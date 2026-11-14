@@ -6,14 +6,19 @@ import { getImageTaskModes, type ImageTaskModes } from '@/api/imageTasks'
 const modes = ref<ImageTaskModes | null>(null)
 const loading = ref(false)
 let pending: Promise<void> | null = null
+// Navigation re-reads the capability so an administrator's switch change shows
+// up without a full reload, but a short cache keeps ordinary page changes cheap.
+const CACHE_TTL_MS = 30_000
+let loadedAt = 0
 
 async function refreshImageTaskModes(force = false): Promise<void> {
-  if (!force && modes.value) return
-  if (pending && !force) return pending
+  if (!force && modes.value && Date.now() - loadedAt < CACHE_TTL_MS) return
+  if (pending) return pending
   loading.value = true
   pending = getImageTaskModes()
     .then((value) => {
       modes.value = value
+      loadedAt = Date.now()
     })
     .catch(() => {
       modes.value = null

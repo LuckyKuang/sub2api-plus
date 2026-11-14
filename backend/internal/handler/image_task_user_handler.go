@@ -37,9 +37,10 @@ func NewImageTaskUserHandler(
 }
 
 // Modes reports which generation modes the console may offer. The global switch
-// is not a permission: can_submit also requires an eligible key, and can_view
-// keeps history reachable after submission stops. Reasons are stable
-// identifiers, not translated text.
+// is not a permission: can_submit also requires an eligible key. can_view stays
+// true whenever the administrator enables the mode or the user still has
+// history, so the entry remains discoverable and can explain a missing key.
+// Reasons are stable identifiers, not translated text.
 func (h *ImageTaskUserHandler) Modes(c *gin.Context) {
 	owner, ok := h.owner(c)
 	if !ok {
@@ -71,13 +72,13 @@ func (h *ImageTaskUserHandler) Modes(c *gin.Context) {
 		"ordinary": gin.H{
 			"enabled":    ordinary.Enabled,
 			"can_submit": ordinary.Enabled && ordinaryKey,
-			"can_view":   (ordinary.Enabled && ordinaryKey) || hasOrdinaryHistory,
+			"can_view":   ordinary.Enabled || hasOrdinaryHistory,
 			"reason":     ordinaryReason,
 		},
 		"batch": gin.H{
 			"enabled":    batch.Enabled,
 			"can_submit": batch.Enabled && batchKey,
-			"can_view":   (batch.Enabled && batchKey) || anyBatchKey,
+			"can_view":   batch.Enabled || anyBatchKey,
 			"reason":     batchReason,
 		},
 	})

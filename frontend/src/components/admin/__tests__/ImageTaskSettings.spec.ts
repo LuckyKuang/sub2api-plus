@@ -21,6 +21,10 @@ vi.mock('@/stores', () => ({
   useAppStore: () => ({ showSuccess, showError }),
 }))
 
+vi.mock('@/composables/useImageTaskModes', () => ({
+  useImageTaskModes: () => ({ refreshImageTaskModes: vi.fn() }),
+}))
+
 // Step-up is a separate contract with its own coverage; here it only has to run
 // the guarded call.
 vi.mock('@/composables/useStepUp', () => ({
@@ -73,15 +77,19 @@ describe('ImageTaskSettings', () => {
         force_path_style: false,
       },
     })
-    updateSettings.mockResolvedValue({
-      ordinary_enabled: false,
-      batch_enabled: true,
-      storage_secret_configured: true,
-      storage: { reuse_backup_s3: true, prefix: 'images/' },
+    const persisted = { ordinary_enabled: true, batch_enabled: false }
+    updateSettings.mockImplementation(async (payload: { ordinary_enabled?: boolean; batch_enabled?: boolean }) => {
+      if (payload.ordinary_enabled !== undefined) persisted.ordinary_enabled = payload.ordinary_enabled
+      if (payload.batch_enabled !== undefined) persisted.batch_enabled = payload.batch_enabled
+      return {
+        ...persisted,
+        storage_secret_configured: true,
+        storage: { reuse_backup_s3: true, prefix: 'images/' },
+      }
     })
   })
 
-  it('loads both switches and saves them together with the storage target', async () => {
+  it('persists each switch immediately and still saves the storage target', async () => {
     const wrapper = mountPanel()
     await flushPromises()
 
@@ -90,15 +98,37 @@ describe('ImageTaskSettings', () => {
 
     await wrapper.get('[data-testid="image-task-ordinary-toggle"]').trigger('click')
     await wrapper.get('[data-testid="image-task-batch-toggle"]').trigger('click')
+    await flushPromises()
+
+    // Each switch persists on its own, before the storage save button is used.
+    expect(updateSettings).toHaveBeenNthCalledWith(1, { ordinary_enabled: false })
+    expect(updateSettings).toHaveBeenNthCalledWith(2, { batch_enabled: true })
+    expect(wrapper.get('[data-testid="image-task-ordinary-toggle"]').attributes('data-checked')).toBe('false')
+    expect(wrapper.get('[data-testid="image-task-batch-toggle"]').attributes('data-checked')).toBe('true')
+
     await wrapper.get('[data-testid="save-image-task-settings"]').trigger('click')
     await flushPromises()
 
-    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+    expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({
       ordinary_enabled: false,
       batch_enabled: true,
       storage: expect.objectContaining({ reuse_backup_s3: true }),
     }))
     expect(showSuccess).toHaveBeenCalledWith('admin.imageTasks.saved')
+  })
+
+  it('reverts only the rejected switch and explains the missing storage target', async () => {
+    updateSettings.mockRejectedValueOnce({ code: 'IMAGE_STORAGE_INCOMPLETE', message: 'incomplete' })
+    const wrapper = mountPanel()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="image-task-ordinary-toggle"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="image-task-ordinary-toggle"]').attributes('data-checked')).toBe('true')
+    expect(wrapper.get('[data-testid="image-task-batch-toggle"]').attributes('data-checked')).toBe('false')
+    expect(showError).toHaveBeenCalledWith('admin.imageTasks.switches.storageRequired')
+    expect(showSuccess).not.toHaveBeenCalled()
   })
 
   it('reports a rejected target change instead of pretending it saved', async () => {

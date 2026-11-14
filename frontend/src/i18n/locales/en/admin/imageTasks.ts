@@ -7,6 +7,7 @@ export default {
       ordinaryHint: 'Submitted tasks run in the background and are archived to object storage.',
       batch: 'Allow new batch image jobs',
       batchHint: 'Existing jobs keep polling, settling, and downloading.',
+      storageRequired: 'Save a complete object-storage target (endpoint, bucket, access key ID and secret) before enabling standard image tasks.',
       historyHint: 'Switching a mode off never hides existing history, and never changes the synchronous image gateway.',
     },
     storage: {

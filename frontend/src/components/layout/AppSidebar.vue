@@ -271,7 +271,12 @@ const mobileVisible = computed(() => !isDesktop.value && mobileOpen.value)
 const sidebarRef = ref<HTMLElement | null>(null)
 useDialogFocus(() => mobileVisible.value, sidebarRef, closeMobile)
 watch(isDesktop, desktop => { if (desktop) closeMobile() })
-watch(() => route.fullPath, closeMobile)
+watch(() => route.fullPath, () => {
+  closeMobile()
+  // Administrator switch changes apply immediately; re-read the cached
+  // capability as the user moves around the console.
+  void refreshImageTaskModes()
+})
 const isAdmin = computed(() => authStore.isAdmin && !adminSupportContext.value)
 const sidebarNavRef = ref<HTMLElement | null>(null)
 const isDark = ref(document.documentElement.classList.contains('dark'))

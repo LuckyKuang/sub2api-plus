@@ -11,14 +11,26 @@
             <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.imageTasks.switches.ordinary') }}</span>
             <span class="mt-1 block text-xs surface-muted">{{ t('admin.imageTasks.switches.ordinaryHint') }}</span>
           </span>
-          <Toggle v-model="ordinaryEnabled" data-testid="image-task-ordinary-toggle" :aria-label="t('admin.imageTasks.switches.ordinary')" />
+          <Toggle
+            :model-value="ordinaryEnabled"
+            :disabled="switchSaving.ordinary"
+            data-testid="image-task-ordinary-toggle"
+            :aria-label="t('admin.imageTasks.switches.ordinary')"
+            @update:model-value="value => persistSwitch('ordinary', value)"
+          />
         </label>
         <label class="flex items-start justify-between gap-4 rounded border border-gray-200 p-4 surface-inset dark:border-dark-600">
           <span class="min-w-0">
             <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.imageTasks.switches.batch') }}</span>
             <span class="mt-1 block text-xs surface-muted">{{ t('admin.imageTasks.switches.batchHint') }}</span>
           </span>
-          <Toggle v-model="batchEnabled" data-testid="image-task-batch-toggle" :aria-label="t('admin.imageTasks.switches.batch')" />
+          <Toggle
+            :model-value="batchEnabled"
+            :disabled="switchSaving.batch"
+            data-testid="image-task-batch-toggle"
+            :aria-label="t('admin.imageTasks.switches.batch')"
+            @update:model-value="value => persistSwitch('batch', value)"
+          />
         </label>
       </div>
       <p class="mt-3 text-xs surface-muted">{{ t('admin.imageTasks.switches.historyHint') }}</p>
@@ -114,18 +126,22 @@ import { useAppStore } from '@/stores'
 import Toggle from '@/components/common/Toggle.vue'
 import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
-import { extractApiErrorMessage } from '@/utils/apiError'
+import { extractApiErrorCode, extractApiErrorMessage } from '@/utils/apiError'
+import { useImageTaskModes } from '@/composables/useImageTaskModes'
 import { getImageTaskSettings, testImageTaskStorage, updateImageTaskSettings, type ImageStorageSettingsPayload } from '@/api/imageTasks'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 const stepUp = useStepUp()
 
+const { refreshImageTaskModes } = useImageTaskModes()
+
 const ordinaryEnabled = ref(false)
 const batchEnabled = ref(false)
 const secretConfigured = ref(false)
 const saving = ref(false)
 const testing = ref(false)
+const switchSaving = reactive({ ordinary: false, batch: false })
 
 interface StorageForm {
   reuse_backup_s3: boolean
@@ -199,6 +215,37 @@ function reportError(error: unknown) {
   appStore.showError(extractApiErrorMessage(error, t('errors.networkError')))
 }
 
+// Each switch persists on its own request: a rejected ordinary switch (for
+// example, an incomplete storage target) must never roll back the batch switch.
+async function persistSwitch(mode: 'ordinary' | 'batch', value: boolean) {
+  if (switchSaving[mode]) return
+  const target = mode === 'ordinary' ? ordinaryEnabled : batchEnabled
+  const previous = target.value
+  target.value = value
+  switchSaving[mode] = true
+  try {
+    const next = await stepUp.run(() => updateImageTaskSettings(
+      mode === 'ordinary' ? { ordinary_enabled: value } : { batch_enabled: value },
+    ))
+    ordinaryEnabled.value = next.ordinary_enabled
+    batchEnabled.value = next.batch_enabled
+    // The console menu reads the same capability endpoint; refresh it so the
+    // entry appears without a full page reload.
+    void refreshImageTaskModes(true)
+    appStore.showSuccess(t('admin.imageTasks.saved'))
+  } catch (error) {
+    target.value = previous
+    if (isStepUpCancelled(error)) return
+    if (extractApiErrorCode(error) === 'IMAGE_STORAGE_INCOMPLETE') {
+      appStore.showError(t('admin.imageTasks.switches.storageRequired'))
+      return
+    }
+    reportError(error)
+  } finally {
+    switchSaving[mode] = false
+  }
+}
+
 async function save() {
   saving.value = true
   try {
@@ -208,6 +255,7 @@ async function save() {
       storage: { ...storage },
     }))
     applySettings(next)
+    void refreshImageTaskModes(true)
     appStore.showSuccess(t('admin.imageTasks.saved'))
   } catch (error) {
     if (isStepUpCancelled(error)) return

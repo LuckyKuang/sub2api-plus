@@ -8,6 +8,7 @@ export default {
       batch: '允许新建批量生图任务',
       batchHint: '已有任务继续轮询、结算与下载。',
       historyHint: '关闭任一模式都不会隐藏历史记录，也不改变同步生图网关的现有权限。',
+      storageRequired: '启用普通生图前，请先填写并保存完整的对象存储配置（Endpoint、Bucket、Access Key ID、Secret Access Key）。',
     },
     storage: {
       title: '对象存储',

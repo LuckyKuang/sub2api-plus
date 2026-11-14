@@ -43,7 +43,7 @@ Asynchronous image tasks are **disabled by default** and gated on object storage
 
 ### From the admin UI (recommended)
 
-**Admin → Settings → Image Tasks.** This single panel owns both generation switches and the one object-storage target. Saving takes effect immediately — the object-storage client is rebuilt on the next request, so there is no container restart.
+**Admin → Settings → Image Tasks.** This single panel owns both generation switches and the one object-storage target. Each switch is saved as soon as it is toggled, independently of the other; the storage form is saved with the Save button. Saving takes effect immediately — the object-storage client is rebuilt on the next request, so there is no container restart. An enabled mode stays visible in the console menu even when the signed-in user has no eligible key: the page explains the missing key, while submission still requires one.
 
 The two submission switches are independent. *Allow new standard image tasks* gates ordinary submissions and requires a complete target; it cannot be saved while endpoint, bucket, or credentials are missing. *Allow new batch image jobs* gates provider batch submissions and falls back to `batch_image.enabled` when no administrator value exists, so upgrading never opens or closes the feature by itself. Neither switch affects polling, download, settlement, or provider cleanup of work that was already accepted.
 

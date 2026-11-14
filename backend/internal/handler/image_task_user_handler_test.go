@@ -106,6 +106,28 @@ func TestImageTaskUserHandlerRejectsInvalidFilters(t *testing.T) {
 	}
 }
 
+// An enabled mode must stay visible so the entry can explain a missing API key
+// instead of disappearing from the console menu.
+func TestImageTaskUserHandlerModesKeepsEnabledModeVisibleWithoutEligibleKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tasks := service.NewImageTaskServiceWithOptions(&asyncImageMemoryStore{}, time.Hour, time.Minute)
+	batch := service.NewBatchImageSettingsService(&toggleSettingRepo{values: map[string]string{
+		"batch_image_enabled": "true",
+	}}, false)
+	handler := NewImageTaskUserHandler(tasks, nil, batch, nil)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 7, Concurrency: 2})
+		c.Next()
+	})
+	router.GET("/image-tasks/modes", handler.Modes)
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/image-tasks/modes", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, `{"ordinary":{"enabled":false,"can_submit":false,"can_view":false,"reason":"disabled"},"batch":{"enabled":true,"can_submit":false,"can_view":true,"reason":"no_eligible_key"}}`, rec.Body.String())
+}
+
 func TestImageTaskUserHandlerModesReportsDisabledReasons(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	tasks := service.NewImageTaskServiceWithOptions(&asyncImageMemoryStore{}, time.Hour, time.Minute)
