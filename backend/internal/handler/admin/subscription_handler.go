@@ -259,7 +259,8 @@ type ResetSubscriptionQuotaRequest struct {
 	FiveHour bool `json:"five_hour"`
 }
 
-// ResetQuota resets daily, weekly, and/or monthly usage for a subscription.
+// ResetQuota resets the selected 5-hour, daily, weekly, and/or monthly usage
+// windows for a subscription.
 // POST /api/v1/admin/subscriptions/:id/reset-quota
 func (h *SubscriptionHandler) ResetQuota(c *gin.Context) {
 	subscriptionID, err := strconv.ParseInt(c.Param("id"), 10, 64)
