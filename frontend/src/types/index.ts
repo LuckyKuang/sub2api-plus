@@ -2183,32 +2183,21 @@ export interface UserSubscription {
   group?: Group
 }
 
+export interface SubscriptionWindowProgress {
+  used: number
+  limit: number | null
+  percentage: number
+  reset_in_seconds: number | null
+  // Authoritative next reset instant reported by the server.
+  resets_at?: string | null
+}
+
 export interface SubscriptionProgress {
   subscription_id: number
-  daily: {
-    used: number
-    limit: number | null
-    percentage: number
-    reset_in_seconds: number | null
-  } | null
-  weekly: {
-    used: number
-    limit: number | null
-    percentage: number
-    reset_in_seconds: number | null
-  } | null
-  monthly: {
-    used: number
-    limit: number | null
-    percentage: number
-    reset_in_seconds: number | null
-  } | null
-  five_hour: {
-    used: number
-    limit: number | null
-    percentage: number
-    reset_in_seconds: number | null
-  } | null
+  daily: SubscriptionWindowProgress | null
+  weekly: SubscriptionWindowProgress | null
+  monthly: SubscriptionWindowProgress | null
+  five_hour: SubscriptionWindowProgress | null
   expires_at: string | null
   days_remaining: number | null
 }

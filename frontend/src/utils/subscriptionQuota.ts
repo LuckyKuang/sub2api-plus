@@ -1,4 +1,4 @@
-import type { UserSubscription } from '@/types'
+import type { Group, UserSubscription } from '@/types'
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
@@ -12,6 +12,28 @@ export interface RemainingDurationParts {
   days: number
   hours: number
   minutes: number
+}
+
+export type SubscriptionQuotaWindow = 'fiveHour' | 'daily' | 'weekly' | 'monthly'
+
+type QuotaLimitSource = Pick<
+  Group,
+  'five_hour_limit_usd' | 'daily_limit_usd' | 'weekly_limit_usd' | 'monthly_limit_usd'
+>
+
+/**
+ * Returns the quota windows the plan actually configures. A window exists only
+ * when its group limit is a positive amount; unlimited windows have nothing to
+ * reset, so they must not be offered.
+ */
+export function configuredQuotaWindows(group: QuotaLimitSource | null | undefined): SubscriptionQuotaWindow[] {
+  if (!group) return []
+  const windows: SubscriptionQuotaWindow[] = []
+  if ((group.five_hour_limit_usd ?? 0) > 0) windows.push('fiveHour')
+  if ((group.daily_limit_usd ?? 0) > 0) windows.push('daily')
+  if ((group.weekly_limit_usd ?? 0) > 0) windows.push('weekly')
+  if ((group.monthly_limit_usd ?? 0) > 0) windows.push('monthly')
+  return windows
 }
 
 export function isOneTimeDailyQuota(
