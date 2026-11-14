@@ -46,6 +46,25 @@ func TestCompatibleImagesGeminiModels(t *testing.T) {
 	}
 }
 
+// nano-banana is a provider alias for Gemini image models. It is accepted on the
+// images endpoints with the same API-key capability fence as the gemini-* names
+// and must stay out of native Responses normalization.
+func TestCompatibleImagesNanoBananaModels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, model := range []string{"nano-banana-2", "nano-banana-2.1", "nano-banana-pro", "gemini-nano-banana-2.1"} {
+		t.Run(model, func(t *testing.T) {
+			body := []byte(fmt.Sprintf(`{"model":%q,"prompt":"draw"}`, model))
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, openAIImagesGenerationsEndpoint, bytes.NewReader(body))
+			parsed, err := (&OpenAIGatewayService{}).ParseOpenAIImagesRequest(c, body)
+			require.NoError(t, err)
+			require.Equal(t, OpenAIImagesCapabilityAPIKey, parsed.RequiredCapability)
+			require.True(t, (&Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}).SupportsOpenAIImageCapability(parsed.RequiredCapability))
+			require.False(t, isOpenAIImageGenerationModel(model), "compatible image IDs must not enter native Responses normalization")
+		})
+	}
+}
+
 func TestCompatibleImagesForwardGemini(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, kind := range []string{"generation", "json_edit", "multipart_edit", "composite_multipart_alias", "channel_mapping", "account_mapping"} {

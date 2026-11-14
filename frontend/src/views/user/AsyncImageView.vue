@@ -272,6 +272,15 @@
               :options="sizeOptions.map(option => ({ value: option.value, label: option.label }))"
             />
           </label>
+          <label v-if="selectedModelUsesAspectRatio" class="block">
+            <span class="input-label">{{ t('asyncImage.create.aspectRatio') }}</span>
+            <Select
+              v-model="form.aspectRatio"
+              class="w-full"
+              :searchable="false"
+              :options="aspectRatioOptions"
+            />
+          </label>
           <div v-if="usingCustomSize" class="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-2">
             <label class="block">
               <span class="input-label">{{ t('asyncImage.create.width') }}</span>
@@ -284,7 +293,7 @@
             <p v-if="customSizeError" class="sm:col-span-2 text-xs text-red-600 dark:text-red-300">{{ customSizeError }}</p>
             <p v-else-if="customSizeExperimental" class="sm:col-span-2 text-xs text-amber-700 dark:text-amber-300">{{ t('asyncImage.create.experimentalSizeHint') }}</p>
           </div>
-          <label v-if="selectedModelIsGPTImage2" class="block">
+          <label v-if="selectedModelUsesQuality" class="block">
             <span class="input-label">{{ t('asyncImage.create.quality') }}</span>
             <Select
               v-model="form.quality"
@@ -403,7 +412,7 @@ import { keyAllowsAsyncImage, keyCanManageAsyncImage } from '@/composables/useAs
 import { adminSupportContext } from '@/utils/adminSupportContext'
 import SearchInput from '@/components/common/SearchInput.vue'
 import { useAppStore } from '@/stores/app'
-import { isGPTImage2, isGPTImage2ExperimentalSize, validateGPTImage2CustomSize } from '@/utils/asyncImageSize'
+import { DEFAULT_GEMINI_ASPECT_RATIO, GEMINI_ASPECT_RATIOS, GEMINI_IMAGE_SIZES, imageModelFamily, isGPTImage2, isGPTImage2ExperimentalSize, validateGPTImage2CustomSize } from '@/utils/asyncImageSize'
 import type { Column } from '@/components/common/types'
 import type { ApiKey } from '@/types'
 
@@ -447,7 +456,7 @@ let modelRequestID = 0
 let taskListRequestID = 0
 
 const filters = reactive({ status: '', platform: '', model: '' })
-const form = reactive({ apiKeyId: 0, mode: 'generation' as AsyncImageMode, model: '', prompt: '', size: '1024x1024', customWidth: 1024, customHeight: 1024, quality: 'auto', n: 1 })
+const form = reactive({ apiKeyId: 0, mode: 'generation' as AsyncImageMode, model: '', prompt: '', size: '1024x1024', customWidth: 1024, customHeight: 1024, quality: 'auto', aspectRatio: DEFAULT_GEMINI_ASPECT_RATIO, n: 1 })
 const editImages = ref<EditImageUpload[]>([])
 const editMask = ref<EditImageUpload | null>(null)
 
@@ -473,7 +482,11 @@ const statusFilterOptions = computed<SelectOption[]>(() => [
   { value: 'failed', label: t('asyncImage.status.failed') },
 ])
 const formApiKey = computed(() => eligibleKeys.value.find(key => key.id === form.apiKeyId) || null)
+const selectedModelFamily = computed(() => imageModelFamily(form.model))
 const selectedModelIsGPTImage2 = computed(() => isGPTImage2(form.model))
+const selectedModelUsesQuality = computed(() => selectedModelFamily.value === 'gpt')
+const selectedModelUsesAspectRatio = computed(() => selectedModelFamily.value === 'gemini')
+const aspectRatioOptions = computed(() => GEMINI_ASPECT_RATIOS.map(value => ({ value, label: value })))
 const usingCustomSize = computed(() => selectedModelIsGPTImage2.value && form.size === 'custom')
 const customSizeValidationCode = computed(() => usingCustomSize.value ? validateGPTImage2CustomSize(form.customWidth, form.customHeight) : null)
 const customSizeError = computed(() => customSizeValidationCode.value ? t(`asyncImage.create.customSizeErrors.${customSizeValidationCode.value}`) : '')
@@ -481,6 +494,11 @@ const customSizeExperimental = computed(() => usingCustomSize.value && !customSi
 const currentPage = computed(() => Math.floor(offset.value / PAGE_SIZE) + 1)
 const deleteConfirmMessage = computed(() => t('asyncImage.delete.confirm', { taskId: deleteTarget.value?.task_id || '' }))
 const sizeOptions = computed(() => {
+  if (selectedModelFamily.value === 'gemini') {
+    // Gemini-compatible models (including the nano-banana aliases) reject
+    // explicit non-square sizes; they take a resolution tier plus aspect_ratio.
+    return GEMINI_IMAGE_SIZES.map(value => ({ value, label: value }))
+  }
   if (!selectedModelIsGPTImage2.value) {
     return [
       { value: '1024x1024', label: '1024 x 1024' },
@@ -598,9 +616,15 @@ async function loadFormModels() {
   }
 }
 
+// Switching model switches the parameter profile: a size the new family does not
+// offer falls back to the shared square default, and quality resets when the
+// selected model does not accept it.
 function onModelChanged() {
-  if (!selectedModelIsGPTImage2.value && form.size === 'custom') form.size = '1024x1024'
-  if (!selectedModelIsGPTImage2.value && form.size === 'auto') form.size = '1024x1024'
+  if (!sizeOptions.value.some(option => option.value === form.size)) {
+    form.size = selectedModelFamily.value === 'gemini' ? GEMINI_IMAGE_SIZES[0] : '1024x1024'
+  }
+  if (!selectedModelUsesQuality.value) form.quality = 'auto'
+  if (!selectedModelUsesAspectRatio.value) form.aspectRatio = DEFAULT_GEMINI_ASPECT_RATIO
 }
 
 function totalEditUploadBytes() {
@@ -869,7 +893,8 @@ async function submitTask() {
       prompt: form.prompt.trim(),
       size,
       n: form.n,
-      ...(selectedModelIsGPTImage2.value ? { quality: form.quality } : {}),
+      ...(selectedModelUsesQuality.value ? { quality: form.quality } : {}),
+      ...(selectedModelUsesAspectRatio.value ? { aspect_ratio: form.aspectRatio } : {}),
     }
     const created = form.mode === 'edit'
       ? await submitAsyncImageEdit(key.key, {

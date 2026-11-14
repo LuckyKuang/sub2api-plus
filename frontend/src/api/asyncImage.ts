@@ -48,6 +48,9 @@ export interface AsyncImageGenerationRequest {
   n?: number
   quality?: string
   background?: string
+  // Gemini-compatible image models carry orientation here and keep size to a
+  // 1K/2K/4K tier; OpenAI-family models ignore this field.
+  aspect_ratio?: string
 }
 
 export interface AsyncImageEditRequest extends AsyncImageGenerationRequest {

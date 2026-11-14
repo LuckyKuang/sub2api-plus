@@ -17,7 +17,7 @@ export default {
       title: '新建异步图像任务', apiKey: 'API Key', mode: '任务类型', generation: '生成图片', edit: '编辑图片',
       noKeys: '当前没有可用于异步图像任务的 API Key。请创建并绑定已开启生图权限的 OpenAI 或 Grok 分组。',
       model: '模型', modelsLoading: '正在加载模型...', noModels: '该 API Key 没有可用模型', prompt: '提示词', promptPlaceholder: '描述你希望生成的画面',
-      size: '图片尺寸', quality: '质量', count: '生成数量', width: '宽度', height: '高度',
+      size: '图片尺寸', aspectRatio: '宽高比', quality: '质量', count: '生成数量', width: '宽度', height: '高度',
       referenceImages: '参考图片', referenceImagesHint: '至少上传 1 张，最多 4 张；上传图片不会被保存到任务历史。', addReferenceImages: '添加参考图', removeReferenceImage: '移除参考图', referenceImageRequired: '编辑任务至少需要上传 1 张参考图', referenceImageLimit: '编辑任务最多可上传 {count} 张参考图',
       maskImage: '蒙版图片（可选）', maskImageHint: '蒙版作用于第一张参考图。请使用带透明通道、且尺寸一致的 PNG 或 WebP。', addMaskImage: '添加蒙版', removeMaskImage: '移除蒙版',
       invalidUploadType: '请选择 PNG、JPEG 或 WebP 图片；蒙版仅支持 PNG 或 WebP。', uploadFileTooLarge: '单张上传图片不能超过 20 MiB。', uploadTotalTooLarge: '参考图和蒙版合计不能超过 40 MiB。',

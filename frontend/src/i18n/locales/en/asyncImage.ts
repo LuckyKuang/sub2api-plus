@@ -16,7 +16,7 @@ export default {
       title: 'New Async Image Task', apiKey: 'API Key', mode: 'Task type', generation: 'Generate image', edit: 'Edit image',
       noKeys: 'No OpenAI or Grok API key with image-generation access is available.',
       model: 'Model', modelsLoading: 'Loading models...', noModels: 'This API key has no available models', prompt: 'Prompt', promptPlaceholder: 'Describe the image you want to generate',
-      size: 'Image size', quality: 'Quality', count: 'Image count', width: 'Width', height: 'Height',
+      size: 'Image size', aspectRatio: 'Aspect ratio', quality: 'Quality', count: 'Image count', width: 'Width', height: 'Height',
       referenceImages: 'Reference images', referenceImagesHint: 'Upload at least 1 and up to 4 images. Uploaded files are not stored in task history.', addReferenceImages: 'Add reference images', removeReferenceImage: 'Remove reference image', referenceImageRequired: 'An edit task requires at least one reference image', referenceImageLimit: 'An edit task can include up to {count} reference images',
       maskImage: 'Mask image (optional)', maskImageHint: 'The mask applies to the first reference image. Use a PNG or WebP with alpha at the same dimensions.', addMaskImage: 'Add mask', removeMaskImage: 'Remove mask',
       invalidUploadType: 'Choose a PNG, JPEG, or WebP image. Masks support PNG or WebP only.', uploadFileTooLarge: 'Each uploaded image must be 20 MiB or smaller.', uploadTotalTooLarge: 'Reference images and the mask together must be 40 MiB or smaller.',

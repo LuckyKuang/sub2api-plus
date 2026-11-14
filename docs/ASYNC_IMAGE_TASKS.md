@@ -30,6 +30,14 @@ silently truncated. This gateway resource policy does not claim the provider's
 maximum upload size. Routing diagnostics record part byte counts without raw
 content types, filenames or image contents.
 
+Accepted model names are validated by family: `gpt-image-*`, `grok-imagine*`,
+`gemini-*-image*`, and the nano-banana alias family (`nano-banana-2`,
+`nano-banana-2.1`, `nano-banana-pro`, `gemini-nano-banana-*`). Any other model
+name is rejected with `images endpoint requires an image model`. nano-banana
+names share the `gemini-*` image models' API-key capability fence, so they route
+to API-key accounts and never to OAuth/Codex accounts; the Gemini request gate
+still requires a resolved image model name and is unchanged.
+
 Dedicated asynchronous image execution retains the admitted pricing snapshot.
 When `image_count_billing` overrides a token card, its conservative reservation
 requires identified prices for every potential 1K/2K/4K output size and uses the
