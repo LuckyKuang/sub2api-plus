@@ -1,39 +1,31 @@
-# v0.2.20+custom.001
+Sub2API Plus v0.2.21+custom.002
+
+## Highlights
+
+- Unify the image task center: the console now shows one row per task with user-scoped history, filters, explicit read states and a single generation entry, while per-model-family switches, the nano-banana aliases and immediate switch persistence keep the flow predictable.
+- Add a dedicated Image Task panel to admin settings with ordinary/batch switches and an S3-compatible storage target that reuses the backup bucket when asked and can test the connection before saving.
+- List only the models a group's accounts actually serve, and hide standard groups whose models are unavailable to users.
+- Make subscription adjustments plan-aware with absolute expiry and quota-window reset, and invalidate the models cache whenever accounts change.
+
+## Changed
+
+- Image task history stays readable after an administrator switches new submissions off; only new submissions are affected.
+- The admin menu entry follows the capability the server reports, so a hidden entry never stands in for authorization.
+
+## Compatibility and migration
+
+- Application version 0.2.21+custom.002; git tag v0.2.21+custom.002; GHCR image tag v0.2.21-custom.002.
+- Same official baseline v0.2.21. No new migrations and no schema change; deployed SQL is untouched.
+- Existing deployments keep their current behavior until an administrator enables image tasks and configures a storage target. Reusing the backup S3 settings avoids re-entering credentials.
+- No configuration changes are required for other features.
+
+## Known issues
+
+- Enabling an image task switch with an incomplete storage target is rejected; configure the endpoint, bucket and credentials first.
+- The storage connection test depends on the server being able to reach the configured endpoint.
+- Group model lists are only as current as the account mappings; a stale mapping keeps its last observed models until accounts are refreshed.
 
 ## Upstream baseline
 
-Official v0.2.20, peeled dab829a4e9b7d1cc307189aea8b0319eb29e29d0.
-Plus contracts remain authoritative; post-tag upstream main is excluded.
-
-## Changes
-
-- Bound gateway request buffering, socket operations, upstream draining, stream
-  parsing, background work and session caches.
-- Add opt-in OAuth management MCP, explicit administrator permissions/full-access
-  confirmation, and exact registration-email blacklists.
-- Import Responses completion, reasoning/tool-content, provider quota and image
-  routing/native-option corrections while preserving Plus identity, audit,
-  proxy ownership, Composite access and frozen billing.
-- Align Terra API effort/tool rules with official documentation without changing
-  the pinned Codex client descriptor or manually selected 0.167.0 identity.
-
-## Compatibility and upgrade
-
-- New MCP migration is Plus 307; deployed migrations remain unchanged.
-- MCP remains off until MCP_PUBLIC_URL is configured. Existing administrator
-  keys retain their scopes; full access requires explicit confirmation.
-- Resource settings use gateway.*, including a 1-GiB ingress buffering budget
-  and 120-second per-operation read/write deadlines by default. Zero disables
-  the corresponding configurable limit. Tune against instance capacity.
-- Post-disconnect draining is finite. Only observed usage can be settled if
-  final provider usage arrives after the drain window. Prices remain frozen.
-- Terra API minimal effort is rejected; none is accepted. Tool calls require
-  Responses. Existing Codex catalogs retain their separate client contract.
-
-## Known limitations
-
-The ingress budget is conservative buffer accounting, not a total RSS cap.
-MCP public URLs require the exact root /api/v1/mcp path; subpath deployment
-is unsupported. Cache bounds may evict continuation bindings before TTL.
-
-Publication status: planned.
+Official release: v0.2.21
+Official commit: 10ba8f9b4dc2e6023d4a9879ab77b21841babd10
