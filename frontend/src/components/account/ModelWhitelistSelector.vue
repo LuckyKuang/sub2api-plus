@@ -177,7 +177,10 @@ const props = withDefaults(defineProps<{
     api_key: string
   }
   showSyncButton?: boolean
-}>(), { showSyncButton: true })
+  /** Models the account's upstream catalogue reports; keeps the fill button
+   *  honest when a provider ships a model the bundled preset list lacks. */
+  upstreamModels?: string[]
+}>(), { showSyncButton: true, upstreamModels: () => [] })
 
 const emit = defineEmits<{
   'update:modelValue': [value: string[]]
@@ -244,7 +247,7 @@ const availableOptions = computed(() => {
     ? allModels
     : allModels.filter(model => allowedModels.has(model.value))
   const options = new Map(presets.map(model => [model.value, model]))
-  for (const value of [...discoveredModels.value, ...props.modelValue]) {
+  for (const value of [...discoveredModels.value, ...(props.upstreamModels ?? []), ...props.modelValue]) {
     if (!options.has(value)) options.set(value, { value, label: value })
   }
   return [...options.values()]
@@ -300,7 +303,7 @@ const handleEnter = () => {
 }
 
 const fillRelated = () => {
-  const newModels = [...new Set([...props.modelValue, ...discoveredModels.value])]
+  const newModels = [...new Set([...props.modelValue, ...discoveredModels.value, ...(props.upstreamModels ?? [])])]
   for (const platform of normalizedPlatforms.value) {
     for (const model of getModelsByPlatform(platform)) {
       if (!newModels.includes(model)) {

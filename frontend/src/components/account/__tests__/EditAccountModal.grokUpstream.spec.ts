@@ -1438,4 +1438,28 @@ describe('EditAccountModal Grok OAuth upstream config', () => {
       })
     }
   )
+
+  it('fills models from the saved upstream catalogue that the bundled presets do not list', async () => {
+    // The account's saved catalogue is what the upstream really advertised, so
+    // the fill action must not be limited to the bundled per-platform presets.
+    const account = buildGrokOAuthAccount()
+    getByIdMock.mockResolvedValue({
+      ...account,
+      grok_model_diagnostics: {
+        state: 'fresh',
+        endpoint: 'https://cli-chat-proxy.grok.com/v1/models',
+        fetched_at: '2026-11-15T00:00:00Z',
+        expires_at: '2099-01-01T00:00:00.000Z',
+        models: ['grok-4.5', 'grok-4.6', 'grok-4.7', 'grok-9.9-preview'],
+        mappings: []
+      }
+    })
+    const wrapper = mountLiveSelectorModal(account)
+    await flushPromises()
+    const selector = wrapper.getComponent({ name: 'ModelWhitelistSelector' })
+    expect(selector.props('upstreamModels')).toEqual(expect.arrayContaining(['grok-4.7', 'grok-9.9-preview']))
+    await wrapper.findAll('button').find(button => button.text().includes('admin.accounts.fillRelatedModels'))!.trigger('click')
+    await flushPromises()
+    expect(selector.props('modelValue')).toContain('grok-9.9-preview')
+  })
 })

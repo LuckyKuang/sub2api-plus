@@ -506,6 +506,33 @@ describe('ModelWhitelistSelector', () => {
     expect(wrapper.emitted('upstream-synced')).toBeUndefined()
   })
 
+  it('fills catalogue entries the bundled presets lack but the upstream reports', async () => {
+    // A provider can ship a model before the bundled per-platform presets list
+    // it; the account's saved upstream catalogue is the authority here.
+    const wrapper = mountSelector({
+      platform: 'grok',
+      accountId: 92,
+      modelValue: [],
+      upstreamModels: ['grok-4.5', 'grok-4.6', 'grok-4.7', 'grok-4.7-build-fast']
+    })
+    await wrapper.get('div.cursor-pointer').trigger('click')
+    expect(wrapper.findAll('[data-testid="select-model"]').map(button => button.text())).toContain('grok-4.7')
+    await wrapper.findAll('button').find(b => b.text() === 'admin.accounts.fillRelatedModels')!.trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toEqual(expect.arrayContaining([
+      'grok-4.7', 'grok-4.7-build-fast', 'grok-4.6', 'grok-4.5'
+    ]))
+    expect(syncUpstreamModels).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('ships grok-4.7 in the bundled grok presets', async () => {
+    const wrapper = mountSelector({ platform: 'grok', modelValue: [] })
+    await wrapper.get('div.cursor-pointer').trigger('click')
+    const values = wrapper.findAll('[data-testid="select-model"]').map(button => button.text())
+    expect(values).toEqual(expect.arrayContaining(['grok-4.7', 'grok-4.7-latest', 'grok-4.7-fast', 'grok-4.7-build-fast']))
+    wrapper.unmount()
+  })
+
   it('keeps appending models when a non-grok sync omits discovery fields', async () => {
     syncUpstreamModels.mockResolvedValue({ models: ['gpt-6'] })
     const wrapper = mountSelector({ platform: 'openai', accountId: 46, modelValue: [] })
