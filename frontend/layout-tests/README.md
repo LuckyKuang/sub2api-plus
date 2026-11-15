@@ -47,7 +47,10 @@ card groups. Actual DataTable cases cover content-sized left-aligned columns,
 single-line model/group labels, wrapping actions and complete first-column hover
 and empty-row borders. Dense-record fallbacks retain multiple field columns on
 desktop, one on phones, and full-width selection and action rows.
-Administrator fixed-scroll ownership remains covered.
+Administrator fixed-scroll ownership remains covered. The unified image-task
+case mounts the real mode cards and ordinary history at phone widths in both
+themes/languages, checks their viewport bounds and confirms that disabled new
+submissions preserve history and explain the reason.
 The administrator fixture checks the original 12/16/24px shell insets, expanded
 and collapsed sidebars, independent toolbar and pagination surfaces, pinned
 columns during horizontal scrolling, full mobile record fields and actions,

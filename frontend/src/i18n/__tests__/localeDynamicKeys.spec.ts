@@ -5,6 +5,7 @@ import paymentTypes from '../../types/payment.ts?raw'
 import pluginTypes from '../../api/admin/plugins.ts?raw'
 import monitorTypes from '../../api/admin/channelMonitor.ts?raw'
 import statusTypes from '../../api/channelMonitorV3.ts?raw'
+import asyncImageTypes from '../../api/asyncImage.ts?raw'
 import en from '../locales/en'
 import zh from '../locales/zh'
 
@@ -46,6 +47,8 @@ function message(messages: unknown, key: string): unknown {
 }
 
 const contracts = [
+  [asyncImageTypes, 'AsyncImageTask', 'archive_status', 'asyncImage.archiveStatus'],
+  [asyncImageTypes, 'AsyncImageTask', 'read_status', 'asyncImage.readStatus'],
   [apiTypes, 'ApiKey', 'status', 'keys.status'],
   [apiTypes, 'Proxy', 'status', 'admin.accounts.status'],
   [apiTypes, 'Account', 'status', 'admin.accounts.status'],

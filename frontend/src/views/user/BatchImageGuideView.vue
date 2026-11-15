@@ -33,7 +33,7 @@
                 <Icon name="book" size="md" class="mr-2" />
                 {{ t('batchImage.actions.usageGuide') }}
               </button>
-              <button v-support-readonly type="button" class="btn btn-primary" @click="openCreateModal">
+              <button v-support-readonly type="button" class="btn btn-primary" :disabled="!canSubmit" @click="openCreateModal">
                 <Icon name="plus" size="md" class="mr-2" />
                 {{ t('batchImage.actions.createJob') }}
               </button>
@@ -709,7 +709,7 @@
       <template #footer>
         <div class="flex flex-wrap justify-end gap-3">
           <button type="button" class="btn btn-secondary" :disabled="submitting" @click="closeCreateModal">{{ t('common.cancel') }}</button>
-	          <button v-support-readonly type="button" class="btn btn-primary inline-flex min-w-[120px] justify-center" :disabled="submitting || loadingModels || (parsedItems.length === 0 && !promptDraft.trim()) || !selectedApiKey || !form.model" @click="submitJob">
+	          <button v-support-readonly type="button" class="btn btn-primary inline-flex min-w-[120px] justify-center" :disabled="!canSubmit || submitting || loadingModels || (parsedItems.length === 0 && !promptDraft.trim()) || !selectedApiKey || !form.model" @click="submitJob">
             <Icon v-if="submitting" name="refresh" size="sm" class="mr-2 animate-spin" />
             {{ submitting ? t('common.submitting') : t('batchImage.actions.submitJob') }}
           </button>
@@ -755,7 +755,7 @@
 
 <script setup lang="ts">
 import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
@@ -765,6 +765,7 @@ import Select, { type SelectOption } from '@/components/common/Select.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useClipboard } from '@/composables/useClipboard'
+import { USER_TABLE_LAYOUT_KEY } from '@/composables/useUserTableLayout'
 import { getPersistedPageSize, setPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { useAppStore } from '@/stores/app'
 import { keysAPI } from '@/api'
@@ -837,8 +838,11 @@ const BATCH_IMAGE_MAX_OUTPUTS_PER_JOB = 200
 const outputCountOptions = Array.from({ length: BATCH_IMAGE_MAX_OUTPUTS_PER_ITEM }, (_, index) => index + 1)
 const batchPageSizeOptions: SelectOption[] = [20, 50, 100].map(size => ({ value: size, label: String(size) }))
 
-const props = defineProps<{ embedded?: boolean }>()
+const props = withDefaults(defineProps<{ embedded?: boolean; canSubmit?: boolean }>(), { canSubmit: false })
 const shellProps = computed(() => props.embedded ? { class: 'image-task-embedded' } : { appearance: 'user', workspace: true })
+
+// One table row per job at every desktop width, matching the ordinary panel.
+provide(USER_TABLE_LAYOUT_KEY, computed(() => false))
 
 const appStore = useAppStore()
 const { copyToClipboard } = useClipboard()
@@ -1561,6 +1565,7 @@ function handlePageSizeChange(value: string | number | boolean | null) {
 }
 
 function openCreateModal() {
+  if (!props.canSubmit) return
   showCreateModal.value = true
   if (!apiKeys.value.length) {
     void loadApiKeys()
@@ -1631,7 +1636,7 @@ function validateForm(): boolean {
 }
 
 async function submitJob() {
-  if (submitting.value) return
+  if (!props.canSubmit || submitting.value) return
   if (promptDraft.value.trim()) addPromptRow()
   if (!validateForm()) return
   const key = requireApiKey()
@@ -1733,7 +1738,7 @@ function canDownload(job: Pick<BatchImageJob, 'status' | 'success_count'>) {
 
 function canRetry(job: Pick<BatchImageJob, 'status' | 'fail_count'>) {
   const display = 'id' in job ? displayJob(job as BatchImageJob) : job
-  return TERMINAL_STATUSES.has(display.status) && display.fail_count > 0
+  return props.canSubmit && TERMINAL_STATUSES.has(display.status) && display.fail_count > 0
 }
 
 function isDownloadingJob(batchId: string) {

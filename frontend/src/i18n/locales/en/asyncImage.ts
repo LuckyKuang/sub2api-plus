@@ -3,10 +3,12 @@ export default {
     title: 'Async Images',
     description: 'Submit a generation or edit task and view its result when processing completes',
     actions: { create: 'New Task', refresh: 'Refresh', view: 'View Result', delete: 'Delete failed task', submit: 'Submit Task', downloadAll: 'Download all images' },
-    filters: { apiKey: 'API Key', allStatuses: 'All statuses', selectKey: 'Select an API key', allPlatforms: 'All platforms', modelPlaceholder: 'Filter by model' },
+    filters: { apiKey: 'API Key', allStatuses: 'All statuses', selectKey: 'Select an API key', allPlatforms: 'All platforms', modelPlaceholder: 'Filter by model', allModels: 'All historical models', unknownPlatform: 'Unknown platform', since: 'Created from (inclusive)', until: 'Created before (exclusive)' },
     columns: { prompt: 'Prompt', model: 'Model', type: 'Type', status: 'Status', result: 'Result', createdAt: 'Created', actions: 'Actions' },
     requestTypes: { generation: 'Generation', edit: 'Edit' },
     status: { processing: 'Processing', completed: 'Completed', failed: 'Failed' },
+    archiveStatus: { archived: 'Archive index saved', incomplete: 'Archive index incomplete', unarchived: 'Not archived' },
+    readStatus: { readable: 'Images available', object_missing: 'An archived image no longer exists in the current storage', storage_unavailable: 'Image storage is temporarily unavailable', unarchived: 'No archived images', incomplete: 'Image archive is incomplete' },
     list: {
       empty: 'No async image tasks', emptyHint: 'Create a generation or edit task to view its status and result here.',
       previous: 'Previous', next: 'Next', page: 'Page {page}',
@@ -33,14 +35,16 @@ export default {
     },
     detail: {
       title: 'Async Image Task Details', taskId: 'Task ID', prompt: 'Prompt', error: 'Error',
+      deletedKey: 'Deleted API key',
       requestedImages: 'Requested', actualImages: 'Generated', countMismatch: 'Requested {requested} images, but the upstream returned {actual}. Successfully generated images were retained.',
       pending: 'This task is still processing', noImage: 'The task completed without an image URL',
+      unconfirmed: 'The execution record is unavailable. The upstream result is unconfirmed; the task will not be resubmitted.',
     },
     delete: {
       title: 'Delete failed task',
       confirm: 'Delete failed task {taskId}? This action cannot be undone.',
       success: 'Failed task deleted',
     },
-    errors: { loadKeys: 'Failed to load API keys', loadModels: 'Failed to load available models', loadTasks: 'Failed to load async image tasks', submit: 'Failed to submit async image task', refresh: 'Failed to refresh task status', delete: 'Failed to delete async image task', deleteNotAllowed: 'Only failed async image tasks can be deleted', download: 'Failed to download generated images', invalidArchive: 'The downloaded archive is invalid. Please try again.' },
+    errors: { loadKeys: 'Failed to load API keys', loadModels: 'Failed to load available models', loadFilters: 'Failed to load historical filter options', invalidTimeRange: 'The start time must be earlier than the end time.', loadTasks: 'Failed to load async image tasks', submit: 'Failed to submit async image task', refresh: 'Failed to refresh task status', delete: 'Failed to delete async image task', deleteNotAllowed: 'Only failed async image tasks can be deleted', download: 'Failed to download generated images', invalidArchive: 'The downloaded archive is invalid. Please try again.' },
   },
 }

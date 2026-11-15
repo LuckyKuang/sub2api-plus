@@ -2,7 +2,9 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 
 import AsyncImageView from '../AsyncImageView.vue'
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { installAppStyles } from '@/__tests__/appStyles'
+import { setAdminSupportContext } from '@/utils/adminSupportContext'
 
 enableAutoUnmount(afterEach)
 
@@ -10,12 +12,18 @@ const {
   keysList,
   deleteUserImageTask,
   listUserImageTasks,
+  getUserImageTaskFilters,
+  getUserImageTask,
+  downloadUserImageTaskZip,
   showError,
   showSuccess,
 } = vi.hoisted(() => ({
   keysList: vi.fn(),
   deleteUserImageTask: vi.fn(),
   listUserImageTasks: vi.fn(),
+  getUserImageTaskFilters: vi.fn(),
+  getUserImageTask: vi.fn(),
+  downloadUserImageTaskZip: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
 }))
@@ -36,9 +44,10 @@ vi.mock('@/api/asyncImage', () => ({
 // History is user-scoped: the console never passes an API key to read or delete.
 vi.mock('@/api/imageTasks', () => ({
   deleteUserImageTask,
-  downloadUserImageTaskZip: vi.fn(),
-  getUserImageTask: vi.fn(),
+  downloadUserImageTaskZip,
+  getUserImageTask,
   listUserImageTasks,
+  getUserImageTaskFilters,
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -47,10 +56,15 @@ vi.mock('@/stores/app', () => ({
 
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
+  const { default: messages } = await import('@/i18n/locales/en/asyncImage')
   return {
     ...actual,
     useI18n: () => ({
       t: (key: string, params?: Record<string, unknown>) => {
+        if (key.startsWith('asyncImage.status.')) {
+          const status = key.slice('asyncImage.status.'.length) as keyof typeof messages.asyncImage.status
+          return messages.asyncImage.status[status] || key
+        }
         if (params?.taskId) return key + ':' + String(params.taskId)
         if (params?.page) return key + ':' + String(params.page)
         return key
@@ -69,7 +83,7 @@ const baseDialogStub = {
 }
 const dataTableStub = {
   props: ['data'],
-  template: '<div class="data-table"><div v-for="row in data" :key="row.task_id" class="data-row" :data-task-id="row.task_id"><slot name="cell-actions" :row="row" /></div><slot v-if="data.length === 0" name="empty" /></div>',
+  template: '<div class="data-table"><div v-for="row in data" :key="row.task_id" class="data-row" :data-task-id="row.task_id"><slot name="cell-status" :row="row" /><slot name="cell-actions" :row="row" /></div><slot v-if="data.length === 0" name="empty" /></div>',
 }
 const iconStub = {
   props: ['name'],
@@ -96,6 +110,7 @@ const completedTask = {
 
 function mountView(realTable = false) {
   return mount(AsyncImageView, {
+    props: { canSubmit: true },
     attachTo: document.body,
     global: {
       stubs: {
@@ -121,8 +136,11 @@ describe('AsyncImageView task management', () => {
   afterAll(() => removeStyles?.())
 
   beforeEach(() => {
+    setAdminSupportContext(null)
     keysList.mockReset()
     deleteUserImageTask.mockReset()
+    getUserImageTask.mockReset()
+    downloadUserImageTaskZip.mockReset()
     listUserImageTasks.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
@@ -137,10 +155,13 @@ describe('AsyncImageView task management', () => {
       }],
     })
     deleteUserImageTask.mockResolvedValue(undefined)
+    getUserImageTaskFilters.mockResolvedValue({ platforms: ['grok', 'openai', 'unknown'], models: ['retired-image-model', 'gpt-image-1'] })
+    getUserImageTask.mockImplementation(async (id: string) => id === failedTask.task_id ? failedTask : completedTask)
     listUserImageTasks.mockResolvedValue({ object: 'list', data: [failedTask, completedTask], has_more: false })
   })
 
   afterEach(() => {
+    setAdminSupportContext(null)
     document.body.innerHTML = ''
     vi.clearAllMocks()
   })
@@ -169,6 +190,30 @@ describe('AsyncImageView task management', () => {
     expect(wrapper.find('[data-testid="view-task-imgtask_failed"]').exists()).toBe(true)
   })
 
+  // Proposal R1/R2: switching new submissions off must leave history readable.
+  it('disables creation while retaining history and failed-task management', async () => {
+    const wrapper = mountView()
+    await wrapper.setProps({ canSubmit: false })
+    await flushPromises()
+
+    const create = wrapper.findAll('button').find(button => button.text().includes('asyncImage.actions.create'))!
+    expect(create.attributes('disabled')).toBeDefined()
+    await create.trigger('click')
+    expect(wrapper.find('.base-dialog').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="view-task-imgtask_failed"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="delete-task-imgtask_failed"]').exists()).toBe(true)
+  })
+
+  it('offers the real Composite image key in the creation form', async () => {
+    keysList.mockResolvedValue({ items: [{ id: 1475, user_id: 7, key: 'sk-composite-test', name: 'images', status: 'active', group: { platform: 'composite', status: 'active', allow_image_generation: true } }] })
+    const wrapper = mountView()
+    await flushPromises()
+    await clickButtonByText(wrapper, 'asyncImage.actions.create')
+    await flushPromises()
+    expect(wrapper.get('.base-dialog').text()).not.toContain('asyncImage.create.noKeys')
+    expect(wrapper.get('.base-dialog').text()).toContain('images')
+  })
+
   it('sends the platform filter to the user-scoped list request', async () => {
     const wrapper = mountView()
     await flushPromises()
@@ -181,6 +226,63 @@ describe('AsyncImageView task management', () => {
     await flushPromises()
 
     expect(listUserImageTasks).toHaveBeenLastCalledWith(expect.objectContaining({ platform: 'grok', offset: 0 }))
+  })
+
+  it('offers unknown platforms and retired models from user history', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="async-image-platform-filter"]').trigger('click')
+    const unknown = Array.from(document.querySelectorAll('[role="option"]'))
+      .find(option => option.textContent?.includes('asyncImage.filters.unknownPlatform'))
+    expect(unknown).toBeTruthy()
+    ;(unknown as HTMLElement).click()
+    await flushPromises()
+    expect(listUserImageTasks).toHaveBeenLastCalledWith(expect.objectContaining({ platform: 'unknown', offset: 0 }))
+
+    await wrapper.get('[data-testid="async-image-model-filter"]').trigger('click')
+    const retired = Array.from(document.querySelectorAll('[role="option"]'))
+      .find(option => option.textContent?.includes('retired-image-model'))
+    expect(retired).toBeTruthy()
+    ;(retired as HTMLElement).click()
+    await flushPromises()
+    expect(listUserImageTasks).toHaveBeenLastCalledWith(expect.objectContaining({ model: 'retired-image-model', offset: 0 }))
+  })
+
+  it('sends absolute start-inclusive/end-exclusive timestamps and resets the page', async () => {
+    listUserImageTasks.mockResolvedValue({ object: 'list', data: [completedTask], has_more: true })
+    const wrapper = mountView()
+    await flushPromises()
+    await clickButtonByText(wrapper, 'asyncImage.list.next')
+    await flushPromises()
+    expect(listUserImageTasks).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 20 }))
+    const [start, end] = wrapper.findAllComponents(DateTimePicker)
+    start.vm.$emit('update:modelValue', '2026-01-12T01:00')
+    end.vm.$emit('update:modelValue', '2026-01-13T02:00')
+    await flushPromises()
+    end.vm.$emit('change', new Event('change'))
+    await flushPromises()
+    expect(listUserImageTasks).toHaveBeenLastCalledWith(expect.objectContaining({
+      since: new Date(2026, 0, 12, 1).getTime() / 1000,
+      until: new Date(2026, 0, 13, 2).getTime() / 1000,
+      offset: 0,
+    }))
+  })
+
+  it('shows uncertain execution separately from the unchanged processing status', async () => {
+    listUserImageTasks.mockResolvedValue({ object: 'list', data: [{ ...failedTask, status: 'processing', execution_status: 'unconfirmed' }], has_more: false })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.get('[data-task-id="imgtask_failed"] .badge').text()).toBe('Processing')
+    expect(wrapper.text()).toContain('asyncImage.detail.unconfirmed')
+  })
+
+  it.each(['unarchived', 'incomplete', 'storage_unavailable', 'object_missing'])('shows %s without replaying saved URLs or changing completion', async readStatus => {
+    listUserImageTasks.mockResolvedValue({ object: 'list', data: [{ ...completedTask, read_status: readStatus, result: { data: [{ url: 'https://expired.example/image.png' }] } }], has_more: false })
+    const wrapper = mountView(true)
+    await flushPromises()
+    expect(wrapper.findAll('.badge').map(badge => badge.text())).toContain('Completed')
+    expect(wrapper.text()).toContain('asyncImage.readStatus.' + readStatus)
+    expect(wrapper.find('img').exists()).toBe(false)
   })
 
   it.each([1, 2, 3])('centers the actual result thumbnails for %i images under their heading', async count => {
@@ -241,23 +343,83 @@ describe('AsyncImageView task management', () => {
   })
 
   it('shows requested and actual image counts when the upstream returns fewer images', async () => {
+    const detail = {
+      ...completedTask,
+      requested_images: 3,
+      actual_images: 1,
+      result: { data: [{ url: 'https://images.example.test/one.png' }] },
+    }
     listUserImageTasks.mockResolvedValue({
       object: 'list',
-      data: [{
-        ...completedTask,
-        requested_images: 3,
-        actual_images: 1,
-        result: { data: [{ url: 'https://images.example.test/one.png' }] },
-      }],
+      data: [detail],
       has_more: false,
     })
+    getUserImageTask.mockResolvedValue(detail)
     const wrapper = mountView()
     await flushPromises()
 
     await wrapper.get('[data-testid="view-task-imgtask_completed"]').trigger('click')
+    await flushPromises()
     expect(wrapper.text()).toContain('asyncImage.detail.requestedImages')
     expect(wrapper.text()).toContain('asyncImage.detail.actualImages')
     expect(wrapper.text()).toContain('asyncImage.detail.countMismatch')
+  })
+
+  it('fetches fresh authorized detail instead of showing an expired URL from the list', async () => {
+    const stale = 'https://expired.example/image.png'
+    const fresh = 'https://fresh.example/image.png'
+    listUserImageTasks.mockResolvedValue({ object: 'list', data: [{ ...completedTask, result: { data: [{ url: stale }] } }], has_more: false })
+    getUserImageTask.mockResolvedValue({ ...completedTask, archive_status: 'archived', read_status: 'readable', result: { data: [{ url: fresh }] } })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="view-task-imgtask_completed"]').trigger('click')
+    await flushPromises()
+    expect(getUserImageTask).toHaveBeenCalledWith(completedTask.task_id)
+    expect(wrapper.findAll('.base-dialog img').map(image => image.attributes('src'))).toEqual([fresh])
+  })
+
+  // Proposal R4: deleting the creating key preserves user history and labels it.
+  it('labels a deleted creating key in history and task details', async () => {
+    const task = { ...completedTask, api_key_deleted: true }
+    keysList.mockResolvedValue({ items: [], pages: 1 })
+    listUserImageTasks.mockResolvedValue({ object: 'list', data: [task], has_more: false })
+    getUserImageTask.mockResolvedValue(task)
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.get('[data-task-id="imgtask_completed"]').text()).toContain('asyncImage.detail.deletedKey')
+    await wrapper.get('[data-testid="view-task-imgtask_completed"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.base-dialog').text()).toContain('asyncImage.detail.deletedKey')
+    expect(getUserImageTask).toHaveBeenCalledWith(completedTask.task_id)
+  })
+
+  it('keeps assistance history, filters and downloads available without target API keys while blocking mutations', async () => {
+    setAdminSupportContext({ actorId: 1, userId: 42 })
+    const task = { ...completedTask, api_key_deleted: true, read_status: 'readable', result: { data: [{ url: 'https://stored.example/image.png' }] } }
+    listUserImageTasks.mockResolvedValue({ object: 'list', data: [task, failedTask], has_more: false })
+    getUserImageTask.mockResolvedValue(task)
+    downloadUserImageTaskZip.mockResolvedValue(new Blob(['zip']))
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(keysList).not.toHaveBeenCalled()
+    expect(getUserImageTaskFilters).toHaveBeenCalled()
+    expect(listUserImageTasks).toHaveBeenCalledWith(expect.objectContaining({ offset: 0 }))
+    expect(wrapper.find('[data-testid="async-image-api-key-filter"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="async-image-platform-filter"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="async-image-model-filter"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="delete-task-imgtask_failed"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="delete-task-imgtask_failed"]').trigger('click')
+    expect(deleteUserImageTask).not.toHaveBeenCalled()
+
+    await wrapper.get('[data-testid="view-task-imgtask_completed"]').trigger('click')
+    await flushPromises()
+    expect(getUserImageTask).toHaveBeenCalledWith(completedTask.task_id)
+    await clickButtonByText(wrapper, 'asyncImage.actions.downloadAll')
+    await flushPromises()
+    expect(downloadUserImageTaskZip).toHaveBeenCalledWith(completedTask.task_id)
+    const create = wrapper.findAll('button').find(button => button.text().includes('asyncImage.actions.create'))!
+    expect(create.attributes('disabled')).toBeDefined()
   })
 
   it('deletes a failed task by its own id and shows pending state only on that row', async () => {

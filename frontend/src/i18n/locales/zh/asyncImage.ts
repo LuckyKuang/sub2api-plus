@@ -3,10 +3,12 @@ export default {
     title: '异步图像',
     description: '提交生成或编辑任务后在后台处理，完成后自动显示结果',
     actions: { create: '新建任务', refresh: '刷新列表', view: '查看结果', delete: '删除失败任务', submit: '提交任务', downloadAll: '一键下载图片' },
-    filters: { apiKey: 'API Key', allStatuses: '全部状态', selectKey: '请选择可用 API Key', allPlatforms: '全部平台', modelPlaceholder: '按模型筛选' },
+    filters: { apiKey: 'API Key', allStatuses: '全部状态', selectKey: '请选择可用 API Key', allPlatforms: '全部平台', modelPlaceholder: '按模型筛选', allModels: '全部历史模型', unknownPlatform: '未知平台', since: '创建起始时间（含）', until: '创建截止时间（不含）' },
     columns: { prompt: '提示词', model: '模型', type: '类型', status: '状态', result: '结果', createdAt: '创建时间', actions: '操作' },
     requestTypes: { generation: '生成', edit: '编辑' },
     status: { processing: '生成中', completed: '已完成', failed: '失败' },
+    archiveStatus: { archived: '归档索引已保存', incomplete: '归档索引不完整', unarchived: '未归档' },
+    readStatus: { readable: '图片可读取', object_missing: '归档图片在当前存储中已不存在', storage_unavailable: '图片存储暂不可用', unarchived: '没有已归档图片', incomplete: '图片归档不完整' },
     list: {
       empty: '暂无异步图像任务',
       emptyHint: '点击右上角新建任务，提交生成或编辑请求后可在此查看状态和结果。',
@@ -34,14 +36,16 @@ export default {
     },
     detail: {
       title: '异步图像任务详情', taskId: '任务 ID', prompt: '提示词', error: '错误信息',
+      deletedKey: '已删除的密钥',
       requestedImages: '请求数量', actualImages: '实际数量', countMismatch: '请求生成 {requested} 张，上游实际返回 {actual} 张。任务已保留成功生成的图片。',
       pending: '任务仍在生成中', noImage: '任务已完成，但没有可展示的图片地址',
+      unconfirmed: '执行记录不可用，上游结果尚未确认；不会重新提交生成任务。',
     },
     delete: {
       title: '删除失败任务',
       confirm: '确定删除失败任务 {taskId} 吗？此操作不可撤销。',
       success: '失败任务已删除',
     },
-    errors: { loadKeys: '加载 API Key 失败', loadModels: '加载可用模型失败', loadTasks: '加载异步图像任务失败', submit: '提交异步图像任务失败', refresh: '刷新任务状态失败', delete: '删除异步图像任务失败', deleteNotAllowed: '只能删除状态为失败的异步图像任务', download: '下载生成图片失败', invalidArchive: '下载包无效，请稍后重试' },
+    errors: { loadKeys: '加载 API Key 失败', loadModels: '加载可用模型失败', loadFilters: '加载历史筛选选项失败', invalidTimeRange: '起始时间必须早于截止时间。', loadTasks: '加载异步图像任务失败', submit: '提交异步图像任务失败', refresh: '刷新任务状态失败', delete: '删除异步图像任务失败', deleteNotAllowed: '只能删除状态为失败的异步图像任务', download: '下载生成图片失败', invalidArchive: '下载包无效，请稍后重试' },
   },
 }

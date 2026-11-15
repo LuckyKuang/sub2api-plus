@@ -31,6 +31,16 @@ export interface ImageTaskListResponse {
   has_more: boolean
 }
 
+export interface ImageTaskHistoryFilters {
+  platforms: string[]
+  models: string[]
+}
+
+export async function getUserImageTaskFilters(): Promise<ImageTaskHistoryFilters> {
+  const { data } = await apiClient.get<ImageTaskHistoryFilters>('/image-tasks/filters')
+  return data
+}
+
 export interface ImageStorageSettingsPayload {
   enabled?: boolean
   reuse_backup_s3?: boolean

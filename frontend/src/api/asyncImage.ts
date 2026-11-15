@@ -13,6 +13,11 @@ export interface AsyncImageTask {
   requested_images?: number
   actual_images?: number
   status: AsyncImageTaskStatus
+  platform?: string
+  api_key_deleted?: boolean
+  archive_status?: 'archived' | 'incomplete' | 'unarchived'
+  read_status?: 'readable' | 'object_missing' | 'storage_unavailable' | 'unarchived' | 'incomplete'
+  execution_status?: 'unconfirmed'
   http_status?: number
   image_url?: string
   result?: {

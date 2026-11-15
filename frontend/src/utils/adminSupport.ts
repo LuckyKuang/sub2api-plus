@@ -54,6 +54,7 @@ export function supportResourceFromPath(path: string): AdminSupportResource | nu
 }
 
 export function supportResourceForPersonalPath(path: string): AdminSupportResource {
+  if (path === '/image-tasks' || path.startsWith('/image-tasks/')) return 'async-images'
   if (path === '/batch-image' || path.startsWith('/batch-image/')) return 'batch-images'
   if (path === '/purchase' || path.startsWith('/purchase/')) return 'purchase'
   if (path === '/redeem' || path.startsWith('/redeem/')) return 'redeem'
@@ -84,6 +85,7 @@ export function accountSelectionDestination(
 }
 
 export function supportPathForPersonalPath(userId: number, path: string): string | null {
+  if (path === '/image-tasks') return adminSupportPath(userId, 'async-images')
   const entry = Object.entries(selfPaths).find(([, self]) => self === path || (self === '/custom/:id' && path.startsWith('/custom/')))
   if (!entry) return null
   const resource = entry[0] as AdminSupportResource

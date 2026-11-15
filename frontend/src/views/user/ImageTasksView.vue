@@ -22,6 +22,18 @@
         </div>
       </div>
 
+      <p v-if="loading" role="status" class="surface-muted" data-testid="image-tasks-loading">{{ t('common.loading') }}</p>
+      <p v-else-if="requestedUnavailable" role="status" class="card p-4 surface-muted" data-testid="image-tasks-requested-unavailable">
+        {{ t('imageTasks.requestedUnavailable', { mode: t('imageTasks.modes.' + requestedMode + '.title'), reason: reasonLabel(requestedReason) }) }}
+      </p>
+      <div v-if="!loading && anyAvailable" class="flex flex-col gap-2">
+        <h2 v-if="!showSwitcher" class="text-lg font-medium">{{ t('imageTasks.modes.' + mode + '.title') }}</h2>
+        <p class="text-sm surface-muted">{{ t('imageTasks.ownership.' + mode) }}</p>
+        <p v-if="!canSubmit" role="status" class="text-sm surface-muted" data-testid="image-tasks-readonly">
+          {{ t('imageTasks.readOnly', { reason: reasonLabel(modes?.[mode]?.reason) }) }}
+        </p>
+      </div>
+
       <div v-if="!loading && !anyAvailable" class="card workspace-shell p-8" data-testid="image-tasks-unavailable">
         <div class="mx-auto max-w-lg text-center">
           <Icon name="sparkles" size="xl" class="mx-auto mb-4 h-12 w-12 surface-muted" />
@@ -34,29 +46,33 @@
         </div>
       </div>
 
-      <KeepAlive v-else>
-        <component :is="activePanel" :key="mode" embedded />
+      <KeepAlive :key="scopeKey">
+        <component v-if="!loading && anyAvailable" :is="activePanel" :key="mode" embedded :can-submit="canSubmit" />
       </KeepAlive>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
-import AsyncImageView from '@/views/user/AsyncImageView.vue'
-import BatchImageGuideView from '@/views/user/BatchImageGuideView.vue'
 import { useImageTaskModes } from '@/composables/useImageTaskModes'
+
+const AsyncImageView = defineAsyncComponent(() => import('@/views/user/AsyncImageView.vue'))
+const BatchImageGuideView = defineAsyncComponent(() => import('@/views/user/BatchImageGuideView.vue'))
 
 type Mode = 'ordinary' | 'batch'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const { modes, loading, ordinaryAvailable, batchAvailable, anyAvailable, refreshImageTaskModes } = useImageTaskModes()
+const { modes, loading, scopeKey, ordinaryAvailable, batchAvailable, anyAvailable, refreshImageTaskModes } = useImageTaskModes()
+const requestedMode = computed<Mode | null>(() => route.query.mode === 'batch' || route.query.mode === 'ordinary' ? route.query.mode : null)
+const requestedUnavailable = computed(() => requestedMode.value !== null && modes.value?.[requestedMode.value]?.can_view === false)
+const requestedReason = computed(() => requestedMode.value ? modes.value?.[requestedMode.value]?.reason : undefined)
 
 const mode = computed<Mode>(() => {
   const requested = route.query.mode
@@ -68,6 +84,7 @@ const mode = computed<Mode>(() => {
 
 const showSwitcher = computed(() => ordinaryAvailable.value && batchAvailable.value)
 const activePanel = computed(() => mode.value === 'ordinary' ? AsyncImageView : BatchImageGuideView)
+const canSubmit = computed(() => modes.value?.[mode.value]?.can_submit === true)
 
 const modeCards = computed(() => [
   {
@@ -85,7 +102,7 @@ const modeCards = computed(() => [
 ])
 
 function reasonLabel(reason?: string) {
-  if (!reason) return t('imageTasks.reasons.ready')
+  if (!reason) return t(modes.value ? 'imageTasks.reasons.ready' : 'imageTasks.reasons.dependency_unavailable')
   const key = 'imageTasks.reasons.' + reason
   const translated = t(key)
   return translated === key ? reason : translated
@@ -100,14 +117,6 @@ onMounted(async () => {
   await refreshImageTaskModes(true)
 })
 
-// A direct link may request a mode that is currently switched off; normalize the
-// query so the visible page and the URL agree.
-watch([ordinaryAvailable, batchAvailable], () => {
-  const requested = route.query.mode
-  if (requested && requested !== mode.value) {
-    void router.replace({ path: '/image-tasks', query: { mode: mode.value } })
-  }
-})
 </script>
 
 <style scoped>
@@ -133,6 +142,7 @@ watch([ordinaryAvailable, batchAvailable], () => {
   border: 1px solid var(--surface-edge, rgba(148, 163, 184, 0.25));
   border-radius: var(--surface-radius-panel, 12px);
   background: var(--surface-field, rgba(148, 163, 184, 0.06));
+  max-width: 100%;
 }
 
 .mode-card {
@@ -184,5 +194,17 @@ watch([ordinaryAvailable, batchAvailable], () => {
 .mode-card-hint {
   font-size: 0.75rem;
   color: var(--surface-muted);
+}
+
+@media (max-width: 639px) {
+  .mode-switcher-track {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .mode-card {
+    min-width: 0;
+    width: 100%;
+  }
 }
 </style>
