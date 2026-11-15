@@ -13,7 +13,7 @@
           </span>
           <Toggle
             :model-value="ordinaryEnabled"
-            :disabled="switchSaving.ordinary"
+            :disabled="saving || switchSaving.ordinary"
             data-testid="image-task-ordinary-toggle"
             :aria-label="t('admin.imageTasks.switches.ordinary')"
             @update:model-value="value => persistSwitch('ordinary', value)"
@@ -26,7 +26,7 @@
           </span>
           <Toggle
             :model-value="batchEnabled"
-            :disabled="switchSaving.batch"
+            :disabled="saving || switchSaving.batch"
             data-testid="image-task-batch-toggle"
             :aria-label="t('admin.imageTasks.switches.batch')"
             @update:model-value="value => persistSwitch('batch', value)"
@@ -109,7 +109,7 @@
         <button type="button" class="btn btn-secondary btn-sm" :disabled="testing" @click="testConnection">
           {{ testing ? t('common.loading') : t('admin.imageTasks.storage.testConnection') }}
         </button>
-        <button type="button" class="btn btn-primary btn-sm" data-testid="save-image-task-settings" :disabled="saving" @click="save">
+        <button type="button" class="btn btn-primary btn-sm" data-testid="save-image-task-settings" :disabled="saving || switchSaving.ordinary || switchSaving.batch" @click="save">
           {{ saving ? t('common.loading') : t('common.save') }}
         </button>
       </div>
@@ -218,7 +218,7 @@ function reportError(error: unknown) {
 // Each switch persists on its own request: a rejected ordinary switch (for
 // example, an incomplete storage target) must never roll back the batch switch.
 async function persistSwitch(mode: 'ordinary' | 'batch', value: boolean) {
-  if (switchSaving[mode]) return
+  if (saving.value || switchSaving[mode]) return
   const target = mode === 'ordinary' ? ordinaryEnabled : batchEnabled
   const previous = target.value
   target.value = value
@@ -227,8 +227,9 @@ async function persistSwitch(mode: 'ordinary' | 'batch', value: boolean) {
     const next = await stepUp.run(() => updateImageTaskSettings(
       mode === 'ordinary' ? { ordinary_enabled: value } : { batch_enabled: value },
     ))
-    ordinaryEnabled.value = next.ordinary_enabled
-    batchEnabled.value = next.batch_enabled
+    // The other switch can have a newer independent request in flight. Its
+    // value in this response is only a snapshot, not an acknowledgement.
+    target.value = mode === 'ordinary' ? next.ordinary_enabled : next.batch_enabled
     // The console menu reads the same capability endpoint; refresh it so the
     // entry appears without a full page reload.
     void refreshImageTaskModes(true)
@@ -247,6 +248,7 @@ async function persistSwitch(mode: 'ordinary' | 'batch', value: boolean) {
 }
 
 async function save() {
+  if (saving.value || switchSaving.ordinary || switchSaving.batch) return
   saving.value = true
   try {
     const next = await stepUp.run(() => updateImageTaskSettings({

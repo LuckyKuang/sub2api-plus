@@ -55,6 +55,17 @@ func TestListCommercialModelMappingsKeepsConfiguredStateAndExactGroupBindings(t 
 	noMapping := create("no-mapping", allowed.ID)
 	_, err = client.Account.UpdateOneID(noMapping.ID).SetCredentials(map[string]any{"access_token": "not-a-model"}).Save(ctx)
 	require.NoError(t, err)
+	// Passthrough ignores even a nonempty saved mapping. The explicit current
+	// false flag must still take precedence over the legacy true flag.
+	passthrough := create("passthrough", allowed.ID)
+	_, err = client.Account.UpdateOneID(passthrough.ID).SetExtra(map[string]any{"openai_passthrough": true}).Save(ctx)
+	require.NoError(t, err)
+	legacy := create("legacy-passthrough", allowed.ID)
+	_, err = client.Account.UpdateOneID(legacy.ID).SetExtra(map[string]any{"openai_oauth_passthrough": true}).Save(ctx)
+	require.NoError(t, err)
+	restricted := create("explicitly-restricted", allowed.ID)
+	_, err = client.Account.UpdateOneID(restricted.ID).SetExtra(map[string]any{"openai_passthrough": false, "openai_oauth_passthrough": true}).Save(ctx)
+	require.NoError(t, err)
 
 	out, err := repo.ListCommercialModelMappings(ctx, []int64{allowed.ID})
 	require.NoError(t, err)
@@ -64,6 +75,9 @@ func TestListCommercialModelMappingsKeepsConfiguredStateAndExactGroupBindings(t 
 		{Platform: service.PlatformOpenAI, ModelMapping: map[string]any{"shared": "private-target"}},
 		{Platform: service.PlatformOpenAI, ModelMapping: map[string]any{"cooldown-and-expired": "private-target"}},
 		{Platform: service.PlatformOpenAI},
+		{Platform: service.PlatformOpenAI},
+		{Platform: service.PlatformOpenAI},
+		{Platform: service.PlatformOpenAI, ModelMapping: map[string]any{"explicitly-restricted": "private-target"}},
 	}, out[allowed.ID])
 
 	out, err = repo.ListCommercialModelMappings(ctx, []int64{allowed.ID, other.ID})

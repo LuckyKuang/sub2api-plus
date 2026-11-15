@@ -2,13 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import SubscriptionsView from '../SubscriptionsView.vue'
 
-const { list, getById, getProgress, extend, resetQuota, showError } = vi.hoisted(() => ({
+const { list, getById, getProgress, extend, resetQuota, showError, publicSettings } = vi.hoisted(() => ({
   list: vi.fn(),
   getById: vi.fn(),
   getProgress: vi.fn(),
   extend: vi.fn(),
   resetQuota: vi.fn(),
-  showError: vi.fn()
+  showError: vi.fn(),
+  publicSettings: { server_timezone: 'UTC' as string | undefined }
 }))
 
 vi.mock('@/api/admin', () => ({
@@ -18,7 +19,7 @@ vi.mock('@/api/admin', () => ({
     users: { list: vi.fn().mockResolvedValue({ items: [] }) }
   }
 }))
-vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showError, showSuccess: vi.fn() }) }))
+vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showError, showSuccess: vi.fn(), cachedPublicSettings: publicSettings }) }))
 vi.mock('vue-i18n', async () => ({
   ...await vi.importActual<typeof import('vue-i18n')>('vue-i18n'),
   useI18n: () => ({ t: (key: string) => key })
@@ -83,6 +84,8 @@ let wrapper: ReturnType<typeof mountView>
 
 beforeEach(async () => {
   vi.clearAllMocks()
+  vi.stubEnv('TZ', 'UTC')
+  publicSettings.server_timezone = 'UTC'
   list.mockResolvedValue({ items: rows, total: 1, pages: 1 })
   getById.mockResolvedValue({ ...rows[0], group: planGroup })
   getProgress.mockResolvedValue(null)
@@ -94,6 +97,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   wrapper.unmount()
+  vi.unstubAllEnvs()
 })
 
 describe('subscription adjust and reset dialogs', () => {
@@ -217,6 +221,73 @@ describe('subscription adjust and reset dialogs', () => {
     await wrapper.get('#extend-subscription-form').trigger('submit')
     await flushPromises()
     expect(extend).toHaveBeenCalledWith(1, { monthly_reset_at: monthlyReset.toISOString() })
+  })
+
+  it('preserves unedited reset times even when they are beyond expiry or have finer precision', async () => {
+    // The adjustment API is partial: editing weekly must leave the current
+    // monthly/daily anchors untouched, including values we cannot resubmit.
+    const dailyReset = new Date(Date.now() + 6 * 60 * 60 * 1000)
+    dailyReset.setMilliseconds(123)
+    const monthlyReset = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    getProgress.mockResolvedValue({
+      daily: { resets_at: dailyReset.toISOString() },
+      monthly: { resets_at: monthlyReset.toISOString() }
+    })
+    await wrapper.get('[data-test="adjust-subscription"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="extend-adjust-mode"]').setValue('windows')
+    const weeklyReset = new Date(Date.now() + 3 * 60 * 60 * 1000)
+    weeklyReset.setMilliseconds(0)
+    await wrapper.get('[data-test="extend-weekly-reset"]').setValue(toLocal(weeklyReset))
+    await wrapper.get('#extend-subscription-form').trigger('submit')
+    await flushPromises()
+    expect(showError).not.toHaveBeenCalled()
+    expect(extend).toHaveBeenCalledWith(1, { weekly_reset_at: weeklyReset.toISOString() })
+  })
+
+  it('accepts daily midnight in the configured server timezone rather than the browser timezone', async () => {
+    // Server contract: dailyWindowStartFromResetAt uses timezone.Location().
+    // Kathmandu midnight is 18:15 UTC on the preceding calendar day.
+    publicSettings.server_timezone = 'Asia/Kathmandu'
+    const reset = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+    reset.setUTCHours(18, 15, 0, 0)
+    expect(reset.getHours()).toBe(18)
+    await wrapper.get('[data-test="adjust-subscription"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="extend-adjust-mode"]').setValue('windows')
+    await wrapper.get('[data-test="extend-daily-reset"]').setValue(toLocal(reset))
+    await wrapper.get('#extend-subscription-form').trigger('submit')
+    await flushPromises()
+    expect(showError).not.toHaveBeenCalled()
+    expect(extend).toHaveBeenCalledWith(1, { daily_reset_at: reset.toISOString() })
+  })
+
+  it('rejects browser midnight when it is not midnight in the configured server timezone', async () => {
+    publicSettings.server_timezone = 'Asia/Kathmandu'
+    const reset = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+    reset.setUTCHours(0, 0, 0, 0)
+    await wrapper.get('[data-test="adjust-subscription"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="extend-adjust-mode"]').setValue('windows')
+    await wrapper.get('[data-test="extend-daily-reset"]').setValue(toLocal(reset))
+    await wrapper.get('#extend-subscription-form').trigger('submit')
+    await flushPromises()
+    expect(extend).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenCalledWith('admin.subscriptions.dailyResetMustBeMidnight')
+  })
+
+  it.each([undefined, 'unsupported/timezone'])('defers daily midnight validation to the API when server timezone is %s', async (timezone) => {
+    publicSettings.server_timezone = timezone
+    const reset = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+    reset.setUTCHours(18, 15, 0, 0)
+    await wrapper.get('[data-test="adjust-subscription"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="extend-adjust-mode"]').setValue('windows')
+    await wrapper.get('[data-test="extend-daily-reset"]').setValue(toLocal(reset))
+    await wrapper.get('#extend-subscription-form').trigger('submit')
+    await flushPromises()
+    expect(showError).not.toHaveBeenCalled()
+    expect(extend).toHaveBeenCalledWith(1, { daily_reset_at: reset.toISOString() })
   })
 
   it('sends only quota reset times in the quota-reset mode', async () => {

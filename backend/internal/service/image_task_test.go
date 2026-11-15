@@ -507,6 +507,43 @@ func TestImageTaskServiceFinishesDuringCacheOutage(t *testing.T) {
 	require.Equal(t, ImageTaskStatusFailed, got.Status)
 }
 
+type imageTaskTimedOutStore struct{ imageTaskMemoryStore }
+
+func (s *imageTaskTimedOutStore) Get(ctx context.Context, _ string) (*ImageTaskRecord, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+type imageTaskContextAwareHistory struct{ imageTaskMemoryHistory }
+
+func (h *imageTaskContextAwareHistory) GetForCompletion(ctx context.Context, id string) (*ImageTaskRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return h.imageTaskMemoryHistory.GetForCompletion(ctx, id)
+}
+
+// R6: a Redis timeout must not consume PostgreSQL's independent recovery
+// budget and lose the already-observed provider result.
+func TestImageTaskServicePersistsCompletionAfterCacheReadTimeout(t *testing.T) {
+	ctx := context.Background()
+	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
+	store := &imageTaskTimedOutStore{}
+	history := &imageTaskContextAwareHistory{}
+	svc := NewImageTaskService(store)
+	svc.SetHistoryRepository(history)
+	task, err := svc.Create(ctx, owner)
+	require.NoError(t, err)
+	store.saveErr = errors.New("redis unavailable")
+
+	require.NoError(t, svc.Complete(ctx, task.ID, http.StatusOK, []byte(`{"data":[{"url":"https://example.test/image.png"}]}`)))
+	got, err := history.Get(ctx, owner, task.ID)
+	require.NoError(t, err)
+	require.Equal(t, ImageTaskStatusCompleted, got.Status)
+	require.Equal(t, 1, got.ActualImages)
+	require.JSONEq(t, `{"data":[{"url":"https://example.test/image.png"}]}`, string(got.Result))
+}
+
 // R6/R7: never replay old URLs when current storage cannot issue fresh ones;
 // do not mark an incomplete object-key index as a readable archive.
 func TestImageTaskServiceDoesNotReplayExpiredOrIncompleteImageURLs(t *testing.T) {

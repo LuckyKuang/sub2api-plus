@@ -24,10 +24,10 @@ func TestListCommercialModelMappingsUsesOneNarrowAuthorizedProjection(t *testing
 	repo := newAccountRepositoryWithSQL(nil, db, nil)
 	mock.ExpectQuery("commercial model mapping projection").
 		WithArgs("{1,2}", service.StatusActive).
-		WillReturnRows(sqlmock.NewRows([]string{"group_id", "platform", "model_mapping"}).
-			AddRow(int64(1), service.PlatformOpenAI, `{"public":"private-target","invalid":42}`).
-			AddRow(int64(2), service.PlatformOpenCodeGo, `{"public":"other-private-target"}`).
-			AddRow(int64(2), service.PlatformOpenAI, `null`))
+		WillReturnRows(sqlmock.NewRows([]string{"group_id", "platform", "model_mapping", "passthrough_flags"}).
+			AddRow(int64(1), service.PlatformOpenAI, `{"public":"private-target","invalid":42}`, `{}`).
+			AddRow(int64(2), service.PlatformOpenCodeGo, `{"public":"other-private-target"}`, `{}`).
+			AddRow(int64(2), service.PlatformOpenAI, `null`, `{}`))
 	out, err := repo.ListCommercialModelMappings(context.Background(), []int64{1, 2, 1})
 	require.NoError(t, err)
 	require.Equal(t, map[int64][]service.CommercialModelMapping{
@@ -41,8 +41,10 @@ func TestListCommercialModelMappingsUsesOneNarrowAuthorizedProjection(t *testing
 	require.True(t, found)
 	require.Contains(t, selectClause, "ag.group_id, a.platform")
 	require.Contains(t, selectClause, "a.credentials->'model_mapping'")
+	require.Contains(t, selectClause, "a.extra->'openai_passthrough'")
+	require.Contains(t, selectClause, "a.extra->'openai_oauth_passthrough'")
 	require.NotContains(t, selectClause, "a.credentials,")
-	for _, unneeded := range []string{"a.*", "a.extra", "proxy_id", "access_token", "proxies", "JOIN groups"} {
+	for _, unneeded := range []string{"a.*", "a.extra,", "proxy_id", "access_token", "proxies", "JOIN groups"} {
 		require.NotContains(t, normalized, unneeded)
 	}
 	require.Contains(t, normalized, "ag.group_id = ANY($1)")
@@ -61,9 +63,9 @@ func TestListCommercialModelMappingsEmptyAndReadFailures(t *testing.T) {
 		err  error
 	}{
 		{name: "query", err: errors.New("database unavailable")},
-		{name: "scan", rows: sqlmock.NewRows([]string{"group_id", "platform", "model_mapping"}).AddRow("not-an-id", service.PlatformOpenAI, `{}`)},
-		{name: "decode", rows: sqlmock.NewRows([]string{"group_id", "platform", "model_mapping"}).AddRow(int64(1), service.PlatformOpenAI, `{`)},
-		{name: "iteration", rows: sqlmock.NewRows([]string{"group_id", "platform", "model_mapping"}).AddRow(int64(1), service.PlatformOpenAI, `{}`).RowError(0, errors.New("read interrupted"))},
+		{name: "scan", rows: sqlmock.NewRows([]string{"group_id", "platform", "model_mapping", "passthrough_flags"}).AddRow("not-an-id", service.PlatformOpenAI, `{}`, `{}`)},
+		{name: "decode", rows: sqlmock.NewRows([]string{"group_id", "platform", "model_mapping", "passthrough_flags"}).AddRow(int64(1), service.PlatformOpenAI, `{`, `{}`)},
+		{name: "iteration", rows: sqlmock.NewRows([]string{"group_id", "platform", "model_mapping", "passthrough_flags"}).AddRow(int64(1), service.PlatformOpenAI, `{}`, `{}`).RowError(0, errors.New("read interrupted"))},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			db, mock, err := sqlmock.New()
@@ -82,6 +84,40 @@ func TestListCommercialModelMappingsEmptyAndReadFailures(t *testing.T) {
 			out, err := repo.ListCommercialModelMappings(context.Background(), []int64{1})
 			require.Error(t, err)
 			require.Nil(t, out, "a failed read must not return a partial directory")
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+// Catalog coverage follows the same routing contract as AccountPublicModels:
+// passthrough ignores saved model mappings, including the historical flag.
+func TestCommercialModelProjectionIgnoresPassthroughMappings(t *testing.T) {
+	for _, tc := range []struct {
+		name, platform, flags string
+		bypass                bool
+	}{
+		{"enabled", service.PlatformOpenAI, `{"openai_passthrough":true}`, true},
+		{"legacy", service.PlatformOpenAI, `{"openai_oauth_passthrough":true}`, true},
+		{"explicit false wins", service.PlatformOpenAI, `{"openai_passthrough":false,"openai_oauth_passthrough":true}`, false},
+		{"invalid new falls through", service.PlatformOpenAI, `{"openai_passthrough":"true","openai_oauth_passthrough":true}`, true},
+		{"other provider", service.PlatformGrok, `{"openai_passthrough":true}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = db.Close() })
+			repo := newAccountRepositoryWithSQL(nil, db, nil)
+			mock.ExpectQuery("SELECT ag.group_id, a.platform").WithArgs("{1}", service.StatusActive).
+				WillReturnRows(sqlmock.NewRows([]string{"group_id", "platform", "model_mapping", "passthrough_flags"}).
+					AddRow(1, tc.platform, `{"gpt-5":"gpt-5"}`, tc.flags))
+			out, err := repo.ListCommercialModelMappings(context.Background(), []int64{1})
+			require.NoError(t, err)
+			require.Len(t, out[1], 1)
+			if tc.bypass {
+				require.Nil(t, out[1][0].ModelMapping)
+			} else {
+				require.Equal(t, map[string]any{"gpt-5": "gpt-5"}, out[1][0].ModelMapping)
+			}
 			require.NoError(t, mock.ExpectationsWereMet())
 		})
 	}

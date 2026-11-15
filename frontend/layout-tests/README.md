@@ -36,6 +36,8 @@ wrap inside the selection field, and an open checkbox menu follows its growing
 height without covering the selected text.
 Aggregate creation and editing also preserve the ordinary Key's platform badge
 colors in both the checkbox menu and selected content, including saved choices.
+Their API fixtures return the sidebar's independent image-mode capabilities
+and the complete saved key detail, matching the production response contracts.
 JSDOM component tests cannot establish these geometry requirements.
 
 The user layout fixture mounts the real AppLayout, sidebar, header and Select.

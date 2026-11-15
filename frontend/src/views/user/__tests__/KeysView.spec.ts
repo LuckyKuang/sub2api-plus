@@ -19,6 +19,7 @@ let statusLocale: 'en' | 'zh' = 'en'
 
 const {
   listKeys,
+  getKeyById,
   updateKey,
   getPublicSettings,
   getDashboardApiKeysUsage,
@@ -31,6 +32,7 @@ const {
   nextStep,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
+  getKeyById: vi.fn(),
   updateKey: vi.fn(),
   getPublicSettings: vi.fn(),
   getDashboardApiKeysUsage: vi.fn(),
@@ -72,6 +74,7 @@ const messages: Record<string, string> = {
 vi.mock('@/api', () => ({
   keysAPI: {
     list: listKeys,
+    getById: getKeyById,
     create: vi.fn(),
     update: updateKey,
     delete: vi.fn(),
@@ -314,6 +317,7 @@ describe('user KeysView column settings', () => {
     localStorage.clear()
 
     listKeys.mockReset()
+    getKeyById.mockReset().mockResolvedValue({ ...createApiKey(), group_binding_mode: 'custom', aggregate_group_ids: [1, 2] })
     updateKey.mockReset()
     vi.mocked(keysAPI.create).mockReset()
     getPublicSettings.mockReset()
@@ -725,6 +729,7 @@ describe('user KeysView column settings', () => {
       listKeys.mockResolvedValue({ items: [{ ...createApiKey(), group_binding_mode: 'custom', aggregate_group_ids: [1, 2], group_id: null }], total: 1, page: 1, page_size: 20, pages: 1 })
       const wrapper = await mountView()
       await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await flushPromises()
       expect(wrapper.getComponent(CheckboxDropdown).props('modelValue')).toEqual([1, 2])
       expect(wrapper.findComponent(NativeAccessFields).exists()).toBe(false)
       wrapper.findComponent('#key-aggregate-mode').vm.$emit('update:modelValue', 'all')
@@ -732,6 +737,70 @@ describe('user KeysView column settings', () => {
       await wrapper.get('#key-form').trigger('submit')
       await flushPromises()
       expect(updateKey).toHaveBeenCalledWith(1, expect.objectContaining({ group_binding_mode: 'all', aggregate_group_ids: [], group_id: undefined, conversion_enabled: false }))
+      wrapper.unmount()
+    })
+
+    it('blocks editing custom keys if the stored scope cannot be loaded', async () => {
+      // List membership is redacted for display. Falling back to [1] would
+      // replace persisted [1, 2] when saving an unrelated name change.
+      listKeys.mockResolvedValue({ items: [{ ...createApiKey(), group_binding_mode: 'custom', aggregate_group_ids: [1], group_id: null }], total: 1, page: 1, page_size: 20, pages: 1 })
+      getKeyById.mockRejectedValue(new Error('temporary read failure'))
+      const wrapper = await mountView()
+      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('#key-form').exists()).toBe(false)
+      expect(showError).toHaveBeenCalledWith('keys.failedToLoad')
+      expect(updateKey).not.toHaveBeenCalled()
+      wrapper.unmount()
+    })
+
+    it('omits unchanged aggregate scope on an unrelated edit and submits deliberate changes', async () => {
+      // Revoked members remain stored for later restoration. A name-only edit
+      // must neither remove them nor rebind them through current authorization.
+      listKeys.mockResolvedValue({ items: [{ ...createApiKey(), group_binding_mode: 'custom', aggregate_group_ids: [1], group_id: null }], total: 1, page: 1, page_size: 20, pages: 1 })
+      getKeyById.mockResolvedValue({ ...createApiKey(), group_binding_mode: 'custom', aggregate_group_ids: [1, 2], group_id: null })
+      const wrapper = await mountView()
+      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await flushPromises()
+      expect(wrapper.getComponent(CheckboxDropdown).props('modelValue')).toEqual([1, 2])
+      await wrapper.get('[data-tour="key-form-name"]').setValue('Renamed key')
+      await wrapper.get('#key-form').trigger('submit')
+      await flushPromises()
+      expect(updateKey).toHaveBeenCalledWith(1, expect.objectContaining({ name: 'Renamed key' }))
+      expect(updateKey.mock.calls[0]![1]).not.toHaveProperty('aggregate_group_ids')
+      expect(updateKey.mock.calls[0]![1]).not.toHaveProperty('group_binding_mode')
+
+      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await flushPromises()
+      wrapper.getComponent(CheckboxDropdown).vm.$emit('update:modelValue', [1])
+      await nextTick()
+      await wrapper.get('#key-form').trigger('submit')
+      await flushPromises()
+      expect(updateKey).toHaveBeenLastCalledWith(1, expect.objectContaining({ group_binding_mode: 'custom', aggregate_group_ids: [1] }))
+      wrapper.unmount()
+    })
+
+    it('keeps a late detail response for another key out of the active edit', async () => {
+      const first: ApiKey = { ...createApiKey(), group_binding_mode: 'custom', aggregate_group_ids: [1], group_id: null }
+      const second: ApiKey = { ...first, id: 2, name: 'Second key', aggregate_group_ids: [2] }
+      let resolveFirst!: (key: ApiKey) => void
+      const pendingFirst = new Promise<ApiKey>(resolve => { resolveFirst = resolve })
+      getKeyById.mockImplementation((id: number) => id === 1 ? pendingFirst : Promise.resolve(second))
+      listKeys.mockResolvedValue({ items: [first, second], total: 2, page: 1, page_size: 20, pages: 1 })
+      const wrapper = await mountView()
+      const editButtons = wrapper.findAll('button').filter(button => button.text().includes('common.edit'))
+      await editButtons[0]!.trigger('click')
+      await editButtons[1]!.trigger('click')
+      await flushPromises()
+      await wrapper.get('[data-tour="key-form-name"]').setValue('Second key draft')
+      resolveFirst(first)
+      await flushPromises()
+      expect((wrapper.get('[data-tour="key-form-name"]').element as HTMLInputElement).value).toBe('Second key draft')
+      expect(wrapper.getComponent(CheckboxDropdown).props('modelValue')).toEqual([2])
+      await wrapper.get('#key-form').trigger('submit')
+      await flushPromises()
+      expect(updateKey).toHaveBeenCalledWith(2, expect.objectContaining({ name: 'Second key draft' }))
+      expect(updateKey.mock.calls[0]![1]).not.toHaveProperty('aggregate_group_ids')
       wrapper.unmount()
     })
 

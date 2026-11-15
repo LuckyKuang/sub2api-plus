@@ -2200,7 +2200,11 @@ func (r *accountRepository) ListCommercialModelMappings(ctx context.Context, gro
 	}
 	rows, err := r.sql.QueryContext(ctx, `
 		SELECT ag.group_id, a.platform,
-			COALESCE(a.credentials->'model_mapping', 'null'::jsonb)::text
+			COALESCE(a.credentials->'model_mapping', 'null'::jsonb)::text,
+			jsonb_build_object(
+				'openai_passthrough', a.extra->'openai_passthrough',
+				'openai_oauth_passthrough', a.extra->'openai_oauth_passthrough'
+			)::text
 		FROM account_groups ag
 		JOIN accounts a ON a.id = ag.account_id
 		WHERE ag.group_id = ANY($1)
@@ -2216,12 +2220,21 @@ func (r *accountRepository) ListCommercialModelMappings(ctx context.Context, gro
 	for rows.Next() {
 		var groupID int64
 		var mapping service.CommercialModelMapping
-		var raw string
-		if err := rows.Scan(&groupID, &mapping.Platform, &raw); err != nil {
+		var raw, flags string
+		if err := rows.Scan(&groupID, &mapping.Platform, &raw, &flags); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(raw), &mapping.ModelMapping); err != nil {
 			return nil, fmt.Errorf("decode commercial model mapping: %w", err)
+		}
+		account := service.Account{Platform: mapping.Platform}
+		if err := json.Unmarshal([]byte(flags), &account.Extra); err != nil {
+			return nil, fmt.Errorf("decode commercial passthrough flags: %w", err)
+		}
+		if account.IsOpenAIPassthroughEnabled() {
+			// Forwarding bypasses the saved mapping. Catalog coverage must use
+			// the same unrestricted model scope, without hydrating credentials.
+			mapping.ModelMapping = nil
 		}
 		out[groupID] = append(out[groupID], mapping)
 	}

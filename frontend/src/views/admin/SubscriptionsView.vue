@@ -1285,8 +1285,8 @@ const extendResets = reactive<Record<SubscriptionQuotaWindow, string>>({
   weekly: '',
   monthly: ''
 })
-// Echoed current reset times, used to skip the local midnight rule for values
-// that were not edited: they already come from the server, so they are valid.
+// Echoed values are display-only until edited. Omitting them preserves the
+// server's current value, including precision and changes made since loading.
 const extendResetBaseline = reactive<Record<SubscriptionQuotaWindow, string>>({
   fiveHour: '',
   daily: '',
@@ -1601,6 +1601,22 @@ const parseLocalDateTime = (value: string): Date | null => {
 
 const toRfc3339 = (date: Date) => date.toISOString()
 
+const isServerMidnight = (date: Date): boolean | null => {
+  const timeZone = appStore.cachedPublicSettings?.server_timezone
+  if (!timeZone) return null
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }).formatToParts(date)
+    return parts.filter(part => ['hour', 'minute', 'second'].includes(part.type))
+      .every(part => part.value === '00')
+  } catch {
+    // Older public-settings caches or browser timezone data may be incomplete;
+    // the API remains authoritative rather than assuming the browser timezone.
+    return null
+  }
+}
+
 const handleExtend = async (subscription: UserSubscription) => {
   extendingSubscription.value = subscription
   extendForm.mode = 'days'
@@ -1700,7 +1716,7 @@ const handleExtendSubscription = async () => {
     // absent, which keeps their current reset time untouched.
     for (const window of extendQuotaWindows.value) {
       const value = extendResets[window]
-      if (!value) continue
+      if (!value || value === extendResetBaseline[window]) continue
       const resetAt = parseLocalDateTime(value)
       if (!resetAt || resetAt <= now) {
         appStore.showError(t('admin.subscriptions.windowResetMustBeFuture'))
@@ -1716,10 +1732,7 @@ const handleExtendSubscription = async () => {
           return
         }
       }
-      // An untouched echoed value already satisfies the server rule, so the
-      // browser-side midnight check only applies to edited values.
-      const untouched = value === extendResetBaseline[window]
-      if (!untouched && window === 'daily' && (resetAt.getHours() !== 0 || resetAt.getMinutes() !== 0 || resetAt.getSeconds() !== 0)) {
+      if (window === 'daily' && isServerMidnight(resetAt) === false) {
         appStore.showError(t('admin.subscriptions.dailyResetMustBeMidnight'))
         return
       }

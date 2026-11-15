@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	infraerrors "github.com/LuckyKuang/sub2api-plus/internal/pkg/errors"
@@ -16,6 +17,7 @@ import (
 
 const settingKeyImageStorageConfig = "image_storage_config"
 const imageStorageConfigInvalidationChannel = "sub2api:image_storage_config:invalidate"
+const imageStorageConfigCacheTTL = 30 * time.Second
 
 // ErrImageStorageIncomplete 表示开关已打开但凭证不全，无法启用异步生图。
 var ErrImageStorageIncomplete = infraerrors.BadRequest(
@@ -54,6 +56,7 @@ type ImageStorageSettings struct {
 //
 // 解析结果带缓存：网关每次请求都要判断功能是否开启，不能每次都查库。保存设置时调用
 // Invalidate 清缓存，下一次请求即重建客户端——这是"后台开关立即生效、无需重启"的实现。
+// 缓存最多保留 30 秒，防止实例错过失效广播后永久使用旧开关或存储位置。
 type ImageStorageSettingService struct {
 	settingRepo     SettingRepository
 	encryptor       SecretEncryptor
@@ -67,6 +70,7 @@ type ImageStorageSettingService struct {
 
 	mu            sync.Mutex
 	resolved      bool
+	resolvedAt    time.Time
 	uploader      *ImageResultUploader
 	enabled       bool
 	switchEnabled bool
@@ -129,13 +133,17 @@ func NewImageStorageSettingService(
 	factory ImageStorageFactory,
 	fallback config.ImageStorageConfig,
 ) *ImageStorageSettingService {
-	return &ImageStorageSettingService{
+	svc := &ImageStorageSettingService{
 		settingRepo: settingRepo,
 		encryptor:   encryptor,
 		backup:      backup,
 		factory:     factory,
 		fallback:    fallback,
 	}
+	if backup != nil {
+		backup.SubscribeS3ConfigChanges(svc.invalidateAndPublish)
+	}
+	return svc
 }
 
 // Resolver 返回可注入 ImageTaskService 的解析函数。
@@ -151,12 +159,13 @@ func (s *ImageStorageSettingService) resolve() (*ImageResultUploader, bool) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.resolved {
+	if s.resolved && time.Since(s.resolvedAt) < imageStorageConfigCacheTTL {
 		return s.uploader, s.enabled
 	}
 
 	ctx := context.Background()
 	s.resolved = true
+	s.resolvedAt = time.Now()
 	s.uploader, s.enabled, s.reason = nil, false, "disabled"
 	s.switchEnabled = false
 
@@ -278,15 +287,21 @@ func (s *ImageStorageSettingService) Update(ctx context.Context, in ImageStorage
 	if err := s.settingRepo.Set(ctx, settingKeyImageStorageConfig, string(data)); err != nil {
 		return nil, fmt.Errorf("save image storage settings: %w", err)
 	}
+	s.invalidateAndPublish(ctx)
+
+	in.SecretAccessKey = ""
+	return &in, nil
+}
+
+// Both direct image settings and inherited backup settings change the effective
+// image target, so both writers invalidate every instance's resolved client.
+func (s *ImageStorageSettingService) invalidateAndPublish(ctx context.Context) {
 	s.Invalidate()
 	if s.invalidationBus != nil {
 		if err := s.invalidationBus.Publish(ctx, imageStorageConfigInvalidationChannel); err != nil {
 			logger.L().Warn("image_storage.settings_invalidation_publish_failed", zap.Error(err))
 		}
 	}
-
-	in.SecretAccessKey = ""
-	return &in, nil
 }
 
 func (s *ImageStorageSettingService) encryptSecret(secret string) (string, error) {

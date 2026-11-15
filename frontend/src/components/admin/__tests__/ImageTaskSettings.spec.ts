@@ -131,6 +131,48 @@ describe('ImageTaskSettings', () => {
     expect(showSuccess).not.toHaveBeenCalled()
   })
 
+  // R2: independent switches must retain their own state even when snapshots
+  // from overlapping requests arrive out of order.
+  it('does not overwrite the other switch with an older response snapshot', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    type Snapshot = Awaited<ReturnType<typeof getSettings>>
+    let resolveOrdinary!: (value: Snapshot) => void
+    let resolveBatch!: (value: Snapshot) => void
+    updateSettings.mockImplementationOnce(() => new Promise(resolve => { resolveOrdinary = resolve }))
+    updateSettings.mockImplementationOnce(() => new Promise(resolve => { resolveBatch = resolve }))
+
+    await wrapper.get('[data-testid="image-task-ordinary-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="image-task-batch-toggle"]').trigger('click')
+    const snapshot = await getSettings()
+    resolveBatch({ ...snapshot, ordinary_enabled: false, batch_enabled: true })
+    await flushPromises()
+    resolveOrdinary({ ...snapshot, ordinary_enabled: false, batch_enabled: false })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="image-task-ordinary-toggle"]').attributes('data-checked')).toBe('false')
+    expect(wrapper.get('[data-testid="image-task-batch-toggle"]').attributes('data-checked')).toBe('true')
+  })
+
+  it('keeps storage saves and switch writes from overwriting each other', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    let resolveUpdate!: (value: Awaited<ReturnType<typeof getSettings>>) => void
+    updateSettings.mockImplementationOnce(() => new Promise(resolve => { resolveUpdate = resolve }))
+
+    await wrapper.get('[data-testid="image-task-ordinary-toggle"]').trigger('click')
+    expect(wrapper.get('[data-testid="save-image-task-settings"]').attributes('disabled')).toBeDefined()
+    resolveUpdate({ ...await getSettings(), ordinary_enabled: false })
+    await flushPromises()
+
+    updateSettings.mockImplementationOnce(() => new Promise(resolve => { resolveUpdate = resolve }))
+    await wrapper.get('[data-testid="save-image-task-settings"]').trigger('click')
+    expect(wrapper.get('[data-testid="image-task-ordinary-toggle"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="image-task-batch-toggle"]').attributes('disabled')).toBeDefined()
+    resolveUpdate({ ...await getSettings(), ordinary_enabled: false })
+    await flushPromises()
+  })
+
   it('reports a rejected target change instead of pretending it saved', async () => {
     updateSettings.mockRejectedValue(new Error('existing image tasks still reference this storage target'))
     const wrapper = mountPanel()

@@ -914,3 +914,8 @@ so retail aliases do not disappear merely because the account serves a different
 upstream name. Account-test pickers likewise preserve exact public aliases when
 the provider catalog contains their mapped upstream target; passthrough accounts
 retain their existing catalog behavior.
+
+For OpenAI passthrough accounts, saved account mappings do not restrict public
+offers: forwarding ignores them too. The catalog projects only the current and
+legacy passthrough flags alongside model mappings, applies the account flag
+precedence, and never loads complete account credentials or extra metadata.

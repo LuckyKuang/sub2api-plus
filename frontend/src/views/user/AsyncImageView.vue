@@ -464,6 +464,9 @@ let pollTimer: ReturnType<typeof setTimeout> | null = null
 let modelRequestID = 0
 let taskListRequestID = 0
 let detailRequestID = 0
+let historyFilterRequestID = 0
+let pollGeneration = 0
+let disposed = false
 
 const filters = reactive({ status: '', platform: '', model: '', since: '', until: '' })
 const form = reactive({ apiKeyId: 0, mode: 'generation' as AsyncImageMode, model: '', prompt: '', size: '1024x1024', customWidth: 1024, customHeight: 1024, quality: 'auto', aspectRatio: DEFAULT_GEMINI_ASPECT_RATIO, n: 1 })
@@ -577,9 +580,13 @@ function promptTitle(task: AsyncImageTask): string {
 }
 
 async function loadHistoryFilters() {
+  if (disposed) return
+  const requestID = ++historyFilterRequestID
   try {
-    historyFilters.value = await getUserImageTaskFilters()
+    const loaded = await getUserImageTaskFilters()
+    if (!disposed && requestID === historyFilterRequestID) historyFilters.value = loaded
   } catch (error) {
+    if (disposed || requestID !== historyFilterRequestID) return
     appStore.showError(errorMessage(error, t('asyncImage.errors.loadFilters')))
   }
 }
@@ -589,6 +596,7 @@ async function refreshHistory() {
 }
 
 async function openTask(task: AsyncImageTask) {
+  if (disposed) return
   const requestID = ++detailRequestID
   selectedTask.value = task
   loadingDetail.value = true
@@ -616,12 +624,13 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 async function loadApiKeys() {
-  if (supportMode.value) return
+  if (disposed || supportMode.value) return
   try {
     const loadedKeys = [] as ApiKey[]
     let page = 1
     while (true) {
       const response = await keysAPI.list(page, 100, { sort_by: 'created_at', sort_order: 'desc' })
+      if (disposed) return
       loadedKeys.push(...(response.items || []))
       const pages = Number.isFinite(response.pages) && response.pages > 0 ? response.pages : 1
       if (page >= pages || (response.items || []).length === 0) break
@@ -629,11 +638,13 @@ async function loadApiKeys() {
     }
     apiKeys.value = loadedKeys
   } catch (error) {
+    if (disposed) return
     appStore.showError(errorMessage(error, t('asyncImage.errors.loadKeys')))
   }
 }
 
 async function loadFormModels() {
+  if (disposed) return
   const key = formApiKey.value
   const requestID = ++modelRequestID
   availableModels.value = []
@@ -738,6 +749,7 @@ function removeMaskImage() {
 }
 
 function stopPolling() {
+  pollGeneration++
   if (pollTimer) {
     clearTimeout(pollTimer)
     pollTimer = null
@@ -746,17 +758,21 @@ function stopPolling() {
 
 function schedulePolling() {
   stopPolling()
-  if (!tasks.value.some(task => task.status === 'processing')) return
+  if (disposed || !tasks.value.some(task => task.status === 'processing')) return
+  const generation = pollGeneration
   pollTimer = setTimeout(async () => {
-    await refreshProcessingTasks()
-    schedulePolling()
+    pollTimer = null
+    await refreshProcessingTasks(generation)
+    if (!disposed && generation === pollGeneration) schedulePolling()
   }, POLL_INTERVAL_MS)
 }
 
-async function refreshProcessingTasks() {
+async function refreshProcessingTasks(generation: number) {
+  if (disposed || generation !== pollGeneration) return
   const active = tasks.value.filter(task => task.status === 'processing')
   if (!active.length) return
   const refreshed = await Promise.allSettled(active.map(task => getUserImageTask(task.task_id)))
+  if (disposed || generation !== pollGeneration) return
   refreshed.forEach((result, index) => {
     if (result.status !== 'fulfilled') return
     const taskID = active[index].task_id
@@ -767,6 +783,7 @@ async function refreshProcessingTasks() {
 }
 
 async function loadTasks(showError = true): Promise<boolean> {
+  if (disposed) return false
   const requestID = ++taskListRequestID
   stopPolling()
   loadingTasks.value = true
@@ -809,11 +826,12 @@ function applyFilters() {
 
 async function confirmDeleteTask() {
   const target = deleteTarget.value
-  if (!target || deletingTaskId.value || supportMode.value) return
+  if (disposed || !target || deletingTaskId.value || supportMode.value) return
 
   deletingTaskId.value = target.task_id
   try {
     await deleteUserImageTask(target.task_id)
+    if (disposed) return
     if (selectedTask.value?.task_id === target.task_id) selectedTask.value = null
     deleteTarget.value = null
     appStore.showSuccess(t('asyncImage.delete.success'))
@@ -823,12 +841,13 @@ async function confirmDeleteTask() {
       await loadTasks()
     }
   } catch (error) {
+    if (disposed) return
     const code = (error as { code?: string })?.code
     appStore.showError(t(code === 'IMAGE_TASK_DELETE_NOT_ALLOWED'
       ? 'asyncImage.errors.deleteNotAllowed'
       : 'asyncImage.errors.delete'))
   } finally {
-    deletingTaskId.value = ''
+    if (!disposed) deletingTaskId.value = ''
   }
 }
 
@@ -864,22 +883,24 @@ function closeCreateDialog() {
 
 async function downloadSelectedTask() {
   const task = selectedTask.value
-  if (!task || downloading.value || taskImageUrls(task).length === 0) return
+  if (disposed || !task || downloading.value || taskImageUrls(task).length === 0) return
   downloading.value = true
   try {
     const blob = await downloadUserImageTaskZip(task.task_id)
+    if (disposed) return
     saveAsyncImageBlob(blob, `${task.task_id}.zip`)
   } catch (error) {
+    if (disposed) return
     appStore.showError(error instanceof AsyncImageDownloadValidationError
       ? t('asyncImage.errors.invalidArchive')
       : errorMessage(error, t('asyncImage.errors.download')))
   } finally {
-    downloading.value = false
+    if (!disposed) downloading.value = false
   }
 }
 
 async function submitTask() {
-  if (!props.canSubmit || supportMode.value) return
+  if (disposed || !props.canSubmit || supportMode.value) return
   const key = formApiKey.value
   if (!key) {
     appStore.showError(t('asyncImage.create.noKeys'))
@@ -919,6 +940,7 @@ async function submitTask() {
         ...(editMask.value ? { mask: editMask.value.file } : {}),
       })
       : await submitAsyncImageGeneration(key.key, payload)
+    if (disposed) return
     filters.status = ''
     filters.platform = ''
     filters.model = ''
@@ -933,20 +955,25 @@ async function submitTask() {
     schedulePolling()
     void loadHistoryFilters()
   } catch (error) {
+    if (disposed) return
     appStore.showError(errorMessage(error, t('asyncImage.errors.submit')))
   } finally {
-    submitting.value = false
+    if (!disposed) submitting.value = false
   }
 }
 
 onMounted(async () => {
   await Promise.all([loadApiKeys(), loadHistoryFilters()])
+  if (disposed) return
   await loadTasks()
 })
 
 onBeforeUnmount(() => {
+  disposed = true
   taskListRequestID++
   detailRequestID++
+  modelRequestID++
+  historyFilterRequestID++
   stopPolling()
   clearEditUploads()
 })

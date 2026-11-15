@@ -59,6 +59,10 @@ Asynchronous image tasks are **disabled by default** and gated on object storage
 
 **Admin → Settings → Image Tasks.** This single panel owns both generation switches and the one object-storage target. Each switch is saved as soon as it is toggled, independently of the other; the storage form is saved with the Save button. Saving takes effect immediately — the object-storage client is rebuilt on the next request, so there is no container restart. An enabled mode stays visible in the console menu even when the signed-in user has no eligible key: the page explains the missing key, while submission still requires one.
 
+Overlapping switch responses update only their own switch. Storage saves wait
+for pending switch writes, and switches wait for a storage save, so an older
+snapshot cannot restore a previously changed switch.
+
 Configuration read failures return `dependency_unavailable` and fail closed;
 only an absent administrator value may fall back to deployment defaults.
 Environment-provided secrets copied into saved settings use the same encrypted
@@ -67,11 +71,15 @@ An empty custom endpoint remains valid for native AWS S3.
 
 The two submission switches are independent. *Allow new standard image tasks* gates ordinary submissions and requires a complete target; it cannot be saved while the effective bucket or credentials are missing. Native AWS S3 does not require a custom endpoint. *Allow new batch image jobs* gates provider batch submissions and falls back to `batch_image.enabled` when no administrator value exists, so upgrading never opens or closes the feature by itself. Neither switch affects polling, download, settlement, or provider cleanup of work that was already accepted.
 
-Because the async image storage and the database backup share one S3 client, the form defaults to **reusing the backup S3 configuration**: it borrows the endpoint, region and credentials already configured there and keeps only its own bucket, prefix, and date-path choice, so backups stay under `backups/` while images go to `images/`. Leave the bucket empty to use the backup bucket as well. Untick the box to point images at a completely separate account.
+Enable **Reuse backup S3 configuration** to borrow the endpoint, region and credentials already configured there. Image storage keeps its own client, bucket, prefix, and date-path choice, so backups stay under `backups/` while images go to `images/`. Leave the bucket empty to use the backup bucket as well. With reuse disabled, configure the image storage account directly.
 
 Saving storage settings invalidates the local client and publishes the existing
-configuration invalidation channel to other instances. The batch switch is read
-from the shared setting store for every decision.
+configuration invalidation channel to other instances. Saving backup S3 settings
+does the same for image clients that inherit that configuration. Image clients
+also re-read settings on their next request after at most 30 seconds, so missed
+notifications cannot preserve an old switch or storage target indefinitely.
+Reconciliation failures disable new submissions until settings can be read.
+The batch switch is read from the shared setting store for every decision.
 
 Both prefix fields have an independent **Append date path** switch. The stored value remains a stable base such as `images/`; when enabled, each new object is written under a concrete server-timezone directory such as `images/2026/08/17/`. The server resolves the date for every new object, so no scheduled configuration update is needed at midnight. Existing objects are not moved.
 
@@ -288,6 +296,11 @@ an available mode remains reachable. New submissions follow `can_submit` while
 history follows `can_view`; loading capability never mounts an unauthorized
 panel. Switching login/support targets clears capability and panel state and
 rejects late responses. Both panels explain their different ownership rules.
+The standard panel stops polling when unmounted and ignores its outstanding
+responses. An in-flight poll or initial key/filter load cannot restart timers,
+continue pagination, or issue follow-up history reads after the panel is gone.
+Refreshing or changing its task list also invalidates earlier polls, so an old
+processing snapshot cannot replace a newer result or restart obsolete polling.
 
 Console routes use the authenticated user, never a client-supplied user ID:
 

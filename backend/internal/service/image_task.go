@@ -603,7 +603,11 @@ func (s *ImageTaskService) finish(ctx context.Context, id, status string, status
 		// Internal completion already owns this accepted task ID. This narrow
 		// lookup never participates in public reads or relaxes their owner scope.
 		if reader, ok := s.history.(ImageTaskCompletionReader); ok {
-			task, err = reader.GetForCompletion(finishCtx, id)
+			// A timed-out Redis lookup has consumed finishCtx's deadline.
+			// PostgreSQL recovery needs its own bounded dependency budget.
+			recoveryCtx, recoveryCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			task, err = reader.GetForCompletion(recoveryCtx, id)
+			recoveryCancel()
 		}
 		if err != nil {
 			return ErrImageTaskUnavailable.WithCause(err)

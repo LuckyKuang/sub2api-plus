@@ -164,6 +164,7 @@ describe('AsyncImageView task management', () => {
     setAdminSupportContext(null)
     document.body.innerHTML = ''
     vi.clearAllMocks()
+    vi.useRealTimers()
   })
 
   it('uses matching shared Select triggers for the platform and status filters', async () => {
@@ -188,6 +189,80 @@ describe('AsyncImageView task management', () => {
     expect(listUserImageTasks).toHaveBeenCalledWith(expect.objectContaining({ offset: 0, platform: '', model: '' }))
     expect(wrapper.find('[data-testid="async-image-api-key-filter"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="view-task-imgtask_failed"]').exists()).toBe(true)
+  })
+
+  it('does not restart polling when an in-flight poll completes after unmount', async () => {
+    // Leaving the panel ends its requests, even when the old scope's HTTP read
+    // finishes after the login/support target has changed.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const processing = { ...completedTask, status: 'processing' }
+    let finishPoll!: (task: typeof processing) => void
+    const pendingPoll = new Promise<typeof processing>(resolve => { finishPoll = resolve })
+    listUserImageTasks.mockResolvedValue({ object: 'list', data: [processing], has_more: false })
+    getUserImageTask.mockResolvedValueOnce(processing).mockReturnValueOnce(pendingPoll)
+    const wrapper = mountView()
+    await flushPromises()
+    vi.advanceTimersByTime(3000)
+    await flushPromises()
+    expect(getUserImageTask).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(3000)
+    await flushPromises()
+    expect(getUserImageTask).toHaveBeenCalledTimes(2)
+
+    wrapper.unmount()
+    setAdminSupportContext({ actorId: 1, userId: 42 })
+    finishPoll(processing)
+    await flushPromises()
+    vi.advanceTimersByTime(9000)
+    await flushPromises()
+    expect(getUserImageTask).toHaveBeenCalledTimes(2)
+    expect(listUserImageTasks).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it.each(['keys', 'filters'])('does not continue initial loading after unmount while %s are pending', async dependency => {
+    let finish!: (value: unknown) => void
+    const pending = new Promise<unknown>(resolve => { finish = resolve })
+    if (dependency === 'keys') keysList.mockReturnValueOnce(pending)
+    else getUserImageTaskFilters.mockReturnValueOnce(pending)
+    const wrapper = mountView()
+    await flushPromises()
+    expect(listUserImageTasks).not.toHaveBeenCalled()
+    wrapper.unmount()
+    setAdminSupportContext({ actorId: 1, userId: 42 })
+    finish(dependency === 'keys'
+      ? { items: [{ id: 9 }], pages: 2 }
+      : { platforms: ['openai'], models: [] })
+    await flushPromises()
+    expect(keysList).toHaveBeenCalledTimes(1)
+    expect(listUserImageTasks).not.toHaveBeenCalled()
+    expect(getUserImageTask).not.toHaveBeenCalled()
+    expect(showError).not.toHaveBeenCalled()
+  })
+
+  it('discards a pending poll when a newer task list replaces its generation', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const processing = { ...completedTask, status: 'processing' }
+    let finishPoll!: (task: typeof processing) => void
+    getUserImageTask.mockReturnValue(new Promise<typeof processing>(resolve => { finishPoll = resolve }))
+    listUserImageTasks
+      .mockResolvedValueOnce({ object: 'list', data: [processing], has_more: false })
+      .mockResolvedValue({ object: 'list', data: [completedTask], has_more: false })
+    const wrapper = mountView()
+    await flushPromises()
+    vi.advanceTimersByTime(3000)
+    await flushPromises()
+    expect(getUserImageTask).toHaveBeenCalledTimes(1)
+    await wrapper.get('button[title="asyncImage.actions.refresh"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-task-id="imgtask_completed"] .badge').text()).toBe('Completed')
+    finishPoll(processing)
+    await flushPromises()
+    expect(wrapper.get('[data-task-id="imgtask_completed"] .badge').text()).toBe('Completed')
+    vi.advanceTimersByTime(6000)
+    await flushPromises()
+    expect(getUserImageTask).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
   })
 
   // Proposal R1/R2: switching new submissions off must leave history readable.

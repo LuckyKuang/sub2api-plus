@@ -235,6 +235,10 @@ async function interceptAuditAPI(page: Page) {
     } else if (url.pathname === '/api/v1/subscriptions') data = subscriptions
     else if (url.pathname === '/api/v1/subscriptions/active' || url.pathname === '/api/v1/subscriptions/progress') data = []
     else if (url.pathname === '/api/v1/subscriptions/summary') data = { active_count: 0, subscriptions: [] }
+    else if (url.pathname === '/api/v1/image-tasks/modes') data = {
+      ordinary: { enabled: false, can_submit: false, can_view: false, reason: 'disabled' },
+      batch: { enabled: false, can_submit: false, can_view: false, reason: 'disabled' },
+    }
     else if (url.pathname === '/api/v1/auth/me' || url.pathname === '/api/v1/user/profile') data = user
     else if (url.pathname === '/api/v1/settings/public') data = { contact_info: 'support@example.test' }
     await route.fulfill({ json: { code: 0, data } })
@@ -584,6 +588,9 @@ async function interceptAggregateKeyAPI(page: Page, saved = false) {
   ].map(item => ({ ...item, status: 'active', subscription_type: 'standard', rate_multiplier: 1 }))
   const items = saved ? [{ id: 99901, name: 'Saved aggregate colors', key: 'sk-browser-fixture', status: 'active', group_binding_mode: 'custom', group_id: null, aggregate_group_ids: [1, 2, 3], created_at: '2026-01-01T00:00:00Z' }] : []
   await page.route(url => url.pathname === '/api/v1/keys', route => route.fulfill({ json: { code: 0, data: { items, total: items.length, pages: saved ? 1 : 0, page: 1, page_size: 20 } } }))
+  if (saved) {
+    await page.route(url => url.pathname === '/api/v1/keys/99901', route => route.fulfill({ json: { code: 0, data: items[0] } }))
+  }
   await page.route(url => url.pathname === '/api/v1/usage/dashboard/api-keys-usage', route => route.fulfill({ json: { code: 0, data: { stats: {} } } }))
   await page.route(url => url.pathname === '/api/v1/groups/available', route => route.fulfill({ json: { code: 0, data: groups } }))
   await page.route(url => url.pathname === '/api/v1/groups/rates', route => route.fulfill({ json: { code: 0, data: {} } }))
