@@ -81,8 +81,9 @@
             <span class="badge" :class="statusClass(row.status)">{{ statusLabel(row.status) }}</span>
             <p v-if="row.api_key_deleted" class="mt-1 text-xs surface-muted">{{ t('asyncImage.detail.deletedKey') }}</p>
             <p v-if="row.execution_status === 'unconfirmed'" class="mt-1 text-xs surface-muted">{{ t('asyncImage.detail.unconfirmed') }}</p>
-            <!-- "readable" is the normal state; only surface real read problems. -->
-            <p v-if="row.read_status && row.read_status !== 'readable'" class="task-cell-note mt-1 text-xs surface-muted" :title="t('asyncImage.readStatus.' + row.read_status)">{{ t('asyncImage.readStatus.' + row.read_status) }}</p>
+            <!-- Only a finished task can have a real read problem: while it runs,
+                 and for a failed task, "unarchived" is the expected state. -->
+            <p v-if="row.status === 'completed' && row.read_status && row.read_status !== 'readable'" class="task-cell-note mt-1 text-xs surface-muted" :title="t('asyncImage.readStatus.' + row.read_status)">{{ t('asyncImage.readStatus.' + row.read_status) }}</p>
           </template>
 
           <template #cell-result="{ row }">
