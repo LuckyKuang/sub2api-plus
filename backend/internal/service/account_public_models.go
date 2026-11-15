@@ -16,9 +16,9 @@ func PlatformDefaultModelIDs(platform string) []string {
 //
 // A configured model_mapping is authoritative: its keys are the public names the
 // account serves. Passthrough routing ignores the mapping, so those accounts
-// expose the platform catalog. An account without a mapping (every OAuth
-// account) falls back to its platform catalog, which keeps OAuth-only groups
-// listable without any manual model configuration.
+// expose the platform catalog. Accounts without a mapping return no explicit
+// IDs here; group-level fallback supplies the platform catalog when appropriate,
+// keeping OAuth-only groups listable without inventing account-specific models.
 //
 // listingPlatform scopes accounts pulled in through mixed scheduling to the
 // models that belong to the listed platform.

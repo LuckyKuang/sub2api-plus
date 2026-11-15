@@ -4,6 +4,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,4 +39,41 @@ func TestBatchImageSettingsStoredValueOverridesDefault(t *testing.T) {
 
 	require.NoError(t, svc.SetEnabled(ctx, false))
 	require.False(t, other.Enabled(ctx))
+}
+
+type failingImageSettingRepo struct {
+	SettingRepository
+	readErr error
+}
+
+func (r *failingImageSettingRepo) GetValue(ctx context.Context, key string) (string, error) {
+	if r.readErr != nil {
+		return "", r.readErr
+	}
+	return r.SettingRepository.GetValue(ctx, key)
+}
+
+func TestBatchImageSettingsReadFailureCannotReenableDisabledMode(t *testing.T) {
+	ctx := context.Background()
+	repo := &failingImageSettingRepo{SettingRepository: newStubSettingRepo()}
+	svc := NewBatchImageSettingsService(repo, true)
+	require.NoError(t, svc.SetEnabled(ctx, false))
+	repo.readErr = errors.New("database unavailable")
+	require.False(t, svc.Enabled(ctx))
+	require.Equal(t, BatchImageAvailability{Reason: "dependency_unavailable"}, svc.Availability(ctx))
+	repo.readErr = nil
+	require.Equal(t, BatchImageAvailability{Reason: "disabled"}, svc.Availability(ctx))
+}
+
+func TestBatchImageSettingsMissingRowUsesDeploymentDefault(t *testing.T) {
+	repo := &failingImageSettingRepo{readErr: fmt.Errorf("wrapped: %w", ErrSettingNotFound)}
+	svc := NewBatchImageSettingsService(repo, true)
+	require.True(t, svc.Enabled(context.Background()))
+}
+
+func TestBatchImageSettingsWorkerReadinessDoesNotChangeAdminSwitch(t *testing.T) {
+	svc := NewBatchImageSettingsService(newStubSettingRepo(), true)
+	svc.SetWorkerEnabled(false)
+	require.True(t, svc.Enabled(context.Background()))
+	require.Equal(t, BatchImageAvailability{Enabled: true, Reason: "worker_disabled"}, svc.Availability(context.Background()))
 }

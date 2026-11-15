@@ -948,7 +948,9 @@ func dailyWindowStartFromResetAt(resetAt *time.Time, now, expiresAt time.Time) (
 func avoidLegacyMidnightAnchor(start, startsAt time.Time) time.Time {
 	legacy := startOfDay(startsAt)
 	if legacy.Before(startsAt) && start.Equal(legacy) {
-		return start.Add(time.Nanosecond)
+		// PostgreSQL timestamps retain microseconds, so a nanosecond marker
+		// would disappear when persisted and re-enable legacy normalization.
+		return start.Add(time.Microsecond)
 	}
 	return start
 }

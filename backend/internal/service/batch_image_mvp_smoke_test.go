@@ -32,6 +32,7 @@ func TestBatchImageMVPFlow(t *testing.T) {
 	accountRepo := &publicBatchImageAccountRepo{accounts: []Account{testBatchImageAccount(accountID, AccountTypeAPIKey)}}
 	cfg := &config.Config{BatchImage: config.BatchImageConfig{
 		Enabled:                           true,
+		QueueEnabled:                      true,
 		MaxItemsPerJobDefault:             10,
 		MaxPromptCharsPerItem:             8000,
 		DefaultResponseMimeType:           "image/png",

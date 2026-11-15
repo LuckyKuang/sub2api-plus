@@ -205,7 +205,7 @@ func NewBatchImagePublicService(repo BatchImageRepository, accountRepo AccountRe
 }
 
 func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOwner, req BatchImageSubmitRequest, idempotencyKey string) (*BatchImagePublicBatch, error) {
-	if !s.enabled(ctx) {
+	if !s.enabled(ctx) || !s.Config.BatchImage.QueueEnabled {
 		return nil, ErrBatchImageDisabled
 	}
 	normalized, err := s.validateSubmitRequest(req)

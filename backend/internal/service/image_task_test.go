@@ -164,8 +164,10 @@ func TestImageTaskServiceLifecycleAndOwnership(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ImageTaskStatusCompleted, completed.Status)
 	require.Equal(t, http.StatusOK, completed.HTTPStatus)
-	require.Equal(t, "https://example.test/image.png", completed.ImageURL)
-	require.JSONEq(t, string(result), string(completed.Result))
+	// R6: an unarchived upstream URL is not a durable image reference.
+	require.Empty(t, completed.ImageURL)
+	require.Equal(t, "unarchived", completed.ReadStatus)
+	require.JSONEq(t, `{"created":123,"data":[{"url":""}]}`, string(completed.Result))
 	require.NotNil(t, completed.CompletedAt)
 }
 
@@ -224,7 +226,8 @@ func TestImageTaskServiceHistoryListKeepsMetadataAndScopesByAPIKey(t *testing.T)
 	require.NoError(t, err)
 	require.Len(t, completed.Data, 1)
 	require.Equal(t, ImageTaskStatusCompleted, completed.Data[0].Status)
-	require.Equal(t, "https://storage.example.test/images/task.png", completed.Data[0].ImageURL)
+	require.Empty(t, completed.Data[0].ImageURL)
+	require.Equal(t, "unarchived", completed.Data[0].ArchiveStatus)
 	require.Equal(t, 2, completed.Data[0].RequestedImages)
 	require.Equal(t, 1, completed.Data[0].ActualImages)
 	require.NotNil(t, completed.Data[0].CompletedAt)
@@ -365,7 +368,8 @@ func TestImageTaskServiceGetFallsBackToDurableHistory(t *testing.T) {
 	got, err := svc.Get(context.Background(), owner, created.ID)
 	require.NoError(t, err)
 	require.Equal(t, ImageTaskStatusCompleted, got.Status)
-	require.Equal(t, "https://example.test/image.png", got.ImageURL)
+	require.Empty(t, got.ImageURL)
+	require.Equal(t, "unarchived", got.ReadStatus)
 
 	_, err = svc.Get(context.Background(), ImageTaskOwner{UserID: 7, APIKeyID: 10}, created.ID)
 	require.ErrorIs(t, err, ErrImageTaskNotFound, "another key of the same user stays hidden on the gateway contract")
@@ -431,4 +435,102 @@ func TestImageTaskServiceReSignsStoredImageURLs(t *testing.T) {
 	require.Equal(t, "https://fresh.example.test/images/task-0.png", got.ImageURL)
 	require.NotContains(t, string(got.Result), "stale.example.test")
 	require.Equal(t, []string{"images/task-0.png", "images/task-1.png"}, storage.signed)
+}
+
+// R6: durable terminal history remains readable during a Redis outage, with
+// exactly the same user/key isolation as during normal cache operation.
+func TestImageTaskServiceReadsTerminalHistoryDuringCacheOutage(t *testing.T) {
+	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
+	store := &imageTaskMemoryStore{getErr: errors.New("redis unavailable")}
+	history := &imageTaskMemoryHistory{}
+	require.NoError(t, history.Save(context.Background(), &ImageTaskRecord{ID: "imgtask_archived", UserID: 7, APIKeyID: 9, Status: ImageTaskStatusFailed}))
+	svc := NewImageTaskService(store)
+	svc.SetHistoryRepository(history)
+	got, err := svc.Get(context.Background(), owner, "imgtask_archived")
+	require.NoError(t, err)
+	require.Equal(t, ImageTaskStatusFailed, got.Status)
+	for _, foreign := range []ImageTaskOwner{{UserID: 8}, {UserID: 7, APIKeyID: 10}} {
+		_, err = svc.Get(context.Background(), foreign, "imgtask_archived")
+		require.ErrorIs(t, err, ErrImageTaskNotFound)
+	}
+	history.getErr = errors.New("postgres unavailable")
+	_, err = svc.Get(context.Background(), owner, "imgtask_archived")
+	require.ErrorIs(t, err, ErrImageTaskUnavailable)
+}
+
+// R6: the cache is not the durable completion boundary. A failed cache write
+// cannot discard an already-observed provider result or its history index.
+func TestImageTaskServicePersistsTerminalHistoryWhenCacheWriteFails(t *testing.T) {
+	ctx := context.Background()
+	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
+	store := &imageTaskMemoryStore{}
+	history := &imageTaskMemoryHistory{}
+	svc := NewImageTaskService(store)
+	svc.SetHistoryRepository(history)
+	task, err := svc.Create(ctx, owner)
+	require.NoError(t, err)
+	store.saveErr = errors.New("redis write unavailable")
+	require.NoError(t, svc.Fail(ctx, task.ID, 502, []byte(`{"message":"provider failed"}`)))
+	stored, err := history.Get(ctx, owner, task.ID)
+	require.NoError(t, err)
+	require.Equal(t, ImageTaskStatusFailed, stored.Status)
+}
+
+func (h *imageTaskMemoryHistory) GetForCompletion(ctx context.Context, id string) (*ImageTaskRecord, error) {
+	if h.getErr != nil {
+		return nil, h.getErr
+	}
+	record := h.tasks[id]
+	if record == nil {
+		return nil, ErrImageTaskNotFound
+	}
+	copy := *record
+	return &copy, nil
+}
+
+// R6: completing an accepted task during a cache outage still persists the
+// observed result from its existing history identity, without reissuing work.
+func TestImageTaskServiceFinishesDuringCacheOutage(t *testing.T) {
+	ctx := context.Background()
+	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
+	store := &imageTaskMemoryStore{}
+	history := &imageTaskMemoryHistory{}
+	svc := NewImageTaskService(store)
+	svc.SetHistoryRepository(history)
+	task, err := svc.Create(ctx, owner)
+	require.NoError(t, err)
+	store.getErr = errors.New("redis unavailable")
+	store.saveErr = store.getErr
+	require.NoError(t, svc.Fail(ctx, task.ID, 502, []byte(`{"message":"provider failed"}`)))
+	got, err := svc.Get(ctx, owner, task.ID)
+	require.NoError(t, err)
+	require.Equal(t, ImageTaskStatusFailed, got.Status)
+}
+
+// R6/R7: never replay old URLs when current storage cannot issue fresh ones;
+// do not mark an incomplete object-key index as a readable archive.
+func TestImageTaskServiceDoesNotReplayExpiredOrIncompleteImageURLs(t *testing.T) {
+	for _, keys := range [][]string{nil, {"old-prefix/a.png"}, {"old-prefix/a.png", ""}} {
+		t.Run(string(rune('0'+len(keys))), func(t *testing.T) {
+			record := &ImageTaskRecord{ID: "imgtask_old", UserID: 7, APIKeyID: 9, Status: ImageTaskStatusCompleted, HistoryPersisted: true, StorageKeys: keys, Result: []byte(`{"data":[{"url":"https://old.test/expired-a"},{"url":"https://old.test/expired-b"}]}`)}
+			svc := NewImageTaskService(&imageTaskMemoryStore{task: record})
+			got, err := svc.Get(context.Background(), ImageTaskOwner{UserID: 7}, record.ID)
+			require.NoError(t, err)
+			require.Empty(t, got.ImageURL)
+			require.NotContains(t, string(got.Result), "old.test")
+			require.NotEqual(t, "readable", got.ReadStatus)
+			require.NotEqual(t, "archived", got.ArchiveStatus)
+		})
+	}
+}
+
+// Malformed/incomplete historical results must remain unarchived instead of
+// crashing a signed-in history read or guessing an object by its ordinal.
+func TestImageTaskServiceNullHistoryImageDoesNotPanic(t *testing.T) {
+	record := &ImageTaskRecord{ID: "imgtask_null", UserID: 7, APIKeyID: 9, Status: ImageTaskStatusCompleted, Result: []byte(`{"data":[null]}`)}
+	svc := NewImageTaskService(&imageTaskMemoryStore{task: record})
+	got, err := svc.Get(context.Background(), ImageTaskOwner{UserID: 7}, record.ID)
+	require.NoError(t, err)
+	require.Equal(t, "unarchived", got.ArchiveStatus)
+	require.Empty(t, got.ImageURL)
 }

@@ -903,3 +903,14 @@ platform/model presets from `/api/v1/admin/channels/long-context-defaults`.
 Different thresholds in one platform remain visible; missing tiers show 0,
 while explicit group/model overrides retain priority. Displaying inherited
 values never silently stores them as explicit overrides.
+
+
+### Account coverage in public catalogs
+
+Finite configured offers are intersected with linked accounts' public model
+mapping keys using the existing exact/wildcard matching rules. Composite offers
+check account coverage after resolving the public model to its route target,
+so retail aliases do not disappear merely because the account serves a different
+upstream name. Account-test pickers likewise preserve exact public aliases when
+the provider catalog contains their mapped upstream target; passthrough accounts
+retain their existing catalog behavior.

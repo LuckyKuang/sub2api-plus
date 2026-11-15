@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strings"
+
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	"github.com/LuckyKuang/sub2api-plus/internal/handler/admin"
 	"github.com/LuckyKuang/sub2api-plus/internal/securityaudit"
@@ -8,6 +10,15 @@ import (
 
 	"github.com/google/wire"
 )
+
+// ProvideImageTaskUserHandler wires local capability metadata without provider probes.
+func ProvideImageTaskUserHandler(tasks *service.ImageTaskService, storage *service.ImageStorageSettingService, batch *service.BatchImageSettingsService, keys *service.APIKeyService, accounts service.AccountRepository, cfg *config.Config) *ImageTaskUserHandler {
+	h := NewImageTaskUserHandler(tasks, storage, batch, keys)
+	h.accounts = accounts
+	h.batchProviders = service.NewBatchImageProviderRegistryFromConfig(cfg)
+	h.vertexEnabled = cfg != nil && cfg.BatchImage.VertexEnabled && strings.TrimSpace(cfg.BatchImage.VertexManagedGCSBucket) != ""
+	return h
+}
 
 // ProvideAdminHandlers creates the AdminHandlers struct
 func ProvideAdminHandlers(
@@ -330,7 +341,7 @@ var ProviderSet = wire.NewSet(
 	NewModelPlazaHandler,
 	ProvideAsyncImageHandler,
 	ProvideBatchImageHandler,
-	NewImageTaskUserHandler,
+	ProvideImageTaskUserHandler,
 
 	// Admin handlers
 	admin.NewDashboardHandler,

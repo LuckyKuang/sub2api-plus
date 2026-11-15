@@ -38,8 +38,8 @@ func (h *ImageTaskSettingsHandler) Get(c *gin.Context) {
 }
 
 // Update applies only the fields present in the payload. Enabling the ordinary
-// mode requires a complete target; changing endpoint or bucket while archived
-// images or accepted tasks exist is rejected by the service layer.
+// mode requires a complete target. Changing the storage target is allowed and
+// can make images archived under the previous target unreadable.
 func (h *ImageTaskSettingsHandler) Update(c *gin.Context) {
 	var req imageTaskSettingsPayload
 	if err := c.ShouldBindJSON(&req); err != nil {

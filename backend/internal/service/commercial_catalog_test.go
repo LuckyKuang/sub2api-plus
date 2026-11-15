@@ -40,6 +40,35 @@ func TestCommercialCatalogUsesPublicRoutesAndAllowlistWithoutChannel(t *testing.
 	require.Equal(t, int64(7), quote.PolicyVersion)
 }
 
+func TestAvailableChannelCatalogAccountCoverageSupportsWildcardMapping(t *testing.T) {
+	ch := plazaPricedChannel(1, "Channel", []int64{1}, PlatformOpenAI, "gpt-5", "claude-sonnet-4")
+	svc := newPlazaServiceWithBilling([]Channel{ch}, nil, nil, nil)
+	svc.SetCommercialCatalogSources(nil, &commercialAccountsStub{byGroup: map[int64][]CommercialModelMapping{1: {
+		{Platform: PlatformOpenAI, ModelMapping: map[string]any{"gpt-*": "upstream"}},
+	}}})
+	out, err := svc.ListAvailableChannelCatalog(context.Background(), []Group{{ID: 1, Platform: PlatformOpenAI}})
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	require.Len(t, out[0].Models, 1)
+	require.Equal(t, "gpt-5", out[0].Models[0].Name)
+}
+
+func TestAvailableChannelCatalogAccountCoverageUsesCompositeRouteTarget(t *testing.T) {
+	ch := plazaPricedChannel(1, "Channel", []int64{1}, PlatformOpenAI, "retail-alias", "unserved-alias")
+	svc := newPlazaServiceWithBilling([]Channel{ch}, nil, nil, nil)
+	svc.SetCommercialCatalogSources(&compositeRouteRepoStub{routes: []CompositeModelRoute{
+		{ID: 1, GroupID: 1, PublicModel: "retail-alias", MatchType: CompositeRouteMatchExact, Endpoint: CompositeRouteEndpointResponses, TargetPlatform: PlatformOpenAI, UpstreamModel: "gpt-5", Enabled: true},
+		{ID: 2, GroupID: 1, PublicModel: "unserved-alias", MatchType: CompositeRouteMatchExact, Endpoint: CompositeRouteEndpointResponses, TargetPlatform: PlatformOpenAI, UpstreamModel: "gpt-unserved", Enabled: true},
+	}}, &commercialAccountsStub{byGroup: map[int64][]CommercialModelMapping{1: {
+		{Platform: PlatformOpenAI, ModelMapping: map[string]any{"gpt-5": "provider-gpt-5"}},
+	}}})
+	out, err := svc.ListAvailableChannelCatalog(context.Background(), []Group{{ID: 1, Platform: PlatformComposite}})
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	require.Len(t, out[0].Models, 1)
+	require.Equal(t, "retail-alias", out[0].Models[0].Name)
+}
+
 func TestCommercialCatalogDoesNotPublishOtherSupplierDuplicateAlias(t *testing.T) {
 	g := Group{ID: 8, Platform: PlatformComposite}
 	ch := plazaPricedChannel(1, "Channel", []int64{8}, PlatformOpenAI, "shared")

@@ -151,7 +151,9 @@ func ProvideBatchImageSettingsService(settingRepo SettingRepository, cfg *config
 	if cfg != nil {
 		fallback = cfg.BatchImage.Enabled
 	}
-	return NewBatchImageSettingsService(settingRepo, fallback)
+	svc := NewBatchImageSettingsService(settingRepo, fallback)
+	svc.SetWorkerEnabled(cfg != nil && cfg.BatchImage.QueueEnabled)
+	return svc
 }
 
 func ProvideBatchImagePublicService(repo BatchImageRepository, accountRepo AccountRepository, groupRepo GroupRepository, userGroupRateRepo UserGroupRateRepository, queue BatchImageQueue, pricing *BatchImageModelPricingResolver, billingRepo UsageBillingRepository, authCache APIKeyAuthCacheInvalidator, cfg *config.Config, unfinished *GatewayUnfinishedTaskService, batchSettings *BatchImageSettingsService) *BatchImagePublicService {
@@ -793,18 +795,16 @@ func ProvideIPAccessControlService(
 // 启用状态由 settings 服务在运行时解析，因此后台改开关后无需重启即可生效。
 // ProvideImageTaskHistoryRetryService connects durable compensation to the task
 // service and starts its retry loop, so a failed history write is re-applied.
-func ProvideImageTaskHistoryRetryService(history ImageTaskHistoryRepository, retry ImageTaskHistoryRetryRepository, tasks *ImageTaskService) *ImageTaskHistoryRetryService {
+func ProvideImageTaskHistoryRetryService(history ImageTaskHistoryRepository, retry ImageTaskHistoryRetryRepository) *ImageTaskHistoryRetryService {
 	svc := NewImageTaskHistoryRetryService(history, retry)
-	if tasks != nil {
-		tasks.SetHistoryRetryQueue(svc)
-	}
 	svc.Start()
 	return svc
 }
 
-func ProvideImageTaskService(store ImageTaskStore, history ImageTaskHistoryRepository, settings *ImageStorageSettingService) *ImageTaskService {
+func ProvideImageTaskService(store ImageTaskStore, history ImageTaskHistoryRepository, settings *ImageStorageSettingService, retry *ImageTaskHistoryRetryService) *ImageTaskService {
 	svc := NewImageTaskServiceWithResolver(store, settings.Resolver(), defaultImageTaskTTL, defaultImageTaskExecutionTimeout)
 	svc.SetHistoryRepository(history)
+	svc.SetHistoryRetryQueue(retry)
 	return svc
 }
 

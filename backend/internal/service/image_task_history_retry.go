@@ -16,8 +16,8 @@ const (
 )
 
 // ImageTaskHistoryRetryService re-applies terminal task records whose PostgreSQL
-// write failed. The payload lives in the database, so a process restart does not
-// lose the result index; only the compact record is stored.
+// write failed. The compact payload lives in the database retry table or an
+// independent non-expiring Redis compensation hash, across worker restarts.
 type ImageTaskHistoryRetryService struct {
 	history  ImageTaskHistoryRepository
 	retry    ImageTaskHistoryRetryRepository
@@ -94,12 +94,15 @@ func (s *ImageTaskHistoryRetryService) Start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
 	s.done = make(chan struct{})
+	done := s.done
 	go func() {
-		defer close(s.done)
+		defer close(done)
 		ticker := time.NewTicker(s.interval)
 		defer ticker.Stop()
 		for {
-			_, _ = s.RunOnce(ctx, time.Now())
+			if _, err := s.RunOnce(ctx, time.Now()); err != nil && ctx.Err() == nil {
+				logger.L().Warn("image_task.history_retry_scan_failed", zap.Error(err))
+			}
 			select {
 			case <-ctx.Done():
 				return

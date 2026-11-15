@@ -62,7 +62,18 @@ func (b *commercialCatalogBuilder) allows(model SupportedModel) bool {
 		return true
 	}
 	name := strings.ToLower(strings.TrimSpace(model.Name))
-	return name != "" && servable[name]
+	if name == "" {
+		return false
+	}
+	if servable[name] {
+		return true
+	}
+	for pattern := range servable {
+		if matchWildcard(pattern, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // commercialModelCandidates enumerates finite configured public IDs. Global
@@ -91,6 +102,15 @@ func (s *ModelPlazaService) commercialModelCandidates(ctx context.Context, group
 	}
 	out := make([]commercialModelCandidate, 0, len(builder.candidates))
 	for _, candidate := range builder.candidates {
+		// Composite routing translates the public ID before account matching.
+		// Check the resolved request model rather than rejecting retail aliases.
+		accountModel := candidate.SupportedModel
+		if candidate.UpstreamModel != "" {
+			accountModel.Name = candidate.UpstreamModel
+		}
+		if !builder.allows(accountModel) {
+			continue
+		}
 		out = append(out, candidate)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -162,9 +182,6 @@ func (b *commercialCatalogBuilder) seedAccountServableModels(mappings []Commerci
 func (b *commercialCatalogBuilder) seedConfiguredModels(channel *Channel, mappings []CommercialModelMapping, routes []CompositeModelRoute) {
 	if channel != nil {
 		for _, model := range channel.SupportedModels() {
-			if !b.allows(model) {
-				continue
-			}
 			b.add(model, "", nil)
 		}
 	}
@@ -175,9 +192,6 @@ func (b *commercialCatalogBuilder) seedConfiguredModels(channel *Channel, mappin
 		}
 		for _, model := range pricing.Models {
 			candidate := SupportedModel{Name: model, Platform: platform}
-			if !b.allows(candidate) {
-				continue
-			}
 			p := pricing.Clone()
 			candidate.Pricing = &p
 			b.add(candidate, "", nil)
@@ -202,9 +216,6 @@ func (b *commercialCatalogBuilder) seedConfiguredModels(channel *Channel, mappin
 	for _, route := range routes {
 		if route.MatchType == CompositeRouteMatchExact {
 			routeModel := SupportedModel{Name: route.PublicModel, Platform: route.TargetPlatform}
-			if !b.allows(routeModel) {
-				continue
-			}
 			b.add(routeModel, "", nil)
 		}
 	}

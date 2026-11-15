@@ -15,6 +15,15 @@ turn retain the existing canonical extraction and trusted outbound identity.
 
 Administrator [read-only user assistance](USER_SUPPORT_VIEW.md) exposes explicitly registered panel GET reads, including existing image history, downloads and model catalogs. Model catalogs reuse the existing discovery handlers and trusted outbound identity contract. It does not expose inference, image submission, provider probes or other gateway write paths. The real administrator remains the management-audit actor, while the separately validated target scopes reads. No inference extraction, moderation ordering or outbound identity behavior changes in this flow.
 
+The unified image console adds authenticated user-history GET reads (capability,
+historical filter options, list/detail, task-local image ordinal and ZIP), plus
+failed-history deletion. These management routes do not accept generation
+prompts or select provider accounts, reserve balances, run generation or release
+unfinished-task capacity. Support registers only target-authorized GET variants;
+the original gateway generation/batch endpoints retain the same two-engine
+canonical extraction and pre-side-effect ordering. Object reads use trusted
+storage configuration and exact recorded keys, never user-supplied URLs.
+
 This document is the normative content-extraction matrix for Content
 Moderation and Prompt Audit. The shared implementation is
 `backend/internal/auditcontent`; protocol handlers and account paths must not

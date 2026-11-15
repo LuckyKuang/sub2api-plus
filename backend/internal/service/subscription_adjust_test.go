@@ -14,16 +14,16 @@ import (
 type adjustSubscriptionRepo struct {
 	userSubRepoNoop
 
-	sub            *UserSubscription
-	extendCalls    int
-	statusCalls    int
-	windowCalls    int
-	lastExpiry     time.Time
-	lastStatus     string
-	lastFiveHour   *time.Time
-	lastDaily      *time.Time
-	lastWeekly     *time.Time
-	lastMonthly    *time.Time
+	sub          *UserSubscription
+	extendCalls  int
+	statusCalls  int
+	windowCalls  int
+	lastExpiry   time.Time
+	lastStatus   string
+	lastFiveHour *time.Time
+	lastDaily    *time.Time
+	lastWeekly   *time.Time
+	lastMonthly  *time.Time
 }
 
 func (r *adjustSubscriptionRepo) GetByID(_ context.Context, id int64) (*UserSubscription, error) {
@@ -186,4 +186,21 @@ func TestAdjustSubscription_RejectsDaysAndExpiresAtTogether(t *testing.T) {
 func TestBulkSubscriptionAction_FiveHourOnlyResetIsValid(t *testing.T) {
 	input := BulkSubscriptionActionInput{SubscriptionIDs: []int64{1}, Action: "reset_quota", FiveHour: true}
 	require.NoError(t, input.Validate())
+}
+
+func TestAdjustSubscription_LegacyAnchorMarkerSurvivesDatabasePrecision(t *testing.T) {
+	useUTCTimezone(t)
+	starts := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+	now := starts.Add(time.Hour)
+	reset := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+	repo := &adjustSubscriptionRepo{sub: &UserSubscription{
+		ID: 9, StartsAt: starts, ExpiresAt: starts.AddDate(0, 1, 0),
+	}}
+	_, err := newAdjustSvc(repo, now).AdjustSubscription(context.Background(), 9, SubscriptionAdjustment{WeeklyResetAt: &reset})
+	require.NoError(t, err)
+	// PostgreSQL timestamps have microsecond resolution. Reconstruct that
+	// persisted precision before checking legacy normalization on the read path.
+	persisted := repo.lastWeekly.Truncate(time.Microsecond)
+	sub := &UserSubscription{StartsAt: starts, WeeklyWindowStart: &persisted}
+	require.WithinDuration(t, reset, *sub.WeeklyResetTime(), time.Microsecond)
 }

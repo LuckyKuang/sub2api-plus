@@ -54,6 +54,20 @@ func TestBatchImagePublicService_Submit(t *testing.T) {
 		require.ErrorIs(t, err, ErrBatchImageDisabled)
 	})
 
+	t.Run("disabled worker rejects before reservation provider writes and queueing", func(t *testing.T) {
+		svc, repo, queue, gemini, vertex := newTestBatchImagePublicService(true)
+		svc.Config.BatchImage.QueueEnabled = false
+		_, err := svc.Submit(ctx, testBatchImageOwner(), validBatchImageSubmitRequest(), "")
+		require.ErrorIs(t, err, ErrBatchImageDisabled)
+		require.Empty(t, repo.jobs)
+		require.Empty(t, svc.BillingRepo.(*fakeBatchImageBillingRepo).reserves)
+		require.Empty(t, gemini.submits)
+		require.Empty(t, vertex.submits)
+		require.Empty(t, queue.enqueued)
+		_, err = svc.ListModels(ctx, testBatchImageOwner())
+		require.NoError(t, err, "worker readiness must not disable model reads")
+	})
+
 	t.Run("accepts valid request stores refs and enqueues once", func(t *testing.T) {
 		svc, repo, queue, gemini, _ := newTestBatchImagePublicService(true)
 		req := validBatchImageSubmitRequest()
@@ -763,6 +777,7 @@ func newTestBatchImagePublicService(enabled bool) (*BatchImagePublicService, *fa
 		AuthCache:   &fakeBatchImageAuthCacheInvalidator{},
 		Config: &config.Config{BatchImage: config.BatchImageConfig{
 			Enabled:                 enabled,
+			QueueEnabled:            true,
 			MaxItemsPerJobDefault:   2,
 			MaxPromptCharsPerItem:   8,
 			DefaultResponseMimeType: "image/png",

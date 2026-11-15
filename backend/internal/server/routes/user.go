@@ -174,8 +174,10 @@ func RegisterUserRoutes(
 		imageTasks := authenticated.Group("/image-tasks")
 		{
 			imageTasks.GET("/modes", h.ImageTasks.Modes)
+			imageTasks.GET("/filters", h.ImageTasks.Filters)
 			imageTasks.GET("", h.ImageTasks.List)
 			imageTasks.GET("/:task_id", h.ImageTasks.Get)
+			imageTasks.GET("/:task_id/images/:index", panelRateLimiter.Heavy(), h.ImageTasks.Image)
 			imageTasks.GET("/:task_id/download", panelRateLimiter.Heavy(), h.ImageTasks.Download)
 			imageTasks.DELETE("/:task_id", h.ImageTasks.Delete)
 		}

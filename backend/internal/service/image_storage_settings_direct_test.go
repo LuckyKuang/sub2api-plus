@@ -64,3 +64,24 @@ func TestImageStorageSettingsAllowsPrefixAndSecretChanges(t *testing.T) {
 	_, err = svc.Update(ctx, rotated)
 	require.NoError(t, err)
 }
+
+func TestImageStorageSettingsAWSBackupTargetAllowsDefaultEndpointAndRequiresAccessKey(t *testing.T) {
+	for _, accessKey := range []string{"aws-ak", ""} {
+		t.Run(accessKey, func(t *testing.T) {
+			svc, repo, built := newImageStorageFixture(t, config.ImageStorageConfig{})
+			ctx := context.Background()
+			seedBackupS3(t, repo, BackupS3Config{Region: "us-east-1", Bucket: "aws-images", AccessKeyID: accessKey, SecretAccessKey: "aws-sk"})
+			_, err := svc.Update(ctx, ImageStorageSettings{Enabled: true, ReuseBackupS3: true})
+			if accessKey == "" {
+				require.ErrorIs(t, err, ErrImageStorageIncomplete)
+				return
+			}
+			require.NoError(t, err)
+			_, enabled := svc.resolve()
+			require.True(t, enabled)
+			require.Len(t, *built, 1)
+			require.Empty(t, (*built)[0].Endpoint)
+			require.Equal(t, "us-east-1", (*built)[0].Region)
+		})
+	}
+}

@@ -124,3 +124,33 @@ func normalizeImageTaskHistoryFilter(filter ImageTaskHistoryFilter) ImageTaskHis
 	}
 	return filter
 }
+
+// ImageTaskCompletionReader is internal worker recovery of a pre-existing row.
+// Public reads always use the owner-scoped repository methods instead.
+type ImageTaskCompletionReader interface {
+	GetForCompletion(context.Context, string) (*ImageTaskRecord, error)
+}
+
+type ImageTaskHistoryFilters struct {
+	Platforms []string `json:"platforms"`
+	Models    []string `json:"models"`
+}
+
+type ImageTaskHistoryFilterReader interface {
+	Filters(context.Context, int64) (*ImageTaskHistoryFilters, error)
+}
+
+func (s *ImageTaskService) Filters(ctx context.Context, userID int64) (*ImageTaskHistoryFilters, error) {
+	if s == nil || userID <= 0 {
+		return nil, ErrImageTaskUnavailable
+	}
+	reader, ok := s.history.(ImageTaskHistoryFilterReader)
+	if !ok {
+		return nil, ErrImageTaskUnavailable
+	}
+	filters, err := reader.Filters(ctx, userID)
+	if err != nil {
+		return nil, ErrImageTaskUnavailable.WithCause(err)
+	}
+	return filters, nil
+}

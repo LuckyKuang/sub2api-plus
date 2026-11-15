@@ -66,7 +66,7 @@ func TestAdminSupportRegistersSharedReadsAndNoMutations(t *testing.T) {
 		require.Equal(t, http.MethodGet, route.Method)
 		registered[route.Path] = true
 	}
-	for _, path := range []string{"/user/profile", "/keys", "/groups/available", "/usage/dashboard/trend", "/usage/errors/:id", "/channels/available", "/channel-monitor-v2/snapshot", "/channel-monitor-v3/snapshot", "/user/totp/status", "/user/passkeys", "/images/tasks/:task_id/download", "/images/batches/:id/items/:custom_id/content", "/payment/orders/my", "/redeem/history", "/user/aff"} {
+	for _, path := range []string{"/image-tasks/modes", "/image-tasks/filters", "/image-tasks", "/image-tasks/:task_id", "/image-tasks/:task_id/download", "/user/profile", "/keys", "/groups/available", "/usage/dashboard/trend", "/usage/errors/:id", "/channels/available", "/channel-monitor-v2/snapshot", "/channel-monitor-v3/snapshot", "/user/totp/status", "/user/passkeys", "/images/tasks/:task_id/download", "/images/batches/:id/items/:custom_id/content", "/payment/orders/my", "/redeem/history", "/user/aff"} {
 		require.True(t, registered["/api/v1/admin/support/users/:user_id"+path], path)
 	}
 	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {

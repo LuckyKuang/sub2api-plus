@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -109,6 +110,40 @@ func TestImageStorageSettingsMissingDatePathDefaultsDisabled(t *testing.T) {
 	var settings ImageStorageSettings
 	require.NoError(t, json.Unmarshal([]byte(`{"prefix":"images/"}`), &settings))
 	require.False(t, settings.AppendDatePath)
+}
+
+func TestImageStorageSettingsReadFailureCannotReenableDisabledMode(t *testing.T) {
+	fallback := config.ImageStorageConfig{
+		Enabled: true, Endpoint: "https://acct.r2.cloudflarestorage.com", Region: "auto",
+		Bucket: "yaml-bucket", AccessKeyID: "yaml-ak", SecretAccessKey: "yaml-sk",
+	}
+	svc, underlying, built := newImageStorageFixture(t, fallback)
+	ctx := context.Background()
+	current, err := svc.Get(ctx)
+	require.NoError(t, err)
+	current.Enabled = false
+	_, err = svc.Update(ctx, *current)
+	require.NoError(t, err)
+	repo := &failingImageSettingRepo{SettingRepository: underlying, readErr: errors.New("database unavailable")}
+	svc.settingRepo = repo
+	require.Equal(t, ImageStorageAvailability{Reason: "dependency_unavailable"}, svc.Availability())
+	require.Empty(t, *built, "an unavailable setting must not build the enabled environment target")
+	_, err = svc.Get(ctx)
+	require.Error(t, err)
+	_, err = svc.Update(ctx, *current)
+	require.Error(t, err)
+	repo.readErr = nil
+	require.Equal(t, ImageStorageAvailability{Reason: "disabled"}, svc.Availability(), "retry the setting read after a transient outage")
+}
+
+func TestImageStorageSettingsMissingRowUsesDeploymentDefault(t *testing.T) {
+	fallback := config.ImageStorageConfig{
+		Enabled: true, Endpoint: "https://acct.r2.cloudflarestorage.com", Region: "auto",
+		Bucket: "yaml-bucket", AccessKeyID: "yaml-ak", SecretAccessKey: "yaml-sk",
+	}
+	svc, _, _ := newImageStorageFixture(t, fallback)
+	svc.settingRepo = &failingImageSettingRepo{readErr: fmt.Errorf("wrapped: %w", ErrSettingNotFound)}
+	require.Equal(t, ImageStorageAvailability{Enabled: true}, svc.Availability())
 }
 
 // The admin switch must take effect without a restart: that is the entire point
@@ -323,4 +358,15 @@ func TestImageStorageSettingsTestConnectionDoesNotReuseFallbackForChangedTarget(
 	err := svc.TestConnection(context.Background(), request)
 	require.ErrorIs(t, err, ErrImageStorageIncomplete)
 	require.Empty(t, *built)
+}
+
+// R3 keeps the global switch distinct from submission readiness. An enabled
+// deployment with incomplete storage is visible but cannot accept submissions.
+func TestImageStorageSettingsAvailabilitySeparatesSwitchFromReadiness(t *testing.T) {
+	svc, _, _ := newImageStorageFixture(t, config.ImageStorageConfig{Enabled: true})
+	got := svc.Availability()
+	require.True(t, got.Enabled)
+	require.Equal(t, "not_configured", got.Reason)
+	_, ready := svc.Resolver()()
+	require.False(t, ready)
 }

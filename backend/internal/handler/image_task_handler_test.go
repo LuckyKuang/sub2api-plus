@@ -64,6 +64,10 @@ func (s *asyncImageDownloadStorage) Save(_ context.Context, key, _ string, data 
 	return "https://cdn.example.test/" + key, nil
 }
 
+func (s *asyncImageDownloadStorage) Sign(_ context.Context, key string) (string, error) {
+	return "https://cdn.example.test/" + key + "?fresh=true", nil
+}
+
 func (s *asyncImageDownloadStorage) Open(_ context.Context, key string) (*service.ImageStorageObject, error) {
 	if s.openErr != nil {
 		return nil, s.openErr
@@ -182,13 +186,14 @@ func (h *asyncImageMemoryHistory) DeleteFailed(_ context.Context, owner service.
 func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
-	tasks := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
+	storage := &asyncImageDownloadStorage{}
+	tasks := service.NewImageTaskServiceWithUploader(store, service.NewImageResultUploader(storage, "images/", false, 0, nil), time.Hour, time.Minute)
 	tasks.SetHistoryRepository(&asyncImageMemoryHistory{})
 	release := make(chan struct{})
 	h := &AsyncImageHandler{openAI: newGatewayAdmissionForTest(), tasks: tasks}
 	h.execute = func(_ string, c *gin.Context) {
 		<-release
-		c.JSON(http.StatusOK, gin.H{"created": 123, "data": []gin.H{{"url": "https://example.test/image.png"}}})
+		c.JSON(http.StatusOK, gin.H{"created": 123, "data": []gin.H{{"b64_json": base64.StdEncoding.EncodeToString(asyncImageTestPNG)}}})
 	}
 
 	router := gin.New()
@@ -241,7 +246,13 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
 	require.Equal(t, http.StatusOK, pollWriter.Code)
 	require.Equal(t, "no-store", pollWriter.Header().Get("Cache-Control"))
 	require.Empty(t, pollWriter.Header().Get("Retry-After"))
-	require.Contains(t, pollWriter.Body.String(), "https://example.test/image.png")
+	// R6: successful polling returns a fresh link for the archived exact key,
+	// rather than replaying the URL captured when the object was uploaded.
+	var polled service.ImageTask
+	require.NoError(t, json.Unmarshal(pollWriter.Body.Bytes(), &polled))
+	require.Equal(t, "https://cdn.example.test/images/"+accepted.TaskID+"-0.png?fresh=true", polled.ImageURL)
+	require.Equal(t, "readable", polled.ReadStatus)
+	require.NotContains(t, pollWriter.Body.String(), "b64_json")
 
 	listReq := httptest.NewRequest(http.MethodGet, "/v1/images/tasks?status=completed&limit=20", nil)
 	listWriter := httptest.NewRecorder()
@@ -264,10 +275,10 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
 func TestAsyncImageHandlerSupportUsesSameKeyScopedRead(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	history := &asyncImageMemoryHistory{tasks: map[string]*service.ImageTaskRecord{
-		"target": {ID: "target", UserID: 7, APIKeyID: 99, Status: service.ImageTaskStatusCompleted, Result: json.RawMessage(`{"data":[{"url":"https://example.test/target.png"}]}`), CreatedAt: 10},
+		"target": {ID: "target", UserID: 7, APIKeyID: 99, Status: service.ImageTaskStatusCompleted, Result: json.RawMessage(`{"data":[{"url":"https://expired.test/target.png"}]}`), StorageKeys: []string{"original/target.png"}, CreatedAt: 10},
 		"other":  {ID: "other", UserID: 8, APIKeyID: 100, Status: service.ImageTaskStatusCompleted, CreatedAt: 20},
 	}, order: []string{"target", "other"}}
-	tasks := service.NewImageTaskService(&asyncImageMemoryStore{tasks: history.tasks})
+	tasks := service.NewImageTaskServiceWithUploader(&asyncImageMemoryStore{tasks: history.tasks}, service.NewImageResultUploader(&asyncImageDownloadStorage{}, "new-prefix/", false, 0, nil), time.Hour, time.Minute)
 	tasks.SetHistoryRepository(history)
 	h := &AsyncImageHandler{openAI: newGatewayAdmissionForTest(), tasks: tasks}
 	router := gin.New()
@@ -280,7 +291,8 @@ func TestAsyncImageHandlerSupportUsesSameKeyScopedRead(t *testing.T) {
 	list := httptest.NewRecorder()
 	router.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/support/images/tasks", nil))
 	require.Equal(t, http.StatusOK, list.Code)
-	require.Contains(t, list.Body.String(), "target.png")
+	require.Contains(t, list.Body.String(), "https://cdn.example.test/original/target.png?fresh=true")
+	require.NotContains(t, list.Body.String(), "expired.test")
 	require.NotContains(t, list.Body.String(), "other")
 	require.NotContains(t, list.Body.String(), "storage_keys")
 	forbidden := httptest.NewRecorder()

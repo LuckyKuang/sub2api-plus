@@ -29,12 +29,12 @@ WHERE task_id = $1 AND user_id = $2 AND api_key_id = $3`
 			"task_id", "user_id", "api_key_id", "request_type", "model", "platform", "prompt_preview",
 			"status", "http_status", "image_url", "result", "error",
 			"storage_keys", "requested_images", "actual_images",
-			"created_at", "completed_at", "expires_at",
+			"created_at", "completed_at", "expires_at", "api_key_deleted",
 		}).AddRow(
 			"imgtask_failed", owner.UserID, owner.APIKeyID, "generation", "gpt-image-2", "openai", "prompt",
 			service.ImageTaskStatusFailed, 502, nil, nil, `{"type":"upstream_error"}`,
 			`[]`, 2, 0,
-			now, now, now.Add(time.Hour),
+			now, now, now.Add(time.Hour), false,
 		))
 
 	task, err := repo.Get(context.Background(), owner, "imgtask_failed")
@@ -97,12 +97,12 @@ WHERE task_id = $1 AND user_id = $2`
 			"task_id", "user_id", "api_key_id", "request_type", "model", "platform", "prompt_preview",
 			"status", "http_status", "image_url", "result", "error",
 			"storage_keys", "requested_images", "actual_images",
-			"created_at", "completed_at", "expires_at",
+			"created_at", "completed_at", "expires_at", "api_key_deleted",
 		}).AddRow(
 			"imgtask_any_key", owner.UserID, 9, "generation", "gpt-image-2", "openai", "prompt",
 			service.ImageTaskStatusCompleted, 200, "https://example.test/i.png", nil, nil,
 			`["images/i.png"]`, 1, 1,
-			now, now, now.Add(time.Hour),
+			now, now, now.Add(time.Hour), false,
 		))
 
 	task, err := repo.Get(context.Background(), owner, "imgtask_any_key")
@@ -127,7 +127,7 @@ func TestImageTaskHistoryRepositoryListFiltersByPlatform(t *testing.T) {
 			"task_id", "user_id", "api_key_id", "request_type", "model", "platform", "prompt_preview",
 			"status", "http_status", "image_url", "result", "error",
 			"storage_keys", "requested_images", "actual_images",
-			"created_at", "completed_at", "expires_at",
+			"created_at", "completed_at", "expires_at", "api_key_deleted",
 		}))
 
 	tasks, hasMore, err := repo.List(context.Background(), owner, service.ImageTaskHistoryFilter{Limit: 20, Platform: "grok"})

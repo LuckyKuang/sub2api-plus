@@ -3,8 +3,11 @@ package repository
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -229,4 +232,17 @@ func (s *S3ImageStorage) Check(ctx context.Context) error {
 	}
 	cleanupNeeded = false
 	return nil
+}
+
+// CheckStoredImage uses the same configured, signed S3 client as uploads and
+// downloads. The key has already been authorized through task ownership.
+func (s *S3ImageStorage) CheckStoredImage(ctx context.Context, key string) error {
+	_, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	if err != nil {
+		var response *smithyhttp.ResponseError
+		if errors.As(err, &response) && response.HTTPStatusCode() == http.StatusNotFound {
+			return service.ErrImageTaskObjectMissing
+		}
+	}
+	return err
 }

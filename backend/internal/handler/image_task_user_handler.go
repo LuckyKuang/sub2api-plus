@@ -21,10 +21,13 @@ import (
 // while the console lists every key of the authenticated user so deleting or
 // rotating a key never hides existing history.
 type ImageTaskUserHandler struct {
-	tasks   *service.ImageTaskService
-	storage *service.ImageStorageSettingService
-	batch   *service.BatchImageSettingsService
-	keys    *service.APIKeyService
+	tasks          *service.ImageTaskService
+	storage        *service.ImageStorageSettingService
+	batch          *service.BatchImageSettingsService
+	keys           *service.APIKeyService
+	accounts       service.AccountRepository
+	batchProviders *service.BatchImageProviderRegistry
+	vertexEnabled  bool
 }
 
 func NewImageTaskUserHandler(
@@ -56,86 +59,182 @@ func (h *ImageTaskUserHandler) Modes(c *gin.Context) {
 		batch = h.batch.Availability(ctx)
 	}
 
-	ordinaryKey, hasOrdinaryHistory := h.ordinaryAccess(ctx, owner.UserID)
-	batchKey, anyBatchKey := h.batchAccess(ctx, owner.UserID)
+	keys, keysErr := h.userKeys(ctx, owner.UserID)
+	ordinaryKey, batchKey, anyBatchKey := imageTaskKeyAccess(keys)
+	hasOrdinaryHistory := false
+	var historyErr error
+	if h.tasks != nil {
+		hasOrdinaryHistory, historyErr = h.tasks.HasAnyTask(ctx, owner.UserID)
+	}
 	ordinaryReason := ordinary.Reason
-	if ordinary.Enabled && !ordinaryKey {
+	if keysErr != nil || historyErr != nil {
+		ordinaryReason = "dependency_unavailable"
+	} else if ordinary.Enabled && ordinaryReason == "" && !ordinaryKey {
 		ordinaryReason = "no_eligible_key"
 	}
 	batchReason := batch.Reason
-	if batch.Enabled && !batchKey {
+	if keysErr != nil {
+		batchReason = "dependency_unavailable"
+	} else if batch.Enabled && batchReason == "" && !batchKey {
 		batchReason = "no_eligible_key"
+	}
+	ordinaryReady, ordinaryErr, batchReady, batchErr := h.availableChannels(ctx, keys, ordinary.Enabled && ordinaryReason == "", batch.Enabled && batchReason == "")
+	if ordinary.Enabled && ordinaryReason == "" && !ordinaryReady {
+		ordinaryReason = "no_channel"
+		if ordinaryErr != nil {
+			ordinaryReason = "dependency_unavailable"
+		}
+	}
+	if batch.Enabled && batchReason == "" && !batchReady {
+		batchReason = "no_channel"
+		if batchErr != nil {
+			batchReason = "dependency_unavailable"
+		}
 	}
 
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{
 		"ordinary": gin.H{
 			"enabled":    ordinary.Enabled,
-			"can_submit": ordinary.Enabled && ordinaryKey,
-			"can_view":   ordinary.Enabled || hasOrdinaryHistory,
+			"can_submit": ordinary.Enabled && ordinaryKey && ordinaryReason == "",
+			"can_view":   ordinary.Enabled || hasOrdinaryHistory || keysErr != nil || historyErr != nil || ordinary.Reason == "dependency_unavailable",
 			"reason":     ordinaryReason,
 		},
 		"batch": gin.H{
 			"enabled":    batch.Enabled,
-			"can_submit": batch.Enabled && batchKey,
-			"can_view":   batch.Enabled || anyBatchKey,
+			"can_submit": batch.Enabled && batchKey && batchReason == "",
+			"can_view":   batch.Enabled || anyBatchKey || keysErr != nil || batch.Reason == "dependency_unavailable",
 			"reason":     batchReason,
 		},
 	})
 }
 
-// ordinaryAccess reports whether the user can submit, and whether any ordinary
-// history row exists regardless of current keys.
-func (h *ImageTaskUserHandler) ordinaryAccess(ctx context.Context, userID int64) (bool, bool) {
-	hasKey := h.anyKey(ctx, userID, func(key service.APIKey) bool {
-		if key.Status != "active" || key.Group == nil || !key.Group.AllowImageGeneration {
-			return false
+// availableChannels reads local scheduling metadata only. It never selects an
+// account, probes a provider, acquires capacity or reserves billing. One known
+// usable group is sufficient even if another group's metadata is unavailable.
+func (h *ImageTaskUserHandler) availableChannels(ctx context.Context, keys []service.APIKey, ordinary, batch bool) (bool, error, bool, error) {
+	var ordinaryReady, batchReady bool
+	var ordinaryErr, batchErr error
+	type groupScope struct {
+		id       int64
+		platform string
+	}
+	seen := make(map[groupScope]bool)
+	for i := range keys {
+		key := &keys[i]
+		if key.Group == nil || !key.Group.IsActive() || key.Status != service.StatusAPIKeyActive || key.IsExpired() || key.IsQuotaExhausted() {
+			continue
 		}
-		return key.Group.Platform == service.PlatformOpenAI || key.Group.Platform == service.PlatformGrok
-	})
-	if h.tasks == nil {
-		return hasKey, false
-	}
-	hasHistory, err := h.tasks.HasAnyTask(ctx, userID)
-	if err != nil {
-		hasHistory = false
-	}
-	return hasKey, hasHistory
-}
-
-// batchAccess reports whether the user can submit batch jobs, and whether any
-// batch-capable key exists, including keys that can no longer submit.
-func (h *ImageTaskUserHandler) batchAccess(ctx context.Context, userID int64) (bool, bool) {
-	eligible := func(key service.APIKey) bool {
-		return key.Group != nil && key.Group.AllowBatchImageGeneration && key.Group.Platform == service.PlatformGemini
-	}
-	active := h.anyKey(ctx, userID, func(key service.APIKey) bool {
-		return key.Status == "active" && eligible(key)
-	})
-	return active, h.anyKey(ctx, userID, eligible)
-}
-
-// anyKey walks the user's keys in bounded pages. A permission decision never
-// depends on the first page alone.
-func (h *ImageTaskUserHandler) anyKey(ctx context.Context, userID int64, match func(service.APIKey) bool) bool {
-	if h.keys == nil || userID <= 0 {
-		return false
-	}
-	for page := 1; page <= 10; page++ {
-		keys, _, err := h.keys.List(ctx, userID, pagination.PaginationParams{Page: page, PageSize: 100}, service.APIKeyListFilters{})
-		if err != nil || len(keys) == 0 {
-			return false
+		group := key.Group
+		isOrdinary := ordinary && group.AllowImageGeneration && ordinaryImageGroupPlatform(group.Platform)
+		isBatch := batch && group.AllowBatchImageGeneration && group.Platform == service.PlatformGemini
+		if !isOrdinary && !isBatch {
+			continue
 		}
-		for _, key := range keys {
-			if match(key) {
-				return true
+		scope := groupScope{group.ID, group.Platform}
+		if seen[scope] {
+			continue
+		}
+		seen[scope] = true
+		var accounts []service.Account
+		var err error
+		if h.accounts == nil {
+			err = service.ErrImageTaskUnavailable
+		} else if group.Platform == service.PlatformComposite {
+			accounts, err = h.accounts.ListSchedulableByGroupID(ctx, group.ID)
+		} else {
+			accounts, err = h.accounts.ListSchedulableByGroupIDAndPlatform(ctx, group.ID, group.Platform)
+		}
+		if err != nil {
+			if isOrdinary {
+				ordinaryErr = err
+			}
+			if isBatch {
+				batchErr = err
+			}
+			continue
+		}
+		for j := range accounts {
+			account := &accounts[j]
+			if (group.Platform != service.PlatformComposite && account.Platform != group.Platform) || !account.IsSchedulable() {
+				continue
+			}
+			if isOrdinary && (account.Platform == service.PlatformGrok || account.SupportsOpenAIImageCapability(service.OpenAIImagesCapabilityBasic)) {
+				ordinaryReady = true
+			}
+			if isBatch && h.batchProviders != nil {
+				for _, name := range []string{service.BatchImageProviderGeminiAPI, service.BatchImageProviderVertex} {
+					if name == service.BatchImageProviderVertex && !h.vertexEnabled {
+						continue
+					}
+					if provider, ok := h.batchProviders.Get(name); ok && provider.SupportsAccount(account) {
+						batchReady = true
+					}
+				}
 			}
 		}
-		if len(keys) < 100 {
-			return false
+	}
+	return ordinaryReady, ordinaryErr, batchReady, batchErr
+}
+
+// imageTaskKeyAccess uses one consistent key snapshot for both generation modes.
+// Batch keeps its existing billing authentication for history reads too, so
+// expired/exhausted keys establish neither submission nor history access.
+func imageTaskKeyAccess(keys []service.APIKey) (ordinary, batch, batchHistory bool) {
+	for i := range keys {
+		key := &keys[i]
+		if key.Group == nil || !key.Group.IsActive() {
+			continue
+		}
+		canSubmit := key.Status == service.StatusAPIKeyActive && !key.IsExpired() && !key.IsQuotaExhausted()
+		if key.Group.AllowImageGeneration && ordinaryImageGroupPlatform(key.Group.Platform) && canSubmit {
+			ordinary = true
+		}
+		if key.Group.AllowBatchImageGeneration && key.Group.Platform == service.PlatformGemini {
+			batch = batch || canSubmit
+			batchHistory = batchHistory || canSubmit
 		}
 	}
-	return false
+	return
+}
+
+// Composite requests retain the same group permission and resolve to an
+// existing concrete OpenAI/Grok image path at gateway admission.
+func ordinaryImageGroupPlatform(platform string) bool {
+	return platform == service.PlatformOpenAI || platform == service.PlatformGrok || platform == service.PlatformComposite
+}
+
+// userKeys walks every page once, so a late eligible key remains discoverable.
+func (h *ImageTaskUserHandler) userKeys(ctx context.Context, userID int64) ([]service.APIKey, error) {
+	if h.keys == nil || userID <= 0 {
+		return nil, nil
+	}
+	var all []service.APIKey
+	for page := 1; ; page++ {
+		keys, _, err := h.keys.List(ctx, userID, pagination.PaginationParams{Page: page, PageSize: 100}, service.APIKeyListFilters{})
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, keys...)
+		if len(keys) < 100 {
+			return all, nil
+		}
+	}
+}
+
+// Filters returns this owner's historical platforms and models.
+func (h *ImageTaskUserHandler) Filters(c *gin.Context) {
+	owner, ok := h.owner(c)
+	if !ok {
+		return
+	}
+	filters, err := h.tasks.Filters(c.Request.Context(), owner.UserID)
+	if err != nil {
+		imageTaskError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, filters)
 }
 
 // List returns the authenticated user's tasks across every API key.
@@ -167,14 +266,20 @@ func (h *ImageTaskUserHandler) List(c *gin.Context) {
 		imageTaskJSONError(c, http.StatusBadRequest, "INVALID_TIME_RANGE", "since must be earlier than until")
 		return
 	}
+	limit, validLimit := queryTimestamp(c, "limit")
+	offset, validOffset := queryTimestamp(c, "offset")
+	if !validLimit || !validOffset || (c.Query("limit") != "" && limit == 0) || limit > 100 || offset > 2147483647 {
+		imageTaskJSONError(c, http.StatusBadRequest, "INVALID_PAGINATION", "limit must be between 1 and 100 and offset must be a non-negative integer")
+		return
+	}
 	filter := service.ImageTaskHistoryFilter{
 		Status:   status,
 		Platform: strings.TrimSpace(c.Query("platform")),
 		Model:    strings.TrimSpace(c.Query("model")),
 		Since:    since,
 		Until:    until,
-		Limit:    int(queryInt64(c, "limit")),
-		Offset:   int(queryInt64(c, "offset")),
+		Limit:    int(limit),
+		Offset:   int(offset),
 	}
 	result, err := h.tasks.List(c.Request.Context(), owner, filter)
 	if err != nil {
@@ -243,6 +348,27 @@ func (h *ImageTaskUserHandler) Download(c *gin.Context) {
 	}
 }
 
+// Image proxies one stored image using only its task-local ordinal.
+func (h *ImageTaskUserHandler) Image(c *gin.Context) {
+	owner, ok := h.owner(c)
+	if !ok {
+		return
+	}
+	index, err := strconv.Atoi(c.Param("index"))
+	if err != nil || index < 0 {
+		imageTaskJSONError(c, http.StatusBadRequest, "INVALID_IMAGE_INDEX", "image index must be a non-negative integer")
+		return
+	}
+	data, contentType, err := h.tasks.ReadImage(c.Request.Context(), owner, c.Param("task_id"), index)
+	if err != nil {
+		imageTaskError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "private, no-store")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Data(http.StatusOK, contentType, data)
+}
+
 // Delete removes a failed task. Successful tasks keep their images and records.
 func (h *ImageTaskUserHandler) Delete(c *gin.Context) {
 	owner, ok := h.owner(c)
@@ -268,6 +394,9 @@ func (h *ImageTaskUserHandler) owner(c *gin.Context) (service.ImageTaskOwner, bo
 		return service.ImageTaskOwner{}, false
 	}
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if c.Request.Method == http.MethodGet {
+		subject, ok = middleware2.GetReadSubjectFromContext(c)
+	}
 	if !ok || subject.UserID <= 0 {
 		imageTaskJSONError(c, http.StatusUnauthorized, "IMAGE_TASK_UNAUTHORIZED", "authentication is required")
 		return service.ImageTaskOwner{}, false
@@ -300,16 +429,4 @@ func queryTimestamp(c *gin.Context, name string) (int64, bool) {
 		return 0, false
 	}
 	return value, true
-}
-
-func queryInt64(c *gin.Context, name string) int64 {
-	raw := strings.TrimSpace(c.Query(name))
-	if raw == "" {
-		return 0
-	}
-	value, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || value < 0 {
-		return 0
-	}
-	return value
 }

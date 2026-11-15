@@ -350,7 +350,9 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	modelPlazaHandler := handler.NewModelPlazaHandler(modelPlazaService, apiKeyService, settingService)
 	imageTaskStore := repository.NewImageTaskStore(redisClient)
 	imageTaskHistoryRepository := repository.NewImageTaskHistoryRepository(db)
-	imageTaskService := service.ProvideImageTaskService(imageTaskStore, imageTaskHistoryRepository, imageStorageSettingService)
+	imageTaskHistoryRetryRepository := repository.NewImageTaskHistoryRetryRepository(db, redisClient)
+	imageTaskHistoryRetryService := service.ProvideImageTaskHistoryRetryService(imageTaskHistoryRepository, imageTaskHistoryRetryRepository)
+	imageTaskService := service.ProvideImageTaskService(imageTaskStore, imageTaskHistoryRepository, imageStorageSettingService, imageTaskHistoryRetryService)
 	asyncImageRateLimitStore := repository.NewAsyncImageRateLimitStore(redisClient)
 	asyncImageRateLimiter := service.NewAsyncImageRateLimiter(asyncImageRateLimitStore, settingService)
 	asyncImageHandler := handler.ProvideAsyncImageHandler(imageTaskService, openAIGatewayHandler, asyncImageRateLimiter, opsService)
@@ -362,7 +364,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	batchImageDownloadService := service.NewBatchImageDownloadService(batchImageRepository, accountRepository, batchImageDownloadLimiter, configConfig)
 	batchImageCleanupService := service.ProvideBatchImageCleanupService(batchImageRepository, accountRepository, configConfig)
 	batchImageHandler := handler.ProvideBatchImageHandler(batchImagePublicService, batchImageDownloadService, batchImageCleanupService, openAIGatewayHandler)
-	imageTaskUserHandler := handler.NewImageTaskUserHandler(imageTaskService, imageStorageSettingService, batchImageSettingsService, apiKeyService)
+	imageTaskUserHandler := handler.ProvideImageTaskUserHandler(imageTaskService, imageStorageSettingService, batchImageSettingsService, apiKeyService, accountRepository, configConfig)
 	idempotencyCleanupService := service.ProvideIdempotencyCleanupService(idempotencyRepository, configConfig)
 	openAIQuotaAutoResetService := service.ProvideOpenAIQuotaAutoResetService(accountRepository, openAIQuotaService, rateLimitService, idempotencyCoordinator, auditLogService, settingService, leaderLockCache)
 	handlers := handler.ProvideHandlers(authHandler, userHandler, mcpoAuthHandler, apiKeyHandler, usageHandler, redeemHandler, subscriptionHandler, announcementHandler, channelMonitorUserHandler, channelMonitorV2Handler, channelMonitorV3Handler, adminHandlers, gatewayHandler, openAIGatewayHandler, handlerSettingHandler, totpHandler, passkeyHandler, handlerPaymentHandler, paymentWebhookHandler, availableChannelHandler, modelPlazaHandler, asyncImageHandler, batchImageHandler, imageTaskUserHandler, idempotencyCoordinator, idempotencyCleanupService, openAIQuotaAutoResetService)
@@ -397,7 +399,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	userPlatformQuotaUsageFlusher := service.ProvideUserPlatformQuotaUsageFlusher(configConfig, billingCache, serviceUserPlatformQuotaRepository, timingWheelService)
 	openAIGroupQuotaFollowResetRepository := repository.NewOpenAIGroupQuotaFollowResetRepository(client, db)
 	openAIGroupQuotaFollowResetService := service.ProvideOpenAIGroupQuotaFollowResetService(openAIGroupQuotaFollowResetRepository, billingCacheService)
-	v := provideCleanup(channelMonitorV3Service, client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, opsService, settingService, opsIngressRejectAggregator, apiKeyService, authCacheInvalidationWorker, schedulerSnapshotService, tokenRefreshService, accountExpiryService, cnProviderBalanceCheckService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, geminiCachedContentService, providerFilesService, batchImageCleanupService, batchImageWorkerRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, balanceNotifyService, digestSessionStore, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, zhipuOffPeakTicketManager, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, channelMonitorV2Aggregator, userPlatformQuotaUsageFlusher, ollamaCloudUsageService, usageAlertService, auditLogService, openAIQuotaAutoResetService, openAIGroupQuotaFollowResetService, promptService, pluginManager)
+	v := provideCleanup(channelMonitorV3Service, client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, opsService, settingService, opsIngressRejectAggregator, apiKeyService, authCacheInvalidationWorker, schedulerSnapshotService, tokenRefreshService, accountExpiryService, cnProviderBalanceCheckService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, geminiCachedContentService, providerFilesService, batchImageCleanupService, batchImageWorkerRuntime, imageTaskHistoryRetryService, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, balanceNotifyService, digestSessionStore, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, zhipuOffPeakTicketManager, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, channelMonitorV2Aggregator, userPlatformQuotaUsageFlusher, ollamaCloudUsageService, usageAlertService, auditLogService, openAIQuotaAutoResetService, openAIGroupQuotaFollowResetService, promptService, pluginManager)
 	application := &Application{
 		Server:        httpServer,
 		PromptAudit:   promptService,
@@ -461,6 +463,7 @@ func provideCleanup(
 	providerFiles *service.ProviderFilesService,
 	batchImageCleanup *service.BatchImageCleanupService,
 	batchImageWorker *service.BatchImageWorkerRuntime,
+	imageHistoryRetry *service.ImageTaskHistoryRetryService,
 	pricing *service.PricingService,
 	emailQueue *service.EmailQueueService,
 	billingCache *service.BillingCacheService,
@@ -499,6 +502,10 @@ func provideCleanup(
 		}
 
 		parallelSteps := []cleanupStep{
+			{"ImageTaskHistoryRetryService", func() error {
+				imageHistoryRetry.Stop()
+				return nil
+			}},
 			{"CodexSafetyBufferingRuntime", func() error {
 				if settingService != nil {
 					settingService.StopCodexSafetyBufferingRuntime()

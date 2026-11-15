@@ -20,7 +20,7 @@ const imageStorageConfigInvalidationChannel = "sub2api:image_storage_config:inva
 // ErrImageStorageIncomplete 表示开关已打开但凭证不全，无法启用异步生图。
 var ErrImageStorageIncomplete = infraerrors.BadRequest(
 	"IMAGE_STORAGE_INCOMPLETE",
-	"image storage is enabled but bucket/endpoint/access_key_id/secret_access_key are incomplete",
+	"image storage is enabled but bucket/access_key_id/secret_access_key are incomplete",
 )
 
 // ImageStorageFactory 由 repository 层提供，把配置变成一个可用的对象存储实现。
@@ -65,11 +65,12 @@ type ImageStorageSettingService struct {
 	// 保证升级前已用配置文件开启该功能的部署不被打断。
 	fallback config.ImageStorageConfig
 
-	mu       sync.Mutex
-	resolved bool
-	uploader *ImageResultUploader
-	enabled  bool
-	reason   string
+	mu            sync.Mutex
+	resolved      bool
+	uploader      *ImageResultUploader
+	enabled       bool
+	switchEnabled bool
+	reason        string
 
 	invalidationOnce sync.Once
 }
@@ -91,7 +92,7 @@ func (s *ImageStorageSettingService) Availability() ImageStorageAvailability {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return ImageStorageAvailability{
-		Enabled: s.enabled,
+		Enabled: s.switchEnabled,
 		Reason:  s.reason,
 	}
 }
@@ -157,13 +158,16 @@ func (s *ImageStorageSettingService) resolve() (*ImageResultUploader, bool) {
 	ctx := context.Background()
 	s.resolved = true
 	s.uploader, s.enabled, s.reason = nil, false, "disabled"
+	s.switchEnabled = false
 
 	cfg, err := s.effectiveConfig(ctx)
 	if err != nil {
 		logger.L().Warn("image_storage.settings_load_failed; async image tasks stay disabled", zap.Error(err))
-		s.reason = "not_configured"
+		s.reason = "dependency_unavailable"
+		s.resolved = false
 		return nil, false
 	}
+	s.switchEnabled = cfg.Enabled
 	if !cfg.IsConfigured() {
 		if cfg.Enabled {
 			logger.L().Warn("image_storage is enabled but not fully configured; async image tasks are disabled",
@@ -200,6 +204,7 @@ func (s *ImageStorageSettingService) Invalidate() {
 	s.resolved = false
 	s.uploader = nil
 	s.enabled = false
+	s.switchEnabled = false
 	s.reason = "disabled"
 	s.mu.Unlock()
 }
@@ -239,22 +244,25 @@ func (s *ImageStorageSettingService) Update(ctx context.Context, in ImageStorage
 		in.Endpoint, in.Region, in.AccessKeyID, in.SecretAccessKey = "", "", "", ""
 		in.ForcePathStyle = false
 	} else if in.SecretAccessKey == "" {
-		if old, err := s.load(ctx); err == nil && old != nil {
+		old, err := s.load(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if old != nil {
 			in.SecretAccessKey = old.SecretAccessKey
 		} else if imageStorageConnectionMatchesFallback(in, s.fallback) {
 			// Get masks the environment secret, so an administrator toggling the
 			// switch on an unchanged deployment target must keep using it.
-			in.SecretAccessKey = s.fallback.SecretAccessKey
+			encrypted, err := s.encryptSecret(s.fallback.SecretAccessKey)
+			if err != nil {
+				return nil, err
+			}
+			in.SecretAccessKey = encrypted
 		}
 	} else {
-		// 拒绝用自动生成的临时密钥加密：重启后密文无法解密（#4524）。
-		// 与备份 S3 配置共用同一把密钥，故复用其配置状态判断。
-		if s.backup == nil || !s.backup.EncryptionKeyConfigured() {
-			return nil, ErrSecretEncryptionKeyNotConfigured
-		}
-		encrypted, err := s.encryptor.Encrypt(in.SecretAccessKey)
+		encrypted, err := s.encryptSecret(in.SecretAccessKey)
 		if err != nil {
-			return nil, fmt.Errorf("encrypt secret: %w", err)
+			return nil, err
 		}
 		in.SecretAccessKey = encrypted
 	}
@@ -281,6 +289,18 @@ func (s *ImageStorageSettingService) Update(ctx context.Context, in ImageStorage
 	return &in, nil
 }
 
+func (s *ImageStorageSettingService) encryptSecret(secret string) (string, error) {
+	// A process-generated key cannot decrypt persisted credentials after restart.
+	if s.backup == nil || !s.backup.EncryptionKeyConfigured() {
+		return "", ErrSecretEncryptionKeyNotConfigured
+	}
+	encrypted, err := s.encryptor.Encrypt(secret)
+	if err != nil {
+		return "", fmt.Errorf("encrypt secret: %w", err)
+	}
+	return encrypted, nil
+}
+
 // validateEnabledTarget refuses to switch the ordinary image task mode on
 // while the resulting target cannot actually store an image.
 func (s *ImageStorageSettingService) validateEnabledTarget(ctx context.Context, in *ImageStorageSettings) error {
@@ -292,7 +312,7 @@ func (s *ImageStorageSettingService) validateEnabledTarget(ctx context.Context, 
 		if err != nil || cfg == nil {
 			return ErrImageStorageIncomplete
 		}
-		if strings.TrimSpace(cfg.Endpoint) == "" || strings.TrimSpace(cfg.SecretAccessKey) == "" {
+		if strings.TrimSpace(cfg.AccessKeyID) == "" || strings.TrimSpace(cfg.SecretAccessKey) == "" {
 			return ErrImageStorageIncomplete
 		}
 		if strings.TrimSpace(in.Bucket) == "" && strings.TrimSpace(cfg.Bucket) == "" {
@@ -300,7 +320,7 @@ func (s *ImageStorageSettingService) validateEnabledTarget(ctx context.Context, 
 		}
 		return nil
 	}
-	if strings.TrimSpace(in.Endpoint) == "" || strings.TrimSpace(in.Bucket) == "" ||
+	if strings.TrimSpace(in.Bucket) == "" ||
 		strings.TrimSpace(in.AccessKeyID) == "" || strings.TrimSpace(in.SecretAccessKey) == "" {
 		return ErrImageStorageIncomplete
 	}
@@ -314,7 +334,10 @@ func (s *ImageStorageSettingService) TestConnection(ctx context.Context, in Imag
 	var fallback *config.ImageStorageConfig
 	if !in.ReuseBackupS3 && in.SecretAccessKey == "" {
 		old, err := s.load(ctx)
-		if err == nil && old != nil {
+		if err != nil {
+			return err
+		}
+		if old != nil {
 			in.SecretAccessKey = old.SecretAccessKey
 		} else if imageStorageConnectionMatchesFallback(in, s.fallback) {
 			// Get deliberately masks the environment-provided secret. When no
@@ -436,7 +459,13 @@ func (s *ImageStorageSettingService) load(ctx context.Context) (*ImageStorageSet
 		return nil, nil //nolint:nilnil // no repository means no stored settings
 	}
 	raw, err := s.settingRepo.GetValue(ctx, settingKeyImageStorageConfig)
-	if err != nil || strings.TrimSpace(raw) == "" {
+	if errors.Is(err, ErrSettingNotFound) {
+		return nil, nil //nolint:nilnil // never configured is a valid state
+	}
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(raw) == "" {
 		return nil, nil //nolint:nilnil // never configured is a valid state
 	}
 	var settings ImageStorageSettings

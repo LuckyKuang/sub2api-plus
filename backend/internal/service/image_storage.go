@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"io"
 	"mime"
 	"net"
@@ -18,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	appTimezone "github.com/LuckyKuang/sub2api-plus/internal/pkg/timezone"
 	"github.com/LuckyKuang/sub2api-plus/internal/util/urlvalidator"
 )
@@ -41,6 +41,12 @@ type ImageStorage interface {
 // third-party storage adapters that only support result uploads.
 type ImageStorageReader interface {
 	Open(ctx context.Context, key string) (*ImageStorageObject, error)
+}
+
+// ImageStorageObjectChecker distinguishes a missing object from a temporary
+// storage failure without downloading its body during history reads.
+type ImageStorageObjectChecker interface {
+	CheckStoredImage(context.Context, string) error
 }
 
 // ImageStorageSigner is an optional companion to ImageStorage. Task history is
@@ -434,8 +440,8 @@ func (u *ImageResultUploader) OpenStoredTaskImage(ctx context.Context, key strin
 }
 
 // SignStoredTaskImage returns a fresh download URL for an object written by
-// Rewrite. Adapters without signing support report an error and callers keep the
-// URL captured at upload time.
+// Rewrite. Adapters without signing support report an error; history reads
+// suppress the captured URL rather than returning a stale location or signature.
 func (u *ImageResultUploader) SignStoredTaskImage(ctx context.Context, key string) (string, error) {
 	if u == nil || u.storage == nil {
 		return "", errors.New("image storage is unavailable")

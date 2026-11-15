@@ -228,4 +228,3 @@ func TestSubscriptionExtend_AbsoluteExpirySetsExactTimestamp(t *testing.T) {
 	require.Equal(t, 1, repo.extendCalls)
 	require.True(t, repo.sub.ExpiresAt.Equal(target), repo.sub.ExpiresAt)
 }
-
