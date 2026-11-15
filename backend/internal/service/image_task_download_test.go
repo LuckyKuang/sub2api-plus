@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -173,4 +174,48 @@ func TestImageTaskServiceStreamDownloadZipRejectsTasksWithoutImages(t *testing.T
 
 	_, err = svc.StreamDownloadZip(context.Background(), owner, created.ID, io.Discard)
 	require.ErrorIs(t, err, ErrImageTaskNoImages)
+}
+
+// R6: a Redis outage must not block download of an owned durable archive.
+func TestImageTaskServiceDownloadsDuringCacheOutage(t *testing.T) {
+	store := &imageTaskMemoryStore{}
+	history := &imageTaskMemoryHistory{}
+	svc := NewImageTaskServiceWithUploader(store, NewImageResultUploader(&imageTaskDownloadStorage{}, "images/", false, 0, nil), time.Hour, time.Minute)
+	svc.SetHistoryRepository(history)
+	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
+	task, err := svc.Create(context.Background(), owner)
+	require.NoError(t, err)
+	require.NoError(t, svc.Complete(context.Background(), task.ID, 200, []byte(`{"data":[{"b64_json":"`+base64.StdEncoding.EncodeToString(pngBytes)+`"}]}`)))
+	store.getErr = errors.New("redis unavailable")
+	var archive bytes.Buffer
+	count, err := svc.StreamDownloadZip(context.Background(), owner, task.ID, &archive)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+	_, err = zip.NewReader(bytes.NewReader(archive.Bytes()), int64(archive.Len()))
+	require.NoError(t, err)
+}
+
+// R4/R6: a task ordinal can read only this owner's archived image. Arbitrary
+// object paths and other users' tasks cannot be used as storage lookup inputs.
+func TestImageTaskServiceReadImageUsesOwnedOrdinalAndBoundsDownloads(t *testing.T) {
+	store := &imageTaskMemoryStore{}
+	svc := NewImageTaskServiceWithUploader(store, NewImageResultUploader(&imageTaskDownloadStorage{}, "original/", false, 0, nil), time.Hour, time.Minute)
+	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
+	task, err := svc.Create(context.Background(), owner)
+	require.NoError(t, err)
+	require.NoError(t, svc.Complete(context.Background(), task.ID, 200, []byte(`{"data":[{"b64_json":"`+base64.StdEncoding.EncodeToString(pngBytes)+`"}]}`)))
+	data, mime, err := svc.ReadImage(context.Background(), ImageTaskOwner{UserID: 7}, task.ID, 0)
+	require.NoError(t, err)
+	require.Equal(t, pngBytes, data)
+	require.Equal(t, "image/png", mime)
+	_, _, err = svc.ReadImage(context.Background(), ImageTaskOwner{UserID: 8}, task.ID, 0)
+	require.ErrorIs(t, err, ErrImageTaskNotFound)
+	_, _, err = svc.ReadImage(context.Background(), owner, task.ID, 1)
+	require.ErrorIs(t, err, ErrImageTaskNoImages)
+	require.True(t, svc.acquireDownload(owner.UserID))
+	_, _, err = svc.ReadImage(context.Background(), owner, task.ID, 0)
+	require.ErrorIs(t, err, ErrImageTaskDownloadLimited)
+	svc.releaseDownload(owner.UserID)
+	_, _, err = svc.ReadImage(context.Background(), owner, task.ID, 0)
+	require.NoError(t, err, "a denied concurrent read must not retain a permit")
 }

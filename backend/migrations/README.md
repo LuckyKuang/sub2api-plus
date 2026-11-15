@@ -1,5 +1,14 @@
 # Database Migrations
 
+Migration `311_async_image_task_user_history.sql` adds the platform of an
+asynchronous image task and the user-scoped indexes used by the console. The
+console lists every API key of one user, while gateway endpoints keep their
+existing `(user_id, api_key_id)` ownership and index. Migration
+`313_async_image_task_legacy_platform.sql` clears the prefix-based platform
+inference for records predating 311: model aliases can cross platforms, so these
+rows remain unknown. New submissions preserve their explicitly resolved platform. See
+[async image tasks](../../docs/ASYNC_IMAGE_TASKS.md).
+
 SQL migrations are embedded in the application and applied automatically at
 startup. The runner records each filename and SHA256 checksum in
 `schema_migrations`.

@@ -38,8 +38,8 @@ type aggregateAccountReader interface {
 }
 
 func aggregateGroupAllowed(user *User, group *Group) bool {
-	return user != nil && group != nil && group.IsActive() && group.Platform != PlatformComposite &&
-		group.SubscriptionType == SubscriptionTypeStandard && user.CanBindGroup(group.ID, group.IsExclusive)
+	return group != nil && group.Platform != PlatformComposite &&
+		group.SubscriptionType == SubscriptionTypeStandard && UserVisibleStandardGroup(user, group)
 }
 
 // Validate scope before writes. Membership is deliberately independent of live

@@ -1,6 +1,34 @@
 import { describe, expect, it } from 'vitest'
 
-import { getExpirationDateRelation, getRemainingExpiryDuration } from '../subscriptionQuota'
+import { configuredQuotaWindows, getExpirationDateRelation, getRemainingExpiryDuration } from '../subscriptionQuota'
+
+describe('configured quota windows', () => {
+  it('lists only windows whose plan limit is a positive amount', () => {
+    expect(configuredQuotaWindows({
+      daily_limit_usd: 15,
+      weekly_limit_usd: 75,
+      monthly_limit_usd: 250,
+      five_hour_limit_usd: null
+    })).toEqual(['daily', 'weekly', 'monthly'])
+
+    expect(configuredQuotaWindows({
+      five_hour_limit_usd: 5,
+      daily_limit_usd: 0,
+      weekly_limit_usd: 75,
+      monthly_limit_usd: null
+    })).toEqual(['fiveHour', 'weekly'])
+  })
+
+  it('returns no windows for a missing or unlimited plan', () => {
+    expect(configuredQuotaWindows(null)).toEqual([])
+    expect(configuredQuotaWindows({
+      daily_limit_usd: null,
+      weekly_limit_usd: null,
+      monthly_limit_usd: null,
+      five_hour_limit_usd: null
+    })).toEqual([])
+  })
+})
 
 describe('subscription expiry timing', () => {
   it('uses local calendar dates for today and tomorrow', () => {

@@ -22,6 +22,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -240,6 +241,41 @@ func (s *AccountTestService) FetchOpenAIAccountModels(ctx context.Context, accou
 		}
 		if strings.TrimSpace(model.Type) == "" {
 			model.Type = "model"
+		}
+	}
+	// The picker mirrors the models this account actually routes: an entry the
+	// account mapping does not configure cannot be tested through the account, so
+	// removing it there must remove it from the picker too. Passthrough accounts
+	// keep the whole upstream catalog because they route it unfiltered.
+	if account != nil && !account.IsOpenAIPassthroughEnabled() {
+		if mapping := account.GetModelMapping(); len(mapping) > 0 {
+			filtered := make([]openai.Model, 0, len(payload.Data))
+			upstream := make(map[string]openai.Model, len(payload.Data))
+			seen := make(map[string]bool, len(payload.Data))
+			for _, model := range payload.Data {
+				upstream[model.ID] = model
+				if _, matched := account.ResolveMappedModel(model.ID); matched {
+					filtered = append(filtered, model)
+					seen[model.ID] = true
+				}
+			}
+			// Providers list upstream IDs, while requests use mapping keys. Keep
+			// exact public aliases whose target is present in that catalog too.
+			aliases := make([]string, 0, len(mapping))
+			for publicID := range mapping {
+				if !seen[publicID] && !strings.Contains(publicID, "*") {
+					aliases = append(aliases, publicID)
+				}
+			}
+			sort.Strings(aliases)
+			for _, publicID := range aliases {
+				if model, ok := upstream[mapping[publicID]]; ok {
+					model.ID = publicID
+					model.DisplayName = openaiCodexDisplayName(publicID)
+					filtered = append(filtered, model)
+				}
+			}
+			payload.Data = filtered
 		}
 	}
 	// Codex discovery lists Responses drivers, not image_generation tool models.

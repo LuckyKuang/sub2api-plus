@@ -66,7 +66,6 @@ declare module 'vue-router' {
      * have access; users need an eligible image-generation API key.
      * @default false
      */
-    requiresAsyncImageAccess?: boolean
 
     /**
      * 是否要求订阅功能开关（subscription_enabled，opt-out）未被显式关闭

@@ -33,6 +33,7 @@ export default {
         gateway: '网关服务',
         identity: '出站身份',
         email: '邮件设置',
+        imageTasks: '生图任务',
         backup: '数据备份',
         payment: '支付设置',
       },

@@ -30,6 +30,25 @@ describe('complete scoped assistance requests', () => {
     expect(adapter.mock.calls[0][0].headers.get('Authorization')).toBe('Bearer administrator-session')
     expect(adapter.mock.calls[0][0].method).toBe('get')
   })
+  it.each([
+    '/image-tasks/modes', '/image-tasks/filters', '/image-tasks?platform=unknown&model=retired-model',
+    '/image-tasks/imgtask_deleted_key', '/image-tasks/imgtask_deleted_key/download',
+    '/image-tasks/imgtask_deleted_key/images/0',
+  ])('reads ordinary history through the validated support target without an API key: %s', async path => {
+    const adapter = vi.fn(async (config: InternalAxiosRequestConfig) => success(config, {}))
+    apiClient.defaults.adapter = adapter
+    await apiClient.get(path)
+    const config = adapter.mock.calls[0][0]
+    expect(config.url).toBe(`/admin/support/users/42${path}`)
+    expect(config.headers.get('Authorization')).toBe('Bearer administrator-session')
+    expect(config.url).not.toContain('api_key_id')
+  })
+  it.each(['post', 'put', 'patch', 'delete'] as const)('blocks %s ordinary task mutations during assistance', async method => {
+    const adapter = vi.fn()
+    apiClient.defaults.adapter = adapter
+    await expect(apiClient.request({ method, url: '/image-tasks/imgtask_failed' })).rejects.toMatchObject({ code: 'ADMIN_SUPPORT_READ_ONLY' })
+    expect(adapter).not.toHaveBeenCalled()
+  })
   it.each(['post','put','patch','delete'] as const)('rejects %s changes before any network call', async method => {
     const adapter = vi.fn()
     apiClient.defaults.adapter = adapter

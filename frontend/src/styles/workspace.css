@@ -90,6 +90,10 @@
   .workspace-table-viewport thead { position: sticky; top: 0; z-index: 12; }
   .workspace-table-card > .pagination-card { flex: none; margin: 0; }
   .app-layout-workspace .table-page-layout:not(.mobile-mode) { flex: 1; height: 100%; min-height: 0; gap: var(--shell-zone-gap); }
+  /* Embedded panels (image-task modes) continue the workspace flex chain. With
+     an auto-height wrapper the table grew past the overflow-hidden .app-main,
+     so the page could not scroll at all. */
+  .image-task-embedded { display: flex; flex: 1 1 0%; flex-direction: column; min-height: 0; }
 }
 
 /* Filter bars own their fill and corners, without an extra page-level frame. */

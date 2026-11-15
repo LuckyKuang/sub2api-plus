@@ -598,15 +598,15 @@ func (h *AsyncImageHandler) taskMetadata(c *gin.Context, platform string, body [
 	}
 	if platform == service.PlatformGrok {
 		parsed := service.ParseGrokMediaRequest(c.GetHeader("Content-Type"), body)
-		return service.ImageTaskMetadata{RequestType: requestType, Model: parsed.Model, PromptPreview: parsed.Prompt, RequestedImages: parsed.N}
+		return service.ImageTaskMetadata{RequestType: requestType, Model: parsed.Model, Platform: platform, PromptPreview: parsed.Prompt, RequestedImages: parsed.N}
 	}
 	if h != nil && h.openAI != nil && h.openAI.gatewayService != nil {
 		parsed, err := h.openAI.gatewayService.ParseOpenAIImagesRequest(c, body)
 		if err == nil && parsed != nil {
-			return service.ImageTaskMetadata{RequestType: requestType, Model: parsed.Model, PromptPreview: parsed.Prompt, RequestedImages: parsed.N}
+			return service.ImageTaskMetadata{RequestType: requestType, Model: parsed.Model, Platform: platform, PromptPreview: parsed.Prompt, RequestedImages: parsed.N}
 		}
 	}
-	return service.ImageTaskMetadata{RequestType: requestType, RequestedImages: h.requestedImages(c, platform, body)}
+	return service.ImageTaskMetadata{RequestType: requestType, Platform: platform, RequestedImages: h.requestedImages(c, platform, body)}
 }
 
 func (h *AsyncImageHandler) executeWithGateway(platform string, c *gin.Context) {

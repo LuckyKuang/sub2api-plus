@@ -42,8 +42,11 @@ docker build --tag sub2api-plus:local-candidate --file Dockerfile \
   --build-arg "COMMIT=${deployment_commit}" .
 ```
 
-Record dirty worktree state rather than treating it as an exact committed
-build. For a published-image deployment, `docker pull <requested-reference>`
+Build from the authoritative worktree, or from a copy verified to match it. A
+separate deployment source snapshot does not follow later edits, and
+`git archive HEAD` omits uncommitted changes, so building either one silently
+deploys stale code. Record dirty worktree state rather than treating it as an
+exact committed build. For a published-image deployment, `docker pull <requested-reference>`
 and inspect its resolved immutable identity. Do not change the current image
 reference until preparation succeeds.
 

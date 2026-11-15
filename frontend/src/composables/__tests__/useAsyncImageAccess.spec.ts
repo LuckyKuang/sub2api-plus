@@ -53,6 +53,17 @@ describe('async image access', () => {
     expect(keyAllowsAsyncImage(apiKey({ status: 'inactive', group: { platform: 'openai', allow_image_generation: true } } as Partial<ApiKey>))).toBe(false)
   })
 
+  // Composite -> OpenAI/Grok is already admitted by the gateway; the console
+  // must offer image-enabled keys while retaining expiry/quota fences.
+  it('offers Composite image keys and rejects exhausted or expired active keys', () => {
+    const group = { platform: 'composite', allow_image_generation: true }
+    expect(keyAllowsAsyncImage(apiKey({ group } as Partial<ApiKey>))).toBe(true)
+    expect(keyAllowsAsyncImage(apiKey({ group: { ...group, allow_image_generation: false } } as Partial<ApiKey>))).toBe(false)
+    expect(keyAllowsAsyncImage(apiKey({ group, expires_at: '2000-01-01T00:00:00Z' } as Partial<ApiKey>))).toBe(false)
+    expect(keyAllowsAsyncImage(apiKey({ group, quota: 10, quota_used: 10 } as Partial<ApiKey>))).toBe(false)
+    expect(keyAllowsAsyncImage(apiKey({ group, quota: 10, quota_used: 9 } as Partial<ApiKey>))).toBe(true)
+  })
+
   it('keeps every non-disabled key available for owner-scoped task management', () => {
     expect(keyCanManageAsyncImage(apiKey({ status: 'active', group: { platform: 'openai', allow_image_generation: false } } as Partial<ApiKey>))).toBe(true)
     expect(keyCanManageAsyncImage(apiKey({ status: 'quota_exhausted', group: { platform: 'openai', allow_image_generation: false } } as Partial<ApiKey>))).toBe(true)

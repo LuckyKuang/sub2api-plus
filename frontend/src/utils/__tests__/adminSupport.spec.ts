@@ -40,6 +40,10 @@ const resourceCases: Array<[AdminSupportResource, string]> = [
 ]
 
 describe('administrator support route selection', () => {
+  it('keeps the unified image menu and account selection inside the target support view', () => {
+    expect(supportPathForPersonalPath(42, '/image-tasks')).toBe('/admin/support/users/42/async-images')
+    expect(accountSelectionDestination('/image-tasks', 7, 42)).toBe('/admin/support/users/42/async-images')
+  })
   it.each(resourceCases)('maps %s between personal and target routes', (resource, personalPath) => {
     const supportPath = adminSupportPath(42, resource)
     expect(supportResourceFromPath(supportPath)).toBe(resource)

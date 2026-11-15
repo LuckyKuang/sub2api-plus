@@ -19,7 +19,7 @@ func (s *nativeIdentityImportService) ListProxies(context.Context, int, int, str
 func TestImportNativeIdentityRejectsForeignFamilyThroughRealAccountService(t *testing.T) {
 	// Only proxy enumeration is stubbed. Imported accounts pass through the real
 	// CreateAccount validation, with no repository available to hide a write.
-	svc := service.NewAdminService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := service.NewAdminService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	handler := &AccountHandler{adminService: &nativeIdentityImportService{AdminService: svc}}
 	skipGroups := true
 	for _, platform := range []string{"deepseek", "kimi", "minimax", "zhipu", "stepfun"} {

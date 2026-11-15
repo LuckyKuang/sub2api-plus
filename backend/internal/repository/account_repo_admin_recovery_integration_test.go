@@ -27,7 +27,7 @@ func (r *adminRecoveryRuntimeRecorder) PrepareOAuthSchedulingRecovery(account *s
 
 func adminRecoveryService(repo *accountRepository, runtime service.AccountRuntimeBlocker) service.AdminService {
 	return service.NewAdminService(&config.Config{}, nil, nil, repo, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, integrationEntClient, nil, nil, nil, nil, runtime, nil, nil, nil, nil)
+		nil, nil, nil, integrationEntClient, nil, nil, nil, nil, runtime, nil, nil, nil, nil, nil)
 }
 
 func installAdminLifecycleStorageFault(t *testing.T, table, condition string) {

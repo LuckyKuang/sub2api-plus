@@ -20,11 +20,14 @@ vi.mock('vue-i18n', async () => ({
   ...await vi.importActual('vue-i18n'),
   useI18n: () => ({ t: (key: string) => key }),
 }))
-vi.mock('@/composables/useBatchImageAccess', () => ({
-  useBatchImageAccess: () => ({ canUseBatchImage: ref(false), refreshBatchImageAccess: vi.fn() }),
-}))
-vi.mock('@/composables/useAsyncImageAccess', () => ({
-  useAsyncImageAccess: () => ({ canUseAsyncImage: ref(false), refreshAsyncImageAccess: vi.fn() }),
+// Sidebar visibility for the merged image task entry comes from backend modes.
+vi.mock('@/composables/useImageTaskModes', () => ({
+  useImageTaskModes: () => ({
+    anyAvailable: ref(false),
+    ordinaryAvailable: ref(false),
+    batchAvailable: ref(false),
+    refreshImageTaskModes: vi.fn(),
+  }),
 }))
 enableAutoUnmount(afterEach)
 

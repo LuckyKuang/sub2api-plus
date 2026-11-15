@@ -160,6 +160,38 @@ func TestFetchOpenAIAccountModelsOAuthPassthroughIgnoresMappingTargets(t *testin
 	}
 }
 
+// An API-key account with an explicit mapping routes only those models, so the
+// test picker must not keep offering an upstream model the mapping dropped.
+func TestFetchOpenAIAccountModelsAPIKeyScopedToAccountMapping(t *testing.T) {
+	gateway := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		return ordinaryModelsUpstreamResponse(`{"data":[{"id":"gpt-image-2"},{"id":"nano-banana-pro"},{"id":"gpt-5.6-sol"}]}`), nil
+	}})
+	svc := &AccountTestService{openaiGatewayService: gateway}
+	account := newCodexModelsAPIKeyTestAccount("https://models.example/v1")
+	account.Credentials["model_mapping"] = map[string]any{
+		"gpt-image-2": "gpt-image-2",
+		"gpt-5.6-sol": "gpt-5.6-sol",
+	}
+
+	models, err := svc.FetchOpenAIAccountModels(context.Background(), account)
+	require.NoError(t, err)
+	require.Equal(t, []string{"gpt-image-2", "gpt-5.6-sol"}, pickerModelIDs(models))
+}
+
+func TestFetchOpenAIAccountModelsAPIKeyIncludesPublicAliases(t *testing.T) {
+	gateway := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		return ordinaryModelsUpstreamResponse(`{"data":[{"id":"upstream-model"},{"id":"other"}]}`), nil
+	}})
+	svc := &AccountTestService{openaiGatewayService: gateway}
+	account := newCodexModelsAPIKeyTestAccount("https://models.example/v1")
+	account.Credentials["model_mapping"] = map[string]any{"public-alias": "upstream-model"}
+
+	models, err := svc.FetchOpenAIAccountModels(context.Background(), account)
+	require.NoError(t, err)
+	require.Equal(t, []string{"public-alias"}, pickerModelIDs(models))
+	require.Equal(t, "public-alias", models[0].DisplayName)
+}
+
 func TestFetchOpenAIAccountModelsAPIKeyPassthroughIgnoresMapping(t *testing.T) {
 	gateway := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
 		return ordinaryModelsUpstreamResponse(`{"data":[{"id":"target"},{"id":"other"}]}`), nil

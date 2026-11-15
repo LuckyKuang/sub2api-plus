@@ -8718,11 +8718,14 @@
         <div v-show="activeTab === 'backup'">
           <BackupSettings />
         </div>
+        <div v-show="activeTab === 'imageTasks'">
+          <ImageTaskSettings />
+        </div>
 
         </div>
 
         <!-- Save dock remains outside the scrolling settings panels. -->
-        <div v-show="activeTab !== 'backup'" class="settings-save-dock" data-test="settings-save-bar">
+        <div v-show="activeTab !== 'backup' && activeTab !== 'imageTasks'" class="settings-save-dock" data-test="settings-save-bar">
           <button
             type="submit"
             :disabled="saving || loadFailed"
@@ -8856,6 +8859,7 @@ import ProxySelector from "@/components/common/ProxySelector.vue";
 import ImageUpload from "@/components/common/ImageUpload.vue";
 import AppearanceSettingsCard from "@/components/admin/settings/AppearanceSettingsCard.vue";
 import BackupSettings from "@/views/admin/BackupView.vue";
+import ImageTaskSettings from "@/components/admin/ImageTaskSettings.vue";
 import EmailTemplateEditor from "@/views/admin/settings/EmailTemplateEditor.vue";
 import OutboundIdentitySettings from "@/views/admin/settings/OutboundIdentitySettings.vue";
 import CodexCLIRuntimeSettings from "@/views/admin/settings/CodexCLIRuntimeSettings.vue";
@@ -8946,6 +8950,7 @@ type SettingsTab =
   | "identity"
   | "payment"
   | "email"
+  | "imageTasks"
   | "backup";
 const activeTab = ref<SettingsTab>("general");
 const settingsBody = ref<HTMLElement | null>(null);
@@ -8966,6 +8971,7 @@ const settingsTabs = [
   { key: "identity" as SettingsTab, icon: "shield" as const },
   { key: "payment" as SettingsTab, icon: "creditCard" as const },
   { key: "email" as SettingsTab, icon: "mail" as const },
+  { key: "imageTasks" as SettingsTab, icon: "sparkles" as const },
   { key: "backup" as SettingsTab, icon: "database" as const },
 ];
 

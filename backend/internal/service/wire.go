@@ -146,9 +146,22 @@ func ProvideBatchImageModelPricingResolver(resolver *ModelPricingResolver) *Batc
 	return &BatchImageModelPricingResolver{Resolver: resolver}
 }
 
-func ProvideBatchImagePublicService(repo BatchImageRepository, accountRepo AccountRepository, groupRepo GroupRepository, userGroupRateRepo UserGroupRateRepository, queue BatchImageQueue, pricing *BatchImageModelPricingResolver, billingRepo UsageBillingRepository, authCache APIKeyAuthCacheInvalidator, cfg *config.Config, unfinished *GatewayUnfinishedTaskService) *BatchImagePublicService {
+func ProvideBatchImageSettingsService(settingRepo SettingRepository, cfg *config.Config) *BatchImageSettingsService {
+	fallback := false
+	if cfg != nil {
+		fallback = cfg.BatchImage.Enabled
+	}
+	svc := NewBatchImageSettingsService(settingRepo, fallback)
+	svc.SetWorkerEnabled(cfg != nil && cfg.BatchImage.QueueEnabled)
+	return svc
+}
+
+func ProvideBatchImagePublicService(repo BatchImageRepository, accountRepo AccountRepository, groupRepo GroupRepository, userGroupRateRepo UserGroupRateRepository, queue BatchImageQueue, pricing *BatchImageModelPricingResolver, billingRepo UsageBillingRepository, authCache APIKeyAuthCacheInvalidator, cfg *config.Config, unfinished *GatewayUnfinishedTaskService, batchSettings *BatchImageSettingsService) *BatchImagePublicService {
 	svc := NewBatchImagePublicService(repo, accountRepo, groupRepo, userGroupRateRepo, queue, pricing, billingRepo, authCache, cfg)
 	svc.UnfinishedTasks = unfinished
+	if batchSettings != nil {
+		svc.EnabledResolver = batchSettings.Enabled
+	}
 	return svc
 }
 
@@ -780,9 +793,18 @@ func ProvideIPAccessControlService(
 // 对象存储是异步图片任务的启用前提：仅当开关打开且凭证齐全时功能才可用，否则整体禁用
 // （handler 返回 404，不创建任务、不写 Redis），从而避免大 base64 结果撑爆 Redis。
 // 启用状态由 settings 服务在运行时解析，因此后台改开关后无需重启即可生效。
-func ProvideImageTaskService(store ImageTaskStore, history ImageTaskHistoryRepository, settings *ImageStorageSettingService) *ImageTaskService {
+// ProvideImageTaskHistoryRetryService connects durable compensation to the task
+// service and starts its retry loop, so a failed history write is re-applied.
+func ProvideImageTaskHistoryRetryService(history ImageTaskHistoryRepository, retry ImageTaskHistoryRetryRepository) *ImageTaskHistoryRetryService {
+	svc := NewImageTaskHistoryRetryService(history, retry)
+	svc.Start()
+	return svc
+}
+
+func ProvideImageTaskService(store ImageTaskStore, history ImageTaskHistoryRepository, settings *ImageStorageSettingService, retry *ImageTaskHistoryRetryService) *ImageTaskService {
 	svc := NewImageTaskServiceWithResolver(store, settings.Resolver(), defaultImageTaskTTL, defaultImageTaskExecutionTimeout)
 	svc.SetHistoryRepository(history)
+	svc.SetHistoryRetryQueue(retry)
 	return svc
 }
 
@@ -957,7 +979,9 @@ var ProviderSet = wire.NewSet(
 	ProvideProviderFilesService,
 	ProvideImageStorageSettingService,
 	ProvideImageTaskService,
+	ProvideImageTaskHistoryRetryService,
 	ProvideBatchImageModelPricingResolver,
+	ProvideBatchImageSettingsService,
 	ProvideBatchImagePublicService,
 	NewGatewayUnfinishedTaskService,
 	NewBatchImageDownloadService,
@@ -1055,6 +1079,8 @@ var ProviderSet = wire.NewSet(
 	NewGroupCapacityService,
 	ProvideChannelService,
 	wire.Bind(new(ChannelCacheInvalidator), new(*ChannelService)),
+	// 账号模型变化后立即失效 /v1/models 短缓存，避免下游在 TTL 窗口内仍看到已删除的模型。
+	wire.Bind(new(AvailableModelsCacheInvalidator), new(*GatewayService)),
 	NewModelPricingResolver,
 	ProvideModelPlazaService,
 	NewContentModerationService,

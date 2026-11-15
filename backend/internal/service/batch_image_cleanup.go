@@ -134,8 +134,10 @@ func (s *BatchImageCleanupService) RunOnce(ctx context.Context, now time.Time) (
 	return result, nil
 }
 
+// Start runs cleanup regardless of the submission switch: disabling new jobs
+// must not strand the retention and cleanup of work that was already accepted.
 func (s *BatchImageCleanupService) Start() {
-	if s == nil || s.Repo == nil || s.Config == nil || !s.Config.BatchImage.Enabled || s.cleanupInterval() <= 0 {
+	if s == nil || s.Repo == nil || s.Config == nil || s.cleanupInterval() <= 0 {
 		return
 	}
 	s.mu.Lock()

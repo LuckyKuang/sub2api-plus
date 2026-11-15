@@ -110,8 +110,11 @@ func TestAvailableChannelCatalogExcludesUnboundModels(t *testing.T) {
 		}
 		require.Equal(t, want, got)
 	}
+	// Sales catalog membership is the intersection of configured price cards and
+	// the models the group's accounts actually serve: a channel card alone cannot
+	// advertise a model no account exposes.
 	assertChannelModels(map[int64][]string{
-		1: {"gpt-configured"}, 2: {"claude-configured"}, 6: {}, 7: {"claude-configured"},
+		1: {}, 2: {}, 6: {}, 7: {"claude-configured"},
 	})
 	require.ElementsMatch(t, []int64{1, 2, 6, 7}, mappings.groupIDs)
 
@@ -119,7 +122,7 @@ func TestAvailableChannelCatalogExcludesUnboundModels(t *testing.T) {
 	// deletion immediately; configuration from other sources cannot restore them.
 	channels.channels[0].ModelPricing = nil
 	assertChannelModels(map[int64][]string{
-		1: {}, 2: {"claude-configured"}, 6: {}, 7: {"claude-configured"},
+		1: {}, 2: {}, 6: {}, 7: {"claude-configured"},
 	})
 	channels.channels[0].GroupIDs = nil
 	channels.channels[1].Status = service.StatusDisabled

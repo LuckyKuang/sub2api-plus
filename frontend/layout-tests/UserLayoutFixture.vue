@@ -48,6 +48,7 @@ import type { PublicSettings, User } from '../src/types'
 const parameters = new URLSearchParams(location.search)
 const auditPage = parameters.get('auditPage')
 const auditPages = {
+  'image-tasks': defineAsyncComponent(() => import('../src/views/user/ImageTasksView.vue')),
   channels: defineAsyncComponent(() => import('../src/views/user/AvailableChannelsView.vue')),
   keys: defineAsyncComponent(() => import('../src/views/user/KeysView.vue')),
   redeem: defineAsyncComponent(() => import('../src/views/user/RedeemView.vue')),

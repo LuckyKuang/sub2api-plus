@@ -1,5 +1,5 @@
 <template>
-  <AppLayout appearance="user" workspace>
+  <component :is="embedded ? 'div' : AppLayout" v-bind="shellProps">
     <TablePageLayout>
       <template #filters>
         <div class="card flex flex-col gap-3 p-4">
@@ -7,13 +7,22 @@
             <div class="filter-bar w-full xl:w-auto">
               <div class="filter-field">
                 <Select
-                  v-model="selectedApiKeyId"
-                  :options="apiKeyFilterOptions"
-                  :disabled="loadingKeys"
-                  searchable="auto"
-                  data-testid="async-image-api-key-filter"
-                  :aria-label="t('asyncImage.filters.apiKey')"
-                  @change="selectApiKey"
+                  v-model="filters.platform"
+                  :options="platformFilterOptions"
+                  :disabled="loadingTasks"
+                  :searchable="false"
+                  data-testid="async-image-platform-filter"
+                  :aria-label="t('asyncImage.filters.allPlatforms')"
+                  @change="applyFilters"
+                />
+              </div>
+              <div class="filter-field">
+                <Select
+                  v-model="filters.model"
+                  :options="modelFilterOptions"
+                  :aria-label="t('asyncImage.filters.modelPlaceholder')"
+                  data-testid="async-image-model-filter"
+                  @change="applyFilters"
                 />
               </div>
               <div class="filter-field">
@@ -27,34 +36,39 @@
                   @change="applyFilters"
                 />
               </div>
+              <div class="filter-field">
+                <DateTimePicker v-model="filters.since" :max="filters.until || undefined" :aria-label="t('asyncImage.filters.since')" :placeholder="t('asyncImage.filters.since')" data-testid="async-image-since-filter" @change="applyFilters" />
+              </div>
+              <div class="filter-field">
+                <DateTimePicker v-model="filters.until" :min="filters.since || undefined" :aria-label="t('asyncImage.filters.until')" :placeholder="t('asyncImage.filters.until')" data-testid="async-image-until-filter" @change="applyFilters" />
+              </div>
             </div>
             <div class="flex flex-wrap items-center gap-2 xl:flex-shrink-0">
-              <button type="button" class="btn btn-secondary" :disabled="loadingTasks" :title="t('asyncImage.actions.refresh')" @click="() => loadTasks()">
+              <button type="button" class="btn btn-secondary" :disabled="loadingTasks" :title="t('asyncImage.actions.refresh')" @click="refreshHistory">
                 <Icon name="refresh" size="md" :class="loadingTasks ? 'animate-spin' : ''" />
               </button>
-              <button v-support-readonly type="button" class="btn btn-primary" @click="openCreateDialog">
+              <button v-support-readonly type="button" class="btn btn-primary" :disabled="!canSubmit || supportMode" @click="openCreateDialog">
                 <Icon name="plus" size="md" class="mr-2" />
                 {{ t('asyncImage.actions.create') }}
               </button>
             </div>
           </div>
-          <p class="text-xs surface-muted">{{ t('asyncImage.list.keyHint') }}</p>
+          <p class="text-xs surface-muted">{{ t('asyncImage.list.historyHint') }}</p>
         </div>
       </template>
 
       <template #table>
         <DataTable class="workspace-table-viewport" :columns="columns" :data="tasks" :loading="loadingTasks" row-key="task_id">
           <template #cell-prompt_preview="{ row }">
-            <div class="max-w-[360px]">
-              <p class="line-clamp-2 text-sm text-gray-800 dark:text-gray-100" :title="row.prompt_preview || ''">
-                {{ row.prompt_preview || '-' }}
-              </p>
-              <p class="mt-1 truncate font-mono text-xs surface-muted">{{ row.task_id }}</p>
-            </div>
+            <!-- One row per record: the task id used to sit on a second line and
+                 stretched every row, so it moved into the cell tooltip. -->
+            <p class="task-cell-prompt text-sm text-gray-800 dark:text-gray-100" :title="promptTitle(row)">
+              {{ row.prompt_preview || '-' }}
+            </p>
           </template>
 
           <template #cell-model="{ row }">
-            <span class="block max-w-[160px] truncate text-sm surface-muted" :title="row.model || ''">
+            <span class="block max-w-[140px] truncate text-sm surface-muted" :title="row.model || ''">
               {{ row.model || '-' }}
             </span>
           </template>
@@ -65,6 +79,11 @@
 
           <template #cell-status="{ row }">
             <span class="badge" :class="statusClass(row.status)">{{ statusLabel(row.status) }}</span>
+            <p v-if="row.api_key_deleted" class="mt-1 text-xs surface-muted">{{ t('asyncImage.detail.deletedKey') }}</p>
+            <p v-if="row.execution_status === 'unconfirmed'" class="mt-1 text-xs surface-muted">{{ t('asyncImage.detail.unconfirmed') }}</p>
+            <!-- Only a finished task can have a real read problem: while it runs,
+                 and for a failed task, "unarchived" is the expected state. -->
+            <p v-if="row.status === 'completed' && row.read_status && row.read_status !== 'readable'" class="task-cell-note mt-1 text-xs surface-muted" :title="t('asyncImage.readStatus.' + row.read_status)">{{ t('asyncImage.readStatus.' + row.read_status) }}</p>
           </template>
 
           <template #cell-result="{ row }">
@@ -81,17 +100,17 @@
                 <img :src="url" alt="" class="h-full w-full object-cover" loading="lazy" />
               </div>
             </div>
-            <span v-else-if="row.status === 'failed'" class="text-xs text-red-600 dark:text-red-300">{{ row.error?.message || '-' }}</span>
+            <span v-else-if="row.status === 'failed'" class="task-cell-error block text-xs text-red-600 dark:text-red-300" :title="row.error?.message || ''">{{ row.error?.message || '-' }}</span>
             <span v-else class="text-xs surface-muted">-</span>
           </template>
 
           <template #cell-created_at="{ row }">
-            <span class="text-sm surface-muted">{{ formatDate(row.created_at) }}</span>
+            <span class="task-cell-time text-sm surface-muted">{{ formatDate(row.created_at) }}</span>
           </template>
 
           <template #cell-actions="{ row }">
             <div class="flex justify-center gap-1">
-              <button type="button" class="icon-button surface-control" :title="t('asyncImage.actions.view')" :data-testid="`view-task-${row.task_id}`" @click="selectedTask = row">
+              <button type="button" class="icon-button surface-control" :title="t('asyncImage.actions.view')" :data-testid="`view-task-${row.task_id}`" @click="openTask(row)">
                 <Icon name="eye" size="sm" />
               </button>
               <button v-support-readonly
@@ -253,6 +272,15 @@
               :options="sizeOptions.map(option => ({ value: option.value, label: option.label }))"
             />
           </label>
+          <label v-if="selectedModelUsesAspectRatio" class="block">
+            <span class="input-label">{{ t('asyncImage.create.aspectRatio') }}</span>
+            <Select
+              v-model="form.aspectRatio"
+              class="w-full"
+              :searchable="false"
+              :options="aspectRatioOptions"
+            />
+          </label>
           <div v-if="usingCustomSize" class="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-2">
             <label class="block">
               <span class="input-label">{{ t('asyncImage.create.width') }}</span>
@@ -265,7 +293,7 @@
             <p v-if="customSizeError" class="sm:col-span-2 text-xs text-red-600 dark:text-red-300">{{ customSizeError }}</p>
             <p v-else-if="customSizeExperimental" class="sm:col-span-2 text-xs text-amber-700 dark:text-amber-300">{{ t('asyncImage.create.experimentalSizeHint') }}</p>
           </div>
-          <label v-if="selectedModelIsGPTImage2" class="block">
+          <label v-if="selectedModelUsesQuality" class="block">
             <span class="input-label">{{ t('asyncImage.create.quality') }}</span>
             <Select
               v-model="form.quality"
@@ -286,7 +314,7 @@
         </div>
         <div class="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-dark-700">
           <button type="button" class="btn btn-secondary" @click="closeCreateDialog">{{ t('common.cancel') }}</button>
-          <button type="submit" class="btn btn-primary" :disabled="submitting || eligibleKeys.length === 0 || loadingModels || !form.model || (form.mode === 'edit' && editImages.length === 0)">
+          <button type="submit" class="btn btn-primary" :disabled="!canSubmit || submitting || eligibleKeys.length === 0 || loadingModels || !form.model || (form.mode === 'edit' && editImages.length === 0)">
             <Icon v-if="submitting" name="refresh" size="sm" class="mr-2 animate-spin" />
             {{ submitting ? t('common.submitting') : t('asyncImage.actions.submit') }}
           </button>
@@ -300,6 +328,10 @@
           <div>
             <p class="text-xs surface-muted">{{ t('asyncImage.columns.status') }}</p>
             <span class="mt-1 inline-flex badge" :class="statusClass(selectedTask.status)">{{ statusLabel(selectedTask.status) }}</span>
+            <p v-if="selectedTask.api_key_deleted" class="mt-1 text-sm surface-muted">{{ t('asyncImage.detail.deletedKey') }}</p>
+            <p v-if="selectedTask.execution_status === 'unconfirmed'" class="mt-1 text-sm surface-muted">{{ t('asyncImage.detail.unconfirmed') }}</p>
+            <p v-if="selectedTask.archive_status" class="mt-1 text-sm surface-muted">{{ t('asyncImage.archiveStatus.' + selectedTask.archive_status) }}</p>
+            <p v-if="selectedTask.read_status" class="mt-1 text-sm surface-muted">{{ t('asyncImage.readStatus.' + selectedTask.read_status) }}</p>
           </div>
           <div>
             <p class="text-xs surface-muted">{{ t('asyncImage.create.model') }}</p>
@@ -330,14 +362,14 @@
           <span class="font-medium">{{ t('asyncImage.detail.error') }}: </span>{{ selectedTask.error?.message || '-' }}
         </div>
         <div v-else-if="selectedTask.status === 'processing'" class="rounded border border-blue-200 bg-blue-50/[0.15] px-3 py-2 text-sm text-blue-800 dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-200">
-          {{ t('asyncImage.detail.pending') }}
+          {{ t(selectedTask.execution_status === 'unconfirmed' ? 'asyncImage.detail.unconfirmed' : 'asyncImage.detail.pending') }}
         </div>
-        <div v-else-if="taskImageUrls(selectedTask).length" class="space-y-3">
+        <div v-else-if="!loadingDetail && taskImageUrls(selectedTask).length" class="space-y-3">
           <div v-if="imageCountMismatch(selectedTask)" class="rounded border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-sm text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200">
             {{ t('asyncImage.detail.countMismatch', { requested: selectedTask.requested_images || 1, actual: selectedTask.actual_images ?? taskImageUrls(selectedTask).length }) }}
           </div>
           <div class="flex justify-end">
-            <button type="button" class="btn btn-secondary btn-sm" :disabled="downloading || !selectedTaskApiKey" @click="downloadSelectedTask">
+            <button type="button" class="btn btn-secondary btn-sm" :disabled="downloading || !taskReadable(selectedTask)" @click="downloadSelectedTask">
               <Icon :name="downloading ? 'refresh' : 'download'" size="sm" class="mr-1.5" :class="downloading ? 'animate-spin' : ''" />
               {{ downloading ? t('common.submitting') : t('asyncImage.actions.downloadAll') }}
             </button>
@@ -348,7 +380,7 @@
             </div>
           </div>
         </div>
-        <p v-else class="text-sm surface-muted">{{ t('asyncImage.detail.noImage') }}</p>
+        <p v-else class="text-sm surface-muted">{{ t(loadingDetail ? 'common.loading' : 'asyncImage.detail.noImage') }}</p>
       </div>
     </BaseDialog>
 
@@ -363,12 +395,12 @@
       @confirm="confirmDeleteTask"
       @cancel="deleteTarget = null"
     />
-  </AppLayout>
+  </component>
 </template>
 
 <script setup lang="ts">
 import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
@@ -378,10 +410,14 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { keysAPI } from '@/api'
-import { AsyncImageDownloadValidationError, deleteAsyncImageTask, downloadAsyncImageZip, getAsyncImageTask, listAsyncImageModels, listAsyncImageTasks, preferredAsyncImageModel, saveAsyncImageBlob, submitAsyncImageEdit, submitAsyncImageGeneration, type AsyncImageTask } from '@/api/asyncImage'
-import { keyAllowsAsyncImage, keyCanManageAsyncImage } from '@/composables/useAsyncImageAccess'
+import { AsyncImageDownloadValidationError, listAsyncImageModels, preferredAsyncImageModel, saveAsyncImageBlob, submitAsyncImageEdit, submitAsyncImageGeneration, type AsyncImageTask } from '@/api/asyncImage'
+import { deleteUserImageTask, downloadUserImageTaskZip, getUserImageTask, getUserImageTaskFilters, listUserImageTasks, type ImageTaskHistoryFilters } from '@/api/imageTasks'
+import { keyAllowsAsyncImage } from '@/composables/useAsyncImageAccess'
+import { USER_TABLE_LAYOUT_KEY } from '@/composables/useUserTableLayout'
+import { adminSupportContext } from '@/utils/adminSupportContext'
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import { useAppStore } from '@/stores/app'
-import { isGPTImage2, isGPTImage2ExperimentalSize, validateGPTImage2CustomSize } from '@/utils/asyncImageSize'
+import { DEFAULT_GEMINI_ASPECT_RATIO, GEMINI_ASPECT_RATIOS, GEMINI_IMAGE_SIZES, imageModelFamily, isGPTImage2, isGPTImage2ExperimentalSize, validateGPTImage2CustomSize } from '@/utils/asyncImageSize'
 import type { Column } from '@/components/common/types'
 import type { ApiKey } from '@/types'
 
@@ -400,37 +436,54 @@ interface EditImageUpload {
   url: string
 }
 
+const props = withDefaults(defineProps<{ embedded?: boolean; canSubmit?: boolean }>(), { canSubmit: false })
+
+// One table row per task at every desktop width: the user console's per-record
+// card fallback stacked a task into several rows inside the mode shell.
+provide(USER_TABLE_LAYOUT_KEY, computed(() => false))
+const shellProps = computed(() => props.embedded ? { class: 'image-task-embedded' } : { appearance: 'user', workspace: true })
+
 const { t } = useI18n()
 const appStore = useAppStore()
 const apiKeys = ref<ApiKey[]>([])
-const selectedApiKeyId = ref(0)
-const loadingKeys = ref(false)
 const loadingModels = ref(false)
 const loadingTasks = ref(false)
 const submitting = ref(false)
 const downloading = ref(false)
 const tasks = ref<AsyncImageTask[]>([])
 const availableModels = ref<string[]>([])
+const historyFilters = ref<ImageTaskHistoryFilters>({ platforms: [], models: [] })
 const hasMore = ref(false)
 const offset = ref(0)
 const showCreateDialog = ref(false)
 const selectedTask = ref<AsyncImageTask | null>(null)
+const loadingDetail = ref(false)
 const deleteTarget = ref<AsyncImageTask | null>(null)
 const deletingTaskId = ref('')
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let modelRequestID = 0
 let taskListRequestID = 0
+let detailRequestID = 0
+let historyFilterRequestID = 0
+let pollGeneration = 0
+let disposed = false
 
-const filters = reactive({ status: '' })
-const form = reactive({ apiKeyId: 0, mode: 'generation' as AsyncImageMode, model: '', prompt: '', size: '1024x1024', customWidth: 1024, customHeight: 1024, quality: 'auto', n: 1 })
+const filters = reactive({ status: '', platform: '', model: '', since: '', until: '' })
+const form = reactive({ apiKeyId: 0, mode: 'generation' as AsyncImageMode, model: '', prompt: '', size: '1024x1024', customWidth: 1024, customHeight: 1024, quality: 'auto', aspectRatio: DEFAULT_GEMINI_ASPECT_RATIO, n: 1 })
 const editImages = ref<EditImageUpload[]>([])
 const editMask = ref<EditImageUpload | null>(null)
 
+// Support history reads are scoped to the validated target by the API client.
+// Mutations remain unavailable throughout an administrator assistance session.
+const supportMode = computed(() => adminSupportContext.value !== null)
 const eligibleKeys = computed(() => apiKeys.value.filter(keyAllowsAsyncImage))
-const manageableKeys = computed(() => apiKeys.value.filter(keyCanManageAsyncImage))
-const apiKeyFilterOptions = computed<SelectOption[]>(() => [
-  { value: 0, label: t('asyncImage.filters.selectKey') },
-  ...manageableKeys.value.map(key => ({ value: key.id, label: key.name || `API Key #${key.id}` })),
+const platformFilterOptions = computed<SelectOption[]>(() => [
+  { value: '', label: t('asyncImage.filters.allPlatforms') },
+  ...historyFilters.value.platforms.map(platform => ({ value: platform, label: platform === 'unknown' ? t('asyncImage.filters.unknownPlatform') : platform === 'openai' ? 'OpenAI' : platform === 'grok' ? 'Grok' : platform })),
+])
+const modelFilterOptions = computed<SelectOption[]>(() => [
+  { value: '', label: t('asyncImage.filters.allModels') },
+  ...historyFilters.value.models.map(model => ({ value: model, label: model })),
 ])
 const statusFilterOptions = computed<SelectOption[]>(() => [
   { value: '', label: t('asyncImage.filters.allStatuses') },
@@ -438,10 +491,12 @@ const statusFilterOptions = computed<SelectOption[]>(() => [
   { value: 'completed', label: t('asyncImage.status.completed') },
   { value: 'failed', label: t('asyncImage.status.failed') },
 ])
-const selectedApiKey = computed(() => manageableKeys.value.find(key => key.id === selectedApiKeyId.value) || null)
 const formApiKey = computed(() => eligibleKeys.value.find(key => key.id === form.apiKeyId) || null)
-const selectedTaskApiKey = computed(() => selectedApiKey.value)
+const selectedModelFamily = computed(() => imageModelFamily(form.model))
 const selectedModelIsGPTImage2 = computed(() => isGPTImage2(form.model))
+const selectedModelUsesQuality = computed(() => selectedModelFamily.value === 'gpt')
+const selectedModelUsesAspectRatio = computed(() => selectedModelFamily.value === 'gemini')
+const aspectRatioOptions = computed(() => GEMINI_ASPECT_RATIOS.map(value => ({ value, label: value })))
 const usingCustomSize = computed(() => selectedModelIsGPTImage2.value && form.size === 'custom')
 const customSizeValidationCode = computed(() => usingCustomSize.value ? validateGPTImage2CustomSize(form.customWidth, form.customHeight) : null)
 const customSizeError = computed(() => customSizeValidationCode.value ? t(`asyncImage.create.customSizeErrors.${customSizeValidationCode.value}`) : '')
@@ -449,6 +504,11 @@ const customSizeExperimental = computed(() => usingCustomSize.value && !customSi
 const currentPage = computed(() => Math.floor(offset.value / PAGE_SIZE) + 1)
 const deleteConfirmMessage = computed(() => t('asyncImage.delete.confirm', { taskId: deleteTarget.value?.task_id || '' }))
 const sizeOptions = computed(() => {
+  if (selectedModelFamily.value === 'gemini') {
+    // Gemini-compatible models (including the nano-banana aliases) reject
+    // explicit non-square sizes; they take a resolution tier plus aspect_ratio.
+    return GEMINI_IMAGE_SIZES.map(value => ({ value, label: value }))
+  }
   if (!selectedModelIsGPTImage2.value) {
     return [
       { value: '1024x1024', label: '1024 x 1024' },
@@ -470,8 +530,8 @@ const sizeOptions = computed(() => {
   ]
 })
 const columns = computed<Column[]>(() => [
-  { key: 'prompt_preview', label: t('asyncImage.columns.prompt'), sortable: false, class: 'min-w-[280px] max-w-[360px]' },
-  { key: 'model', label: t('asyncImage.columns.model'), sortable: false, class: 'w-44' },
+  { key: 'prompt_preview', label: t('asyncImage.columns.prompt'), sortable: false, class: 'min-w-[240px] max-w-[320px]' },
+  { key: 'model', label: t('asyncImage.columns.model'), sortable: false, class: 'w-40' },
   { key: 'request_type', label: t('asyncImage.columns.type'), sortable: false, class: 'w-24 text-center' },
   { key: 'status', label: t('asyncImage.columns.status'), sortable: false, class: 'w-28 text-center' },
   { key: 'result', label: t('asyncImage.columns.result'), sortable: false, class: 'w-[120px] text-center' },
@@ -506,8 +566,50 @@ function requestTypeClass(requestType?: string) {
 }
 
 function taskImageUrls(task: AsyncImageTask): string[] {
+  if (!taskReadable(task)) return []
   const urls = [task.image_url, ...(task.result?.data || []).map(item => item.url)].filter((url): url is string => Boolean(url))
   return [...new Set(urls)]
+}
+
+function taskReadable(task: AsyncImageTask): boolean {
+  return !task.read_status || task.read_status === 'readable'
+}
+
+function promptTitle(task: AsyncImageTask): string {
+  return [task.prompt_preview, task.task_id].filter(Boolean).join('\n')
+}
+
+async function loadHistoryFilters() {
+  if (disposed) return
+  const requestID = ++historyFilterRequestID
+  try {
+    const loaded = await getUserImageTaskFilters()
+    if (!disposed && requestID === historyFilterRequestID) historyFilters.value = loaded
+  } catch (error) {
+    if (disposed || requestID !== historyFilterRequestID) return
+    appStore.showError(errorMessage(error, t('asyncImage.errors.loadFilters')))
+  }
+}
+
+async function refreshHistory() {
+  await Promise.all([loadHistoryFilters(), loadTasks()])
+}
+
+async function openTask(task: AsyncImageTask) {
+  if (disposed) return
+  const requestID = ++detailRequestID
+  selectedTask.value = task
+  loadingDetail.value = true
+  try {
+    const detail = await getUserImageTask(task.task_id)
+    if (requestID === detailRequestID && selectedTask.value?.task_id === task.task_id) selectedTask.value = detail
+  } catch (error) {
+    if (requestID !== detailRequestID || selectedTask.value?.task_id !== task.task_id) return
+    selectedTask.value = null
+    appStore.showError(errorMessage(error, t('asyncImage.errors.refresh')))
+  } finally {
+    if (requestID === detailRequestID) loadingDetail.value = false
+  }
 }
 
 function imageCountMismatch(task: AsyncImageTask): boolean {
@@ -522,29 +624,27 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 async function loadApiKeys() {
-  loadingKeys.value = true
+  if (disposed || supportMode.value) return
   try {
     const loadedKeys = [] as ApiKey[]
     let page = 1
     while (true) {
       const response = await keysAPI.list(page, 100, { sort_by: 'created_at', sort_order: 'desc' })
+      if (disposed) return
       loadedKeys.push(...(response.items || []))
       const pages = Number.isFinite(response.pages) && response.pages > 0 ? response.pages : 1
       if (page >= pages || (response.items || []).length === 0) break
       page += 1
     }
     apiKeys.value = loadedKeys
-    if (!manageableKeys.value.some(key => key.id === selectedApiKeyId.value)) {
-      selectedApiKeyId.value = eligibleKeys.value[0]?.id || manageableKeys.value[0]?.id || 0
-    }
   } catch (error) {
+    if (disposed) return
     appStore.showError(errorMessage(error, t('asyncImage.errors.loadKeys')))
-  } finally {
-    loadingKeys.value = false
   }
 }
 
 async function loadFormModels() {
+  if (disposed) return
   const key = formApiKey.value
   const requestID = ++modelRequestID
   availableModels.value = []
@@ -566,9 +666,15 @@ async function loadFormModels() {
   }
 }
 
+// Switching model switches the parameter profile: a size the new family does not
+// offer falls back to the shared square default, and quality resets when the
+// selected model does not accept it.
 function onModelChanged() {
-  if (!selectedModelIsGPTImage2.value && form.size === 'custom') form.size = '1024x1024'
-  if (!selectedModelIsGPTImage2.value && form.size === 'auto') form.size = '1024x1024'
+  if (!sizeOptions.value.some(option => option.value === form.size)) {
+    form.size = selectedModelFamily.value === 'gemini' ? GEMINI_IMAGE_SIZES[0] : '1024x1024'
+  }
+  if (!selectedModelUsesQuality.value) form.quality = 'auto'
+  if (!selectedModelUsesAspectRatio.value) form.aspectRatio = DEFAULT_GEMINI_ASPECT_RATIO
 }
 
 function totalEditUploadBytes() {
@@ -643,6 +749,7 @@ function removeMaskImage() {
 }
 
 function stopPolling() {
+  pollGeneration++
   if (pollTimer) {
     clearTimeout(pollTimer)
     pollTimer = null
@@ -651,19 +758,21 @@ function stopPolling() {
 
 function schedulePolling() {
   stopPolling()
-  if (!selectedApiKey.value || !tasks.value.some(task => task.status === 'processing')) return
+  if (disposed || !tasks.value.some(task => task.status === 'processing')) return
+  const generation = pollGeneration
   pollTimer = setTimeout(async () => {
-    await refreshProcessingTasks()
-    schedulePolling()
+    pollTimer = null
+    await refreshProcessingTasks(generation)
+    if (!disposed && generation === pollGeneration) schedulePolling()
   }, POLL_INTERVAL_MS)
 }
 
-async function refreshProcessingTasks() {
-  const key = selectedApiKey.value
-  if (!key) return
+async function refreshProcessingTasks(generation: number) {
+  if (disposed || generation !== pollGeneration) return
   const active = tasks.value.filter(task => task.status === 'processing')
   if (!active.length) return
-  const refreshed = await Promise.allSettled(active.map(task => getAsyncImageTask(key.key, task.task_id)))
+  const refreshed = await Promise.allSettled(active.map(task => getUserImageTask(task.task_id)))
+  if (disposed || generation !== pollGeneration) return
   refreshed.forEach((result, index) => {
     if (result.status !== 'fulfilled') return
     const taskID = active[index].task_id
@@ -674,18 +783,20 @@ async function refreshProcessingTasks() {
 }
 
 async function loadTasks(showError = true): Promise<boolean> {
-  const key = selectedApiKey.value
+  if (disposed) return false
   const requestID = ++taskListRequestID
   stopPolling()
-  if (!key) {
-    tasks.value = []
-    hasMore.value = false
-    loadingTasks.value = false
-    return true
-  }
   loadingTasks.value = true
   try {
-    const response = await listAsyncImageTasks(key.key, { status: filters.status, limit: PAGE_SIZE, offset: offset.value })
+    const response = await listUserImageTasks({
+      status: filters.status,
+      platform: filters.platform,
+      model: filters.model.trim(),
+      since: filters.since ? Math.floor(new Date(filters.since).getTime() / 1000) : undefined,
+      until: filters.until ? Math.floor(new Date(filters.until).getTime() / 1000) : undefined,
+      limit: PAGE_SIZE,
+      offset: offset.value,
+    })
     if (requestID !== taskListRequestID) return false
     tasks.value = response.data || []
     hasMore.value = response.has_more === true
@@ -705,24 +816,22 @@ async function loadTasks(showError = true): Promise<boolean> {
 }
 
 function applyFilters() {
+  if (filters.since && filters.until && new Date(filters.since).getTime() >= new Date(filters.until).getTime()) {
+    appStore.showError(t('asyncImage.errors.invalidTimeRange'))
+    return
+  }
   offset.value = 0
-  void loadTasks()
-}
-
-function selectApiKey() {
-  offset.value = 0
-  selectedTask.value = null
   void loadTasks()
 }
 
 async function confirmDeleteTask() {
   const target = deleteTarget.value
-  const key = selectedApiKey.value
-  if (!target || !key || deletingTaskId.value) return
+  if (disposed || !target || deletingTaskId.value || supportMode.value) return
 
   deletingTaskId.value = target.task_id
   try {
-    await deleteAsyncImageTask(key.key, target.task_id)
+    await deleteUserImageTask(target.task_id)
+    if (disposed) return
     if (selectedTask.value?.task_id === target.task_id) selectedTask.value = null
     deleteTarget.value = null
     appStore.showSuccess(t('asyncImage.delete.success'))
@@ -732,12 +841,13 @@ async function confirmDeleteTask() {
       await loadTasks()
     }
   } catch (error) {
+    if (disposed) return
     const code = (error as { code?: string })?.code
     appStore.showError(t(code === 'IMAGE_TASK_DELETE_NOT_ALLOWED'
       ? 'asyncImage.errors.deleteNotAllowed'
       : 'asyncImage.errors.delete'))
   } finally {
-    deletingTaskId.value = ''
+    if (!disposed) deletingTaskId.value = ''
   }
 }
 
@@ -753,9 +863,8 @@ function nextPage() {
 }
 
 function openCreateDialog() {
-  form.apiKeyId = eligibleKeys.value.some(key => key.id === selectedApiKeyId.value)
-    ? selectedApiKeyId.value
-    : eligibleKeys.value[0]?.id || 0
+  if (!props.canSubmit || supportMode.value) return
+  form.apiKeyId = eligibleKeys.value[0]?.id || 0
   form.mode = 'generation'
   form.size = '1024x1024'
   form.customWidth = 1024
@@ -774,22 +883,24 @@ function closeCreateDialog() {
 
 async function downloadSelectedTask() {
   const task = selectedTask.value
-  const key = selectedTaskApiKey.value
-  if (!task || !key || downloading.value || taskImageUrls(task).length === 0) return
+  if (disposed || !task || downloading.value || taskImageUrls(task).length === 0) return
   downloading.value = true
   try {
-    const blob = await downloadAsyncImageZip(key.key, task.task_id)
+    const blob = await downloadUserImageTaskZip(task.task_id)
+    if (disposed) return
     saveAsyncImageBlob(blob, `${task.task_id}.zip`)
   } catch (error) {
+    if (disposed) return
     appStore.showError(error instanceof AsyncImageDownloadValidationError
       ? t('asyncImage.errors.invalidArchive')
       : errorMessage(error, t('asyncImage.errors.download')))
   } finally {
-    downloading.value = false
+    if (!disposed) downloading.value = false
   }
 }
 
 async function submitTask() {
+  if (disposed || !props.canSubmit || supportMode.value) return
   const key = formApiKey.value
   if (!key) {
     appStore.showError(t('asyncImage.create.noKeys'))
@@ -819,7 +930,8 @@ async function submitTask() {
       prompt: form.prompt.trim(),
       size,
       n: form.n,
-      ...(selectedModelIsGPTImage2.value ? { quality: form.quality } : {}),
+      ...(selectedModelUsesQuality.value ? { quality: form.quality } : {}),
+      ...(selectedModelUsesAspectRatio.value ? { aspect_ratio: form.aspectRatio } : {}),
     }
     const created = form.mode === 'edit'
       ? await submitAsyncImageEdit(key.key, {
@@ -828,8 +940,12 @@ async function submitTask() {
         ...(editMask.value ? { mask: editMask.value.file } : {}),
       })
       : await submitAsyncImageGeneration(key.key, payload)
-    selectedApiKeyId.value = key.id
+    if (disposed) return
     filters.status = ''
+    filters.platform = ''
+    filters.model = ''
+    filters.since = ''
+    filters.until = ''
     offset.value = 0
     tasks.value = [created, ...tasks.value.filter(task => task.task_id !== created.task_id)].slice(0, PAGE_SIZE)
     showCreateDialog.value = false
@@ -837,20 +953,27 @@ async function submitTask() {
     clearEditUploads()
     appStore.showSuccess(t('asyncImage.create.submitted'))
     schedulePolling()
+    void loadHistoryFilters()
   } catch (error) {
+    if (disposed) return
     appStore.showError(errorMessage(error, t('asyncImage.errors.submit')))
   } finally {
-    submitting.value = false
+    if (!disposed) submitting.value = false
   }
 }
 
 onMounted(async () => {
-  await loadApiKeys()
+  await Promise.all([loadApiKeys(), loadHistoryFilters()])
+  if (disposed) return
   await loadTasks()
 })
 
 onBeforeUnmount(() => {
+  disposed = true
   taskListRequestID++
+  detailRequestID++
+  modelRequestID++
+  historyFilterRequestID++
   stopPolling()
   clearEditUploads()
 })
@@ -864,4 +987,22 @@ onBeforeUnmount(() => {
 .icon-button-danger {
   @apply text-red-600 hover:border-red-300 hover:bg-red-50/25 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400 dark:hover:border-red-800 dark:hover:bg-red-950/30 dark:hover:text-red-300;
 }
+
+/* The user console removes cell truncation so tables keep native content
+   widths. These task cells still need a hard cap: without it the prompt and
+   the failure message stretched one row across the viewport, and the timestamp
+   inherited the console's two-line wrap. */
+.task-cell-prompt,
+.task-cell-error,
+.task-cell-note {
+  display: block;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.task-cell-prompt { max-width: 320px !important; }
+.task-cell-error { max-width: 200px !important; }
+.task-cell-note { max-width: 160px !important; }
+.task-cell-time { max-width: none !important; white-space: nowrap !important; }
 </style>

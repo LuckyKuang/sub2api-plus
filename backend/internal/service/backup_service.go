@@ -189,9 +189,10 @@ type BackupService struct {
 	backingUp bool
 	restoring bool
 
-	storeMu sync.Mutex // 保护 store/s3Cfg 缓存
-	store   BackupObjectStore
-	s3Cfg   *BackupS3Config
+	storeMu             sync.Mutex // 保护 store/s3Cfg 缓存
+	store               BackupObjectStore
+	s3Cfg               *BackupS3Config
+	s3ConfigSubscribers []func(context.Context)
 
 	recordsMu sync.Mutex // 保护 records 的 load/save 操作
 
@@ -449,10 +450,25 @@ func (s *BackupService) UpdateS3Config(ctx context.Context, cfg BackupS3Config) 
 	s.storeMu.Lock()
 	s.store = nil
 	s.s3Cfg = nil
+	subscribers := append([]func(context.Context){}, s.s3ConfigSubscribers...)
 	s.storeMu.Unlock()
+	for _, subscriber := range subscribers {
+		subscriber(ctx)
+	}
 
 	cfg.SecretAccessKey = ""
 	return &cfg, nil
+}
+
+// SubscribeS3ConfigChanges invalidates clients that inherit the backup target.
+// Notifications run only after the new configuration has been persisted.
+func (s *BackupService) SubscribeS3ConfigChanges(subscriber func(context.Context)) {
+	if s == nil || subscriber == nil {
+		return
+	}
+	s.storeMu.Lock()
+	s.s3ConfigSubscribers = append(s.s3ConfigSubscribers, subscriber)
+	s.storeMu.Unlock()
 }
 
 func (s *BackupService) TestS3Connection(ctx context.Context, cfg BackupS3Config) error {

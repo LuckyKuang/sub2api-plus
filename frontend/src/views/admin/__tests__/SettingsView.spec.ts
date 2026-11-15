@@ -628,6 +628,9 @@ function mountView(attachTo?: HTMLElement) {
         ProxySelector: true,
         ImageUpload: ImageUploadStub,
         BackupSettings: true,
+        // The image task panel has its own suite; it reads the auth store, which
+        // this view-level fixture does not install.
+        ImageTaskSettings: true,
       },
     },
   });
@@ -1814,6 +1817,7 @@ describe("admin SettingsView payment visible method controls", () => {
           ProxySelector: true,
           ImageUpload: ImageUploadStub,
           BackupSettings: true,
+          ImageTaskSettings: true,
         },
       },
     });
@@ -2069,6 +2073,7 @@ describe("admin SettingsView payment visible method controls", () => {
           ProxySelector: true,
           ImageUpload: ImageUploadStub,
           BackupSettings: true,
+          ImageTaskSettings: true,
         },
       },
     });

@@ -3,8 +3,11 @@ package repository
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -31,6 +34,7 @@ type S3ImageStorage struct {
 var _ service.ImageStorage = (*S3ImageStorage)(nil)
 var _ service.ImageStorageHealthChecker = (*S3ImageStorage)(nil)
 var _ service.ImageStorageReader = (*S3ImageStorage)(nil)
+var _ service.ImageStorageSigner = (*S3ImageStorage)(nil)
 
 // NewS3ImageStorage 依据配置构造 S3 图片存储（调用方应先确认 cfg.Active()）。
 func NewS3ImageStorage(ctx context.Context, cfg *config.ImageStorageConfig) (*S3ImageStorage, error) {
@@ -73,8 +77,23 @@ func (s *S3ImageStorage) Save(ctx context.Context, key, contentType string, data
 		return "", fmt.Errorf("S3 PutObject: %w", err)
 	}
 
+	return s.Sign(ctx, key)
+}
+
+// Sign returns a fresh download URL for an existing object. With a public base
+// URL the link is stable; otherwise the object is presigned again so long-lived
+// task history never returns an expired link.
+func (s *S3ImageStorage) Sign(ctx context.Context, key string) (string, error) {
+	if s == nil || s.client == nil || strings.TrimSpace(s.bucket) == "" {
+		return "", fmt.Errorf("S3 image storage is not configured")
+	}
+	key = strings.TrimLeft(strings.TrimSpace(key), "/")
+	if key == "" {
+		return "", fmt.Errorf("S3 image object key is empty")
+	}
+
 	if s.publicBaseURL != "" {
-		return s.publicBaseURL + "/" + strings.TrimLeft(key, "/"), nil
+		return s.publicBaseURL + "/" + key, nil
 	}
 
 	presignClient := s3.NewPresignClient(s.client)
@@ -213,4 +232,17 @@ func (s *S3ImageStorage) Check(ctx context.Context) error {
 	}
 	cleanupNeeded = false
 	return nil
+}
+
+// CheckStoredImage uses the same configured, signed S3 client as uploads and
+// downloads. The key has already been authorized through task ownership.
+func (s *S3ImageStorage) CheckStoredImage(ctx context.Context, key string) error {
+	_, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	if err != nil {
+		var response *smithyhttp.ResponseError
+		if errors.As(err, &response) && response.HTTPStatusCode() == http.StatusNotFound {
+			return service.ErrImageTaskObjectMissing
+		}
+	}
+	return err
 }

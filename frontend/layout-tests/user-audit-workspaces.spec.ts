@@ -12,6 +12,52 @@ const user = {
   balance: 260, concurrency: 6, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
 }
 
+// Image-task proposal R1/R2: keyboard-operable mode cards fit narrow screens,
+// share one layout, and disabled creation leaves existing history manageable.
+test('image task cards fit phones and gate creation while preserving history', async ({ page }, info) => {
+  const { theme, locale } = presentation(info)
+  await page.route('**/api/v1/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    let data: unknown = []
+    if (path === '/api/v1/image-tasks/modes') data = {
+      ordinary: { enabled: false, can_view: true, can_submit: false, reason: 'disabled' },
+      batch: { enabled: true, can_view: true, can_submit: true },
+    }
+    else if (path === '/api/v1/image-tasks/filters') data = { platforms: ['unknown'], models: ['retired-image-model'] }
+    else if (path === '/api/v1/image-tasks') data = { object: 'list', has_more: false, data: [{
+      id: 'imgtask_history', task_id: 'imgtask_history', object: 'image.generation.task',
+      model: 'retired-image-model', prompt_preview: 'Historical image', status: 'completed',
+      created_at: 1790000000, expires_at: 1790086400, archive_status: 'unarchived', read_status: 'unarchived',
+    }] }
+    else if (path === '/api/v1/keys') data = { items: [], pages: 1 }
+    else if (path === '/api/v1/auth/me' || path === '/api/v1/user/profile') data = user
+    await route.fulfill({ json: { code: 0, data } })
+  })
+  for (const width of [320, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto(`/layout-tests/index.html?view=user-layout&auditPage=image-tasks&product=1&theme=${theme}&locale=${locale}`)
+    const ordinary = page.getByTestId('image-task-mode-ordinary')
+    const batch = page.getByTestId('image-task-mode-batch')
+    await expect(ordinary).toHaveAttribute('aria-pressed', 'true', { timeout: 60_000 })
+    await expect(page.getByTestId('image-tasks-readonly')).toBeVisible()
+    await expect(page.getByTestId('view-task-imgtask_history')).toBeVisible({ timeout: 60_000 })
+    await expect(page.locator('.image-task-embedded .btn-primary').first()).toBeDisabled()
+    await expect(page.locator('.app-layout')).toHaveCount(1)
+    const ordinaryBox = (await ordinary.boundingBox())!
+    const batchBox = (await batch.boundingBox())!
+    expect(ordinaryBox.x).toBeGreaterThanOrEqual(0)
+    expect(batchBox.x + batchBox.width).toBeLessThanOrEqual(width)
+    if (width === 320) expect(batchBox.y).toBeGreaterThanOrEqual(ordinaryBox.y + ordinaryBox.height)
+    await batch.focus()
+    await page.keyboard.press('Enter')
+    await expect(batch).toHaveAttribute('aria-pressed', 'true')
+    await ordinary.focus()
+    await page.keyboard.press('Enter')
+    await expect(ordinary).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('view-task-imgtask_history')).toBeVisible()
+  }
+})
+
 // docs/AVAILABLE_CHANNELS.md: real production list rows must fit 320px phones,
 // use two columns on wide screens, and preserve quotes, keyboard focus and cache.
 test('available-channel list fits both themes and supports quote details, filtering and copying', async ({ page }, info) => {
@@ -189,6 +235,10 @@ async function interceptAuditAPI(page: Page) {
     } else if (url.pathname === '/api/v1/subscriptions') data = subscriptions
     else if (url.pathname === '/api/v1/subscriptions/active' || url.pathname === '/api/v1/subscriptions/progress') data = []
     else if (url.pathname === '/api/v1/subscriptions/summary') data = { active_count: 0, subscriptions: [] }
+    else if (url.pathname === '/api/v1/image-tasks/modes') data = {
+      ordinary: { enabled: false, can_submit: false, can_view: false, reason: 'disabled' },
+      batch: { enabled: false, can_submit: false, can_view: false, reason: 'disabled' },
+    }
     else if (url.pathname === '/api/v1/auth/me' || url.pathname === '/api/v1/user/profile') data = user
     else if (url.pathname === '/api/v1/settings/public') data = { contact_info: 'support@example.test' }
     await route.fulfill({ json: { code: 0, data } })
@@ -538,6 +588,9 @@ async function interceptAggregateKeyAPI(page: Page, saved = false) {
   ].map(item => ({ ...item, status: 'active', subscription_type: 'standard', rate_multiplier: 1 }))
   const items = saved ? [{ id: 99901, name: 'Saved aggregate colors', key: 'sk-browser-fixture', status: 'active', group_binding_mode: 'custom', group_id: null, aggregate_group_ids: [1, 2, 3], created_at: '2026-01-01T00:00:00Z' }] : []
   await page.route(url => url.pathname === '/api/v1/keys', route => route.fulfill({ json: { code: 0, data: { items, total: items.length, pages: saved ? 1 : 0, page: 1, page_size: 20 } } }))
+  if (saved) {
+    await page.route(url => url.pathname === '/api/v1/keys/99901', route => route.fulfill({ json: { code: 0, data: items[0] } }))
+  }
   await page.route(url => url.pathname === '/api/v1/usage/dashboard/api-keys-usage', route => route.fulfill({ json: { code: 0, data: { stats: {} } } }))
   await page.route(url => url.pathname === '/api/v1/groups/available', route => route.fulfill({ json: { code: 0, data: groups } }))
   await page.route(url => url.pathname === '/api/v1/groups/rates', route => route.fulfill({ json: { code: 0, data: {} } }))

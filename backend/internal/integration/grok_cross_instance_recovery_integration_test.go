@@ -188,7 +188,7 @@ func TestGrokAdminRecoveryIndependentProcess(t *testing.T) {
 	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 	repo, ok := repository.NewAccountRepository(client, db, nil).(service.AdminAccountRepository)
 	require.True(t, ok)
-	admin := service.NewAdminService(&config.Config{}, nil, nil, repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, client, nil, nil, nil, nil, &service.OpenAIGatewayService{}, nil, nil, nil, nil)
+	admin := service.NewAdminService(&config.Config{}, nil, nil, repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, client, nil, nil, nil, nil, &service.OpenAIGatewayService{}, nil, nil, nil, nil, nil)
 	updated, err := admin.ClearAccountError(context.Background(), id)
 	require.NoError(t, err)
 	require.Equal(t, id, updated.ID)

@@ -25,7 +25,7 @@ import (
 
 func featureAdminService(client *dbent.Client, codes service.RedeemCodeRepository) service.AdminService {
 	groups := NewAdminGroupRepository(client, integrationDB)
-	return service.NewAdminService(nil, NewUserRepository(client, integrationDB), groups, nil, nil, nil, codes, nil, nil, nil, nil, nil, nil, client, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	return service.NewAdminService(nil, NewUserRepository(client, integrationDB), groups, nil, nil, nil, codes, nil, nil, nil, nil, nil, nil, client, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 }
 
 type featureObservedSubscriptionRepo struct {

@@ -450,6 +450,7 @@
             <div class="table-actions">
               <button
                 v-if="row.status === 'active' || row.status === 'expired'"
+                data-test="adjust-subscription"
                 @click="handleExtend(row)"
                 class="table-action"
               >
@@ -458,6 +459,7 @@
               </button>
               <button
                 v-if="row.status === 'active'"
+                data-test="reset-quota"
                 @click="handleResetQuota(row)"
                 :disabled="resettingQuota && resettingSubscription?.id === row.id"
                 class="table-action table-action-warning"
@@ -690,7 +692,7 @@
     <BaseDialog
       :show="showExtendModal"
       :title="t('admin.subscriptions.adjustSubscription')"
-      width="narrow"
+      width="normal"
       @close="closeExtendModal"
     >
       <form
@@ -724,17 +726,62 @@
           </p>
         </div>
         <div>
+          <label class="input-label">{{ t('admin.subscriptions.form.adjustMode') }}</label>
+          <Select
+            v-model="extendForm.mode"
+            data-test="extend-adjust-mode"
+            :options="adjustModeOptions"
+            :searchable="false"
+            :aria-label="t('admin.subscriptions.form.adjustMode')"
+          />
+        </div>
+        <div v-if="extendForm.mode === 'days'">
           <label class="input-label">{{ t('admin.subscriptions.form.adjustDays') }}</label>
-          <div class="flex items-center gap-2">
-            <input
-              v-model.number="extendForm.days"
-              type="number"
-              required
-              class="input text-center"
-              :placeholder="t('admin.subscriptions.adjustDaysPlaceholder')"
-            />
-          </div>
+          <input
+            v-model.number="extendForm.days"
+            data-test="extend-days"
+            type="number"
+            class="input text-center"
+            :placeholder="t('admin.subscriptions.adjustDaysPlaceholder')"
+          />
           <p class="input-hint">{{ t('admin.subscriptions.adjustHint') }}</p>
+        </div>
+        <div v-else-if="extendForm.mode === 'absolute'">
+          <label class="input-label">{{ t('admin.subscriptions.form.expiresAt') }}</label>
+          <DateTimePicker
+            v-model="extendForm.expiresAtLocal"
+            data-test="extend-expires-at"
+            type="datetime-local"
+            step="1"
+            :aria-label="t('admin.subscriptions.form.expiresAt')"
+          />
+          <p class="input-hint">{{ t('admin.subscriptions.expiresAtHint', { timezone: browserTimeZone }) }}</p>
+        </div>
+        <div v-else class="space-y-3">
+          <p class="input-label">{{ t('admin.subscriptions.form.windowResets') }}</p>
+          <p class="input-hint">{{ t('admin.subscriptions.windowResetHint') }}</p>
+          <p v-if="loadingExtendQuotaWindows" class="text-sm surface-muted">
+            {{ t('admin.subscriptions.loadingQuotaWindows') }}
+          </p>
+          <p v-else-if="extendQuotaWindows.length === 0" class="text-sm surface-muted">
+            {{ t('admin.subscriptions.extendNoQuotaWindows') }}
+          </p>
+          <template v-else>
+            <div v-for="window in extendQuotaWindows" :key="window">
+              <label class="input-label">{{ t(`admin.subscriptions.form.${window}Reset`) }}</label>
+              <DateTimePicker
+                v-model="extendResets[window]"
+                :data-test="`extend-${window}-reset`"
+                type="datetime-local"
+                step="1"
+                :max="extendExpiresAtLocal || undefined"
+                :aria-label="t(`admin.subscriptions.form.${window}Reset`)"
+              />
+            </div>
+            <p v-if="extendExpiresAtLocal" class="input-hint">
+              {{ t('admin.subscriptions.resetBeforeExpiry', { time: formatDateTimeToMinute(extendExpiresAtLocal) }) }}
+            </p>
+          </template>
         </div>
       </form>
       <template #footer>
@@ -777,16 +824,70 @@
       @cancel="showRestoreDialog = false"
     />
 
-    <!-- Reset Quota Confirmation Dialog -->
-    <ConfirmDialog
+    <!-- Reset Quota Dialog -->
+    <BaseDialog
       :show="showResetQuotaConfirm"
       :title="t('admin.subscriptions.resetQuotaTitle')"
-      :message="t('admin.subscriptions.resetQuotaConfirm', { user: resettingSubscription?.user?.email })"
-      :confirm-text="t('admin.subscriptions.resetQuota')"
-      :cancel-text="t('common.cancel')"
-      @confirm="confirmResetQuota"
-      @cancel="showResetQuotaConfirm = false"
-    />
+      width="narrow"
+      @close="closeResetQuotaModal"
+    >
+      <form
+        v-if="resettingSubscription"
+        id="reset-quota-form"
+        data-test="reset-quota-form"
+        class="space-y-4"
+        @submit.prevent="confirmResetQuota"
+      >
+        <p class="text-sm surface-muted">
+          {{ t('admin.subscriptions.resetQuotaConfirm', { user: resettingSubscription.user?.email }) }}
+        </p>
+        <fieldset class="space-y-3">
+          <legend class="text-sm font-medium surface-muted">
+            {{ t('admin.subscriptions.bulk.resetWindows') }}
+          </legend>
+          <p v-if="loadingResetQuotaWindows" class="text-sm surface-muted">
+            {{ t('admin.subscriptions.loadingQuotaWindows') }}
+          </p>
+          <p v-else-if="resetQuotaWindows.length === 0" class="text-sm surface-muted">
+            {{ t('admin.subscriptions.noQuotaWindows') }}
+          </p>
+          <div v-else class="flex flex-wrap gap-5">
+            <label
+              v-for="window in resetQuotaWindows"
+              :key="window"
+              class="flex items-center gap-2 text-sm surface-muted"
+            >
+              <input
+                v-model="resetQuotaForm[window]"
+                :name="window"
+                type="checkbox"
+                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                :disabled="resettingQuota"
+              />
+              {{ t(`admin.subscriptions.${window}`) }}
+            </label>
+          </div>
+          <p v-if="!loadingResetQuotaWindows && resetQuotaWindows.length > 0" class="text-xs surface-muted">
+            {{ t('admin.subscriptions.bulk.resetHint') }}
+          </p>
+        </fieldset>
+      </form>
+      <template #footer>
+        <div v-if="resettingSubscription" class="flex justify-end gap-3">
+          <button type="button" class="btn btn-secondary" :disabled="resettingQuota" @click="closeResetQuotaModal">
+            {{ t('common.cancel') }}
+          </button>
+          <button
+            type="submit"
+            form="reset-quota-form"
+            class="btn btn-primary"
+            :disabled="resettingQuota || !resetQuotaSubmittable"
+          >
+            {{ resettingQuota ? t('common.processing') : t('admin.subscriptions.resetQuota') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
     <!-- Subscription Guide Modal -->
     <teleport to="body">
       <transition name="modal">
@@ -880,7 +981,7 @@ import type { SubscriptionBulkAction, SubscriptionBulkActionResult, BulkAssignSu
 import { useTableSelection } from '@/composables/useTableSelection'
 import BulkSubscriptionActionDialog from '@/components/admin/subscription/BulkSubscriptionActionDialog.vue'
 import type { Column } from '@/components/common/types'
-import { formatDateTimeToMinute } from '@/utils/format'
+import { formatDateTimeToMinute, getBrowserTimeZone, parseDateTimeLocalInput } from '@/utils/format'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
@@ -888,16 +989,20 @@ import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import DateTimePicker from '@/components/common/DateTimePicker.vue'
+import type { ExtendSubscriptionRequest } from '@/types'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Select from '@/components/common/Select.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
 import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
 import Icon from '@/components/icons/Icon.vue'
 import {
+  configuredQuotaWindows,
   getRemainingDurationParts,
   getRemainingExpiryDuration,
   isOneTimeDailyQuota,
-  type RemainingDurationParts
+  type RemainingDurationParts,
+  type SubscriptionQuotaWindow
 } from '@/utils/subscriptionQuota'
 import { GROUP_PLATFORM_OPTIONS } from '@/constants/platforms'
 
@@ -1129,9 +1234,71 @@ const assignForm = reactive({
   validity_days: 30
 })
 
-const extendForm = reactive({
-  days: 30
+const ALL_QUOTA_WINDOWS: SubscriptionQuotaWindow[] = ['fiveHour', 'daily', 'weekly', 'monthly']
+
+// List rows carry an empty group object, so plan limits come from the detail
+// endpoint whenever the row does not include a real group id.
+async function resolveQuotaWindows(subscription: UserSubscription): Promise<SubscriptionQuotaWindow[]> {
+  if (subscription.group && typeof subscription.group.id === 'number') {
+    return configuredQuotaWindows(subscription.group)
+  }
+  const detail = await adminAPI.subscriptions.getById(subscription.id)
+  return configuredQuotaWindows(detail.group)
+}
+// Windows are resolved per subscription from its plan limits: an unlimited
+// window is never offered, because resetting it would change nothing.
+const resetQuotaWindows = ref<SubscriptionQuotaWindow[]>([])
+const loadingResetQuotaWindows = ref(false)
+const resetQuotaForm = reactive({
+  fiveHour: false,
+  daily: false,
+  weekly: false,
+  monthly: false
 })
+const selectedResetWindows = computed(() => resetQuotaWindows.value.filter(window => resetQuotaForm[window]))
+const resetQuotaSubmittable = computed(() => !loadingResetQuotaWindows.value && selectedResetWindows.value.length > 0)
+const browserTimeZone = getBrowserTimeZone()
+const adjustModeOptions = computed(() => [
+  { value: 'days', label: t('admin.subscriptions.expiryModeDays') },
+  { value: 'absolute', label: t('admin.subscriptions.expiryModeAbsolute') },
+  { value: 'windows', label: t('admin.subscriptions.expiryModeWindows') }
+])
+// Only the windows the plan configures get a reset-time input in the adjust
+// dialog; unconfigured windows are never shown.
+const extendQuotaWindows = ref<SubscriptionQuotaWindow[]>([])
+const loadingExtendQuotaWindows = ref(false)
+// Reset times must stay before the subscription expiry; the picker refuses
+// later dates and the submit path validates the same rule.
+const extendExpiresAtLocal = computed(() => {
+  const expiresAt = extendingSubscription.value?.expires_at
+  if (!expiresAt) return ''
+  return toDateTimeLocalSeconds(new Date(expiresAt))
+})
+const extendForm = reactive({
+  mode: 'days' as 'days' | 'absolute' | 'windows',
+  days: 30 as number | string,
+  expiresAtLocal: ''
+})
+const extendResets = reactive<Record<SubscriptionQuotaWindow, string>>({
+  fiveHour: '',
+  daily: '',
+  weekly: '',
+  monthly: ''
+})
+// Echoed values are display-only until edited. Omitting them preserves the
+// server's current value, including precision and changes made since loading.
+const extendResetBaseline = reactive<Record<SubscriptionQuotaWindow, string>>({
+  fiveHour: '',
+  daily: '',
+  weekly: '',
+  monthly: ''
+})
+const QUOTA_WINDOW_REQUEST_KEYS: Record<SubscriptionQuotaWindow, 'five_hour_reset_at' | 'daily_reset_at' | 'weekly_reset_at' | 'monthly_reset_at'> = {
+  fiveHour: 'five_hour_reset_at',
+  daily: 'daily_reset_at',
+  weekly: 'weekly_reset_at',
+  monthly: 'monthly_reset_at'
+}
 
 // Group options for filter (all groups)
 const groupOptions = computed(() => [
@@ -1419,10 +1586,86 @@ const handleAssignSubscription = async () => {
   }
 }
 
-const handleExtend = (subscription: UserSubscription) => {
+const padDatePart = (value: number) => String(value).padStart(2, '0')
+
+const toDateTimeLocalSeconds = (date: Date): string => {
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}T${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}:${padDatePart(date.getSeconds())}`
+}
+
+const parseLocalDateTime = (value: string): Date | null => {
+  const timestamp = parseDateTimeLocalInput(value)
+  if (timestamp === null) return null
+  return new Date(timestamp * 1000)
+}
+
+const toRfc3339 = (date: Date) => date.toISOString()
+
+const isServerMidnight = (date: Date): boolean | null => {
+  const timeZone = appStore.cachedPublicSettings?.server_timezone
+  if (!timeZone) return null
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }).formatToParts(date)
+    return parts.filter(part => ['hour', 'minute', 'second'].includes(part.type))
+      .every(part => part.value === '00')
+  } catch {
+    // Older public-settings caches or browser timezone data may be incomplete;
+    // the API remains authoritative rather than assuming the browser timezone.
+    return null
+  }
+}
+
+const handleExtend = async (subscription: UserSubscription) => {
   extendingSubscription.value = subscription
+  extendForm.mode = 'days'
   extendForm.days = 30
+  extendForm.expiresAtLocal = subscription.expires_at
+    ? toDateTimeLocalSeconds(new Date(subscription.expires_at))
+    : ''
+  for (const window of ALL_QUOTA_WINDOWS) {
+    extendResets[window] = ''
+    extendResetBaseline[window] = ''
+  }
+  extendQuotaWindows.value = []
+  loadingExtendQuotaWindows.value = true
   showExtendModal.value = true
+  try {
+    const [windows, progress] = await Promise.all([
+      resolveQuotaWindows(subscription),
+      // Pre-fill the next reset instant each window already has, so an
+      // administrator never reconfigures a window blind.
+      adminAPI.subscriptions.getProgress(subscription.id).catch(() => null)
+    ])
+    extendQuotaWindows.value = windows
+    const oneTimeDaily = isOneTimeDailyQuota(subscription)
+    const resetsByWindow: Record<SubscriptionQuotaWindow, string | null | undefined> = {
+      fiveHour: progress?.five_hour?.resets_at,
+      // A one-time daily quota resets at expiry, not at midnight.
+      daily: oneTimeDaily ? null : progress?.daily?.resets_at,
+      weekly: progress?.weekly?.resets_at,
+      monthly: progress?.monthly?.resets_at
+    }
+    for (const window of windows) {
+      const raw = resetsByWindow[window]
+      if (!raw) continue
+      const resetAt = new Date(raw)
+      // A reset instant already in the past is stale: the window has rolled
+      // over, so echoing it would only invite an invalid submission.
+      if (Number.isNaN(resetAt.getTime()) || resetAt.getTime() <= Date.now()) continue
+      const local = toDateTimeLocalSeconds(resetAt)
+      if (local === '') continue
+      extendResets[window] = local
+      extendResetBaseline[window] = local
+    }
+  } catch (error) {
+    // Never block an expiry adjustment because the plan could not be read.
+    extendQuotaWindows.value = [...ALL_QUOTA_WINDOWS]
+    console.error('Error loading subscription limits:', error)
+  } finally {
+    loadingExtendQuotaWindows.value = false
+  }
 }
 
 const closeExtendModal = () => {
@@ -1433,26 +1676,82 @@ const closeExtendModal = () => {
 const handleExtendSubscription = async () => {
   if (!extendingSubscription.value) return
 
-  // 前端验证：调整后的过期时间必须在未来
-  if (extendingSubscription.value.expires_at) {
-    const expiresAt = new Date(extendingSubscription.value.expires_at)
-    const newExpiresAt = new Date(expiresAt.getTime() + extendForm.days * 24 * 60 * 60 * 1000)
-    if (newExpiresAt <= new Date()) {
-      appStore.showError(t('admin.subscriptions.adjustWouldExpire'))
+  const request: ExtendSubscriptionRequest = {}
+  const now = new Date()
+  if (extendForm.mode === 'days') {
+    const rawDays = extendForm.days
+    const hasDays = rawDays !== '' && rawDays !== null && rawDays !== undefined && Number.isFinite(Number(rawDays))
+    if (!hasDays) {
+      appStore.showError(t('admin.subscriptions.daysRequired'))
+      return
+    }
+    const days = Number(rawDays)
+    if (!Number.isInteger(days) || days === 0 || Math.abs(days) > 36500) {
+      appStore.showError(t('admin.subscriptions.adjustOutOfRange'))
+      return
+    }
+    if (extendingSubscription.value.expires_at) {
+      const expiresAt = new Date(extendingSubscription.value.expires_at)
+      const newExpiresAt = new Date(expiresAt.getTime() + days * 24 * 60 * 60 * 1000)
+      if (newExpiresAt <= now) {
+        appStore.showError(t('admin.subscriptions.adjustWouldExpire'))
+        return
+      }
+    }
+    request.days = days
+  } else if (extendForm.mode === 'absolute') {
+    const expiresAt = parseLocalDateTime(extendForm.expiresAtLocal)
+    if (!expiresAt) {
+      appStore.showError(t('admin.subscriptions.expiresAtRequired'))
+      return
+    }
+    if (expiresAt <= now) {
+      appStore.showError(t('admin.subscriptions.expiresAtMustBeFuture'))
+      return
+    }
+    request.expires_at = toRfc3339(expiresAt)
+  } else {
+    // Each adjustment direction sends only its own fields, so a value typed in
+    // another mode can never leak into this request. Unfilled windows stay
+    // absent, which keeps their current reset time untouched.
+    for (const window of extendQuotaWindows.value) {
+      const value = extendResets[window]
+      if (!value || value === extendResetBaseline[window]) continue
+      const resetAt = parseLocalDateTime(value)
+      if (!resetAt || resetAt <= now) {
+        appStore.showError(t('admin.subscriptions.windowResetMustBeFuture'))
+        return
+      }
+      const expiresAt = extendingSubscription.value.expires_at
+      if (expiresAt) {
+        const expiresTime = new Date(expiresAt).getTime()
+        if (Number.isFinite(expiresTime) && resetAt.getTime() >= expiresTime) {
+          appStore.showError(t('admin.subscriptions.resetAfterExpiry', {
+            time: formatDateTimeToMinute(toDateTimeLocalSeconds(new Date(expiresAt)))
+          }))
+          return
+        }
+      }
+      if (window === 'daily' && isServerMidnight(resetAt) === false) {
+        appStore.showError(t('admin.subscriptions.dailyResetMustBeMidnight'))
+        return
+      }
+      request[QUOTA_WINDOW_REQUEST_KEYS[window]] = toRfc3339(resetAt)
+    }
+    if (!request.five_hour_reset_at && !request.daily_reset_at && !request.weekly_reset_at && !request.monthly_reset_at) {
+      appStore.showError(t('admin.subscriptions.resetTimeRequired'))
       return
     }
   }
 
   submitting.value = true
   try {
-    await adminAPI.subscriptions.extend(extendingSubscription.value.id, {
-      days: extendForm.days
-    })
+    await adminAPI.subscriptions.extend(extendingSubscription.value.id, request)
     appStore.showSuccess(t('admin.subscriptions.subscriptionAdjusted'))
     closeExtendModal()
     loadSubscriptions()
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.subscriptions.failedToAdjust'))
+    appStore.showError(error.response?.data?.detail || error.response?.data?.message || t('admin.subscriptions.failedToAdjust'))
     console.error('Error adjusting subscription:', error)
   } finally {
     submitting.value = false
@@ -1499,17 +1798,45 @@ const confirmRestore = async () => {
   }
 }
 
-const handleResetQuota = (subscription: UserSubscription) => {
+const handleResetQuota = async (subscription: UserSubscription) => {
   resettingSubscription.value = subscription
+  resetQuotaWindows.value = []
+  for (const window of ALL_QUOTA_WINDOWS) resetQuotaForm[window] = false
   showResetQuotaConfirm.value = true
+  loadingResetQuotaWindows.value = true
+  try {
+    resetQuotaWindows.value = await resolveQuotaWindows(subscription)
+  } catch (error) {
+    // A read failure falls back to every window instead of blocking the reset.
+    resetQuotaWindows.value = [...ALL_QUOTA_WINDOWS]
+    console.error('Error loading subscription limits:', error)
+  } finally {
+    loadingResetQuotaWindows.value = false
+  }
+  for (const window of resetQuotaWindows.value) resetQuotaForm[window] = true
+}
+
+const closeResetQuotaModal = () => {
+  if (resettingQuota.value) return
+  showResetQuotaConfirm.value = false
+  resettingSubscription.value = null
 }
 
 const confirmResetQuota = async () => {
   if (!resettingSubscription.value) return
   if (resettingQuota.value) return
+  if (selectedResetWindows.value.length === 0) {
+    appStore.showError(t('admin.subscriptions.selectResetWindow'))
+    return
+  }
   resettingQuota.value = true
   try {
-    await adminAPI.subscriptions.resetQuota(resettingSubscription.value.id, { daily: true, weekly: true, monthly: true, five_hour: true })
+    await adminAPI.subscriptions.resetQuota(resettingSubscription.value.id, {
+      five_hour: resetQuotaForm.fiveHour,
+      daily: resetQuotaForm.daily,
+      weekly: resetQuotaForm.weekly,
+      monthly: resetQuotaForm.monthly
+    })
     appStore.showSuccess(t('admin.subscriptions.quotaResetSuccess'))
     showResetQuotaConfirm.value = false
     resettingSubscription.value = null

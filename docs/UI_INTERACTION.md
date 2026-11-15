@@ -688,6 +688,18 @@ The date-range menu retains its trigger alignment when it fits, and otherwise
 stays at least 12px from the horizontal viewport edges. Opening, scrolling or
 resizing the menu must not apply date changes; Apply retains that responsibility.
 
+## Subscription adjustments
+
+Administrator subscription adjustments send only the chosen expiry change or
+edited quota reset times. Prefilled reset times are informational until edited;
+omitting them preserves the stored anchors and their full timestamp precision,
+even when an existing window's next reset falls after subscription expiry.
+The date-time inputs use the browser timezone. Daily resets must land at midnight
+in the configured **server** timezone, as enforced by the subscription API.
+Client validation uses the public `server_timezone` IANA name and the selected
+instant's timezone offset; when that setting or browser timezone support is
+unavailable, the API validates midnight without a browser-local assumption.
+
 ## User and public presentation
 
 User pages (including admin support views and embedded Model Plaza) use an explicit

@@ -25,6 +25,13 @@ The concrete platform drives account selection, billing, ops attribution, channe
 mapping/pricing and platform usage. User platform quotas apply in balance mode;
 subscription mode uses the user's subscription quotas for the Composite group.
 
+The [image task console](ASYNC_IMAGE_TASKS.md) also accepts Composite keys with
+`allow_image_generation` enabled. Ordinary asynchronous image requests must
+resolve to a supported OpenAI/Grok target; catalog visibility alone does not
+enable image permission. The key picker retains expiry and quota restrictions,
+and capability reads inspect local concrete account metadata without generation
+or billing. Batch image support and ownership remain unchanged.
+
 ## Route Registry
 
 Admins can configure routes on a composite group from the group list's

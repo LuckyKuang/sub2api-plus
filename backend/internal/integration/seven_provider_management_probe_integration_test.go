@@ -94,7 +94,7 @@ func TestSevenProviderManagementLateProxyProbeCannotReplaceRepairedRoute(t *test
 			cfg.Security.ProxyProbe.URLs = []config.ProbeURLConfig{{URL: destination.URL + "/probe", Parser: "ip-api"}}
 			newAdmin := func(cache service.ProxyLatencyCache) service.AdminService {
 				return service.NewAdminService(cfg, nil, nil, nil, proxyRepo, nil, nil, nil, nil, nil,
-					repository.NewProxyExitInfoProber(cfg), cache, nil, services.ent, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+					repository.NewProxyExitInfoProber(cfg), cache, nil, services.ent, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 			}
 			adminA, adminB := newAdmin(repository.NewProxyLatencyCache(redisA)), newAdmin(repository.NewProxyLatencyCache(redisB))
 			type probeResult struct {
@@ -187,7 +187,7 @@ func TestSevenProviderManagementCreatedProxyBackgroundProbeVisibleOnOtherInstanc
 	cfg.Security.ProxyProbe.URLs = []config.ProbeURLConfig{{URL: "http://probe.invalid/creation", Parser: "ip-api"}}
 	newAdmin := func(cache service.ProxyLatencyCache) service.AdminService {
 		return service.NewAdminService(cfg, nil, nil, nil, proxyRepo, nil, nil, nil, nil, nil,
-			repository.NewProxyExitInfoProber(cfg), cache, nil, services.ent, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			repository.NewProxyExitInfoProber(cfg), cache, nil, services.ent, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	}
 	adminA, adminB := newAdmin(repository.NewProxyLatencyCache(redisA)), newAdmin(repository.NewProxyLatencyCache(redisB))
 	created, err := adminA.CreateProxy(ctx, &service.CreateProxyInput{Name: "management-created-" + uuid.NewString(), Protocol: "http", Host: endpoint.Hostname(), Port: port})

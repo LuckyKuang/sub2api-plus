@@ -22,13 +22,27 @@ DELETE /v1/images/tasks/{task_id}
 
 Every endpoint also has the equivalent no-prefix `/images/...` alias.
 
-Only OpenAI and Grok groups are supported. Requests use the same JSON or multipart payload as the corresponding synchronous endpoint. Streaming image requests are rejected because a polled task returns one final JSON result.
+OpenAI and Grok groups are supported, along with Composite groups whose image
+request resolves to an OpenAI or Grok target. All require the group's explicit
+`allow_image_generation` permission; a model appearing in the catalog does not
+grant it. The console includes these Composite keys and checks their local
+concrete account readiness without provider probes. Requests use the same JSON
+or multipart payload as the corresponding synchronous endpoint. Streaming image
+requests are rejected because a polled task returns one final JSON result.
 
 OpenAI multipart files and text fields retain the local 20 MiB per-part limit.
 An oversized part is rejected with the typed size-limit error; it is never
 silently truncated. This gateway resource policy does not claim the provider's
 maximum upload size. Routing diagnostics record part byte counts without raw
 content types, filenames or image contents.
+
+Accepted model names are validated by family: `gpt-image-*`, `grok-imagine*`,
+`gemini-*-image*`, and the nano-banana alias family (`nano-banana-2`,
+`nano-banana-2.1`, `nano-banana-pro`, `gemini-nano-banana-*`). Any other model
+name is rejected with `images endpoint requires an image model`. nano-banana
+names share the `gemini-*` image models' API-key capability fence, so they route
+to API-key accounts and never to OAuth/Codex accounts; the Gemini request gate
+still requires a resolved image model name and is unchanged.
 
 Dedicated asynchronous image execution retains the admitted pricing snapshot.
 When `image_count_billing` overrides a token card, its conservative reservation
@@ -43,13 +57,33 @@ Asynchronous image tasks are **disabled by default** and gated on object storage
 
 ### From the admin UI (recommended)
 
-**Admin → Backup → Async image object storage.** Saving the form takes effect immediately — the object-storage client is rebuilt on the next request, so there is no container restart.
+**Admin → Settings → Image Tasks.** This single panel owns both generation switches and the one object-storage target. Each switch is saved as soon as it is toggled, independently of the other; the storage form is saved with the Save button. Saving takes effect immediately — the object-storage client is rebuilt on the next request, so there is no container restart. An enabled mode stays visible in the console menu even when the signed-in user has no eligible key: the page explains the missing key, while submission still requires one.
 
-Because the async image storage and the database backup share one S3 client, the form defaults to **reusing the backup S3 configuration**: it borrows the endpoint, region and credentials already configured above and keeps only its own bucket, prefix, and date-path choice, so backups stay under `backups/` while images go to `images/`. Leave the bucket empty to use the backup bucket as well. Untick the box to point images at a completely separate account.
+Overlapping switch responses update only their own switch. Storage saves wait
+for pending switch writes, and switches wait for a storage save, so an older
+snapshot cannot restore a previously changed switch.
+
+Configuration read failures return `dependency_unavailable` and fail closed;
+only an absent administrator value may fall back to deployment defaults.
+Environment-provided secrets copied into saved settings use the same encrypted
+at-rest representation and persistent encryption-key requirement as new secrets.
+An empty custom endpoint remains valid for native AWS S3.
+
+The two submission switches are independent. *Allow new standard image tasks* gates ordinary submissions and requires a complete target; it cannot be saved while the effective bucket or credentials are missing. Native AWS S3 does not require a custom endpoint. *Allow new batch image jobs* gates provider batch submissions and falls back to `batch_image.enabled` when no administrator value exists, so upgrading never opens or closes the feature by itself. Neither switch affects polling, download, settlement, or provider cleanup of work that was already accepted.
+
+Enable **Reuse backup S3 configuration** to borrow the endpoint, region and credentials already configured there. Image storage keeps its own client, bucket, prefix, and date-path choice, so backups stay under `backups/` while images go to `images/`. Leave the bucket empty to use the backup bucket as well. With reuse disabled, configure the image storage account directly.
+
+Saving storage settings invalidates the local client and publishes the existing
+configuration invalidation channel to other instances. Saving backup S3 settings
+does the same for image clients that inherit that configuration. Image clients
+also re-read settings on their next request after at most 30 seconds, so missed
+notifications cannot preserve an old switch or storage target indefinitely.
+Reconciliation failures disable new submissions until settings can be read.
+The batch switch is read from the shared setting store for every decision.
 
 Both prefix fields have an independent **Append date path** switch. The stored value remains a stable base such as `images/`; when enabled, each new object is written under a concrete server-timezone directory such as `images/2026/08/17/`. The server resolves the date for every new object, so no scheduled configuration update is needed at midnight. Existing objects are not moved.
 
-Saving requires step-up 2FA when that gate is enabled, for the same reason the backup S3 form does: changing the target redirects generated content to another account.
+Saving requires step-up 2FA when that gate is enabled, for the same reason the backup S3 form does: changing the target redirects generated content to another account. Any field, including the endpoint and bucket, can be changed directly; there is no reference guard or migration flow. Archived objects keep only their full key, so after changing the target or the credentials' storage scope, earlier images may no longer be readable — this is an accepted trade-off, not a defect. The prefix and date-path setting only affects objects written afterwards.
 
 Turning the switch off stops new submissions but keeps already-accepted tasks pollable. When the saved storage credentials remain complete, in-flight results are still offloaded and existing completed tasks remain downloadable.
 
@@ -213,9 +247,23 @@ For URL responses, `image_url` mirrors the first `data[].url` for simple clients
 }
 ```
 
-All submit and poll responses include `Cache-Control: no-store`, preventing a CDN from caching the `processing` state. `requested_images` records the accepted `n` value and `actual_images` records the number of completed result images. A short upstream result remains completed and retains every successful image; the user console shows the mismatch instead of silently presenting it as a fulfilled count. Tasks and results expire 24 hours after their latest state update. A task executes for at most 30 minutes.
+All submit and poll responses include `Cache-Control: no-store`, preventing a CDN from caching the `processing` state. `requested_images` records the accepted `n` value and `actual_images` records the number of completed result images. A short upstream result remains completed and retains every successful image; the user console shows the mismatch instead of silently presenting it as a fulfilled count. Redis execution records expire 24 hours after their latest state update; `expires_at` describes that execution-state deadline, not deletion of PostgreSQL history or stored image objects. Presigned URL validity is configured separately. A task executes for at most 30 minutes.
 
-Task ownership is scoped to both user and API key. Unknown task IDs and IDs owned by another key both return `404`, avoiding task-existence disclosure. Polling remains available when the completed generation used the key's remaining balance; normal authentication, disabled-key, user, IP, and group checks still apply.
+The list reads persistent PostgreSQL history without filtering by `expires_at`,
+and the detail endpoint falls back to that history once the Redis execution
+record is gone, so a task stays readable after the 24-hour execution window.
+Every read re-signs the recorded object keys, so an expired presigned URL is
+replaced by a fresh one instead of being replayed from the stored response.
+Object keys stay fixed for archived objects; changing the prefix only affects
+objects written afterwards. Reads use the current endpoint/bucket and the saved
+full object key, so changing storage location can make old objects unreadable.
+
+The console lists every key of the signed-in user. The gateway endpoints
+(`/v1/images/tasks…`) keep the stricter user-and-key pair, and the console uses
+separate `/api/v1/image-tasks` routes that never accept an API key as the
+ownership proof. Deleting or rotating a key therefore never hides history.
+
+Gateway task ownership is scoped to both user and API key. Unknown task IDs and IDs owned by another key both return `404`, avoiding task-existence disclosure. Polling remains available when the completed generation used the key's remaining balance; normal authentication, disabled-key, user, IP, and group checks still apply.
 
 Completed ZIP downloads first use Redis execution state and fall back to the
 owner-scoped PostgreSQL history row when that execution key has expired. The
@@ -223,6 +271,93 @@ history stores the exact object keys as private server metadata; public and
 administrator task responses never expose those keys. The fallback preserves
 the original user plus API-key ownership check and does not reconstruct object
 paths from the currently configured prefix.
+
+ZIP reads use the currently configured storage client with those exact keys;
+history does not retain an earlier endpoint or bucket. Changing that storage
+location can make existing images unreadable even when their keys remain in
+history. A valid current storage configuration and readable objects are still
+required. Terminal history writes run independently of execution-cache writes.
+Failed history writes are queued in PostgreSQL; when that same database cannot
+accept a compensation row, an independent Redis hash without an execution TTL
+retains the compact terminal record. The startup-wired worker retries after a
+process restart and removes compensation only after history is saved. Replays
+update existing accepted history and cannot recreate deleted failed tasks.
+This is index recovery, never generation replay, billing or capacity release.
+If both persistence services fail, completion reports an error and logs the
+failure; no permanent archive is claimed. Redis loss before a pending Redis-only
+compensation reaches PostgreSQL can still lose that compensation.
+
+## Signed-in console and read states
+
+The single `/image-tasks` console preserves each panel's filters and pagination
+when switching modes. `/async-image`, `/batch-image` and `/docs/batch-image`
+redirect to the requested mode. A disabled requested mode displays its reason;
+an available mode remains reachable. New submissions follow `can_submit` while
+history follows `can_view`; loading capability never mounts an unauthorized
+panel. Switching login/support targets clears capability and panel state and
+rejects late responses. Both panels explain their different ownership rules.
+The standard panel stops polling when unmounted and ignores its outstanding
+responses. An in-flight poll or initial key/filter load cannot restart timers,
+continue pagination, or issue follow-up history reads after the panel is gone.
+Refreshing or changing its task list also invalidates earlier polls, so an old
+processing snapshot cannot replace a newer result or restart obsolete polling.
+
+Console routes use the authenticated user, never a client-supplied user ID:
+
+```text
+GET    /api/v1/image-tasks/modes
+GET    /api/v1/image-tasks/filters
+GET    /api/v1/image-tasks
+GET    /api/v1/image-tasks/{task_id}
+GET    /api/v1/image-tasks/{task_id}/images/{index}
+GET    /api/v1/image-tasks/{task_id}/download
+DELETE /api/v1/image-tasks/{task_id}
+```
+
+`modes` returns independent `enabled`, `can_submit`, `can_view` and stable `reason`
+fields. Reasons include `disabled`, `not_configured`, `no_eligible_key`,
+`worker_disabled`, `no_channel` and `dependency_unavailable`. Expired/exhausted keys cannot
+submit; a history dependency failure is not represented as an empty history.
+Channel availability uses only local, schedulable account metadata and batch
+account-type readiness; capability checks do not probe providers or reserve
+execution capacity. Worker pause prevents batch submission before billing or
+provider side effects.
+
+Lists accept `platform`, exact `model`, `status`, `since`, `until`, `limit` and
+`offset`. Times are absolute Unix seconds and use `[since, until)`; the console
+converts its local date/time controls to those absolute instants. Limits are
+1–100 (default 20), offsets are nonnegative, malformed pagination is rejected,
+and sorting is `created_at DESC, id DESC`. Filter choices come only from the
+current user's historical models/platforms, including retired models. The
+`unknown` platform selects legacy rows without provable platform evidence.
+Migration 313 clears migration 311's prefix guesses on pre-311 records; explicit
+resolved platforms on later submissions remain intact.
+
+Responses separate generation status from `archive_status`
+(`archived`, `incomplete`, `unarchived`) and `read_status` (`readable`,
+`object_missing`, `storage_unavailable`, `incomplete`, `unarchived`). Only complete
+object-key indexes in durably saved terminal history are marked archived.
+S3 HEAD checks the authorized exact keys before issuing fresh links; missing
+objects and temporary/permission failures never rewrite generation or billing.
+No old URL is replayed when signing/storage fails or the index is incomplete.
+Opening task details refreshes the authorized result instead of reusing list URLs.
+If processing history has no execution record, `execution_status: unconfirmed`
+preserves uncertainty without resubmitting provider work.
+
+Image proxy indices are zero-based, never object keys. Proxy reads verify
+ownership first, detect the actual image MIME type and return `nosniff` with
+private/no-store caching. Individual images are limited to 32 MiB; ZIPs keep the
+16-image/128-MiB/two-minute limits. One archive/image storage read per user per
+service instance bounds concurrent work, including during Redis outages.
+Panel rate limits remain in force. Authorized terminal history and ZIP reads
+fall back to PostgreSQL during Redis outages; failed-task deletion still requires
+the atomic Redis-first failed-state check.
+
+Administrator assistance has only the corresponding GET routes under
+`/api/v1/admin/support/users/{user_id}/image-tasks`. The separately validated target
+scopes ordinary history, including deleted-key rows; the real administrator
+remains the audit actor. No assistance mutation route is registered. Batch
+assistance keeps its existing key-scoped routes.
 
 ## Delete a failed task
 
@@ -238,7 +373,13 @@ A successful deletion returns `204 No Content` and removes both the PostgreSQL `
 
 Only `failed` tasks can be deleted. Deleting an owned `processing` or `completed` task returns `409`. A missing task, a task owned by another user, or a task created by another API key of the same user all return the same `404` response. List, detail, download, and deletion skip subscription, quota, and expiration enforcement so users can manage existing task data after billable access ends. Credential parsing, hard-disabled-key, user-state, IP, group, and ownership checks still apply.
 
-The task-page API Key filter continues to show every non-disabled key, including expired and quota-exhausted keys and keys whose group or platform changed after task creation, so their owner-scoped history remains manageable. The new-task form remains stricter and offers only active OpenAI/Grok keys whose current group allows image generation.
+The standard task page has no API-key history filter. It reads every task owned
+by the signed-in user, including records created by expired, exhausted, disabled
+or deleted keys; deleted-key rows are labeled. The new-task form still requires
+an active, unexpired, non-exhausted OpenAI/Grok or Composite key with
+image-generation permission. Composite submissions still require a supported
+concrete OpenAI/Grok route; the permission never adds a new provider path.
+The batch panel retains its existing key selection and key-scoped ownership.
 
 Deleting a task record never scans or deletes S3-compatible object storage. In particular, no object key is reconstructed from the active prefix. Object lifecycle and cleanup remain the responsibility of the configured bucket policy.
 
@@ -333,12 +474,14 @@ Enable Google-side APIs and billing/prepayment first. For Vertex, configure a
 fixed managed bucket and grant the runtime and Vertex service agent the required
 bucket permissions. Sub2API Plus switches do not grant Google-side access.
 
-Enable `batch_image.enabled` (`BATCH_IMAGE_ENABLED`), then image generation and
+Enable *Allow new batch image jobs* in **Admin → Settings → Image Tasks**, or set
+`batch_image.enabled` (`BATCH_IMAGE_ENABLED`) as the deployment default when no
+administrator value has been saved. Then enable image generation and
 `allow_batch_image_generation` on the intended **Gemini** group. Enable
 `batch_image.queue_enabled` for Redis workers to poll/index/settle accepted
-jobs. Both switches default to false. Workers reserve specific jobs from Redis;
-they do not scan PostgreSQL as a polling queue. Turning workers off is separate
-from turning admission off.
+jobs. All of these default to false. The administrator switch governs new
+submissions only; workers reserve specific jobs from Redis and are unaffected,
+and they do not scan PostgreSQL as a polling queue.
 
 This provider batch API remains restricted to Gemini balance groups; Composite
 and subscription groups cannot enable it. The new platform/model selling
@@ -366,6 +509,15 @@ The `batch_image` configuration also owns these defaults:
 | `default_requeue_delay_seconds` / `error_retry_delay_seconds` | 30 / 60 |
 | `vertex_enabled` / `vertex_location` | false / `global` |
 | `vertex_managed_gcs_prefix` | `batch-image/{env}/{batch_id}` |
+
+Successful settlement sets `output_expires_at` using the configured output
+retention (72 hours by default). Background cleanup selects due records and
+deletes their provider outputs; download admission checks the persisted job
+state rather than rejecting solely because that timestamp has passed. The
+deadline is not an exact 72-hour download cutoff, and provider-side expiry,
+account access failures or manual deletion can make results unavailable earlier.
+`output_retention_max_days` is declared with default 7 but is not currently
+applied as a hard cap by the settlement or cleanup implementation.
 
 Set `vertex_project_id` and `vertex_managed_gcs_bucket` when using Vertex.
 Complete queue keys, limits, retention and provider defaults are maintained in

@@ -6,16 +6,12 @@ import BackupView from '../BackupView.vue'
 const {
   getS3Config,
   updateS3Config,
-  getImageStorageConfig,
-  updateImageStorageConfig,
   getSchedule,
   listBackups,
   getDownloadURL,
 } = vi.hoisted(() => ({
   getS3Config: vi.fn(),
   updateS3Config: vi.fn(),
-  getImageStorageConfig: vi.fn(),
-  updateImageStorageConfig: vi.fn(),
   getSchedule: vi.fn(),
   listBackups: vi.fn(),
   getDownloadURL: vi.fn(),
@@ -27,9 +23,6 @@ vi.mock('@/api', () => ({
       getS3Config,
       updateS3Config,
       testS3Connection: vi.fn(),
-      getImageStorageConfig,
-      updateImageStorageConfig,
-      testImageStorageConnection: vi.fn(),
       getSchedule,
       updateSchedule: vi.fn(),
       createBackup: vi.fn(),
@@ -89,9 +82,7 @@ function mountBackupView() {
 describe('admin BackupView 分卷备份', () => {
   beforeEach(() => {
     getS3Config.mockResolvedValue({})
-    getImageStorageConfig.mockResolvedValue({ config: {}, secret_configured: false })
     updateS3Config.mockResolvedValue({})
-    updateImageStorageConfig.mockResolvedValue({})
     getSchedule.mockResolvedValue({ enabled: false, cron_expr: '', retain_days: 14, retain_count: 10 })
     getDownloadURL.mockReset()
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
@@ -102,24 +93,19 @@ describe('admin BackupView 分卷备份', () => {
     document.body.innerHTML = ''
   })
 
-  it('保存备份和生图各自的日期路径开关', async () => {
+  it('备份配置只保存备份自己的日期路径开关', async () => {
     listBackups.mockResolvedValue({ items: [] })
     const wrapper = mountBackupView()
     await flushPromises()
 
     const backupToggle = wrapper.get('[data-testid="backup-s3-date-path-toggle"]')
-    const imageToggle = wrapper.get('[data-testid="image-storage-date-path-toggle"]')
     expect(backupToggle.attributes('aria-checked')).toBe('true')
-    expect(imageToggle.attributes('aria-checked')).toBe('false')
 
     await backupToggle.trigger('click')
-    await imageToggle.trigger('click')
     await wrapper.get('[data-testid="save-backup-s3"]').trigger('click')
-    await wrapper.get('[data-testid="save-image-storage"]').trigger('click')
     await flushPromises()
 
     expect(updateS3Config).toHaveBeenCalledWith(expect.objectContaining({ append_date_path: false }))
-    expect(updateImageStorageConfig).toHaveBeenCalledWith(expect.objectContaining({ append_date_path: true }))
   })
 
   it.each(['backup', 'restore'])('does not resume %s polling after navigation during initial loading', async (operation) => {

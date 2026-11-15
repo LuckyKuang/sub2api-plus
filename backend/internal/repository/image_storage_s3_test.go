@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,6 +84,34 @@ func TestS3ImageUploadPreservesSignedCredentialsWithoutProjectHeaders(t *testing
 				for _, value := range values {
 					require.NotContains(t, strings.ToLower(value), "sub2api")
 				}
+			}
+		})
+	}
+}
+
+// R6: object existence and storage authorization are separate read outcomes.
+// Checks must use a signed HEAD of the exact historical key, never a URL fetch.
+func TestS3ImageStorageChecksExactArchivedObject(t *testing.T) {
+	for _, status := range []int{200, 404, 403} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodHead, r.Method)
+				require.Equal(t, "/images/old-prefix/task-0.png", r.URL.Path)
+				require.Contains(t, r.Header.Get("Authorization"), "Signature=")
+				w.WriteHeader(status)
+			}))
+			defer server.Close()
+			storage, err := NewS3ImageStorage(context.Background(), &config.ImageStorageConfig{Endpoint: server.URL, Region: "us-east-1", Bucket: "images", AccessKeyID: "storage-reader", SecretAccessKey: "secret", ForcePathStyle: true})
+			require.NoError(t, err)
+			err = storage.CheckStoredImage(context.Background(), "old-prefix/task-0.png")
+			switch status {
+			case 200:
+				require.NoError(t, err)
+			case 404:
+				require.ErrorIs(t, err, service.ErrImageTaskObjectMissing)
+			case 403:
+				require.Error(t, err)
+				require.NotErrorIs(t, err, service.ErrImageTaskObjectMissing)
 			}
 		})
 	}

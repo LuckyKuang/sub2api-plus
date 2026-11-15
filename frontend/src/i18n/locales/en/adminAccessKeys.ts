@@ -255,7 +255,7 @@ export default {
       "category": "Subscriptions"
     },
     "subscriptions_dextend": {
-      "label": "Extend subscription expiration",
+      "label": "Adjust subscription expiration and quota window reset times",
       "category": "Subscriptions"
     },
     "subscriptions_drevoke": {

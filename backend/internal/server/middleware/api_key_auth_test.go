@@ -1796,6 +1796,10 @@ func (r *stubUserSubscriptionRepo) UpdateNotes(ctx context.Context, subscription
 	return errors.New("not implemented")
 }
 
+func (r *stubUserSubscriptionRepo) UpdateQuotaWindowStarts(ctx context.Context, id int64, fiveHour, daily, weekly, monthly *time.Time) error {
+	return errors.New("not implemented")
+}
+
 func (r *stubUserSubscriptionRepo) ActivateWindows(ctx context.Context, id int64, dailyStart, periodicStart time.Time) error {
 	if r.activateWindow != nil {
 		return r.activateWindow(ctx, id, dailyStart, periodicStart)

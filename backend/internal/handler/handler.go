@@ -46,6 +46,7 @@ type AdminHandlers struct {
 	Compliance             *admin.ComplianceHandler
 	AuditLog               *admin.AuditLogHandler
 	IPAccessControl        *admin.IPAccessControlHandler
+	ImageTask              *admin.ImageTaskSettingsHandler
 }
 
 // Handlers contains all HTTP handlers
@@ -73,6 +74,7 @@ type Handlers struct {
 	ModelPlaza       *ModelPlazaHandler
 	AsyncImage       *AsyncImageHandler
 	BatchImage       *BatchImageHandler
+	ImageTasks       *ImageTaskUserHandler
 }
 
 // BuildInfo contains build-time information

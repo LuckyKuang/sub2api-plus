@@ -99,7 +99,7 @@ describe('BulkSubscriptionActionDialog', () => {
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(bulkAction).toHaveBeenCalledWith({
-      subscription_ids: [1, 2], action: 'reset_quota', daily: false, weekly: true, monthly: false
+      subscription_ids: [1, 2], action: 'reset_quota', five_hour: false, daily: false, weekly: true, monthly: false
     }, expect.any(String))
   })
 

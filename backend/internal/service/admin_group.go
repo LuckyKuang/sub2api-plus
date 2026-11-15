@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -102,9 +103,8 @@ func (s *adminServiceImpl) GetGroupModelsListCandidates(ctx context.Context, id 
 		return nil, infraerrors.BadRequest("INVALID_GROUP_PLATFORM", "unsupported group platform")
 	}
 
-	candidates := defaultModelsListCandidateIDs(platform)
 	if id <= 0 || s.accountRepo == nil {
-		return candidates, nil
+		return defaultModelsListCandidateIDs(platform), nil
 	}
 
 	accounts, err := s.accountRepo.ListSchedulableByGroupID(ctx, id)
@@ -112,11 +112,17 @@ func (s *adminServiceImpl) GetGroupModelsListCandidates(ctx context.Context, id 
 		return nil, err
 	}
 
-	seen := make(map[string]struct{}, len(candidates))
-	for _, model := range candidates {
-		seen[model] = struct{}{}
+	// Only models the group's accounts actually expose are configurable. A
+	// platform catalog entry that no account serves must not become a whitelist
+	// option, and a model the accounts no longer expose must not linger here.
+	candidates := make([]string, 0, len(accounts))
+	seen := make(map[string]struct{}, len(accounts))
+	listingPlatform := platform
+	if platform == PlatformComposite {
+		listingPlatform = ""
 	}
-	for _, acc := range accounts {
+	for i := range accounts {
+		acc := &accounts[i]
 		if platform == PlatformComposite {
 			if !isConcreteRequestPlatform(acc.Platform) {
 				continue
@@ -124,7 +130,7 @@ func (s *adminServiceImpl) GetGroupModelsListCandidates(ctx context.Context, id 
 		} else if acc.Platform != platform {
 			continue
 		}
-		for model := range acc.GetModelMapping() {
+		for _, model := range AccountPublicModels(acc, listingPlatform) {
 			model = strings.TrimSpace(model)
 			if model == "" {
 				continue
@@ -136,6 +142,12 @@ func (s *adminServiceImpl) GetGroupModelsListCandidates(ctx context.Context, id 
 			candidates = append(candidates, model)
 		}
 	}
+	if len(candidates) == 0 {
+		// A group whose accounts expose nothing keeps the platform catalog so
+		// the editor stays usable.
+		return defaultModelsListCandidateIDs(platform), nil
+	}
+	sort.Strings(candidates)
 	return candidates, nil
 }
 
@@ -1252,6 +1264,9 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if group.Platform != previousPlatform && s.channelCacheInvalidator != nil {
 		s.channelCacheInvalidator.InvalidateCache()
 	}
+	// The group's model allowlist, platform and membership decide what
+	// /v1/models reports, so the short-lived list cache must not outlive the edit.
+	s.invalidateAvailableModelsCache()
 
 	return group, nil
 }

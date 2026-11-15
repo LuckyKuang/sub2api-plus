@@ -22,6 +22,7 @@ export interface SubscriptionBulkActionRequest {
   daily?: boolean
   weekly?: boolean
   monthly?: boolean
+  five_hour?: boolean
 }
 
 export interface SubscriptionBulkActionResult {
@@ -136,7 +137,7 @@ export async function bulkAssign(
 /**
  * Extend subscription validity
  * @param id - Subscription ID
- * @param request - Extension request with days
+ * @param request - Relative days, absolute expiry, and optional next window reset times
  * @returns Updated subscription
  */
 export async function extend(

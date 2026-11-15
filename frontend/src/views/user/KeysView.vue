@@ -1439,6 +1439,8 @@ const showCcsClientSelect = ref(false)
 const showColumnDropdown = ref(false)
 const pendingCcsRow = ref<ApiKey | null>(null)
 const selectedKey = ref<ApiKey | null>(null)
+const editingAggregateGroupIDs = ref<number[]>([])
+let keyEditRequestID = 0
 const copiedKeyId = ref<number | null>(null)
 const changingGroupIds = ref(new Set<number>())
 const groupSelectorKeyId = ref<number | null>(null)
@@ -1765,13 +1767,31 @@ const handleSort = (key: string, order: 'asc' | 'desc') => {
   loadApiKeys()
 }
 
-const editKey = (key: ApiKey) => {
+const editKey = async (key: ApiKey) => {
+  const requestID = ++keyEditRequestID
   selectedKey.value = key
+  // The list hides groups the user can no longer use, but the stored aggregate
+  // scope must survive an unrelated edit; read it from the key detail.
+  let storedAggregateGroupIDs = [...(key.aggregate_group_ids || [])]
+  if (key.group_binding_mode === 'custom') {
+    try {
+      const detail = await keysAPI.getById(key.id)
+      storedAggregateGroupIDs = [...(detail.aggregate_group_ids || storedAggregateGroupIDs)]
+    } catch (error) {
+      if (requestID !== keyEditRequestID) return
+      console.error('Error loading API key detail:', error)
+      appStore.showError(t('keys.failedToLoad'))
+      selectedKey.value = null
+      return
+    }
+  }
+  if (requestID !== keyEditRequestID) return
+  editingAggregateGroupIDs.value = [...storedAggregateGroupIDs]
   const hasIPRestriction = (key.ip_whitelist?.length > 0) || (key.ip_blacklist?.length > 0)
   const hasExpiration = !!key.expires_at
   formData.value = {
     group_binding_mode: key.group_binding_mode || 'single',
-    aggregate_group_ids: [...(key.aggregate_group_ids || [])],
+    aggregate_group_ids: storedAggregateGroupIDs,
     name: key.name,
     conversion_enabled: key.conversion_enabled || false,
     default_client: key.default_client || '',
@@ -1941,8 +1961,13 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     if (showEditModal.value && selectedKey.value) {
+      const mode = formData.value.group_binding_mode
+      const originalIDs = editingAggregateGroupIDs.value
+      const currentIDs = mode === 'custom' ? formData.value.aggregate_group_ids : []
+      const bindingChanged = mode !== (selectedKey.value.group_binding_mode || 'single') ||
+        (mode === 'custom' && (currentIDs.length !== originalIDs.length || currentIDs.some(id => !originalIDs.includes(id))))
       const updates: UpdateApiKeyRequest = {
-        ...(formData.value.group_binding_mode !== 'single' ? { group_binding_mode: formData.value.group_binding_mode, aggregate_group_ids: formData.value.group_binding_mode === 'custom' ? formData.value.aggregate_group_ids : [] } : {}),
+        ...(mode !== 'single' && bindingChanged ? { group_binding_mode: mode, aggregate_group_ids: currentIDs } : {}),
         name: formData.value.name,
         conversion_enabled: groups.value.find(group => group.id === formData.value.group_id)?.platform === 'composite' && formData.value.conversion_enabled,
         default_client: formData.value.default_client,
@@ -2012,6 +2037,7 @@ const handleDelete = async () => {
 }
 
 const closeModals = () => {
+  keyEditRequestID++
   showCreateModal.value = false
   showEditModal.value = false
   selectedKey.value = null

@@ -119,7 +119,7 @@ func TestOpenAIAPIKeyAdminResetRecoversObservedModelTransient(t *testing.T) {
 			if where == "same-process" {
 				adminRepo, ok := repo.(service.AdminAccountRepository)
 				require.True(t, ok)
-				admin := service.NewAdminService(cfg, nil, nil, adminRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, services.ent, nil, nil, nil, nil, gateway, nil, nil, nil, nil)
+				admin := service.NewAdminService(cfg, nil, nil, adminRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, services.ent, nil, nil, nil, nil, gateway, nil, nil, nil, nil, nil)
 				_, err := admin.ClearAccountError(ctx, account.ID)
 				require.NoError(t, err)
 			} else {

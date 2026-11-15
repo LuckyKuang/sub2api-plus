@@ -60,6 +60,15 @@ func registerAdminSupportRoutes(admin *gin.RouterGroup, h *handler.Handlers, set
 	support.GET("/payment/orders/refund-eligible-providers", h.Payment.GetRefundEligibleProviders)
 	support.GET("/payment/orders/:id", h.Payment.GetOrder)
 
+	// Ordinary history belongs to the validated assistance target, even when
+	// that user's original API key has been deleted. Assistance remains GET-only.
+	support.GET("/image-tasks/modes", h.ImageTasks.Modes)
+	support.GET("/image-tasks/filters", h.ImageTasks.Filters)
+	support.GET("/image-tasks", h.ImageTasks.List)
+	support.GET("/image-tasks/:task_id", h.ImageTasks.Get)
+	support.GET("/image-tasks/:task_id/images/:index", h.ImageTasks.Image)
+	support.GET("/image-tasks/:task_id/download", h.ImageTasks.Download)
+
 	images := support.Group("/images", h.APIKey.RequireSupportImageKey)
 	images.GET("/models", func(c *gin.Context) { dispatchModelsGateway(c, h) })
 	images.GET("/tasks", h.AsyncImage.List)

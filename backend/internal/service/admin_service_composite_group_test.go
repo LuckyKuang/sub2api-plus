@@ -199,13 +199,11 @@ func TestAdminService_CompositeModelsListCandidatesIncludeConcreteAccountMapping
 	candidates, err := svc.GetGroupModelsListCandidates(context.Background(), 99, PlatformComposite)
 
 	require.NoError(t, err)
-	require.Contains(t, candidates, "gpt-custom")
-	require.Contains(t, candidates, "gemini-custom")
-	require.Contains(t, candidates, "kimi-custom")
-	require.Contains(t, candidates, "gpt-5.5")
-	require.Contains(t, candidates, "gemini-2.5-flash")
-	for _, model := range []string{"deepseek-flash", "kimi-k3", "glm-5.3-flashx", "MiniMax-M3.1-Flash", "step-5-preview", "step-router-v1"} {
-		require.Contains(t, candidates, model)
+	// Only the models the accounts expose are configurable; the platform catalog
+	// is not offered once every account declares its own list.
+	require.ElementsMatch(t, []string{"gpt-custom", "gemini-custom", "kimi-custom"}, candidates)
+	for _, model := range []string{"gpt-5.5", "gemini-2.5-flash", "deepseek-flash", "kimi-k3", "glm-5.3-flashx", "MiniMax-M3.1-Flash", "step-5-preview", "step-router-v1"} {
+		require.NotContains(t, candidates, model)
 	}
 }
 
@@ -235,11 +233,13 @@ func TestAdminService_CNProviderModelsListCandidatesUseSelectedPlatform(t *testi
 			// is Anthropic; account mappings from other platforms are excluded.
 			edited, err := svc.GetGroupModelsListCandidates(context.Background(), 99, platform)
 			require.NoError(t, err)
-			require.Equal(t, defaults, edited[:len(defaults)])
-			require.Contains(t, edited, "custom-native")
-			require.Contains(t, edited, "claude-compatible-alias")
+			// The group has accounts with explicit mappings: only those models are
+			// configurable, and no other platform leaks in.
+			require.ElementsMatch(t, []string{defaults[0], "custom-native", "claude-compatible-alias"}, edited)
 			require.NotContains(t, edited, "unrelated-provider-model")
-			require.Len(t, edited, len(defaults)+2)
+			for _, model := range defaults[1:] {
+				require.NotContains(t, edited, model)
+			}
 			inferred, err := svc.GetGroupModelsListCandidates(context.Background(), 100, "")
 			require.NoError(t, err)
 			require.ElementsMatch(t, edited, inferred)

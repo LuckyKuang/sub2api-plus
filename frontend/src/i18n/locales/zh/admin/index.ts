@@ -9,6 +9,7 @@ import promptAudit from './promptAudit'
 import ipAccessControl from './ipAccessControl'
 import support from './support'
 import plugins from './plugins'
+import imageTasks from './imageTasks'
 
 export default {
   ...overview,
@@ -22,4 +23,5 @@ export default {
   ...ipAccessControl,
   ...support,
   ...plugins,
+  ...imageTasks,
 }
