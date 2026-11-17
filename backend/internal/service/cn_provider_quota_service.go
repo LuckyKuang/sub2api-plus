@@ -481,11 +481,14 @@ func zhipuQuotaHost(baseURL string) string {
 //     utilization = (limit-remaining)/limit*100。
 //   - 新套餐（5h + 月度）：不再有顶层 usage，改由 usages.limit_5h /
 //     usages.limit_7d / usages.limit_month_total / usages.limit_month_code
-//     以 used_ratio（0-1）+ reset_time 上报。月度 total 与 code 任一耗尽都会
-//     限流，因此 monthly 取两者较大用量、较早重置时间。
+//     以 used_ratio（0-1）+ reset_time 上报。limit_month_total 与
+//     limit_month_code 是两个**独立**的限流窗口，各自保留用量与重置时间；
+//     合并会掩盖另一个窗口仍在耗尽的事实。
 //
-// 两者同时出现时 used_ratio 优先（比 counts 更贴近官方口径），顶层 usage 仅兜底；
-// usages.limit_5h 只在 limits[] 没有 detail 时补位，避免重复产出 5h 档。
+// 5h 的取值顺序是「limits[].detail 的绝对计数」优先，usages.limit_5h 仅在其
+// 缺失或不可解析时补位，避免同一窗口产出两档；周窗口用 usages.limit_7d，
+// 顶层 usage 只在老套餐没有 ratios 时兜底。used_ratio 的可信上限为 10
+// （=1000%）：更大的值通常是把百分数直接塞进比例字段，按畸形丢弃。
 func parseKimiUsageTiers(body []byte) []CNQuotaTier {
 	if !json.Valid(body) {
 		return nil

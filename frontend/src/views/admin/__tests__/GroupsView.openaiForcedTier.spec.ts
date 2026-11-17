@@ -14,6 +14,7 @@ const {
   getLiveCapability,
   createGroup,
   updateGroup,
+  getGroupById,
 } = vi.hoisted(() => ({
   listGroups: vi.fn(),
   getModelAllowlistCandidates: vi.fn(),
@@ -22,6 +23,7 @@ const {
   getLiveCapability: vi.fn(),
   createGroup: vi.fn(),
   updateGroup: vi.fn(),
+  getGroupById: vi.fn(),
 }));
 
 vi.mock("@/api/admin", () => ({
@@ -29,6 +31,7 @@ vi.mock("@/api/admin", () => ({
     groups: {
       list: listGroups,
       getAll: vi.fn(),
+      getById: getGroupById,
       getModelAllowlistCandidates,
       getUsageSummary,
       getCapacitySummary,
@@ -194,6 +197,8 @@ const mountView = () =>
   });
 
 const openEditDialog = async (group: AdminGroup) => {
+  // Plus 的编辑入口会按 ID 重新拉取整行（避免使用列表页的裁剪快照）。
+  getGroupById.mockResolvedValue({ ...group });
   listGroups.mockResolvedValue({
     items: [group],
     total: 1,
@@ -228,10 +233,7 @@ const submit = async (wrapper: ReturnType<typeof mountView>) => {
   return updateGroup.mock.calls[0][1];
 };
 
-// TODO(sync-v0.2.22)：本用例按上游 GroupsView 的弹窗结构编写，本分支的分组编辑器
-// 通过独立弹窗组件渲染，现有 mount 桩不包含该结构。两个开关的本地化键与目录/门控
-// 已有其他用例覆盖；补齐编辑弹窗的挂载方式后再启用。
-describe.skip("GroupsView OpenAI forced service tier", () => {
+describe("GroupsView OpenAI forced service tier", () => {
   beforeEach(() => {
     localStorage.clear();
     listGroups.mockReset();
@@ -241,6 +243,7 @@ describe.skip("GroupsView OpenAI forced service tier", () => {
     getLiveCapability.mockReset();
     createGroup.mockReset();
     updateGroup.mockReset();
+    getGroupById.mockReset();
 
     getModelAllowlistCandidates.mockResolvedValue([]);
     getUsageSummary.mockResolvedValue([]);

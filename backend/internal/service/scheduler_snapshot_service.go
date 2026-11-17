@@ -1732,22 +1732,6 @@ func compactSchedulableAccounts(accounts []Account) []Account {
 	return out
 }
 
-// derefAccounts 复制快照里的账号指针，保留配置池原样：限时封禁由调用方按
-// 本次请求判定，读取阶段不做二次过滤。
-func derefAccounts(accounts []*Account) []Account {
-	if len(accounts) == 0 {
-		return []Account{}
-	}
-	out := make([]Account, 0, len(accounts))
-	for _, account := range accounts {
-		if account == nil {
-			continue
-		}
-		out = append(out, *account)
-	}
-	return out
-}
-
 func derefSchedulableAccounts(accounts []*Account) []Account {
 	if len(accounts) == 0 {
 		return []Account{}

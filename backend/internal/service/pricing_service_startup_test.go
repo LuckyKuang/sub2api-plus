@@ -198,3 +198,17 @@ func TestPricingStartupUnvalidatedLocalFileStillRequiresRelease(t *testing.T) {
 	// 本地文件仍保持可用，只是启动不宣称已获得受信任版本。
 	require.NotNil(t, svc.GetModelPricing("remote-model"))
 }
+
+// 停止后不再发起后台刷新，且重复 Stop 不会重复关闭停止信号。
+func TestPricingServiceStopIsIdempotentAndStopsBackgroundRefresh(t *testing.T) {
+	remote := &failingManifestRemoteClient{}
+	svc := newStartupPricingService(t, remote)
+	seedValidatedCache(t, svc, startupPricingVersion, hotReloadCatalogJSON)
+
+	svc.Stop()
+	svc.Stop()
+
+	svc.refreshReleaseInBackground()
+	require.Never(t, func() bool { return remote.count() > 0 }, 100*time.Millisecond, 10*time.Millisecond,
+		"a stopped service must not start a release refresh")
+}

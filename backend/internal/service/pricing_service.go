@@ -351,9 +351,12 @@ type PricingService struct {
 	// 需要从本地目录缓存重建叠加层。
 	customFilesHash string
 
-	// 停止信号
-	stopCh chan struct{}
-	wg     sync.WaitGroup
+	// 停止信号。lifecycleMu 让后台刷新的 wg.Add 与 Stop 的 close/Wait 互斥，
+	// stopOnce 保证 Stop 重复调用不会重复 close。
+	stopCh      chan struct{}
+	stopOnce    sync.Once
+	lifecycleMu sync.Mutex
+	wg          sync.WaitGroup
 }
 
 // NewPricingService 创建价格服务
@@ -394,7 +397,9 @@ func (s *PricingService) Initialize() error {
 
 // Stop 停止价格服务
 func (s *PricingService) Stop() {
-	close(s.stopCh)
+	s.lifecycleMu.Lock()
+	s.stopOnce.Do(func() { close(s.stopCh) })
+	s.lifecycleMu.Unlock()
 	s.wg.Wait()
 	logger.LegacyPrintf("service.pricing", "%s", "[Pricing] Service stopped")
 }
@@ -513,14 +518,18 @@ func (s *PricingService) refreshReleaseInBackground() {
 	if s == nil {
 		return
 	}
+	// 与 Stop 互斥：已停止就不再 Add，避免 Wait 之后的 WaitGroup 误用。
+	s.lifecycleMu.Lock()
+	select {
+	case <-s.stopCh:
+		s.lifecycleMu.Unlock()
+		return
+	default:
+	}
 	s.wg.Add(1)
+	s.lifecycleMu.Unlock()
 	go func() {
 		defer s.wg.Done()
-		select {
-		case <-s.stopCh:
-			return
-		default:
-		}
 		if err := s.syncWithRemote(); err != nil {
 			logger.LegacyPrintf("service.pricing", "[Pricing] Release refresh failed; keeping validated local cache: %v", err)
 		}

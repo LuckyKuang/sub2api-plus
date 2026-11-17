@@ -50,6 +50,7 @@ function mountView() {
         Select: true,
         Icon: true,
         PlatformIcon: true,
+        RouterLink: defineComponent({ template: '<a><slot /></a>' }),
         PricingEntryCard: true
       }
     }
@@ -67,7 +68,7 @@ async function clickButton(wrapper: View, text: string) {
 
 function platformCheckbox(wrapper: View, platform: string) {
   return wrapper.findAll('label')
-    .find(label => label.text() === `admin.groups.platforms.${platform}`)!
+    .find(label => label.text().includes(`admin.groups.platforms.${platform}`))!
     .get('input[type="checkbox"]')
 }
 
@@ -86,10 +87,7 @@ function makeChannel(features: Record<string, unknown>): Channel {
   }
 }
 
-// TODO(sync-v0.2.22)：本用例按上游 ChannelsView 的表格结构编写；本分支的通道路由
-// 表格由统一表格组件渲染，桩与列定义不同。Bedrock 兼容字段的后端契约由
-// service/handler 用例覆盖，待补齐视图层挂载后启用。
-describe.skip('ChannelsView Bedrock compatibility', () => {
+describe('ChannelsView Bedrock compatibility', () => {
   let stored: Channel[]
 
   beforeEach(() => {
@@ -119,7 +117,6 @@ describe.skip('ChannelsView Bedrock compatibility', () => {
     await clickButton(wrapper, 'admin.channels.createChannel')
     await wrapper.get('input[required]').setValue('Bedrock relay')
     await platformCheckbox(wrapper, 'anthropic').setValue(true)
-    await clickButton(wrapper, 'admin.groups.platforms.anthropic')
     await wrapper.findAll('label').find(label => label.text().includes('Anthropic group'))!
       .get('input[type="checkbox"]').setValue(true)
     if (enabled) await bedrockToggle(wrapper).trigger('click')
@@ -131,7 +128,7 @@ describe.skip('ChannelsView Bedrock compatibility', () => {
     expect(createChannel.mock.calls[0][0].features_config.bedrock_cc_compat).toBe(enabled)
 
     await clickButton(wrapper, 'common.edit')
-    await clickButton(wrapper, 'admin.groups.platforms.anthropic')
+    await platformCheckbox(wrapper, 'anthropic').setValue(true)
     expect(bedrockToggle(wrapper).attributes('aria-checked')).toBe(String(enabled))
     wrapper.unmount()
   })
@@ -141,7 +138,7 @@ describe.skip('ChannelsView Bedrock compatibility', () => {
     const wrapper = mountView()
     await flushPromises()
     await clickButton(wrapper, 'common.edit')
-    await clickButton(wrapper, 'admin.groups.platforms.anthropic')
+    await platformCheckbox(wrapper, 'anthropic').setValue(true)
     expect(bedrockToggle(wrapper).attributes('aria-checked')).toBe('true')
     if (!enabled) await bedrockToggle(wrapper).trigger('click')
 
@@ -155,7 +152,7 @@ describe.skip('ChannelsView Bedrock compatibility', () => {
     })
 
     await clickButton(wrapper, 'common.edit')
-    await clickButton(wrapper, 'admin.groups.platforms.anthropic')
+    await platformCheckbox(wrapper, 'anthropic').setValue(true)
     expect(bedrockToggle(wrapper).attributes('aria-checked')).toBe(String(enabled))
     wrapper.unmount()
   })

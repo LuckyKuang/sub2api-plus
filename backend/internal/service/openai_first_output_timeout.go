@@ -40,6 +40,7 @@ type openAIFirstOutputStage struct {
 	tempPath   string
 	createTemp func() (*os.File, error)
 	removeFile func(string) error
+	// memoryOnly 表示磁盘暂存不可用后回落到内存缓冲；只有有界阶段会这样降级。
 	memoryOnly bool
 	// spoolRequired 表示该阶段没有可信的内存上限（安全缓冲使用 MaxInt64），
 	// 因此磁盘暂存不可用时必须失败，不能退化为无界内存缓冲。
