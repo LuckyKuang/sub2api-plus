@@ -1521,23 +1521,7 @@ func (s *PricingService) lookupIdentifiedModelPricingLocked(lookupCandidates []s
 			}
 		}
 	}
-	keys := make([]string, 0, len(s.pricingData))
-	for key := range s.pricingData {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		if isUnregisteredGPT61TerraPricingModel(key) {
-			continue
-		}
-		for _, base := range modelLookupCandidates(s.extractBaseName(strings.ToLower(key))) {
-			if _, ok := bases[base]; ok {
-				return s.pricingData[key]
-			}
-		}
-	}
-
-	return nil
+	return s.pricingSnapshotIndexFor(s.pricingData).firstMatch(bases)
 }
 
 // GetIdentifiedModelPricing 在价格表中确定性地识别模型，识别不到时返回 nil。

@@ -116,7 +116,8 @@ func (h *AvailableChannelHandler) listCatalog(c *gin.Context, userID int64) {
 			c.GetHeader("Accept-Language"), localized.Name, localized.Description)
 		out.Groups = append(out.Groups, localized)
 	}
-	response.Success(c, out)
+	// The catalog is ~1.3 MB of repetitive JSON; gzip cuts it to a few percent.
+	response.SuccessCompressed(c, out)
 }
 
 func toCatalogGroup(cg service.CatalogGroup, rates map[int64]float64) catalogGroup {
