@@ -59,9 +59,10 @@ describe('toast cards', () => {
     expect(new Set(cards().map(card => card.className)).size).toBe(1)
     expect(cards().every(card => card.querySelector('.toast-icon') && card.querySelector('.toast-progress-track'))).toBe(true)
     expect(document.querySelector('[aria-live="polite"]')?.getAttribute('aria-atomic')).toBe('true')
-    expect(declarations('.toast-card')).toMatchObject({ 'border-radius': '20px', 'background-color': 'var(--surface-panel)', color: 'var(--surface-text)' })
-    expect(declarations('.toast-icon')).toMatchObject({ width: '36px', height: '36px', 'border-radius': '12px' })
-    expect(declarations('.toast-close')['border-radius']).toBe('10px')
+    // Toasts are floating containers on the shared radius ladder.
+    expect(declarations('.toast-card')).toMatchObject({ 'border-radius': 'var(--surface-radius)', 'background-color': 'var(--surface-panel)', color: 'var(--surface-text)' })
+    expect(declarations('.toast-icon')).toMatchObject({ width: '36px', height: '36px', 'border-radius': 'var(--surface-radius-control)' })
+    expect(declarations('.toast-close')['border-radius']).toBe('var(--surface-radius-control)')
     expect(declarations('.toast-progress-track')).toMatchObject({ left: '16px', right: '16px', height: '3px', 'border-radius': '9999px' })
     expect(cards().every(card => !card.className.includes('border-l-'))).toBe(true)
   })

@@ -249,7 +249,7 @@
 
         <!-- Charts Section -->
         <WorkspaceTabs v-if="compactCharts" v-model="chartTab" class="workspace-fixed" :tabs="dashboardTabs" :label="t('workspace.charts')" />
-        <div class="workspace-body dashboard-charts" :class="{ 'dashboard-charts-compact': compactCharts }">
+        <div class="workspace-body dashboard-charts">
           <!-- Charts Grid -->
           <div v-show="!compactCharts || chartTab === 'models'" class="dashboard-chart-grid grid grid-cols-1 gap-6 lg:grid-cols-2">
             <ModelDistributionChart
@@ -292,6 +292,10 @@
               </div>
             </div>
           </div>
+
+          <!-- Usage totals, group and endpoint distributions moved here from the
+               usage page: the dashboard is the one place with the date range. -->
+          <UsageOverviewPanel ref="usageOverviewRef" :start-date="startDate" :end-date="endDate" />
         </div>
       </template>
 
@@ -338,6 +342,7 @@ import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Select from '@/components/common/Select.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
+import UsageOverviewPanel from '@/components/charts/UsageOverviewPanel.vue'
 import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
 
 import {
@@ -373,6 +378,7 @@ const dashboardTabs = computed(() => [
 ])
 watch(chartTab, async () => { await nextTick(); window.dispatchEvent(new Event('resize')) })
 const stats = ref<DashboardStats | null>(null)
+const usageOverviewRef = ref<InstanceType<typeof UsageOverviewPanel> | null>(null)
 const loading = ref(false)
 const chartsLoading = ref(false)
 const userTrendLoading = ref(false)
@@ -750,24 +756,23 @@ const loadChartData = async () => {
   ])
 }
 
-let chartUpdatedAt = 0
-let forceCharts = false
+// Every refresh cycle (manual or automatic) renews the whole block: overview
+// KPIs, both chart groups, the spending ranking and the usage overview panel.
 const overviewRefresh = useAutoRefresh({
   storageKey: useColumnPreferenceKey('admin-overview-refresh'), intervals: [30, 60, 120], defaultInterval: 30, defaultEnabled: true,
   shouldPause: () => chartsLoading.value,
   onRefresh: async () => {
-    const includeCharts = forceCharts || Date.now() - chartUpdatedAt >= 60000
-    forceCharts = false
     const results = await Promise.allSettled([
-      loadDashboardSnapshot(true, includeCharts, true),
-      ...(includeCharts ? [loadUsersTrend(true), loadUserSpendingRanking(true)] : []),
+      loadDashboardSnapshot(true, true, true),
+      loadUsersTrend(true),
+      loadUserSpendingRanking(true),
     ])
+    await usageOverviewRef.value?.reload()
     const failure = results.find(result => result.status === 'rejected')
     if (failure?.status === 'rejected') throw failure.reason
-    if (includeCharts) chartUpdatedAt = Date.now()
   },
 })
-const refreshAll = () => { forceCharts = true; return overviewRefresh.refresh() }
+const refreshAll = () => overviewRefresh.refresh()
 onBeforeUnmount(() => { chartLoadSeq++; usersTrendLoadSeq++; rankingLoadSeq++ })
 onMounted(() => {
   void refreshAll()
@@ -784,12 +789,14 @@ onMounted(() => {
   .dashboard-kpi-grid { gap: 10px; }
   .dashboard-kpi-grid > .card { min-width: 0; padding: 12px; }
   .dashboard-kpi-grid > .card > div { gap: 10px; }
-  .dashboard-charts { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1.02fr); gap: 12px; }
-  .dashboard-charts-compact { grid-template-rows: minmax(0, 1fr); }
-  .dashboard-chart-grid { min-height: 0; gap: 12px; }
-  .dashboard-user-trend { display: flex; min-height: 0; flex-direction: column; overflow: hidden; padding: 14px; }
+  /* The dashboard now carries the usage overview too, so the charts zone
+     scrolls vertically instead of dividing one viewport between fixed rows. */
+  .dashboard-charts { display: flex; min-height: 0; flex-direction: column; gap: 12px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; }
+  .dashboard-charts > * { flex: none; }
+  .dashboard-chart-grid { min-height: 340px; gap: 12px; }
+  .dashboard-user-trend { display: flex; flex-direction: column; overflow: hidden; min-height: 320px; padding: 14px; }
   .dashboard-user-trend > div:first-child { flex: none; margin-bottom: 10px; }
-  .dashboard-line-canvas { position: relative; height: auto; min-height: 0; flex: 1; }
+  .dashboard-line-canvas { position: relative; height: 280px; min-height: 0; flex: none; }
 }
 @media (min-width: 1800px) and (min-height: 960px) {
   .dashboard-kpi-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }

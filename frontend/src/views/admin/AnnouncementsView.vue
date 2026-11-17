@@ -123,26 +123,13 @@
                 <Icon name="eye" size="sm" />
               </button>
               <button
-                @click="openReadStatus(row)"
-                class="table-action"
-                :title="t('admin.announcements.readStatus')"
-              >
-                <Icon name="chartBar" size="sm" />
-              </button>
-              <button
                 @click="openEditDialog(row)"
                 class="table-action table-action-neutral"
                 :title="t('common.edit')"
               >
                 <Icon name="edit" size="sm" />
               </button>
-              <button
-                @click="handleDelete(row)"
-                class="table-action table-action-danger"
-                :title="t('common.delete')"
-              >
-                <Icon name="trash" size="sm" />
-              </button>
+              <ActionMenu :items="announcementRowActions()" @select="handleAnnouncementRowAction(row, $event)" />
             </div>
           </template>
 
@@ -277,6 +264,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Icon from '@/components/icons/Icon.vue'
+import ActionMenu, { type ActionMenuItem } from '@/components/common/ActionMenu.vue'
 
 import AnnouncementTargetingEditor from '@/components/admin/announcements/AnnouncementTargetingEditor.vue'
 import AnnouncementReadStatusDialog from '@/components/admin/announcements/AnnouncementReadStatusDialog.vue'
@@ -580,6 +568,17 @@ async function handleSave() {
 // ===== Delete =====
 const showDeleteDialog = ref(false)
 const deletingAnnouncement = ref<Announcement | null>(null)
+
+// Each row shows preview and edit; the rest live in one "more" menu.
+const announcementRowActions = (): ActionMenuItem[] => [
+  { key: 'readStatus', label: t('admin.announcements.readStatus'), icon: 'chartBar' },
+  { key: 'delete', label: t('common.delete'), icon: 'trash', tone: 'danger' },
+]
+
+const handleAnnouncementRowAction = (row: Announcement, action: string) => {
+  if (action === 'readStatus') openReadStatus(row)
+  else if (action === 'delete') handleDelete(row)
+}
 
 function handleDelete(row: Announcement) {
   deletingAnnouncement.value = row

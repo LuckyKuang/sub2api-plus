@@ -208,7 +208,7 @@ onMounted(() => {
     </div>
 
     <div v-else class="space-y-6">
-      <div class="rounded-2xl surface-inset p-4">
+      <div class="rounded-xl surface-inset p-4">
         <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.email.alertTitle') }}</h4>
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div class="text-xs surface-muted">
@@ -234,7 +234,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="rounded-2xl surface-inset p-4">
+      <div class="rounded-xl surface-inset p-4">
         <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.email.reportTitle') }}</h4>
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div class="text-xs surface-muted">
@@ -263,7 +263,7 @@ onMounted(() => {
           <li v-for="msg in editorValidation.errors" :key="msg">{{ msg }}</li>
         </ul>
       </div>
-      <div class="rounded-2xl surface-inset p-4">
+      <div class="rounded-xl surface-inset p-4">
         <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.email.alertTitle') }}</h4>
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
@@ -298,7 +298,7 @@ onMounted(() => {
               <span
                 v-for="email in draft.alert.recipients"
                 :key="email"
-                class="inline-flex items-center gap-2 rounded-full bg-blue-100/[0.15] px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                class="inline-flex items-center gap-2 rounded-md bg-blue-100/[0.15] px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
               >
                 {{ email }}
                 <button
@@ -333,7 +333,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="rounded-2xl surface-inset p-4">
+      <div class="rounded-xl surface-inset p-4">
         <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.email.reportTitle') }}</h4>
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
@@ -363,7 +363,7 @@ onMounted(() => {
               <span
                 v-for="email in draft.report.recipients"
                 :key="email"
-                class="inline-flex items-center gap-2 rounded-full bg-blue-100/[0.15] px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                class="inline-flex items-center gap-2 rounded-md bg-blue-100/[0.15] px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
               >
                 {{ email }}
                 <button

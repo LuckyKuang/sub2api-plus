@@ -62,7 +62,7 @@
         <!-- Balance Display -->
         <div
           v-if="user && !compactHeader"
-          class="group relative hidden items-center gap-2 rounded-xl bg-primary-50/[0.15] px-3 py-1.5 dark:bg-primary-900/20 sm:flex"
+          class="group relative hidden items-center gap-2 rounded-lg bg-primary-50/[0.15] px-3 py-1.5 dark:bg-primary-900/20 sm:flex"
         >
           <svg
             class="h-4 w-4 text-primary-600 dark:text-primary-400"
@@ -82,7 +82,7 @@
           </span>
           <span
             v-if="frozenBalance > 0"
-            class="rounded-full bg-amber-100/[0.15] px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
+            class="rounded-md bg-amber-100/[0.15] px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
           >
             {{ balanceFrozenLabel }}
           </span>
@@ -117,7 +117,7 @@
             :aria-expanded="dropdownOpen"
             aria-haspopup="true"
           >
-            <div class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-sm font-medium text-white shadow-sm">
+            <div class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 text-sm font-medium text-white shadow-sm">
               <img
                 v-if="avatarUrl"
                 :src="avatarUrl"

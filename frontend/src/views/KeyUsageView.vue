@@ -4,7 +4,7 @@
     <header class="shell-surface relative z-20 px-4 py-4 sm:px-6">
       <nav class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
         <router-link to="/home" class="flex min-w-0 items-center gap-3">
-          <div class="h-10 w-10 shrink-0 overflow-hidden rounded-xl shadow-md">
+          <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg shadow-md">
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </div>
           <span class="truncate text-lg font-semibold tracking-tight text-gray-900 dark:text-white">{{ siteName }}</span>
@@ -58,7 +58,7 @@
               v-model="apiKey"
               :type="keyVisible ? 'text' : 'password'"
               :placeholder="t('keyUsage.placeholder')"
-              class="input-ring w-full h-12 pl-12 pr-12 rounded-xl border border-gray-200 surface-inset text-sm text-gray-900 placeholder:text-gray-400 transition-all dark:border-dark-700 dark:text-white dark:placeholder:text-dark-500"
+              class="input-ring w-full h-12 pl-12 pr-12 rounded-lg border border-gray-200 surface-inset text-sm text-gray-900 placeholder:text-gray-400 transition-all dark:border-dark-700 dark:text-white dark:placeholder:text-dark-500"
               @keydown.enter="queryKey"
             />
             <button
@@ -77,7 +77,7 @@
           <button
             @click="queryKey"
             :disabled="isQuerying"
-            class="h-12 px-7 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium text-sm transition-all active:scale-[0.97] flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-60"
+            class="h-12 px-7 rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-medium text-sm transition-all active:scale-[0.97] flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-60"
           >
             <svg v-if="isQuerying" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
@@ -156,7 +156,7 @@
         <div v-else-if="resultData" class="space-y-6">
           <!-- Status Badge -->
           <div v-if="statusInfo" class="fade-up flex items-center justify-center mb-2">
-            <div class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-gray-200 surface-inset shadow-sm dark:border-dark-700">
+            <div class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-gray-200 surface-inset shadow-sm dark:border-dark-700">
               <span
                 class="console-data-mark w-2.5 h-2.5 rounded-full pulse-dot"
                 :class="statusInfo.isActive ? 'bg-emerald-500' : 'bg-rose-500'"
@@ -1002,7 +1002,7 @@ onUnmounted(() => {
   background: linear-gradient(90deg, #e5e5e5 25%, #f5f5f5 50%, #e5e5e5 75%);
   background-size: 200% 100%;
   animation: shimmer-kv 1.8s ease-in-out infinite;
-  border-radius: 8px;
+  border-radius: var(--surface-radius-control);
 }
 :global(.dark) .skeleton {
   background: linear-gradient(90deg, #404040 25%, #282828 50%, #404040 75%);

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,13 @@ import (
 type channelCatalog struct {
 	Groups         []catalogGroup `json:"groups"`
 	UserRateStatus string         `json:"user_rate_status"`
+	// Paged catalog responses carry the facets and totals of the whole filtered
+	// catalog; the un-paged response keeps its original shape.
+	ModelsTotal int            `json:"models_total,omitempty"`
+	Categories  map[string]int `json:"categories,omitempty"`
+	Platforms   map[string]int `json:"platforms,omitempty"`
+	Page        int            `json:"page,omitempty"`
+	PageSize    int            `json:"page_size,omitempty"`
 }
 type catalogGroup struct {
 	modelPlazaGroup
@@ -83,6 +91,34 @@ func emptyChannelCatalog() channelCatalog {
 	return channelCatalog{Groups: []catalogGroup{}, UserRateStatus: "not_requested"}
 }
 
+// catalogPageQuery reads the paged catalog controls. A request without any of
+// them keeps the complete-catalog contract used by other clients.
+func catalogPageQuery(c *gin.Context) *service.CatalogPageQuery {
+	values := c.Request.URL.Query()
+	if values.Get("page") == "" && values.Get("page_size") == "" && values.Get("category") == "" &&
+		values.Get("platform") == "" && values.Get("search") == "" && values.Get("model") == "" {
+		return nil
+	}
+	page := &service.CatalogPageQuery{
+		Category: values.Get("category"),
+		Platform: values.Get("platform"),
+		Search:   values.Get("search"),
+		Model:    values.Get("model"),
+		PageSize: 9,
+	}
+	if raw := values.Get("page"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			page.Page = parsed
+		}
+	}
+	if raw := values.Get("page_size"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 60 {
+			page.PageSize = parsed
+		}
+	}
+	return page
+}
+
 func (h *AvailableChannelHandler) listCatalog(c *gin.Context, userID int64) {
 	groups, err := h.apiKeyService.GetAvailableGroups(c.Request.Context(), userID)
 	if err != nil {
@@ -95,10 +131,25 @@ func (h *AvailableChannelHandler) listCatalog(c *gin.Context, userID int64) {
 		return
 	}
 	readCatalog := h.plazaService.ListAvailableChannelCatalog
+	page := catalogPageQuery(c)
 	if keyQuotesView(c) {
 		readCatalog = h.plazaService.ListAvailableCatalog
+		page = nil
 	}
-	catalog, err := readCatalog(c.Request.Context(), groups)
+	var catalog []service.CatalogGroup
+	meta := service.CatalogPageMeta{}
+	if page != nil {
+		// Paged responses summarize the offers they actually returned; the
+		// complete per-group summary stays on the un-paged read.
+		catalog, err = h.plazaService.ListAvailableChannelCatalogPage(c.Request.Context(), groups, *page, &meta)
+		out.ModelsTotal = meta.Total
+		out.Categories = meta.Categories
+		out.Platforms = meta.Platforms
+		out.Page = page.Page
+		out.PageSize = page.PageSize
+	} else {
+		catalog, err = readCatalog(c.Request.Context(), groups)
+	}
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -116,7 +167,8 @@ func (h *AvailableChannelHandler) listCatalog(c *gin.Context, userID int64) {
 			c.GetHeader("Accept-Language"), localized.Name, localized.Description)
 		out.Groups = append(out.Groups, localized)
 	}
-	response.Success(c, out)
+	// The catalog is ~1.3 MB of repetitive JSON; gzip cuts it to a few percent.
+	response.SuccessCompressed(c, out)
 }
 
 func toCatalogGroup(cg service.CatalogGroup, rates map[int64]float64) catalogGroup {

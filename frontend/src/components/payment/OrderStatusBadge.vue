@@ -1,6 +1,6 @@
 <template>
   <span
-    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+    class="inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-medium"
     :class="statusClass"
   >
     {{ statusLabel }}

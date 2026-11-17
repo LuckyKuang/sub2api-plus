@@ -59,7 +59,7 @@
               <!-- 充值赠送活动文案（后台 Markdown 配置，空则不渲染） -->
               <div
                 v-if="renderedBonusNotice"
-                class="mb-5 rounded-xl border border-amber-200 bg-amber-50/[0.15] px-4 py-3 text-sm leading-relaxed text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100 [&_a]:font-medium [&_a]:underline [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_ol]:my-1 [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:my-1 [&_strong]:font-semibold [&_ul]:my-1 [&_ul]:ml-5 [&_ul]:list-disc"
+                class="mb-5 rounded-lg border border-amber-200 bg-amber-50/[0.15] px-4 py-3 text-sm leading-relaxed text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100 [&_a]:font-medium [&_a]:underline [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_ol]:my-1 [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:my-1 [&_strong]:font-semibold [&_ul]:my-1 [&_ul]:ml-5 [&_ul]:list-disc"
                 data-testid="recharge-bonus-notice"
                 v-html="renderedBonusNotice"
               ></div>
@@ -214,11 +214,11 @@
                 <p class="mb-2 text-xs font-medium surface-muted">{{ t('payment.activeSubscription') }}</p>
                 <div class="space-y-2">
                   <div v-for="sub in activeSubscriptions" :key="sub.id"
-                    class="flex items-center gap-3 rounded-xl border border-gray-100 surface-inset px-3 py-2 dark:border-dark-700">
+                    class="flex items-center gap-3 rounded-lg border border-gray-100 surface-inset px-3 py-2 dark:border-dark-700">
                     <div class="min-w-0 flex-1">
                       <div class="flex items-center gap-1.5">
                         <span class="truncate text-xs font-semibold text-gray-900 dark:text-white">{{ sub.group?.name || t('payment.groupFallback', { id: sub.group_id }) }}</span>
-                        <span :class="['shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium', platformBadgeLightClass(sub.group?.platform || '')]">{{ platformLabel(sub.group?.platform || '') }}</span>
+                        <span :class="['shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-medium', platformBadgeLightClass(sub.group?.platform || '')]">{{ platformLabel(sub.group?.platform || '') }}</span>
                       </div>
                       <div class="flex flex-wrap gap-x-3 text-[11px] surface-muted">
                         <span>{{ t('payment.planCard.rate') }}: ×{{ sub.group?.rate_multiplier ?? 1 }}</span>
@@ -1350,7 +1350,7 @@ onMounted(async () => {
 }
 
 .payment-tabs { padding: 8px; }
-.payment-activity { border-radius: 16px; }
+.payment-activity { border-radius: var(--surface-radius); }
 
 .payment-tabs :deep(.workspace-tab) {
   flex: 1 1 0%;

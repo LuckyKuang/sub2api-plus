@@ -92,7 +92,7 @@ describe('RedeemView refresh after redemption', () => {
       global: { stubs: { AppLayout: { template: '<div><slot /></div>' }, Icon: true } },
     })
     await flushPromises()
-    const button = (text: string) => wrapper.findAll('button').find(b => b.text() === text)!
+    const button = (label: string) => wrapper.get(`button[aria-label="${label}"]`)
     expect(getHistory).toHaveBeenLastCalledWith(1, 20)
     expect(button('pagination.previous').attributes('disabled')).toBeDefined()
     await button('pagination.next').trigger('click')
@@ -101,7 +101,8 @@ describe('RedeemView refresh after redemption', () => {
     await button('pagination.previous').trigger('click')
     await flushPromises()
     expect(getHistory).toHaveBeenLastCalledWith(1, 20)
-    expect((await openSelect(wrapper)).findAll('[role="option"]').map(o => o.text())).toEqual(['20', '50', '100'])
+    // History pages through the shared pager, so it offers the table page sizes.
+    expect((await openSelect(wrapper)).findAll('[role="option"]').map(o => o.text())).toEqual(['10', '20', '50', '100'])
     await chooseSelect(wrapper, '50')
     await flushPromises()
     expect(getHistory).toHaveBeenLastCalledWith(1, 50)
@@ -128,7 +129,7 @@ describe('RedeemView refresh after redemption', () => {
       global: { stubs: { AppLayout: { template: '<div><slot /></div>' }, Icon: true } },
     })
     await flushPromises()
-    const button = (text: string) => wrapper.findAll('button').find(b => b.text() === text)!
+    const button = (label: string) => wrapper.get(`button[aria-label="${label}"]`)
     await button('pagination.next').trigger('click')
     await flushPromises()
     let rejectRequest!: (error: Error) => void
@@ -172,7 +173,7 @@ describe('RedeemView refresh after redemption', () => {
     wrapper.getComponent(Select).vm.$emit('update:modelValue', 50)
     wrapper.getComponent(Select).vm.$emit('change', 50)
     await flushPromises()
-    const button = (text: string) => wrapper.findAll('button').find(b => b.text() === text)!
+    const button = (label: string) => wrapper.get(`button[aria-label="${label}"]`)
     await button('pagination.next').trigger('click')
     await flushPromises()
     expect(getHistory).toHaveBeenLastCalledWith(2, 50)
@@ -197,7 +198,9 @@ describe('RedeemView refresh after redemption', () => {
 
   it('disables both paging buttons for empty history', async () => {
     const wrapper = await submitCode()
-    for (const button of wrapper.findAll('button').filter(b => b.text().startsWith('pagination.'))) {
+    const pagers = wrapper.findAll('button[aria-label="pagination.previous"], button[aria-label="pagination.next"]')
+    expect(pagers.length).toBeGreaterThan(0)
+    for (const button of pagers) {
       expect(button.attributes('disabled')).toBeDefined()
     }
     wrapper.unmount()
@@ -221,7 +224,7 @@ describe('RedeemView refresh after redemption', () => {
     expect(history.element.contains(navigation.element)).toBe(false)
     const viewport = history.element as HTMLElement
     viewport.scrollTop = 120
-    await navigation.findAll('button').find(button => button.text() === 'pagination.next')!.trigger('click')
+    await navigation.get('button[aria-label="pagination.next"]').trigger('click')
     await flushPromises()
     expect(getHistory).toHaveBeenLastCalledWith(2, 20)
     expect(viewport.scrollTop).toBe(0)

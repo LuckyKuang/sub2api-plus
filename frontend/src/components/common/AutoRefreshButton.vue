@@ -2,7 +2,7 @@
   <div class="relative" ref="dropdownRef">
     <button
       @click="showDropdown = !showDropdown"
-      class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium shadow-sm transition-colors hover:surface-hover dark:border-dark-600 surface-control surface-muted"
+      class="btn btn-secondary btn-sm"
       :title="t('common.autoRefresh.title')"
     >
       <svg

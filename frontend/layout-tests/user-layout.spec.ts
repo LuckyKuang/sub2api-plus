@@ -96,7 +96,7 @@ test('user workspace scrolls rows with the wheel while pagination stays in a sep
       mainBottom: el.closest('.app-main')!.getBoundingClientRect().bottom,
     }))
     expect(card.fill).not.toBe('rgba(0, 0, 0, 0)')
-    expect(card.radius).toBe(24)
+    expect(card.radius).toBe(16)
     expect(card.border).toBe(1)
     expect(Math.abs(card.bottom - card.mainBottom)).toBeLessThanOrEqual(1)
     const before = await pagination.boundingBox()
@@ -185,8 +185,8 @@ test('real usage records support wheel scrolling and reachable server pagination
       await wheelScroll(page, page.locator('html'), 20000, panel.getByText('audit-model-1', { exact: true }))
       await expect(panel.locator('.pagination-card')).toBeInViewport()
     }
-    const next = panel.locator('.pagination-card button:visible').filter({ hasText: locale === 'zh' ? '下一页' : 'Next' })
-    const nextButton = width < 1024 ? next : panel.locator('.pagination-card').getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true }).filter({ visible: true })
+    // Narrow and wide pagers are both numbered; next is an icon button named by aria-label.
+    const nextButton = panel.locator('.pagination-card').getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true }).filter({ visible: true })
     const response = page.waitForResponse(response => {
       const url = new URL(response.url())
       return url.pathname === '/api/v1/usage' && url.searchParams.get('page') === '2' && url.searchParams.get('page_size') === '20'

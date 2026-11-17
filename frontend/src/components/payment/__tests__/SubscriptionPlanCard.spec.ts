@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
+import { vi } from "vitest";
 import { createPinia } from "pinia";
 import { createI18n } from "vue-i18n";
 import type { SubscriptionPlan } from "@/types/payment";
@@ -8,6 +9,9 @@ import SubscriptionPlanCard from "../SubscriptionPlanCard.vue";
 import { offer, pricing, rateQuote } from '@/components/channels/__tests__/catalogFixtures'
 
 type NamedMessageContext = { named: (key: string) => unknown }
+
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('@/utils/format', () => ({ formatDateTime: (v: string) => `fmt(${v})` }));
 
 const i18n = createI18n({
   legacy: false,
@@ -57,7 +61,7 @@ const mountPlanCard = (groupPlatform: string, overrides: Partial<SubscriptionPla
         ...overrides,
       },
     },
-    global: { plugins: [i18n, createPinia()] },
+    global: { plugins: [i18n, createPinia()], stubs: { teleport: true } },
   });
 
 describe("SubscriptionPlanCard", () => {
@@ -77,12 +81,12 @@ describe("SubscriptionPlanCard", () => {
     useAppStore().$patch({ cachedPublicSettings: { server_utc_offset: '+00:00' } })
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('09:00-12:00 ×1.5 (UTC+00:00)')
-    expect(wrapper.text()).toContain(`×${effective}`)
+    expect(wrapper.text()).toContain(`${effective}x`)
     expect(wrapper.text()).not.toContain('×99')
+    await wrapper.get('button').trigger('click')
     await wrapper.get('details > summary').trigger('click')
-    await wrapper.get('details > details > summary').trigger('click')
     expect(wrapper.get('table').findAll('tbody td').map(cell => cell.text())).toEqual([charge])
-    expect(wrapper.text()).toContain(`Quoted at ${asOf}`)
+    expect(wrapper.text()).toContain(`Quoted at fmt(${asOf})`)
     if (calculation === 'override_v1') {
       expect(wrapper.text()).toContain('Historical base 1 × policy 3 × peak 1')
       expect(wrapper.text()).not.toContain('Base 1 × platform 2 × model 3')
@@ -91,36 +95,71 @@ describe("SubscriptionPlanCard", () => {
       expect(wrapper.text()).toContain(`Base 1 × platform 2 × model 3 × peak ${peak}`)
     }
     expect(wrapper.emitted('select')).toBeUndefined()
-    await wrapper.get('button').trigger('click')
+    await wrapper.get('.plan-purchase-action').trigger('click')
     expect(wrapper.emitted('select')).toEqual([[wrapper.props('plan')]])
     wrapper.unmount()
   })
 
   it('shows the backend quote range, including free models, and pre-purchase model details', () => {
     const wrapper = mountPlanCard('composite', { rate_multiplier: 99, model_catalog: { policy_version: 3, as_of: '2026-10-26T12:00:00Z', models: [offer('free', { rate_quote: rateQuote(0) }), offer('paid', { platform: 'stepfun', rate_quote: rateQuote(2) })], platforms: ['openai', 'stepfun'], rate_min: 0, rate_max: 2 } })
-    expect(wrapper.text()).toContain('×0–×2')
+    expect(wrapper.text()).toContain('0x–2x')
     expect(wrapper.text()).not.toContain('×99')
-    expect(wrapper.get('details summary').text()).toContain('billingRates.models')
+    expect(wrapper.get('.plan-quota + div button').text()).toContain('billingRates.models')
   })
   it('shows unavailable instead of a default multiplier when sale quotes are absent or empty', () => {
     const missing = mountPlanCard('composite', { rate_multiplier: 1 })
     expect(missing.text()).toContain('billingRates.unknown')
-    expect(missing.text()).not.toContain('×1')
+    expect(missing.text()).not.toContain('1x')
     const empty = mountPlanCard('composite', { rate_multiplier: 1, model_catalog: { policy_version: 3, as_of: '', models: [], platforms: [], rate_min: null, rate_max: null } })
     expect(empty.text()).toContain('billingRates.unknown')
-    expect(empty.text()).not.toContain('×1')
+    expect(empty.text()).not.toContain('1x')
     missing.unmount()
     empty.unmount()
   })
   it("keeps the catalog purchase action at the card bottom and emits the unchanged selected plan", async () => {
     const wrapper = mountPlanCard("openai", { features: ["Priority support", "Advanced models"] });
     await wrapper.setProps({ catalog: true });
-    const action = wrapper.get("button");
+    const action = wrapper.get(".plan-purchase-action");
     expect(wrapper.classes()).toContain("subscription-plan-catalog");
-    expect(action.classes()).toEqual(expect.arrayContaining(["mt-auto", "min-h-11", "w-full", "font-semibold"]));
+    // The purchase call-to-action is the shared large button: 44px, control radius.
+    expect(action.classes()).toEqual(expect.arrayContaining(["btn", "btn-lg", "mt-auto", "w-full", "font-semibold"]));
+    expect(action.classes()).not.toContain("rounded-xl");
     expect(action.element.parentElement?.lastElementChild).toBe(action.element);
     await action.trigger("click");
     expect(wrapper.emitted("select")).toEqual([[wrapper.props("plan")]]);
+  });
+
+  it("falls back to the group multiplier for non-composite plans and highlights it", () => {
+    const wrapper = mountPlanCard("openai", { rate_multiplier: 1.5 });
+    expect(wrapper.get(".plan-quota .bg-primary-100").text()).toBe("1.5x");
+    wrapper.unmount();
+  });
+
+  it("renders one proportional bar per limit, monthly full and most saturated", () => {
+    const wrapper = mountPlanCard("openai", { five_hour_limit_usd: 5, daily_limit_usd: 15, weekly_limit_usd: 75, monthly_limit_usd: 250 });
+    const bars = ["fiveHour", "daily", "weekly", "monthly"].map((k) => wrapper.get(`[data-limit="${k}"]`));
+    expect(bars.map((b) => b.get(".console-data-mark").attributes("style"))).toEqual([
+      // 5h rounds to 2%, so the 3% floor keeps its colour visible.
+      "width: 3%;", "width: 6%;", "width: 30%;", "width: 100%;",
+    ]);
+    expect(bars[3]!.text()).toContain("$250");
+    expect(bars[3]!.get(".console-data-mark").classes()).toContain("bg-violet-600");
+    wrapper.unmount();
+  });
+
+  // User audit: plan cards describe the plan; usage stays on the subscriptions
+  // page, so an active subscription must not empty the coloured bars.
+  it("keeps limit-proportional bars when the user already has an active subscription", () => {
+    const active = mount(SubscriptionPlanCard, {
+      props: { plan: { id: 1, group_id: 10, group_platform: "openai", name: "Pro", price: 10, features: [], validity_days: 30, validity_unit: "day", daily_limit_usd: 10, monthly_limit_usd: 100 } as unknown as SubscriptionPlan,
+        activeSubscriptions: [{ group_id: 10, status: "active", daily_usage_usd: 2.5, monthly_usage_usd: 0 }] as never },
+      global: { plugins: [i18n, createPinia()], stubs: { teleport: true } },
+    });
+    expect(active.get('[data-limit="daily"]').text()).toContain("$10");
+    expect(active.get('[data-limit="daily"]').text()).not.toContain("/");
+    expect(active.get('[data-limit="daily"] .console-data-mark').attributes("style")).toContain("width: 10%");
+    expect(active.get('[data-limit="monthly"] .console-data-mark').attributes("style")).toContain("width: 100%");
+    active.unmount();
   });
 
   it("does not show Antigravity model scopes for OpenAI plans", () => {
@@ -221,7 +260,7 @@ describe("SubscriptionPlanCard", () => {
     expect(badge?.element.parentElement?.parentElement?.classList).toContain("shrink-0");
     expect(price?.element.parentElement?.parentElement?.classList).toContain("shrink-0");
     expect(wrapper.get("p").text()).toBe("Includes advanced models and priority support.");
-    expect(wrapper.get("button").text()).toBe("Subscribe now");
+    expect(wrapper.get(".plan-purchase-action").text()).toBe("Subscribe now");
   });
 
   it("keeps short plan titles compact and aligned", () => {

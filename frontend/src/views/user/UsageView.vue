@@ -1,15 +1,19 @@
 <template>
   <AppLayout appearance="user" workspace>
     <div class="workspace-page usage-workspace">
-      <div v-show="activeTab !== 'live'" class="card workspace-fixed usage-date p-4">
+      <div class="card workspace-fixed usage-date p-4">
         <div class="filter-bar">
-          <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
-          <div class="filter-field">
-            <DateRangePicker
-              v-model:start-date="startDate"
-              v-model:end-date="endDate"
-              @change="onDateRangeChange"
-            />
+          <!-- A labelled control is one pair, so the label centres on the
+               trigger instead of bottom-aligning with the filter row. -->
+          <div class="filter-pair">
+            <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
+            <div class="filter-field filter-field--date">
+              <DateRangePicker
+                v-model:start-date="startDate"
+                v-model:end-date="endDate"
+                @change="onDateRangeChange"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -17,7 +21,6 @@
       <section class="workspace-body usage-records-workspace" data-testid="usage-records-panel">
       <div class="card workspace-fixed overflow-hidden">
       <div class="usage-detail-tabs card-tabs workspace-fixed" role="tablist" :aria-label="t('usage.tabs.usage')">
-        <button type="button" role="tab" class="card-tab" :aria-selected="activeTab === 'live'" @click="selectRecordTab('live')">{{ t('inspection.live') }}</button>
         <button type="button" role="tab" class="card-tab" :aria-selected="activeTab === 'usage'" @click="selectRecordTab('usage')">
           {{ t('usage.tabs.usage') }}
         </button>
@@ -26,7 +29,7 @@
         </button>
       </div>
 
-      <div v-if="activeTab !== 'live'" class="usage-workspace-filters workspace-fixed border-b border-gray-100 p-4 dark:border-dark-700/50">
+      <div class="usage-workspace-filters workspace-fixed border-b border-gray-100 p-4 dark:border-dark-700/50">
         <div class="usage-filter-layout flex flex-wrap items-end justify-between gap-4">
           <div v-if="activeTab === 'errors'" class="usage-filter-fields filter-bar flex-1">
             <div class="filter-field">
@@ -165,7 +168,6 @@
 
       </div>
 
-      <LiveRequestsPanel workspace v-else-if="activeTab === 'live'" mode="user" />
       <UserErrorRequestsTable
         workspace
         v-else-if="errorViewEnabled"
@@ -217,7 +219,6 @@ import type { Column } from '@/components/common/types'
 import { useColumnPreferenceKey } from '@/composables/useColumnPreferenceKey'
 import { useAnchoredDropdown } from '@/composables/useAnchoredDropdown'
 import { useUsageSnapshot } from '@/composables/useUsageSnapshot'
-import LiveRequestsPanel from '@/components/usage/LiveRequestsPanel.vue'
 import { COMMON_ERROR_STATUS_CODES } from '@/utils/errorBadges'
 
 const { t } = useI18n()
@@ -292,8 +293,8 @@ const getLast24HoursRangeDates = () => {
 const defaultRange = getLast24HoursRangeDates()
 const startDate = ref(defaultRange.start)
 const endDate = ref(defaultRange.end)
-const activeTab = ref<'usage' | 'errors' | 'live'>('usage')
-function selectRecordTab(tab: 'usage' | 'live') {
+const activeTab = ref<'usage' | 'errors'>('usage')
+function selectRecordTab(tab: 'usage') {
   activeTab.value = tab
 }
 const errorViewEnabled = computed(() => appStore.cachedPublicSettings?.allow_user_view_error_requests ?? false)
@@ -836,9 +837,7 @@ useLocaleRefresh(() => Promise.all([loadLogs(), loadFilterOptions()]))
   .usage-date, .usage-workspace-filters { padding: 10px 14px; }
   .usage-filter-layout { flex-direction: column; align-items: stretch; gap: 8px; }
   .usage-filter-fields .input-label { min-height: 16px; margin-bottom: 4px; font-size: 12px; line-height: 16px; }
-  .usage-filter-fields :deep(.select-trigger) { min-height: 34px; padding: 6px 10px; }
   .usage-filter-actions { width: 100%; gap: 8px; }
-  .usage-workspace :deep(.workspace-fixed .btn) { min-height: 34px; padding-top: 6px; padding-bottom: 6px; }
 }
 @media (min-width: 1024px) and (max-height: 799px) {
   .usage-date, .usage-workspace-filters { padding: 8px 12px; }

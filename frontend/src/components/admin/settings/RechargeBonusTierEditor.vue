@@ -57,7 +57,7 @@
       <!-- 档位列表：紧凑表格 -->
       <div
         v-if="tiers.length === 0"
-        class="rounded-xl border border-dashed border-gray-300 px-4 py-3 text-sm dark:border-dark-600 surface-muted"
+        class="rounded-lg border border-dashed border-gray-300 px-4 py-3 text-sm dark:border-dark-600 surface-muted"
       >
         {{ t('admin.settings.payment.rechargeBonus.empty') }}
       </div>

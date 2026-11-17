@@ -140,7 +140,7 @@ onMounted(async () => {
   gap: 8px;
   padding: 6px;
   border: 1px solid var(--surface-edge, rgba(148, 163, 184, 0.25));
-  border-radius: var(--surface-radius-panel, 12px);
+  border-radius: var(--surface-radius-panel);
   background: var(--surface-field, rgba(148, 163, 184, 0.06));
   max-width: 100%;
 }
@@ -152,7 +152,7 @@ onMounted(async () => {
   min-width: 200px;
   padding: 8px 16px;
   border: 1px solid transparent;
-  border-radius: var(--surface-radius-item, 8px);
+  border-radius: var(--surface-radius-item);
   text-align: left;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
@@ -175,7 +175,7 @@ onMounted(async () => {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--surface-radius-control);
   background: rgba(99, 102, 241, 0.12);
   color: rgb(99, 102, 241);
 }

@@ -1,5 +1,4 @@
 import workspace from './workspace'
-import requestList from './requestList'
 import featureExtensions from './featureExtensions'
 import adminAccessKeys from './adminAccessKeys'
 import codexCli from './codexCli'
@@ -22,7 +21,6 @@ import nativeAccess from './nativeAccess'
 
 export default {
   ...workspace,
-  ...requestList,
   ...inspection,
   ...billingRates,
   ...nativeAccess,

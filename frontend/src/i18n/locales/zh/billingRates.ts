@@ -25,6 +25,7 @@ export default {
     units: { all: '全部单位', token: 'Token', image: '张', video: '视频', request: '次请求', second: '秒', minute: '分钟', hour: '小时', million_characters: '百万字符' },
     currentRate: '当前倍率', unknown: '倍率暂不可用', models: '模型与倍率',
     noModels: '尚未配置可售模型。',
+    catalogDialogHint: '这里仅为套餐的模型与倍率摘要，完整列表请前往「可用渠道」查看。', viewAvailableChannels: '查看完整列表（可用渠道）',
     saleNote: '倍率表示当前使用扣费，与订阅购买价格分别计算。后续请求按请求开始时生效的规则计费；模型清单不保证账号实时可用。',
     asOf: '报价时间：{time}', factorBreakdown: '基础 {base} × 平台 {platform} × 模型 {model} × 高峰 {peak}',
     legacyFactorBreakdown: '基础 {base} × 策略 {policy} × 高峰 {peak}（历史规则）',

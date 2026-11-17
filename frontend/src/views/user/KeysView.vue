@@ -25,6 +25,55 @@
                 @update:model-value="onStatusFilterChange"
               />
             </div>
+            <div class="filter-actions">
+              <button
+                @click="loadApiKeys"
+                :disabled="loading"
+                class="btn btn-secondary"
+                :title="t('common.refresh')"
+              >
+                <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
+              </button>
+              <div class="relative" ref="columnDropdownRef">
+                <button
+                  @click="showColumnDropdown = !showColumnDropdown"
+                  class="btn btn-secondary px-2 md:px-3"
+                  :title="t('keys.columnSettings')"
+                >
+                  <svg class="h-4 w-4 md:mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
+                  </svg>
+                  <span class="hidden md:inline">{{ t('keys.columnSettings') }}</span>
+                </button>
+                <div
+                  v-if="showColumnDropdown"
+                  class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
+                >
+                  <button
+                    v-for="col in toggleableColumns"
+                    :key="col.key"
+                    @click="toggleColumn(col.key)"
+                    class="flex w-full items-center justify-between rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
+                  >
+                    <span>{{ col.label }}</span>
+                    <Icon
+                      v-if="isColumnVisible(col.key)"
+                      name="check"
+                      size="sm"
+                      class="text-primary-500"
+                      :stroke-width="2"
+                    />
+                  </button>
+                </div>
+              </div>
+              <button v-support-readonly class="btn btn-primary" data-testid="create-aggregate-key" @click="startAggregateCreate">
+                {{ t('keys.createAggregate') }}
+              </button>
+              <button v-support-readonly @click="showCreateModal = true" class="btn btn-primary" data-tour="keys-create-btn">
+                <Icon name="plus" size="md" class="mr-2" />
+                {{ t('keys.createKey') }}
+              </button>
+            </div>
           </div>
           <EndpointPopover
             v-if="publicSettings?.api_base_url || (publicSettings?.custom_endpoints?.length ?? 0) > 0"
@@ -50,57 +99,6 @@
         </div>
       </template>
 
-      <template #actions>
-        <div class="flex justify-end gap-3">
-          <button
-            @click="loadApiKeys"
-            :disabled="loading"
-            class="btn btn-secondary"
-            :title="t('common.refresh')"
-          >
-            <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
-          </button>
-          <div class="relative" ref="columnDropdownRef">
-            <button
-              @click="showColumnDropdown = !showColumnDropdown"
-              class="btn btn-secondary px-2 md:px-3"
-              :title="t('keys.columnSettings')"
-            >
-              <svg class="h-4 w-4 md:mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
-              </svg>
-              <span class="hidden md:inline">{{ t('keys.columnSettings') }}</span>
-            </button>
-            <div
-              v-if="showColumnDropdown"
-              class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
-            >
-              <button
-                v-for="col in toggleableColumns"
-                :key="col.key"
-                @click="toggleColumn(col.key)"
-                class="flex w-full items-center justify-between rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
-              >
-                <span>{{ col.label }}</span>
-                <Icon
-                  v-if="isColumnVisible(col.key)"
-                  name="check"
-                  size="sm"
-                  class="text-primary-500"
-                  :stroke-width="2"
-                />
-              </button>
-            </div>
-          </div>
-          <button v-support-readonly class="btn btn-primary" data-testid="create-aggregate-key" @click="startAggregateCreate">
-            {{ t('keys.createAggregate') }}
-          </button>
-          <button v-support-readonly @click="showCreateModal = true" class="btn btn-primary" data-tour="keys-create-btn">
-            <Icon name="plus" size="md" class="mr-2" />
-            {{ t('keys.createKey') }}
-          </button>
-        </div>
-      </template>
 
       <template #table>
         <DataTable
@@ -114,8 +112,8 @@
           :selection-label="(key: ApiKey) => t('keys.bulkEdit.selectKey', { name: key.name })"
           @update:selected-keys="handleSelectionChange"
           :server-side-sort="true"
-          default-sort-key="created_at"
-          default-sort-order="desc"
+          default-sort-key="name"
+          default-sort-order="asc"
           @sort="handleSort"
         >
           <template #cell-id="{ value }">
@@ -418,30 +416,6 @@
                 <Icon name="terminal" size="sm" />
                 <span class="text-xs">{{ t('keys.useKey') }}</span>
               </button>
-              <!-- Import to CC Switch Button -->
-              <button
-                v-if="!publicSettings?.hide_ccs_import_button"
-                @click="importToCcswitch(row)"
-                class="table-action"
-              >
-                <Icon name="upload" size="sm" />
-                <span class="text-xs">{{ t('keys.importToCcSwitch') }}</span>
-              </button>
-              <!-- Toggle Status Button -->
-              <button v-support-readonly
-                @click="toggleKeyStatus(row)"
-                :class="[
-                  'table-action',
-                  row.status === 'active'
-                    ? 'table-action-warning'
-                    : ''
-                ]"
-              >
-                <Icon v-if="row.status === 'active'" name="ban" size="sm" />
-                <Icon v-else name="checkCircle" size="sm" />
-                <span class="text-xs">{{ row.status === 'active' ? t('keys.disable') : t('keys.enable') }}</span>
-              </button>
-              <!-- Edit Button -->
               <button
                 @click="editKey(row)"
                 class="table-action"
@@ -449,14 +423,7 @@
                 <Icon name="edit" size="sm" />
                 <span class="text-xs">{{ t('common.edit') }}</span>
               </button>
-              <!-- Delete Button -->
-              <button v-support-readonly
-                @click="confirmDelete(row)"
-                class="table-action table-action-danger"
-              >
-                <Icon name="trash" size="sm" />
-                <span class="text-xs">{{ t('common.delete') }}</span>
-              </button>
+              <ActionMenu :items="keyRowActions(row)" @select="handleKeyRowAction(row, $event)" />
             </div>
           </template>
 
@@ -521,7 +488,7 @@
                 @change="selectCreateProvider(provider.value)"
               />
               <span
-                class="flex h-full flex-col items-center gap-2 rounded-xl border border-gray-200 surface-inset px-2 py-3 text-center transition-colors peer-checked:border-primary-500 peer-checked:bg-primary-50/60 peer-checked:ring-1 peer-checked:ring-primary-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary-500 peer-disabled:opacity-40 dark:border-dark-600 dark:peer-checked:bg-primary-500/10"
+                class="flex h-full flex-col items-center gap-2 rounded-lg border border-gray-200 surface-inset px-2 py-3 text-center transition-colors peer-checked:border-primary-500 peer-checked:bg-primary-50/60 peer-checked:ring-1 peer-checked:ring-primary-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary-500 peer-disabled:opacity-40 dark:border-dark-600 dark:peer-checked:bg-primary-500/10"
                 :class="provider.count > 0 && 'hover:border-primary-300 dark:hover:border-primary-700'"
               >
                 <span class="flex h-8 items-center justify-center gap-1.5" aria-hidden="true">
@@ -1239,6 +1206,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import ActionMenu, { type ActionMenuItem } from '@/components/common/ActionMenu.vue'
 import Select from '@/components/common/Select.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -1420,8 +1388,8 @@ const pagination = ref({
   pages: 0
 })
 const sortState = ref({
-  sort_by: 'created_at',
-  sort_order: 'desc' as 'asc' | 'desc'
+  sort_by: 'name',
+  sort_order: 'asc' as 'asc' | 'desc'
 })
 
 // Filter state
@@ -1891,6 +1859,21 @@ const closeGroupSelector = (event: MouseEvent) => {
   if (columnDropdownRef.value && !columnDropdownRef.value.contains(target)) {
     showColumnDropdown.value = false
   }
+}
+
+// Each row shows its two everyday actions; the rest live in one "more" menu.
+const keyRowActions = (key: ApiKey): ActionMenuItem[] => [
+  { key: 'ccswitch', label: t('keys.importToCcSwitch'), icon: 'upload', hidden: !!publicSettings.value?.hide_ccs_import_button },
+  key.status === 'active'
+    ? { key: 'toggle', label: t('keys.disable'), icon: 'ban', tone: 'warning', mutates: true }
+    : { key: 'toggle', label: t('keys.enable'), icon: 'checkCircle', mutates: true },
+  { key: 'delete', label: t('common.delete'), icon: 'trash', tone: 'danger', mutates: true },
+]
+
+const handleKeyRowAction = (key: ApiKey, action: string) => {
+  if (action === 'ccswitch') importToCcswitch(key)
+  else if (action === 'toggle') void toggleKeyStatus(key)
+  else if (action === 'delete') confirmDelete(key)
 }
 
 const confirmDelete = (key: ApiKey) => {

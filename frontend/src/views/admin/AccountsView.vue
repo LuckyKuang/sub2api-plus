@@ -43,7 +43,7 @@
                   <div class="p-2">
                     <button
                       @click="setAutoRefreshEnabled(!autoRefreshEnabled)"
-                      class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:surface-hover surface-control surface-muted"
+                      class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:surface-hover surface-control surface-muted"
                     >
                       <span>{{ t('admin.accounts.enableAutoRefresh') }}</span>
                       <Icon v-if="autoRefreshEnabled" name="check" size="sm" class="text-primary-500" />
@@ -53,7 +53,7 @@
                       v-for="sec in autoRefreshIntervals"
                       :key="sec"
                       @click="setAutoRefreshInterval(sec)"
-                      class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:surface-hover surface-control surface-muted"
+                      class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:surface-hover surface-control surface-muted"
                     >
                       <span>{{ autoRefreshIntervalLabel(sec) }}</span>
                       <Icon v-if="autoRefreshIntervalSeconds === sec" name="check" size="sm" class="text-primary-500" />
@@ -109,7 +109,7 @@
                         </span>
                         <span
                           v-if="selIds.length"
-                          class="rounded-full bg-primary-100/[0.15] px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/40 dark:text-primary-300"
+                          class="rounded-md bg-primary-100/[0.15] px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/40 dark:text-primary-300"
                         >
                           {{ t('admin.accounts.selectedCount', { count: selIds.length }) }}
                         </span>
@@ -148,7 +148,7 @@
                           v-for="col in toggleableColumns"
                           :key="col.key"
                           @click="toggleColumn(col.key)"
-                          class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:surface-hover surface-control surface-muted"
+                          class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:surface-hover surface-control surface-muted"
                         >
                           <span class="truncate">{{ col.label }}</span>
                           <Icon v-if="isColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />

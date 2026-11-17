@@ -2,6 +2,7 @@
    Root tokens also reach menus and dialogs portalled directly to body. */
 :root[data-product-ui] {
   --surface-solid: rgb(255 255 255 / var(--console-card-alpha, 1));
+  --surface-panel: rgb(255 255 255 / 97%);
   --surface-soft: rgb(245 243 240 / var(--console-card-alpha, 1));
   --surface-text: #221f1c;
   --surface-muted: #635e57;
@@ -16,6 +17,7 @@
 }
 :root.dark[data-product-ui] {
   --surface-solid: rgb(41 38 36 / var(--console-card-alpha, 1));
+  --surface-panel: rgb(41 38 36 / 97%);
   --surface-soft: rgb(34 31 29 / var(--console-card-alpha, 1));
   --surface-text: #f2f0ed;
   --surface-muted: #b8b3ac;
@@ -31,7 +33,7 @@
 }
 :root[data-product-ui] :is(.surface-control, .input, .select-trigger, .btn-secondary) { box-shadow: none; }
 :root[data-product-ui] :is(.app-header, .sidebar-header, .sidebar-panel, .sidebar-footer) { box-shadow: none; }
-:root[data-product-ui] .surface-panel { box-shadow: 0 6px 20px -10px rgb(0 0 0 / calc(.22 * var(--console-card-alpha, 1))); }
+:root[data-product-ui] .surface-panel { box-shadow: 0 12px 32px -12px rgb(0 0 0 / .28), 0 2px 6px -2px rgb(0 0 0 / .08); }
 
 /* Narrow screens count the floating shell once. Desktop content is centered
    with proportional whitespace and the Café Shop content-width limit; the
@@ -42,13 +44,11 @@
 .app-layout-user .card-body { padding: 1.25rem; }
 .app-layout-user .stat-value { font-variant-numeric: tabular-nums; letter-spacing: -.025em; }
 .app-layout-user .sidebar-link { font-size: .875rem; }
-.app-layout-user .sidebar-link-active { box-shadow: inset 3px 0 0 rgb(var(--console-accent-500, 20 184 166)); }
 .app-layout-admin .app-page { color: var(--surface-text); }
 .app-layout-admin .card-header { padding-block: 1rem; }
 .app-layout-admin .card-body { padding-block: 1.25rem; }
 .app-layout-admin .stat-value { font-variant-numeric: tabular-nums; letter-spacing: -.025em; }
 .app-layout-admin .sidebar-link { font-size: .875rem; }
-.app-layout-admin .sidebar-link-active { box-shadow: inset 3px 0 0 rgb(var(--console-accent-500, 20 184 166)); }
 .auth-layout, .home-page { background-color: var(--console-canvas); color: var(--surface-text); }
 :root[data-console-background] :is(.auth-layout, .home-page) {
   background-image: linear-gradient(var(--console-background-mask), var(--console-background-mask)), var(--console-custom-background-image);

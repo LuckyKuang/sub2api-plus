@@ -22,7 +22,7 @@
       </div>
 
       <span
-        class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tracking-wider uppercase"
+        class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold tracking-wider uppercase"
         :class="overallChipClass"
       >
         <span

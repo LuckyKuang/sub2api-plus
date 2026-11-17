@@ -7,7 +7,7 @@
       <div class="px-6 py-6 md:px-8">
         <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
           <div
-            class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-primary-500 to-primary-600 text-2xl font-bold text-white shadow-lg shadow-primary-500/20"
+            class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-2xl font-bold text-white shadow-lg shadow-primary-500/20"
           >
             <img
               v-if="avatarUrl"
@@ -49,7 +49,7 @@
                   <span
                     v-for="hint in sourceHints"
                     :key="hint.key"
-                    class="inline-flex items-center gap-1 rounded-full surface-inset px-3 py-1 ring-1 ring-primary-100 dark:ring-primary-900/40"
+                    class="inline-flex items-center gap-1 rounded-md surface-inset px-3 py-1 ring-1 ring-primary-100 dark:ring-primary-900/40"
                   >
                     <Icon name="link" size="sm" />
                     {{ hint.text }}

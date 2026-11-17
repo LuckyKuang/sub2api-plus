@@ -18,7 +18,7 @@
         </div>
         <div class="flex items-center gap-2">
           <span
-            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px]"
+            class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px]"
             :class="statusBadgeClass(r.status)"
           >
             {{ statusLabel(r.status) }}

@@ -261,7 +261,7 @@ onMounted(() => {
     </div>
 
     <div v-else class="space-y-6">
-      <div class="rounded-2xl surface-inset p-4">
+      <div class="rounded-xl surface-inset p-4">
         <div class="mb-3 flex items-center justify-between">
           <h4 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.runtime.alertTitle') }}</h4>
           <button class="btn btn-sm btn-secondary" @click="openAlertEditor">{{ t('common.edit') }}</button>
@@ -328,7 +328,7 @@ onMounted(() => {
         <p class="mt-1 text-xs surface-muted">{{ t('admin.ops.runtime.evalIntervalHint') }}</p>
       </div>
 
-      <div class="rounded-2xl surface-inset p-4">
+      <div class="rounded-xl surface-inset p-4">
         <div class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.runtime.metricThresholds') }}</div>
         <p class="mb-4 text-xs surface-muted">{{ t('admin.ops.runtime.metricThresholdsHint') }}</p>
 
@@ -392,7 +392,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="rounded-2xl surface-inset p-4">
+      <div class="rounded-xl surface-inset p-4">
         <div class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.runtime.silencing.title') }}</div>
 
         <label class="inline-flex items-center gap-2 text-sm surface-muted">

@@ -1,11 +1,15 @@
 <template>
-  <div>
-    <!-- 铃铛按钮 -->
+  <div class="relative">
+    <!-- 铃铛按钮：面板像用户菜单一样贴着按钮展开 -->
     <button
-      @click="openModal"
+      ref="buttonRef"
+      type="button"
+      @click="togglePanel"
       class="relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:surface-hover surface-control surface-muted"
       :class="{ 'text-primary-600 dark:text-primary-400': unreadCount > 0 }"
       :aria-label="t('announcements.title')"
+      :aria-expanded="isOpen"
+      aria-controls="announcement-panel"
     >
       <Icon name="bell" size="md" />
       <!-- 未读标记 -->
@@ -17,88 +21,84 @@
 
     <!-- 公告列表 -->
     <Teleport to="body">
-      <BaseDialog
-        :show="isModalOpen"
-        :title="t('announcements.title')"
-        width="normal"
-        :z-index="100"
-        @close="closeModal"
-      >
-        <template #header-actions>
-          <button
-            v-if="unreadCount > 0"
-            v-support-readonly
-            @click="markAllAsRead"
-            :disabled="loading"
-            class="btn btn-secondary text-xs"
-          >
-            {{ t('announcements.markAllRead') }}
-          </button>
-        </template>
-
-        <p v-if="unreadCount > 0" class="mb-4 text-sm surface-muted">
-          <span class="font-medium">{{ unreadCount }}</span>
-          {{ t('announcements.unread') }}
-        </p>
-
-        <!-- Loading -->
-        <div v-if="loading" class="flex items-center justify-center py-16">
-          <LoadingSpinner />
-        </div>
-
-        <!-- Announcements List -->
-        <div v-else-if="announcements.length > 0" class="-mx-6 -my-4">
-          <button
-            v-for="item in announcements"
-            :key="item.id"
-            type="button"
-            class="group relative flex w-full items-center gap-4 border-b border-gray-100 px-6 py-4 text-left transition-colors last:border-b-0 hover:surface-hover dark:border-dark-700"
-            :class="{ 'surface-soft': !item.read_at }"
-            style="min-height: 72px"
-            data-testid="announcement-row"
-            @click="openDetail(item)"
-          >
-            <!-- Status Indicator -->
-            <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[var(--surface-radius-item)] surface-inset surface-muted">
-              <Icon v-if="!item.read_at" name="infoCircle" size="sm" />
-              <Icon v-else name="check" size="sm" />
+      <transition name="dropdown">
+        <div
+          v-if="isOpen"
+          id="announcement-panel"
+          ref="panelRef"
+          class="dropdown announcement-dropdown"
+          :style="panelStyle"
+          role="dialog"
+          tabindex="-1"
+          :aria-label="t('announcements.title')"
+          @keydown.esc.stop="closePanelAndFocus"
+        >
+          <div class="announcement-dropdown-header">
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('announcements.title') }}</p>
+              <p v-if="unreadCount > 0" class="mt-0.5 text-xs surface-muted">
+                <span class="font-medium">{{ unreadCount }}</span>
+                {{ t('announcements.unread') }}
+              </p>
             </div>
+            <button
+              v-if="unreadCount > 0"
+              v-support-readonly
+              type="button"
+              @click="markAllAsRead"
+              :disabled="loading"
+              class="btn btn-ghost btn-sm shrink-0"
+            >
+              {{ t('announcements.markAllRead') }}
+            </button>
+          </div>
 
-            <!-- Content -->
-            <div class="flex min-w-0 flex-1 items-center justify-between gap-4">
-              <div class="min-w-0 flex-1">
-                <h3 class="truncate text-sm font-medium text-gray-900 dark:text-white">
+          <!-- Loading -->
+          <div v-if="loading" class="flex items-center justify-center py-12">
+            <LoadingSpinner />
+          </div>
+
+          <!-- Announcements List -->
+          <div v-else-if="announcements.length > 0" class="announcement-dropdown-list">
+            <button
+              v-for="item in announcements"
+              :key="item.id"
+              type="button"
+              class="announcement-dropdown-item"
+              :class="{ 'is-unread': !item.read_at }"
+              data-testid="announcement-row"
+              @click="openDetail(item)"
+            >
+              <span class="announcement-dropdown-icon surface-inset surface-muted">
+                <Icon v-if="!item.read_at" name="infoCircle" size="sm" />
+                <Icon v-else name="check" size="sm" />
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm text-gray-900 dark:text-white" :class="item.read_at ? 'font-normal' : 'font-semibold'">
                   {{ item.title }}
-                </h3>
-                <div class="mt-1 flex items-center gap-2">
-                  <time class="text-xs surface-muted">
-                    {{ formatRelativeTime(item.created_at) }}
-                  </time>
-                  <span
-                    v-if="!item.read_at"
-                    class="inline-flex items-center gap-1 rounded-md surface-inset px-1.5 py-0.5 text-xs font-medium surface-muted"
-                  >
+                </span>
+                <span class="mt-0.5 flex items-center gap-2 text-xs surface-muted">
+                  <time>{{ formatRelativeTime(item.created_at) }}</time>
+                  <span v-if="!item.read_at" class="inline-flex items-center gap-1">
                     <span class="console-data-mark h-1.5 w-1.5 rounded-full bg-rose-500"></span>
                     {{ t('announcements.unread') }}
                   </span>
-                </div>
-              </div>
-
-              <!-- Arrow -->
+                </span>
+              </span>
               <Icon name="chevronRight" size="sm" class="flex-shrink-0 surface-muted" />
-            </div>
-          </button>
-        </div>
-
-        <!-- Empty State -->
-        <div v-else class="flex flex-col items-center justify-center py-16">
-          <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-[var(--surface-radius-panel)] surface-inset surface-muted">
-            <Icon name="inbox" size="lg" />
+            </button>
           </div>
-          <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('announcements.empty') }}</p>
-          <p class="mt-1 text-xs surface-muted">{{ t('announcements.emptyDescription') }}</p>
+
+          <!-- Empty State -->
+          <div v-else class="flex flex-col items-center justify-center px-4 py-10 text-center">
+            <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-[var(--surface-radius-panel)] surface-inset surface-muted">
+              <Icon name="inbox" size="lg" />
+            </div>
+            <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('announcements.empty') }}</p>
+            <p class="mt-1 text-xs surface-muted">{{ t('announcements.emptyDescription') }}</p>
+          </div>
         </div>
-      </BaseDialog>
+      </transition>
     </Teleport>
 
     <!-- 公告详情 -->
@@ -150,7 +150,7 @@
 
 <script setup lang="ts">
 import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { marked } from 'marked'
@@ -178,8 +178,11 @@ marked.setOptions({
 const { announcements, loading } = storeToRefs(announcementStore)
 const unreadCount = computed(() => announcementStore.unreadCount)
 
-// Local modal state
-const isModalOpen = ref(false)
+// Local panel state
+const isOpen = ref(false)
+const buttonRef = ref<HTMLButtonElement | null>(null)
+const panelRef = ref<HTMLElement | null>(null)
+const panelStyle = ref<Record<string, string>>({})
 const detailModalOpen = ref(false)
 const selectedAnnouncement = ref<UserAnnouncement | null>(null)
 
@@ -190,15 +193,66 @@ function renderMarkdown(content: string): string {
   return DOMPurify.sanitize(html)
 }
 
-function openModal() {
-  isModalOpen.value = true
+const PANEL_GAP = 8
+const PANEL_EDGE = 12
+const PANEL_MAX_WIDTH = 380
+
+// The list panel is teleported (the header's backdrop filter would otherwise
+// become the containing block), so anchor it to the bell by hand: right edges
+// aligned like the user menu, clamped inside the viewport on narrow screens.
+function positionPanel() {
+  const rect = buttonRef.value?.getBoundingClientRect()
+  if (!rect) return
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth
+  const width = Math.min(PANEL_MAX_WIDTH, viewportWidth - PANEL_EDGE * 2)
+  const left = Math.min(Math.max(rect.right - width, PANEL_EDGE), viewportWidth - width - PANEL_EDGE)
+  panelStyle.value = {
+    position: 'fixed',
+    top: `${Math.round(rect.bottom + PANEL_GAP)}px`,
+    left: `${Math.round(left)}px`,
+    width: `${Math.round(width)}px`,
+    maxHeight: `calc(100dvh - ${Math.round(rect.bottom + PANEL_GAP + PANEL_EDGE)}px)`
+  }
 }
 
-function closeModal() {
-  isModalOpen.value = false
+function handleOutsideClick(event: MouseEvent) {
+  const target = event.target as Node | null
+  if (!target) return
+  if (buttonRef.value?.contains(target) || panelRef.value?.contains(target)) return
+  closePanel()
 }
+
+function openPanel() {
+  positionPanel()
+  isOpen.value = true
+  window.addEventListener('resize', positionPanel)
+  // Capture phase: registered while the opening click is still bubbling, so
+  // that click cannot close the panel it just opened.
+  document.addEventListener('click', handleOutsideClick, true)
+  void nextTick(() => panelRef.value?.focus({ preventScroll: true }))
+}
+
+function closePanel() {
+  if (!isOpen.value) return
+  isOpen.value = false
+  window.removeEventListener('resize', positionPanel)
+  document.removeEventListener('click', handleOutsideClick, true)
+}
+
+function closePanelAndFocus() {
+  closePanel()
+  buttonRef.value?.focus()
+}
+
+function togglePanel() {
+  if (isOpen.value) closePanel()
+  else openPanel()
+}
+
+onBeforeUnmount(closePanel)
 
 function openDetail(announcement: UserAnnouncement) {
+  closePanel()
   selectedAnnouncement.value = announcement
   detailModalOpen.value = true
   if (!announcement.read_at) {

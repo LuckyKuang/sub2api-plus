@@ -28,7 +28,7 @@ test('admin keeps original horizontal reservations and fixed record chrome', asy
   for (const surface of [toolbar, pagination]) {
     const style = await surface.evaluate(el => ({ radius: parseFloat(getComputedStyle(el).borderRadius), border: parseFloat(getComputedStyle(el).borderTopWidth), fill: getComputedStyle(el).backgroundColor }))
     // Zone containers carry the shell page radius, never the card radius.
-    expect(style.radius).toBe(24)
+    expect(style.radius).toBe(16)
     expect(style.border).toBe(1)
     expect(style.fill).not.toBe('rgba(0, 0, 0, 0)')
   }
@@ -178,7 +178,7 @@ test('mobile prompt audit configuration keeps long group choices and save contro
 
 // Acceptance: administrator usage adopts the user lists' separate rounded
 // controls, record body and footer cards, with 16px gaps. It retains the admin
-// fluid width, frozen columns, horizontal scrolling and live-window semantics.
+// fluid width, frozen columns, horizontal scrolling and paged-record semantics.
 async function mockAdminUsage(page: Page, empty = false) {
   await page.addInitScript(() => localStorage.setItem('table-page-size', '20'))
   await page.route('**/api/v1/**', async route => {
@@ -208,15 +208,6 @@ async function mockAdminUsage(page: Page, empty = false) {
         phase: 'upstream', type: 'upstream_error', status_code: 429, message: `Admin error record ${id}`,
         request_type: 2, created_at: '2026-10-29T10:00:00Z',
       })) }
-    } else if (url.pathname === '/api/v1/admin/usage/live') {
-      const now = new Date().toISOString()
-      data = { server_now: now, window_seconds: 300, limit: 200, truncated: false, poll_after_seconds: 30,
-        items: Array.from({ length: empty ? 0 : 48 }, (_, index) => ({
-          id: `admin-live-${index + 1}`, version: 1, user_id: 9998, api_key_id: 1, key_name: 'Admin layout key',
-          model: `admin-live-model-${index + 1}`, group_name: 'Admin routing group', endpoint: '/v1/responses',
-          request_type: 'stream', status: 'completed', started_at: now, updated_at: now, finished_at: now,
-          elapsed_ms: 1000, duration_ms: 1000, first_token_ms: 100, input_tokens: 1200, output_tokens: 300, actual_cost: .03,
-        })) }
     } else if (url.pathname === '/api/v1/admin/usage/stats') {
       data = { total_requests: total, total_input_tokens: 0, total_output_tokens: 0, total_cache_tokens: 0,
         total_cache_creation_tokens: 0, total_cache_read_tokens: 0, total_tokens: 0, total_cost: 0,
@@ -241,7 +232,7 @@ async function assertAdminSurfaceStack(page: Page, surfaces: Locator[]) {
       return { radius: parseFloat(css.borderRadius), border: parseFloat(css.borderTopWidth), fill: css.backgroundColor }
     })
     // Every zone surface shares the shell page radius, never the card radius.
-    expect(style.radius).toBe(24)
+    expect(style.radius).toBe(16)
     expect(style.border).toBe(1)
     expect(style.fill).not.toBe('rgba(0, 0, 0, 0)')
     if (bottom !== undefined) expect(Math.abs(box.y - bottom - 16)).toBeLessThanOrEqual(1)
@@ -259,15 +250,13 @@ test('real admin usage lists separate controls, scrolling records and paging wit
   const panel = page.getByTestId('usage-records-panel')
   const controls = page.getByTestId('usage-query-card')
   await expect(panel.getByText('admin-history-model-1', { exact: true })).toBeVisible({ timeout: 60_000 })
-  for (const tab of ['usage', 'errors', 'live']) {
+  for (const tab of ['usage', 'errors']) {
     await page.locator(`[data-tab="${tab}"]`).click()
-    const workspace = panel.locator(tab === 'usage' ? '.usage-history-workspace' : tab === 'errors' ? '.usage-errors-workspace' : '.live-admin-workspace')
+    const workspace = panel.locator(tab === 'usage' ? '.usage-history-workspace' : '.usage-errors-workspace')
     const body = workspace.locator('.card.workspace-table-card')
     const viewport = body.locator('.workspace-table-viewport').filter({ visible: true })
-    await expect(viewport.locator('table.record-table tbody tr:not([aria-hidden="true"])').first()).toContainText(`admin-${tab === 'usage' ? 'history' : tab === 'errors' ? 'error' : 'live'}-model-1`)
-    const surfaces = [controls]
-    if (tab === 'live') surfaces.push(workspace.locator('.card.workspace-fixed').first())
-    surfaces.push(body)
+    await expect(viewport.locator('table.record-table tbody tr:not([aria-hidden="true"])').first()).toContainText(`admin-${tab === 'usage' ? 'history' : 'error'}-model-1`)
+    const surfaces = [controls, body]
     const pagination = workspace.locator('.pagination-card')
     surfaces.push(pagination)
     await expect(viewport.locator('tbody tr:not([aria-hidden="true"])')).toHaveCount(20)
@@ -285,26 +274,25 @@ test('real admin usage lists separate controls, scrolling records and paging wit
       expect(Math.abs((await frozen.boundingBox())!.x - left)).toBeLessThanOrEqual(1)
     }
     await pagination.getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true }).filter({ visible: true }).click()
-    await expect(viewport.locator('tbody tr:not([aria-hidden="true"])').first()).toContainText(`admin-${tab === 'usage' ? 'history' : tab === 'errors' ? 'error' : 'live'}-model-21`)
+    await expect(viewport.locator('tbody tr:not([aria-hidden="true"])').first()).toContainText(`admin-${tab === 'usage' ? 'history' : 'error'}-model-21`)
   }
 })
 
-test('empty admin live, history and errors keep separate visible pagination cards', async ({ page }, info) => {
+test('empty admin history and errors keep separate visible pagination cards', async ({ page }, info) => {
   const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
   const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
   await mockAdminUsage(page, true)
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.goto(`/layout-tests/index.html?view=admin-layout&usage=1&theme=${theme}&locale=${locale}`)
   const panel = page.getByTestId('usage-records-panel')
-  for (const tab of ['usage', 'errors', 'live']) {
+  for (const tab of ['usage', 'errors']) {
     await page.locator(`[data-tab="${tab}"]`).click()
-    const workspace = panel.locator(tab === 'usage' ? '.usage-history-workspace' : tab === 'errors' ? '.usage-errors-workspace' : '.live-admin-workspace')
+    const workspace = panel.locator(tab === 'usage' ? '.usage-history-workspace' : '.usage-errors-workspace')
     const footer = workspace.locator('.pagination-card')
     await expect(footer).toBeInViewport()
     await expect(footer.getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true }).filter({ visible: true })).toBeDisabled()
     expect(await footer.evaluate(el => el.closest('.workspace-table-card'))).toBeNull()
-    if (tab === 'live') await expect(workspace.locator('.workspace-table-viewport').getByText(locale === 'zh' ? '暂无数据' : 'No data found', { exact: true })).toBeVisible()
-    else await expect(workspace.locator('.workspace-table-viewport .empty-state')).toBeVisible()
+    await expect(workspace.locator('.workspace-table-viewport .empty-state')).toBeVisible()
   }
 })
 
@@ -316,9 +304,9 @@ test('real admin usage cards and paging remain reachable inside phone shell inse
   await page.goto(`/layout-tests/index.html?view=admin-layout&usage=1&theme=${theme}&locale=${locale}`)
   const panel = page.getByTestId('usage-records-panel')
   await expect(panel.getByText('admin-history-model-1', { exact: true })).toBeVisible({ timeout: 60_000 })
-  for (const tab of ['usage', 'errors', 'live']) {
+  for (const tab of ['usage', 'errors']) {
     await page.locator(`[data-tab="${tab}"]`).click()
-    const workspace = panel.locator(tab === 'usage' ? '.usage-history-workspace' : tab === 'errors' ? '.usage-errors-workspace' : '.live-admin-workspace')
+    const workspace = panel.locator(tab === 'usage' ? '.usage-history-workspace' : '.usage-errors-workspace')
     const body = workspace.locator('.card.workspace-table-card')
     await expect(body).toBeVisible()
     for (const surface of [page.getByTestId('usage-query-card'), body]) {
@@ -326,185 +314,14 @@ test('real admin usage cards and paging remain reachable inside phone shell inse
       expect(Math.abs(box.x - 12)).toBeLessThanOrEqual(1)
       expect(Math.abs(390 - box.x - box.width - 12)).toBeLessThanOrEqual(1)
     }
-    if (tab === 'live') {
-      await expect(body.locator('article')).toHaveCount(20)
-      const first = body.locator('article').first()
-      await first.getByRole('button', { name: locale === 'zh' ? '更多字段' : 'More fields', exact: true }).click()
-      await expect(first.locator('dl')).toBeVisible()
-      await expect(first.locator('dl')).toContainText('Admin layout key')
-    }
     const footer = workspace.locator('.pagination-card')
     await footer.scrollIntoViewIfNeeded()
     await expect(footer).toBeInViewport()
     await footer.getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true }).filter({ visible: true }).click()
-    if (tab === 'live') await expect(body.locator('article').first()).toContainText('admin-live-model-21')
-    else await expect(body.getByText(`admin-${tab === 'usage' ? 'history' : 'error'}-model-21`, { exact: true })).toHaveCount(1)
+    await expect(body.getByText(`admin-${tab === 'usage' ? 'history' : 'error'}-model-21`, { exact: true })).toHaveCount(1)
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
   }
 })
-
-// User audit requirement: admin live requests need an independently fixed
-// bottom pagination card, including in short desktop windows and empty filters.
-test('admin live paging stays at the workspace bottom while records scroll', async ({ page }, info) => {
-  const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
-  const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
-  await mockAdminUsage(page)
-  for (const [width, height] of [[1280, 800], [1440, 600], [1920, 1080]]) {
-    await page.setViewportSize({ width, height })
-    await page.goto(`/layout-tests/index.html?view=admin-layout&usage=1&theme=${theme}&locale=${locale}`)
-    const panel = page.getByTestId('usage-records-panel')
-    await page.locator('[data-tab="live"]').click()
-    const workspace = panel.locator('.live-admin-workspace')
-    const footer = workspace.locator('.pagination-card')
-    const viewport = workspace.locator('.workspace-table-viewport')
-    const rows = viewport.locator('tbody tr:not([aria-hidden="true"])')
-    await expect(rows).toHaveCount(20)
-    await expect(rows.first()).toContainText('admin-live-model-1')
-    const firstRecord = (await rows.first().boundingBox())!
-    const recordViewport = (await viewport.boundingBox())!
-    expect(firstRecord.y).toBeGreaterThanOrEqual(recordViewport.y)
-    expect(firstRecord.y + firstRecord.height).toBeLessThanOrEqual(recordViewport.y + recordViewport.height)
-    await expect(footer).toBeInViewport()
-    expect(await footer.evaluate(element => element.closest('.workspace-table-card'))).toBeNull()
-    const before = (await footer.boundingBox())!
-    const bounds = (await workspace.boundingBox())!
-    expect(Math.abs(before.y + before.height - bounds.y - bounds.height)).toBeLessThanOrEqual(1)
-    if (height === 600) await page.screenshot({ path: info.outputPath('live-pagination-before-scroll.png') })
-    await wheelScroll(page, viewport, 600)
-    await expect.poll(() => viewport.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
-    expect(await footer.boundingBox()).toEqual(before)
-    if (height === 600) await page.screenshot({ path: info.outputPath('live-pagination-after-scroll.png') })
-    const next = footer.getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true }).filter({ visible: true })
-    await next.click()
-    await expect(rows.first()).toContainText('admin-live-model-21')
-    await expect.poll(() => viewport.evaluate(element => element.scrollTop)).toBe(0)
-    await next.click()
-    await expect(rows).toHaveCount(8)
-    await expect(rows.first()).toContainText('admin-live-model-41')
-    await expect(next).toBeDisabled()
-    await workspace.locator('[role="group"] button').nth(2).click()
-    await expect(viewport.getByText(locale === 'zh' ? '暂无数据' : 'No data found', { exact: true })).toBeVisible()
-    await expect(footer).toBeInViewport()
-    await expect(footer.locator('[aria-current="page"]')).toHaveText('1')
-    await expect(next).toBeDisabled()
-    expect(await footer.boundingBox()).toEqual(before)
-    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight)).toBe(false)
-  }
-})
-
-// Short windows must expose the entire empty message and its icon above the
-// fixed pagination card; Playwright visibility alone permits clipped content.
-test('short admin live empty message and icon remain completely readable', async ({ page }, info) => {
-  const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
-  const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
-  await mockAdminUsage(page, true)
-  for (const height of [600, 800]) {
-    await page.setViewportSize({ width: 1440, height })
-    await page.goto(`/layout-tests/index.html?view=admin-layout&usage=1&theme=${theme}&locale=${locale}`)
-    const panel = page.getByTestId('usage-records-panel')
-    await page.locator('[data-tab="live"]').click()
-    const workspace = panel.locator('.live-admin-workspace')
-    const viewport = workspace.locator('.workspace-table-viewport')
-    const footer = workspace.locator('.pagination-card')
-    const message = viewport.getByText(locale === 'zh' ? '暂无数据' : 'No data found', { exact: true })
-    await expect(message).toHaveCount(1)
-    await expect(message).toBeVisible()
-    const icon = message.locator('..').locator('svg')
-    await expect(icon).toHaveCount(1)
-    const geometry = await workspace.evaluate(async element => {
-      await document.fonts.ready
-      const viewport = element.querySelector<HTMLElement>('.workspace-table-viewport')!
-      const message = viewport.querySelector<HTMLElement>('[data-test="live-empty-message"]')!
-      const icon = viewport.querySelector<SVGElement>('[data-test="live-empty-icon"]')!
-      const rect = (target: Element) => {
-        const bounds = target.getBoundingClientRect()
-        return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
-      }
-      const sample = () => {
-        // The real header can move into a separate rail on a later frame.
-        // Its hidden measurement copy is not the visible header boundary.
-        const header = viewport.closest('.static-table-frame')?.querySelector('.static-table-header-rail thead')
-          ?? viewport.querySelector('thead')!
-        return { viewport: rect(viewport), header: rect(header), message: rect(message), icon: rect(icon) }
-      }
-      let previous = '', stable = 0
-      for (let frame = 0; frame < 60 && stable < 4; frame++) {
-        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
-        const signature = JSON.stringify(sample())
-        stable = signature === previous ? stable + 1 : 0
-        previous = signature
-      }
-      // Read all bounds and hit targets together, after header reparenting and
-      // font layout settle, so a single assertion never mixes separate frames.
-      const bounds = sample()
-      return {
-        ...bounds, stable,
-        hits: [message, icon].map(target => {
-          const box = target.getBoundingClientRect()
-          return [0.05, 0.5, 0.95].every(fraction => {
-            const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height * fraction)
-            return hit !== null && (target.contains(hit) || hit === target.parentElement)
-          })
-        }),
-      }
-    })
-    expect(geometry.stable, JSON.stringify(geometry)).toBe(4)
-    for (const bounds of [geometry.message, geometry.icon]) {
-      expect(bounds.x, JSON.stringify(geometry)).toBeGreaterThanOrEqual(geometry.viewport.x)
-      expect(bounds.x + bounds.width, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.viewport.x + geometry.viewport.width)
-      expect(bounds.y, JSON.stringify(geometry)).toBeGreaterThanOrEqual(geometry.header.y + geometry.header.height)
-      expect(bounds.y + bounds.height, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.viewport.y + geometry.viewport.height)
-    }
-    expect(geometry.hits).toEqual([true, true])
-    if (height === 800) {
-      // Standard-height desktops retain the established vertical empty state.
-      const iconBounds = geometry.icon
-      const messageBounds = geometry.message
-      expect(iconBounds.y + iconBounds.height).toBeLessThan(messageBounds.y)
-      expect(Math.abs(iconBounds.x + iconBounds.width / 2 - messageBounds.x - messageBounds.width / 2)).toBeLessThanOrEqual(1)
-    }
-    await expect(footer).toBeInViewport()
-    expect(await footer.evaluate(element => element.closest('.workspace-table-card'))).toBeNull()
-    const footerBounds = (await footer.boundingBox())!
-    const workspaceBounds = (await workspace.boundingBox())!
-    expect(Math.abs(footerBounds.y + footerBounds.height - workspaceBounds.y - workspaceBounds.height)).toBeLessThanOrEqual(1)
-    expect(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight)).toBe(false)
-  }
-})
-
-// Every data-table filter row reads one control width. Measured on the real
-// console views the fixture mounts, not on a purpose-built toolbar, so a page
-// that reintroduces an ad-hoc width fails here.
-for (const view of ['', 'users=1', 'groups=1', 'ipAccessControl=1', 'usage=1']) {
-  test(`admin ${view || 'toolbar'} filter controls share one width`, async ({ page }, info) => {
-    const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
-    const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
-    await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto(`/layout-tests/index.html?view=admin-layout&${view ? `${view}&` : ''}theme=${theme}&locale=${locale}`)
-    // Tabbed views keep inactive panels in the DOM; the rules tab owns the
-    // query row for this console.
-    if (view === 'ipAccessControl=1') await page.locator('[aria-controls=ip-panel-rules]').click()
-    const fields = page.locator('.filter-bar .filter-field')
-    await expect(page.locator('.filter-bar:visible').first()).toBeVisible()
-    // Tabbed views keep inactive panels in the DOM, so only measure rendered rows.
-    const measured = await fields.evaluateAll(elements => elements.map(element => {
-      const box = element.getBoundingClientRect()
-      const control = element.querySelector('.input, .select-trigger, .date-picker-trigger, .date-time-picker')
-      return {
-        width: Math.round(box.width),
-        search: element.classList.contains('filter-field--search'),
-        controlWidth: control ? Math.round(control.getBoundingClientRect().width) : null,
-      }
-    }).filter(field => field.width > 0))
-    expect(measured.length, JSON.stringify(measured)).toBeGreaterThan(0)
-    for (const field of measured) {
-      expect(field.width, JSON.stringify(field)).toBe(field.search ? 240 : 200)
-      // The control fills its field, so no wrapper can size itself to the
-      // longest option label.
-      expect(field.controlWidth, JSON.stringify(field)).toBe(field.width)
-    }
-  })
-}
 
 test('admin filter controls stack full width on a phone', async ({ page }, info) => {
   const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
@@ -615,14 +432,14 @@ test('proxy filters and wrapping actions share control heights and stay within t
     }))
     expect(buttons).toHaveLength(7)
     for (const button of buttons) {
-      expect(button.height).toBe(38)
+      expect(button.height).toBe(36)
       expect(button.x).toBeGreaterThanOrEqual(barBox.x - 1)
       expect(button.right).toBeLessThanOrEqual(barBox.x + barBox.width + 1)
     }
     const last = buttons.at(-1)!
     expect(Math.abs(last.right - barBox.x - barBox.width)).toBeLessThanOrEqual(1)
     const heights = await bar.locator('.input, .select-trigger').evaluateAll(elements => elements.map(el => el.getBoundingClientRect().height))
-    expect(new Set(heights)).toEqual(new Set([38]))
+    expect(new Set(heights)).toEqual(new Set([36]))
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
   }
 })

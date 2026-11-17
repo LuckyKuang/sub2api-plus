@@ -7,10 +7,10 @@
             <Icon name="search" size="md" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input v-model="filters.search" type="text" class="input pl-10" :placeholder="t('admin.affiliates.records.searchPlaceholder')" @input="debounceLoad" />
           </div>
-          <div class="filter-field">
+          <div class="filter-field filter-field--date">
             <DateTimePicker :aria-label="t('admin.affiliates.records.startAt')" v-model="filters.start_at" type="date" :title="t('admin.affiliates.records.startAt')" @change="reloadFromFirstPage" />
           </div>
-          <div class="filter-field">
+          <div class="filter-field filter-field--date">
             <DateTimePicker :aria-label="t('admin.affiliates.records.endAt')" v-model="filters.end_at" type="date" :title="t('admin.affiliates.records.endAt')" @change="reloadFromFirstPage" />
           </div>
           <button class="btn btn-secondary px-2 md:px-3" :disabled="loading" :title="t('common.refresh')" @click="loadRecords">

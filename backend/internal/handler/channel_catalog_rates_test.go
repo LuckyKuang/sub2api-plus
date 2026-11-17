@@ -99,6 +99,10 @@ func TestCatalogInvalidPolicyCannotAdvertiseDefaultOne(t *testing.T) {
 
 type catalogRateReader struct{ group service.CatalogGroup }
 
+func (r *catalogRateReader) ListAvailableChannelCatalogPage(ctx context.Context, groups []service.Group, _ service.CatalogPageQuery, _ *service.CatalogPageMeta) ([]service.CatalogGroup, error) {
+	return r.ListAvailableChannelCatalog(ctx, groups)
+}
+
 func (r *catalogRateReader) ListAvailableChannelCatalog(ctx context.Context, groups []service.Group) ([]service.CatalogGroup, error) {
 	return r.ListAvailableCatalog(ctx, groups)
 }

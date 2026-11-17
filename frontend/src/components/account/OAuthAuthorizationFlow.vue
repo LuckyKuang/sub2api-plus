@@ -168,7 +168,7 @@
                 Refresh Token
                 <span
                   v-if="parsedRefreshTokenCount > 1"
-                  class="rounded-full bg-blue-500 px-2 py-0.5 text-xs text-white"
+                  class="rounded-md bg-blue-500 px-2 py-0.5 text-xs text-white"
                 >
                   {{ t('admin.accounts.oauth.keysCount', { count: parsedRefreshTokenCount }) }}
                 </span>
@@ -251,7 +251,7 @@
                 {{ t(getOAuthKey('ssoCookieLabel')) }}
                 <span
                   v-if="parsedSSOCount > 1"
-                  class="rounded-full bg-blue-500 px-2 py-0.5 text-xs text-white"
+                  class="rounded-md bg-blue-500 px-2 py-0.5 text-xs text-white"
                 >
                   {{ t('admin.accounts.oauth.keysCount', { count: parsedSSOCount }) }}
                 </span>
@@ -325,7 +325,7 @@
                 {{ t(getOAuthKey('emailPasswordInputLabel')) }}
                 <span
                   v-if="parsedEmailPasswordCount > 1"
-                  class="rounded-full bg-blue-500 px-2 py-0.5 text-xs text-white"
+                  class="rounded-md bg-blue-500 px-2 py-0.5 text-xs text-white"
                 >
                   {{ t('admin.accounts.oauth.keysCount', { count: parsedEmailPasswordCount }) }}
                 </span>
@@ -399,7 +399,7 @@
                 {{ t(isAgentIdentityInput ? 'admin.accounts.oauth.openai.agentIdentityInputLabel' : 'admin.accounts.oauth.openai.codexSessionInputLabel') }}
                 <span
                   v-if="parsedCodexSessionCount > 1"
-                  class="rounded-full bg-blue-500 px-2 py-0.5 text-xs text-white"
+                  class="rounded-md bg-blue-500 px-2 py-0.5 text-xs text-white"
                 >
                   {{ t('admin.accounts.oauth.keysCount', { count: parsedCodexSessionCount }) }}
                 </span>
@@ -552,7 +552,7 @@
                 {{ t('admin.accounts.oauth.sessionKey') }}
                 <span
                   v-if="parsedKeyCount > 1 && allowMultiple"
-                  class="rounded-full bg-blue-500 px-2 py-0.5 text-xs text-white"
+                  class="rounded-md bg-blue-500 px-2 py-0.5 text-xs text-white"
                 >
                   {{ t('admin.accounts.oauth.keysCount', { count: parsedKeyCount }) }}
                 </span>

@@ -17,7 +17,7 @@ describe('pagination jump input', () => {
   it('keeps an empty list on page one with both directions disabled', async () => {
     const wrapper = mountPagination()
     await wrapper.setProps({ total: 0 })
-    const directions = wrapper.findAll('button').filter(button =>
+    const directions = wrapper.get('.pagination-desktop').findAll('button').filter(button =>
       button.attributes('aria-label') === 'pagination.previous' || button.attributes('aria-label') === 'pagination.next'
     )
     expect(directions).toHaveLength(2)

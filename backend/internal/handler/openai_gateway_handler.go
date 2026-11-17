@@ -273,7 +273,7 @@ func usageRecordContext(parent context.Context, base context.Context) context.Co
 	if requestID, _ := parent.Value(ctxkey.RequestID).(string); strings.TrimSpace(requestID) != "" {
 		base = context.WithValue(base, ctxkey.RequestID, strings.TrimSpace(requestID))
 	}
-	return service.CopyBillingPricingSnapshot(parent, service.CopyLiveUsageBinding(parent, base))
+	return service.CopyBillingPricingSnapshot(parent, base)
 }
 
 // wrapUsageRecordTaskContext 包装计费任务：复制请求级 context 值，并接管请求的在途余额预留引用。
@@ -3343,8 +3343,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					// reference before this handler owner is released.
 					defer hold.done()
 				}
-				usageObservationCtx := liveTurnUsageContext(c, usageCtx, turn)
-				finishLiveRequestTurn(c, turn, result, turnErr)
+				usageObservationCtx := usageCtx
 				turnDisconnectRiskMu.Lock()
 				disconnectLifecycle := turnDisconnectRisks[turn]
 				delete(turnDisconnectRisks, turn)
@@ -3504,7 +3503,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			attemptPublicModel := retryInflightEstimate.Model
 			turnInflightMu.Unlock()
 			hooks.InitialRequestModel = attemptPublicModel
-			beginLiveRequestAttempt(c, account.ID)
 			err := h.gatewayService.ProxyResponsesWebSocketFromClient(ctx, c, wsConn, account, token, wsFirstMessage, hooks)
 			if err == nil {
 				reqLog.Info("openai.websocket_ingress_closed", zap.Int64("account_id", account.ID))

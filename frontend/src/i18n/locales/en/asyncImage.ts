@@ -11,7 +11,6 @@ export default {
     readStatus: { readable: 'Images available', object_missing: 'An archived image no longer exists in the current storage', storage_unavailable: 'Image storage is temporarily unavailable', unarchived: 'No archived images', incomplete: 'Image archive is incomplete' },
     list: {
       empty: 'No async image tasks', emptyHint: 'Create a generation or edit task to view its status and result here.',
-      previous: 'Previous', next: 'Next', page: 'Page {page}',
       historyHint: 'History belongs to your account and includes every API key, so deleting a key never hides past images.',
     },
     create: {

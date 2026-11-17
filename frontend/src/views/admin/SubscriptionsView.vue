@@ -19,7 +19,9 @@
               <input
                 v-model="filterUserKeyword"
                 type="text"
-                :placeholder="t('admin.users.searchUsers')"
+                :placeholder="t('admin.users.searchUsersShort')"
+                :title="t('admin.users.searchUsers')"
+                :aria-label="t('admin.users.searchUsers')"
                 class="input pl-10 pr-8"
                 @input="debounceSearchFilterUsers"
                 @focus="showFilterUserDropdown = true"
@@ -126,14 +128,14 @@
                     </div>
                     <button
                       @click="setUserColumnMode('email')"
-                      class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:surface-hover surface-control surface-muted"
+                      class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:surface-hover surface-control surface-muted"
                     >
                       <span>{{ t('admin.users.columns.email') }}</span>
                       <Icon v-if="userColumnMode === 'email'" name="check" size="sm" class="text-primary-500" />
                     </button>
                     <button
                       @click="setUserColumnMode('username')"
-                      class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:surface-hover surface-control surface-muted"
+                      class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:surface-hover surface-control surface-muted"
                     >
                       <span>{{ t('admin.users.columns.username') }}</span>
                       <Icon v-if="userColumnMode === 'username'" name="check" size="sm" class="text-primary-500" />
@@ -144,7 +146,7 @@
                     v-for="col in toggleableColumns"
                     :key="col.key"
                     @click="toggleColumn(col.key)"
-                    class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:surface-hover surface-control surface-muted"
+                    class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:surface-hover surface-control surface-muted"
                   >
                     <span>{{ col.label }}</span>
                     <Icon v-if="isColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />

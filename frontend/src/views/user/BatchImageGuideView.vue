@@ -126,10 +126,10 @@
 	                  :class="row.task_name ? 'text-gray-900 dark:text-white' : 'surface-muted'"
                 >
                   <span class="min-w-0 truncate">{{ row.task_name || defaultTaskName(row.created_at) }}</span>
-                  <span v-if="row.child_count > 0 && !row.is_child" class="flex-shrink-0 rounded-full surface-inset px-2 py-0.5 text-xs font-normal surface-muted">
+                  <span v-if="row.child_count > 0 && !row.is_child" class="flex-shrink-0 rounded-md surface-inset px-2 py-0.5 text-xs font-normal surface-muted">
                     {{ t('batchImage.list.childCount', { n: row.child_count }, row.child_count) }}
                   </span>
-                  <span v-if="row.is_child" class="flex-shrink-0 rounded-full bg-amber-50/[0.15] px-2 py-0.5 text-xs font-normal text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                  <span v-if="row.is_child" class="flex-shrink-0 rounded-md bg-amber-50/[0.15] px-2 py-0.5 text-xs font-normal text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
                     {{ t('batchImage.list.childBadge') }}
                   </span>
 	                </span>
@@ -234,52 +234,31 @@
       </template>
 
       <template #pagination>
-        <div
+        <Pagination
           v-if="visibleBatchJobs.length > 0 || pagination.page > 1"
-          class="batch-pagination pagination-card card flex flex-col gap-3 px-4 py-3 sm:px-6"
+          class="batch-pagination"
+          :total="null"
+          :has-more="pagination.has_more"
+          :page="pagination.page"
+          :page-size="pagination.page_size"
+          :disabled="loadingJobs"
+          @update:page="handlePageChange"
+          @update:page-size="handlePageSizeChange"
         >
-          <div class="flex flex-wrap items-center gap-3 text-sm surface-muted">
+          <template #info>
             <i18n-t keypath="batchImage.pagination.pageNumber" tag="span" scope="global">
               <template #page>
                 <span class="font-medium">{{ pagination.page }}</span>
               </template>
             </i18n-t>
+            ·
             <i18n-t keypath="batchImage.pagination.pageItems" tag="span" scope="global">
               <template #count>
                 <span class="font-medium">{{ visibleBatchJobs.length }}</span>
               </template>
             </i18n-t>
-            <div class="flex items-center gap-2">
-              <span>{{ t('pagination.perPage') }}</span>
-              <Select
-                v-model="pagination.page_size"
-                :options="batchPageSizeOptions"
-                class="w-24"
-                @change="handlePageSizeChange"
-              />
-            </div>
-          </div>
-          <div class="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              :disabled="pagination.page <= 1 || loadingJobs"
-              @click="handlePageChange(pagination.page - 1)"
-            >
-              <Icon name="chevronLeft" size="sm" class="mr-1" />
-              {{ t('pagination.previous') }}
-            </button>
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              :disabled="!pagination.has_more || loadingJobs"
-              @click="handlePageChange(pagination.page + 1)"
-            >
-              {{ t('pagination.next') }}
-              <Icon name="chevronRight" size="sm" class="ml-1" />
-            </button>
-          </div>
-        </div>
+          </template>
+        </Pagination>
       </template>
     </TablePageLayout>
 
@@ -619,7 +598,7 @@
             <textarea
               v-model="promptDraft"
               rows="3"
-              class="h-[76px] w-full resize-y rounded-md border border-gray-300 px-3 py-2 text-sm leading-5 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100 dark:border-dark-600 dark:surface-inset dark:text-gray-100 dark:focus:ring-primary-900/40"
+              class="h-[76px] w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm leading-5 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100 dark:border-dark-600 dark:surface-inset dark:text-gray-100 dark:focus:ring-primary-900/40"
               :placeholder="t('batchImage.create.promptPlaceholder')"
             />
             <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_132px_132px_112px] md:items-center">
@@ -762,6 +741,7 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useClipboard } from '@/composables/useClipboard'
@@ -836,7 +816,6 @@ const PREVIEW_CACHE_MAX_BYTES = 48 * 1024 * 1024
 const BATCH_IMAGE_MAX_OUTPUTS_PER_ITEM = 4
 const BATCH_IMAGE_MAX_OUTPUTS_PER_JOB = 200
 const outputCountOptions = Array.from({ length: BATCH_IMAGE_MAX_OUTPUTS_PER_ITEM }, (_, index) => index + 1)
-const batchPageSizeOptions: SelectOption[] = [20, 50, 100].map(size => ({ value: size, label: String(size) }))
 
 const props = withDefaults(defineProps<{ embedded?: boolean; canSubmit?: boolean }>(), { canSubmit: false })
 const shellProps = computed(() => props.embedded ? { class: 'image-task-embedded' } : { appearance: 'user', workspace: true })
@@ -2661,17 +2640,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.batch-pagination { align-items: stretch; }
-.batch-pagination > div:first-child { min-width: 0; }
-.batch-pagination > div:first-child > span,
-.batch-pagination > div:first-child > div { flex-shrink: 0; white-space: nowrap; }
-.batch-pagination > div:last-child { align-self: flex-end; flex-shrink: 0; flex-wrap: nowrap; }
-.batch-pagination > div:last-child > button { min-width: 80px; flex-shrink: 0; white-space: nowrap; }
-@container table-page-pagination (min-width: 680px) {
-  .batch-pagination { flex-direction: row; align-items: center; justify-content: space-between; }
-  .batch-pagination > div:last-child { align-self: auto; }
-}
-
 .batch-prompt-trigger:focus {
   outline: none;
   box-shadow: none;

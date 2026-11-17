@@ -146,8 +146,8 @@ describe('AffiliateView', () => {
     await flushPromises()
     const rows = () => wrapper.findAll('tbody tr').map(row => row.findAll('td')[0].text())
     const pager = wrapper.get('nav')
-    const previous = () => pager.findAll('button').find(button => button.text() === 'pagination.previous')!
-    const next = () => pager.findAll('button').find(button => button.text() === 'pagination.next')!
+    const previous = () => pager.get('button[aria-label="pagination.previous"]')
+    const next = () => pager.get('button[aria-label="pagination.next"]')
     expect(rows()).toEqual([
       'invitee-1@example.test', 'invitee-2@example.test', 'invitee-3@example.test', 'invitee-4@example.test', 'invitee-5@example.test',
       'invitee-6@example.test', 'invitee-7@example.test', 'invitee-8@example.test', 'invitee-9@example.test', 'invitee-10@example.test',
@@ -175,7 +175,7 @@ describe('AffiliateView', () => {
     const wrapper = mountView()
     await flushPromises()
     expect(wrapper.findAll('tbody tr')).toHaveLength(10)
-    const next = wrapper.get('nav').findAll('button').find(button => button.text() === 'pagination.next')!
+    const next = wrapper.get('nav').get('button[aria-label="pagination.next"]')
     if (count === 10) {
       expect(next.attributes('disabled')).toBeDefined()
     } else {
@@ -197,7 +197,7 @@ describe('AffiliateView', () => {
     const pager = wrapper.get('nav')
     expect(pager.find('[aria-current="page"]').text()).toBe('1')
     for (const text of ['pagination.previous', 'pagination.next']) {
-      expect(pager.findAll('button').find(button => button.text() === text)!.attributes('disabled')).toBeDefined()
+      expect(pager.get(`button[aria-label="${text}"]`).attributes('disabled')).toBeDefined()
     }
     expect(transferAffiliateQuota).not.toHaveBeenCalled()
   })

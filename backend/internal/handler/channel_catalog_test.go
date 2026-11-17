@@ -40,6 +40,10 @@ type catalogReaderStub struct {
 	calls    int
 }
 
+func (s *catalogReaderStub) ListAvailableChannelCatalogPage(ctx context.Context, groups []service.Group, _ service.CatalogPageQuery, _ *service.CatalogPageMeta) ([]service.CatalogGroup, error) {
+	return s.ListAvailableChannelCatalog(ctx, groups)
+}
+
 func (s *catalogReaderStub) ListAvailableChannelCatalog(ctx context.Context, groups []service.Group) ([]service.CatalogGroup, error) {
 	return s.ListAvailableCatalog(ctx, groups)
 }

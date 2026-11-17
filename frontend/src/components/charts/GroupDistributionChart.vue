@@ -6,24 +6,20 @@
       </h3>
       <div
         v-if="showMetricToggle"
-        class="inline-flex rounded-lg border border-gray-200 surface-inset p-0.5 dark:border-dark-700"
+        class="segmented-control"
       >
         <button
           type="button"
-          class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
-          :class="metric === 'tokens'
-            ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
-            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+          class="segmented-option"
+          :aria-pressed="metric === 'tokens'"
           @click="emit('update:metric', 'tokens')"
         >
           {{ t('admin.dashboard.metricTokens') }}
         </button>
         <button
           type="button"
-          class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
-          :class="metric === 'actual_cost'
-            ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
-            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+          class="segmented-option"
+          :aria-pressed="metric === 'actual_cost'"
           @click="emit('update:metric', 'actual_cost')"
         >
           {{ t('admin.dashboard.metricActualCost') }}
@@ -49,13 +45,13 @@
               <th class="pb-2 text-right">{{ t('admin.dashboard.standard') }}</th>
             </tr>
           </thead>
-          <tbody v-for="group in displayGroupStats" :key="group.group_id" class="record-group">
+          <tbody v-for="group in displayGroupStats" :key="group.group_id">
             <tr
-              class="transition-colors"
+              class="record-row-parent transition-colors"
               :class="enableBreakdown && group.group_id > 0 ? 'cursor-pointer hover:surface-hover dark:hover:surface-hover' : ''"
               @click="enableBreakdown && group.group_id > 0 && toggleBreakdown('group', group.group_id)"
             >
-              <td :data-record-edges="expandedKey === `group-${group.group_id}` ? 't l tl' : 't b l tl bl'"
+              <td
                 class="max-w-[100px] truncate py-1.5 font-medium"
                 :class="enableBreakdown && group.group_id > 0 ? 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300' : 'text-gray-900 dark:text-white'"
                 :title="group.group_name || String(group.group_id)"
@@ -66,19 +62,19 @@
                   {{ group.group_name || t('admin.dashboard.noGroup') }}
                 </span>
               </td>
-              <td :data-record-edges="expandedKey === `group-${group.group_id}` ? 't' : 't b'" class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right surface-muted">
                 {{ formatNumber(group.requests) }}
               </td>
-              <td :data-record-edges="expandedKey === `group-${group.group_id}` ? 't' : 't b'" class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right surface-muted">
                 {{ formatTokens(group.total_tokens) }} <span v-if="groupTokenShare(group.total_tokens)" class="surface-muted">({{ groupTokenShare(group.total_tokens) }})</span>
               </td>
-              <td :data-record-edges="expandedKey === `group-${group.group_id}` ? 't' : 't b'" class="py-1.5 text-right text-green-600 dark:text-green-400">
+              <td class="py-1.5 text-right text-green-600 dark:text-green-400">
                 ${{ formatCost(group.actual_cost) }}
               </td>
-              <td :data-record-edges="expandedKey === `group-${group.group_id}` ? 't' : 't b'" v-if="showAccountCost" class="py-1.5 text-right text-orange-500 dark:text-orange-400">
+              <td v-if="showAccountCost" class="py-1.5 text-right text-orange-500 dark:text-orange-400">
                 ${{ formatCost(group.account_cost) }}
               </td>
-              <td :data-record-edges="expandedKey === `group-${group.group_id}` ? 't r tr' : 't b r tr br'" class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right surface-muted">
                 ${{ formatCost(group.cost) }}
               </td>
             </tr>

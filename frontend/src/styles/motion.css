@@ -66,8 +66,8 @@
 :is(.date-picker-dropdown-enter-to, .date-picker-dropdown-leave-from) { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
-  :is(.modal-overlay, .dialog-overlay, .surface-overlay, .select-dropdown-portal, .select-dropdown, .date-picker-dropdown, .date-time-panel, .header-user-dropdown, .version-dropdown),
-  :is(.modal-overlay, .dialog-overlay, .surface-overlay, .select-dropdown-portal, .select-dropdown, .date-picker-dropdown, .date-time-panel, .header-user-dropdown, .version-dropdown) * {
+  :is(.modal-overlay, .dialog-overlay, .surface-overlay, .select-dropdown-portal, .select-dropdown, .date-picker-dropdown, .date-time-panel, .header-user-dropdown, .announcement-dropdown, .version-dropdown),
+  :is(.modal-overlay, .dialog-overlay, .surface-overlay, .select-dropdown-portal, .select-dropdown, .date-picker-dropdown, .date-time-panel, .header-user-dropdown, .announcement-dropdown, .version-dropdown) * {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;

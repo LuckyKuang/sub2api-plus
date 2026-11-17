@@ -693,7 +693,7 @@
               <span
                 v-for="code in selectedErrorCodes.sort((a, b) => a - b)"
                 :key="code"
-                class="inline-flex items-center gap-1 rounded-full bg-red-100/[0.15] px-2.5 py-0.5 text-sm font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                class="inline-flex items-center gap-1 rounded-md bg-red-100/[0.15] px-2.5 py-0.5 text-sm font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400"
               >
                 {{ code }}
                 <button
@@ -1985,7 +1985,7 @@
               <div class="flex flex-wrap items-center gap-2">
                 <label class="input-label mb-0">{{ t('admin.accounts.openai.codexImageTool') }}</label>
                 <span
-                  class="rounded-full px-2 py-0.5 text-[11px] font-medium"
+                  class="rounded-md px-2 py-0.5 text-[11px] font-medium"
                   :class="codexImageToolBadgeClass"
                 >
                   {{ codexImageToolBadgeLabel }}
@@ -2005,7 +2005,7 @@
                 :data-testid="`codex-image-tool-${option.value}`"
                 @click="codexImageToolMode = option.value"
                 :class="[
-                  'group flex min-h-[62px] items-start gap-2 rounded-md border px-3 py-2 text-left transition-all',
+                  'group flex min-h-[62px] items-start gap-2 rounded-lg border px-3 py-2 text-left transition-all',
                   codexImageToolMode === option.value
                     ? option.selectedCardClass
                     : 'border-transparent bg-transparent text-slate-600 hover:border-gray-200 hover:surface-hover dark:text-slate-300 dark:hover:border-dark-500 dark:hover:surface-hover'

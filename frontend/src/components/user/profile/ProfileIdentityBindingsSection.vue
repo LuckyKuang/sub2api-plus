@@ -31,7 +31,7 @@
           <div class="flex min-w-0 flex-1 items-start gap-4">
             <div
               :class="providerIconClass(item.provider)"
-              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-semibold"
+              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sm font-semibold"
             >
               <Icon
                 v-if="item.provider === 'email'"
@@ -296,8 +296,8 @@ const compact = computed(() => props.compact)
 const rowClass = computed(() =>
   props.embedded
     ? compact.value
-      ? 'rounded-2xl border border-gray-100 surface-inset p-4 shadow-sm dark:border-dark-700 dark:surface-inset'
-      : 'rounded-2xl border border-gray-100 surface-inset p-4 dark:border-dark-700 dark:surface-inset'
+      ? 'rounded-xl border border-gray-100 surface-inset p-4 shadow-sm dark:border-dark-700 dark:surface-inset'
+      : 'rounded-xl border border-gray-100 surface-inset p-4 dark:border-dark-700 dark:surface-inset'
     : 'px-6 py-5'
 )
 const emailBound = computed(() => getBindingStatus('email'))

@@ -79,7 +79,7 @@
               data-testid="codex-auth-mode-legacy"
               :aria-checked="codexAuthMode === 'legacy'"
               :class="[
-                'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 codexAuthMode === 'legacy'
                   ? 'surface-inset text-primary-700 shadow-sm dark:surface-inset dark:text-primary-300'
                   : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
@@ -94,7 +94,7 @@
               data-testid="codex-auth-mode-api-key"
               :aria-checked="codexAuthMode === 'api-key'"
               :class="[
-                'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 codexAuthMode === 'api-key'
                   ? 'surface-inset text-primary-700 shadow-sm dark:surface-inset dark:text-primary-300'
                   : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
@@ -107,7 +107,7 @@
           <div
             v-if="codexAuthMode === 'api-key'"
             data-testid="codex-api-key-restart-notice"
-            class="mt-3 flex items-start gap-2 rounded-xl border border-amber-400 bg-amber-50/[0.15] px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-500 dark:bg-amber-950/30 dark:text-amber-200"
+            class="mt-3 flex items-start gap-2 rounded-lg border border-amber-400 bg-amber-50/[0.15] px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-500 dark:bg-amber-950/30 dark:text-amber-200"
           >
             <Icon name="exclamationCircle" size="sm" class="mt-0.5 flex-shrink-0" />
             <p>{{ t('keys.useKeyModal.openai.authModeApiKeyRestartNotice') }}</p>

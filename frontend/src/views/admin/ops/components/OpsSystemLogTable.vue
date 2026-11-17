@@ -529,7 +529,7 @@ onMounted(async () => {
       <div v-else-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
         <div v-for="row in logs" :key="row.id" class="space-y-1.5 p-3">
           <div class="flex items-center justify-between gap-2">
-            <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold" :class="levelBadgeClass(row.level)">
+            <span class="inline-flex rounded-md px-2 py-0.5 text-xs font-semibold" :class="levelBadgeClass(row.level)">
               {{ row.level }}
             </span>
             <span class="text-xs surface-muted">{{ formatTime(row.created_at) }}</span>
@@ -559,7 +559,7 @@ onMounted(async () => {
                 <span class="block truncate" :title="row.host || '-'">{{ row.host || '-' }}</span>
               </td>
               <td class="px-3 py-2 text-xs">
-                <span class="inline-flex rounded-full px-2 py-0.5 font-semibold" :class="levelBadgeClass(row.level)">
+                <span class="inline-flex rounded-md px-2 py-0.5 font-semibold" :class="levelBadgeClass(row.level)">
                   {{ row.level }}
                 </span>
               </td>

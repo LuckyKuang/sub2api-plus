@@ -1,0 +1,119 @@
+package service
+
+import (
+	"sort"
+	"strings"
+)
+
+// CatalogPageQuery selects one page of the available-channels catalog. The page
+// is chosen from model identities before any pricing card is resolved, so a
+// request only pays for the cards it renders. Model identifies one detail card
+// and ignores Page/PageSize.
+type CatalogPageQuery struct {
+	Category string
+	Platform string
+	Search   string
+	Model    string
+	Page     int
+	PageSize int
+}
+
+// CatalogPageMeta reports the un-paged totals so the caller can render facets
+// and pagination for the whole filtered catalog.
+type CatalogPageMeta struct {
+	Total      int
+	Categories map[string]int
+	Platforms  map[string]int
+}
+
+// catalogIdentity is one display card: composite and ordinary groups keep
+// separate cards even when both expose the same platform and model name.
+type catalogIdentity struct {
+	key      string
+	name     string
+	platform string
+	category string
+}
+
+func catalogModelCategory(g *Group) string {
+	if g.Platform == PlatformComposite {
+		return "composite"
+	}
+	return "group"
+}
+
+func catalogModelIdentity(g *Group, platform, name string) string {
+	return catalogModelCategory(g) + "\x00" + platform + "\x00" + strings.ToLower(name)
+}
+
+// catalogPageSelection returns the identities of the requested page together
+// with the facet counts of the filtered catalog. A nil query selects everything
+// and reports no metadata, preserving the un-paged contract.
+func catalogPageSelection(page *CatalogPageQuery, meta *CatalogPageMeta, identities map[string]catalogIdentity) map[string]struct{} {
+	if page == nil {
+		return nil
+	}
+	search := strings.ToLower(strings.TrimSpace(page.Search))
+	categories := map[string]int{}
+	platforms := map[string]int{}
+	list := make([]catalogIdentity, 0, len(identities))
+	for _, id := range identities {
+		if search != "" && !strings.Contains(strings.ToLower(id.name), search) {
+			continue
+		}
+		// Each facet applies every filter except its own dimension.
+		if page.Platform == "" || id.platform == page.Platform {
+			categories[id.category]++
+		}
+		if page.Category == "" || id.category == page.Category {
+			platforms[id.platform]++
+		}
+		if page.Category != "" && id.category != page.Category {
+			continue
+		}
+		if page.Platform != "" && id.platform != page.Platform {
+			continue
+		}
+		if page.Model != "" && !strings.EqualFold(id.name, page.Model) {
+			continue
+		}
+		list = append(list, id)
+	}
+	sort.Slice(list, func(i, j int) bool {
+		a, b := strings.ToLower(list[i].name), strings.ToLower(list[j].name)
+		if a != b {
+			return a < b
+		}
+		if list[i].platform != list[j].platform {
+			return list[i].platform < list[j].platform
+		}
+		return list[i].key < list[j].key
+	})
+	selected := make(map[string]struct{}, len(list))
+	if page.Model == "" {
+		start := 0
+		if page.Page > 1 && page.PageSize > 0 {
+			start = (page.Page - 1) * page.PageSize
+		}
+		if start > len(list) {
+			start = len(list)
+		}
+		end := len(list)
+		if page.PageSize > 0 && start+page.PageSize < end {
+			end = start + page.PageSize
+		}
+		for _, id := range list[start:end] {
+			selected[id.key] = struct{}{}
+		}
+	} else {
+		for _, id := range list {
+			selected[id.key] = struct{}{}
+		}
+	}
+	if meta != nil {
+		meta.Total = len(list)
+		meta.Categories = categories
+		meta.Platforms = platforms
+	}
+	return selected
+}

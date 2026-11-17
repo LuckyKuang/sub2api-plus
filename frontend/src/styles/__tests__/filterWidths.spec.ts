@@ -61,16 +61,20 @@ const find = (list: Declaration[], selector: string, prop: string) =>
   list.find(entry => entry.selector === selector && entry.prop === prop)
 
 describe('data-table filter widths', () => {
-  it('declares one control width and one wider search width', () => {
-    expect(rootToken('--filter-control-width')).toBe('200px')
-    expect(rootToken('--filter-search-width')).toBe('240px')
+  // User audit: search boxes and selects share one compact width (the old
+  // 200/240px pair left large blanks after short labels such as 全部平台).
+  it('declares one compact width shared by search and select controls', () => {
+    expect(rootToken('--filter-control-width')).toBe('160px')
+    expect(rootToken('--filter-search-width')).toBe('var(--filter-control-width)')
+    expect(rootToken('--filter-date-width')).toBe('200px')
     expect(rootToken('--filter-gap')).toBe('12px')
   })
 
   it('gives every filter control the same fixed width on desktop', () => {
     expect(find(desktop, '.filter-field', 'width')?.value).toBe('var(--filter-control-width)')
-    // The search field is the only deliberately wider sibling.
     expect(find(desktop, '.filter-field--search', 'width')?.value).toBe('var(--filter-search-width)')
+    // Date ranges are the only wider sibling: they show two dates.
+    expect(find(desktop, '.filter-field--date', 'width')?.value).toBe('var(--filter-date-width)')
   })
 
   it('fills the field with the control instead of letting the field follow content', () => {
@@ -96,7 +100,7 @@ describe('data-table filter widths', () => {
   it('never applies the field width outside a filter field', () => {
     // Forms, dialogs and settings pages keep their own control sizing.
     const sizedRules = all.filter(entry => entry.prop === 'width' && [
-      'var(--filter-control-width)', 'var(--filter-search-width)',
+      'var(--filter-control-width)', 'var(--filter-search-width)', 'var(--filter-date-width)',
     ].includes(entry.value))
     expect(sizedRules.length).toBeGreaterThan(0)
     for (const entry of sizedRules) {
@@ -107,12 +111,13 @@ describe('data-table filter widths', () => {
   it('keeps the expanded select menu no narrower than the unified control', () => {
     const componentPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../components/common/SearchableSelect.vue')
     const source = readFileSync(componentPath, 'utf8')
-    const floor = Number.parseFloat(rootToken('--filter-control-width') ?? '')
-    expect(Number.isFinite(floor)).toBe(true)
-    // The teleported menu is content-sized (`w-max`) and floored by the same
-    // width the trigger takes, so expanding never shrinks below the control.
-    expect(source).toContain(`const dropdownMinimumWidth = ${floor}`)
-    expect(source).toContain('min-w-[200px]')
+    const control = Number.parseFloat(rootToken('--filter-control-width') ?? '')
+    expect(Number.isFinite(control)).toBe(true)
+    // The teleported menu is content-sized (`w-max`) and floored at no less
+    // than the width the trigger takes, so expanding never shrinks the control.
+    const floor = Number(/const dropdownMinimumWidth = (\d+)/.exec(source)?.[1])
+    expect(floor).toBeGreaterThanOrEqual(control)
+    expect(source).toContain(`min-w-[${floor}px]`)
     // Long labels ellipsize rather than stretching the panel across the viewport.
     expect(source).toContain('Math.min(dropdownMaximumWidth, availableWidth)')
   })

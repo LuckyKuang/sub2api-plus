@@ -245,7 +245,7 @@ function accountLabel(row: OpsRequestDetail): string {
               <div v-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
                 <div v-for="(row, idx) in items" :key="idx" class="space-y-2 p-4">
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="rounded-full px-2 py-1 text-[10px] font-bold" :class="kindBadgeClass(row.kind)">
+                    <span class="rounded-md px-2 py-1 text-[10px] font-bold" :class="kindBadgeClass(row.kind)">
                       {{ row.kind === 'error' ? t('admin.ops.requestDetails.kind.error') : t('admin.ops.requestDetails.kind.success') }}
                     </span>
                     <span class="text-xs font-medium surface-muted">{{ (row.platform || 'unknown').toUpperCase() }}</span>
@@ -317,7 +317,7 @@ function accountLabel(row: OpsRequestDetail): string {
                     {{ formatDateTime(row.created_at) }}
                   </td>
                   <td class="whitespace-nowrap px-4 py-3">
-                    <span class="rounded-full px-2 py-1 text-[10px] font-bold" :class="kindBadgeClass(row.kind)">
+                    <span class="rounded-md px-2 py-1 text-[10px] font-bold" :class="kindBadgeClass(row.kind)">
                       {{ row.kind === 'error' ? t('admin.ops.requestDetails.kind.error') : t('admin.ops.requestDetails.kind.success') }}
                     </span>
                   </td>

@@ -6,7 +6,7 @@
         <div class="card redeem-balance-card overflow-hidden">
           <div class="redeem-balance">
             <div
-              class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl surface-inset"
+              class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-xl surface-inset"
             >
               <Icon name="creditCard" size="xl" class="text-primary-600 dark:text-primary-400" />
             </div>
@@ -90,7 +90,7 @@
           <div class="p-6">
             <div class="flex items-start gap-4">
               <div
-                class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-100/[0.15] dark:bg-emerald-900/30"
+                class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-100/[0.15] dark:bg-emerald-900/30"
               >
                 <Icon name="checkCircle" size="md" class="text-emerald-600 dark:text-emerald-400" />
               </div>
@@ -144,7 +144,7 @@
           <div class="p-6">
             <div class="flex items-start gap-4">
               <div
-                class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-red-100/[0.15] dark:bg-red-900/30"
+                class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-red-100/[0.15] dark:bg-red-900/30"
               >
                 <Icon
                   name="exclamationCircle"
@@ -219,7 +219,7 @@
               <div class="flex items-center gap-4">
                 <div
                   :class="[
-                    'flex h-10 w-10 items-center justify-center rounded-xl',
+                    'flex h-10 w-10 items-center justify-center rounded-lg',
                     isBalanceType(item.type)
                       ? item.value >= 0
                         ? 'bg-emerald-100/[0.15] dark:bg-emerald-900/30'
@@ -311,7 +311,7 @@
           <!-- Empty State -->
           <div v-else class="empty-state py-8">
             <div
-              class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl surface-inset"
+              class="mb-4 flex h-16 w-16 items-center justify-center rounded-xl surface-inset"
             >
               <Icon name="clock" size="xl" class="surface-muted" />
             </div>
@@ -322,41 +322,21 @@
         </div>
       </div>
 
-      <nav class="card workspace-fixed redeem-history-pagination" :aria-label="t('redeem.recentActivity')">
-        <div class="redeem-pagination-info">
-          <span>{{ t('common.total') }}: {{ historyTotal }} {{ t('pagination.results') }}</span>
-          <label>
-            {{ t('pagination.perPage') }}
-            <Select
-              v-model="historyPageSize"
-              class="w-24"
-              :disabled="loadingHistory || submitting"
-              @change="fetchHistory(1)"
-              :searchable="false"
-              :options="[20, 50, 100].map(size => ({ value: size, label: String(size) }))"
-            />
-          </label>
-        </div>
-        <div class="redeem-pagination-actions">
-          <span class="text-xs surface-muted">{{ t('pagination.pageOf', { page: historyPage, total: historyPageCount }) }}</span>
-          <button
-            class="btn btn-secondary"
-            :disabled="loadingHistory || submitting || historyPage <= 1"
-            @click="fetchHistory(historyPage - 1)"
-          >{{ t('pagination.previous') }}</button>
-          <button
-            class="btn btn-secondary"
-            :disabled="loadingHistory || submitting || historyPage * historyPageSize >= historyTotal"
-            @click="fetchHistory(historyPage + 1)"
-          >{{ t('pagination.next') }}</button>
-        </div>
-      </nav>
+      <Pagination
+        class="workspace-fixed redeem-history-pagination"
+        :total="historyTotal"
+        :page="historyPage"
+        :page-size="historyPageSize"
+        :disabled="loadingHistory || submitting"
+        @update:page="fetchHistory"
+        @update:page-size="changeHistoryPageSize"
+      />
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import Select from '@/components/common/Select.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import { useLocaleRefresh } from '@/utils/localeRefresh'
 import { supportReadonly as vSupportReadonly } from '@/directives/supportReadonly'
 import { ref, computed, onMounted, nextTick } from 'vue'
@@ -399,7 +379,6 @@ let historyRequest = 0
 let loadedHistoryPageSize = 20
 const contactInfo = ref('')
 const historyViewport = ref<HTMLElement | null>(null)
-const historyPageCount = computed(() => Math.max(1, Math.ceil(historyTotal.value / historyPageSize.value)))
 const redeemRules = [
   { title: 'redeem.ruleTitles.once', body: 'redeem.codeRule1', icon: 'shield' },
   { title: 'redeem.ruleTitles.benefits', body: 'redeem.codeRule2', icon: 'gift' },
@@ -474,6 +453,11 @@ const fetchHistory = async (page = 1) => {
   }
 }
 
+const changeHistoryPageSize = (pageSize: number) => {
+  historyPageSize.value = pageSize
+  void fetchHistory(1)
+}
+
 const handleRedeem = async () => {
   if (!redeemCode.value.trim()) {
     appStore.showError(t('redeem.pleaseEnterCode'))
@@ -538,25 +522,19 @@ useLocaleRefresh(() => fetchHistory(historyPage.value))
 
 <style scoped>
 .redeem-top-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
-.redeem-top-row > .card { min-width: 0; border-radius: 16px; }
+.redeem-top-row > .card { min-width: 0; border-radius: var(--surface-radius); }
 .redeem-balance { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 20px; align-content: center; height: 100%; min-height: 200px; padding: 22px 24px; color: var(--surface-text); }
 .redeem-balance > div { grid-row: 1 / 4; align-self: center; margin: 0; }
 .redeem-balance > p { grid-column: 2; margin: 4px 0; }
 .redeem-form-card { display: flex; align-items: center; }
 .redeem-form-card > div { width: 100%; padding: 24px 28px; }
 .redeem-guide-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-.redeem-guide-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 18px 20px; border-radius: 16px; }
+.redeem-guide-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 18px 20px; border-radius: var(--surface-radius); }
 .redeem-guide-top { display: flex; align-items: center; justify-content: space-between; }
-.redeem-guide-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 12px; background: var(--surface-soft); color: var(--console-accent-readable); }
+.redeem-guide-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: var(--surface-radius-control); background: var(--surface-soft); color: var(--console-accent-readable); }
 .redeem-guide-step { color: var(--surface-muted); opacity: .65; font: 500 12px/1.5 ui-monospace, monospace; }
-.redeem-history-card { min-height: 0; border-radius: 16px; overflow: hidden; }
-.redeem-history { padding: 16px 20px; border-radius: 0 0 16px 16px; }
-.redeem-history-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; min-width: 0; border-radius: 16px; }
-.redeem-pagination-info, .redeem-pagination-actions { display: flex; align-items: center; gap: 16px; min-width: 0; }
-.redeem-pagination-info { color: var(--surface-muted); font-size: 13px; }
-.redeem-pagination-info > label { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
-.redeem-pagination-actions { gap: 8px; margin-left: auto; }
-.redeem-pagination-actions > button { min-width: 80px; white-space: nowrap; }
+.redeem-history-card { min-height: 0; border-radius: var(--surface-radius); overflow: hidden; }
+.redeem-history { padding: 16px 20px; border-radius: 0 0 var(--surface-radius) var(--surface-radius); }
 .redeem-feedback { max-height: 200px; overflow: auto; }
 @media (max-width: 1023px) {
   .redeem-top-row { grid-template-columns: 1fr; }
@@ -564,9 +542,6 @@ useLocaleRefresh(() => fetchHistory(historyPage.value))
 }
 @media (max-width: 639px) {
   .redeem-guide-grid { grid-template-columns: 1fr; }
-  .redeem-history-pagination { flex-wrap: wrap; }
-  .redeem-pagination-info { width: 100%; justify-content: space-between; }
-  .redeem-pagination-actions { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
 }
 .fade-enter-active, .fade-leave-active { transition: all .3s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(-8px); }

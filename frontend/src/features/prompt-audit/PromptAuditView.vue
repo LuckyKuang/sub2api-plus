@@ -59,7 +59,7 @@
               v-if="draft?.enabled && !draft.store_pass_events"
               data-test="pass-events-disabled-notice"
               role="status"
-              class="prompt-events-notice workspace-fixed mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/[0.15] px-4 py-3 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200"
+              class="prompt-events-notice workspace-fixed mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/[0.15] px-4 py-3 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200"
             >
               <span>{{ t('admin.promptAudit.events.passEventsDisabled') }}</span>
               <button type="button" class="btn btn-secondary btn-sm" @click="activeTab = 'config'">

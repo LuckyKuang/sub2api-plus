@@ -248,15 +248,15 @@ onBeforeUnmount(() => { disposed = true; appStore.consoleAppearancePreview = nul
 </script>
 
 <style scoped>
-.appearance-preview { position: relative; display: grid; min-height: 180px; place-items: center; overflow: hidden; border-radius: 16px; border: 1px solid rgb(148 163 184 / 25%); }
+.appearance-preview { position: relative; display: grid; min-height: 180px; place-items: center; overflow: hidden; border-radius: var(--surface-radius); border: 1px solid rgb(148 163 184 / 25%); }
 .appearance-preview-light { color: #221f1c; background: radial-gradient(ellipse at 8% 10%, rgb(20 184 166 / 13%), transparent 55%), #f4f1ed; }
 .appearance-preview-dark { color: #f2f0ed; background: radial-gradient(ellipse at 8% 10%, rgb(20 184 166 / 10%), transparent 55%), #1c1a18; }
-.appearance-sample-card { position: relative; width: 76%; padding: 18px; border-radius: 16px; border: 1px solid rgb(148 163 184 / 25%); }
-.appearance-control-card { min-width: 0; padding: 20px; border: 1px solid var(--surface-edge); border-radius: 16px; background: var(--surface-field); }
-.appearance-color-input { width: 48px; height: 42px; padding: 4px; border: 1px solid var(--surface-edge); border-radius: 10px; background: var(--surface-field); cursor: pointer; }
+.appearance-sample-card { position: relative; width: 76%; padding: 18px; border-radius: var(--surface-radius); border: 1px solid rgb(148 163 184 / 25%); }
+.appearance-control-card { min-width: 0; padding: 20px; border: 1px solid var(--surface-edge); border-radius: var(--surface-radius); background: var(--surface-field); }
+.appearance-color-input { width: 48px; height: 42px; padding: 4px; border: 1px solid var(--surface-edge); border-radius: var(--surface-radius-control); background: var(--surface-field); cursor: pointer; }
 .appearance-hex-input { width: 136px; font-family: ui-monospace, monospace; text-transform: uppercase; }
 .appearance-percent-input { width: 76px; text-align: right; }
-.appearance-accent-swatch { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--surface-edge); border-radius: 8px; color: white; text-shadow: 0 1px 3px rgb(0 0 0 / 50%); }
+.appearance-accent-swatch { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--surface-edge); border-radius: var(--surface-radius-control); color: white; text-shadow: 0 1px 3px rgb(0 0 0 / 50%); }
 .appearance-accent-swatch[aria-pressed="true"] { outline: 2px solid var(--surface-text); outline-offset: 2px; }
 .appearance-accent-swatch:focus-visible { outline: 2px solid var(--surface-text); outline-offset: 2px; }
 </style>

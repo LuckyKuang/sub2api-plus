@@ -56,7 +56,14 @@ func (o CatalogOffer) ResolveBillingRateQuote(group *Group, personalRate *float6
 // bound to active channels. Unbound group configuration remains available to
 // API-key quotes and sale catalogs through ListAvailableCatalog.
 func (s *ModelPlazaService) ListAvailableChannelCatalog(ctx context.Context, groups []Group) ([]CatalogGroup, error) {
-	return s.listAvailableCatalog(ctx, groups, true)
+	return s.listAvailableCatalog(ctx, groups, true, nil, nil)
+}
+
+// ListAvailableChannelCatalogPage limits the Available Channels page to the
+// requested card page. Only the selected page's offers resolve pricing, so the
+// response carries the page instead of the whole catalog.
+func (s *ModelPlazaService) ListAvailableChannelCatalogPage(ctx context.Context, groups []Group, page CatalogPageQuery, meta *CatalogPageMeta) ([]CatalogGroup, error) {
+	return s.listAvailableCatalog(ctx, groups, true, &page, meta)
 }
 
 // ListAvailableCatalog assembles configured group offers for API-key quotes and
@@ -65,10 +72,10 @@ func (s *ModelPlazaService) ListAvailableChannelCatalog(ctx context.Context, gro
 // Resolve against a request-local channel snapshot, so enumeration, mapping and
 // pricing cannot join different channel-cache generations during a refresh.
 func (s *ModelPlazaService) ListAvailableCatalog(ctx context.Context, groups []Group) ([]CatalogGroup, error) {
-	return s.listAvailableCatalog(ctx, groups, false)
+	return s.listAvailableCatalog(ctx, groups, false, nil, nil)
 }
 
-func (s *ModelPlazaService) listAvailableCatalog(ctx context.Context, groups []Group, requireChannel bool) ([]CatalogGroup, error) {
+func (s *ModelPlazaService) listAvailableCatalog(ctx context.Context, groups []Group, requireChannel bool, page *CatalogPageQuery, meta *CatalogPageMeta) ([]CatalogGroup, error) {
 	out := make([]CatalogGroup, 0, len(groups))
 	if len(groups) == 0 {
 		return out, nil
@@ -159,10 +166,20 @@ func (s *ModelPlazaService) listAvailableCatalog(ctx context.Context, groups []G
 		}
 	}
 	asOf := time.Now().UTC()
-	for _, g := range groups {
-		cg := CatalogGroup{Group: g, Models: []CatalogOffer{}, AsOf: asOf}
+	// Phase 1 enumerates the candidate cards without resolving pricing. Identity,
+	// search, platform and paging work on this cheap list, so Phase 2 prices only
+	// the cards the response renders.
+	type pendingOffer struct {
+		candidate commercialModelCandidate
+		model     SupportedModel
+		channel   *Channel
+	}
+	pendingByGroup := make([][]pendingOffer, len(groups))
+	identities := make(map[string]catalogIdentity)
+	for gi := range groups {
+		g := &groups[gi]
 		channel := bound[g.ID]
-		candidates, err := s.commercialModelCandidates(ctx, &g, channel, accountMappings[g.ID], requireChannel)
+		candidates, err := s.commercialModelCandidates(ctx, g, channel, accountMappings[g.ID], requireChannel)
 		if err != nil {
 			return nil, err
 		}
@@ -180,11 +197,29 @@ func (s *ModelPlazaService) listAvailableCatalog(ctx context.Context, groups []G
 			if candidate.UpstreamModel != "" {
 				model.Name = candidate.UpstreamModel
 			}
-			pricingCtx := context.WithValue(WithResolvedTargetPlatform(ctx, model.Platform), ctxkey.Group, &g)
+			pricingCtx := context.WithValue(WithResolvedTargetPlatform(ctx, model.Platform), ctxkey.Group, g)
 			if channel.RestrictModels && localChannels.IsModelRestricted(pricingCtx, g.ID, model.Name) {
 				continue
 			}
-			offer := s.catalogOffer(ctx, &g, channel, model, candidate.Name, resolver, references, asOf)
+			pendingByGroup[gi] = append(pendingByGroup[gi], pendingOffer{candidate: candidate, model: model, channel: channel})
+			key := catalogModelIdentity(g, model.Platform, candidate.Name)
+			if _, ok := identities[key]; !ok {
+				identities[key] = catalogIdentity{key: key, name: candidate.Name, platform: model.Platform, category: catalogModelCategory(g)}
+			}
+		}
+	}
+	selected := catalogPageSelection(page, meta, identities)
+	for gi := range groups {
+		g := &groups[gi]
+		cg := CatalogGroup{Group: *g, Models: []CatalogOffer{}, AsOf: asOf}
+		for _, pending := range pendingByGroup[gi] {
+			if selected != nil {
+				if _, ok := selected[catalogModelIdentity(g, pending.model.Platform, pending.candidate.Name)]; !ok {
+					continue
+				}
+			}
+			candidate := pending.candidate
+			offer := s.catalogOffer(ctx, g, pending.channel, pending.model, candidate.Name, resolver, references, asOf)
 			if offer.BillingMode == BillingModePerRequest && len(candidate.Endpoints) > 0 {
 				hasImages := false
 				for _, endpoint := range candidate.Endpoints {

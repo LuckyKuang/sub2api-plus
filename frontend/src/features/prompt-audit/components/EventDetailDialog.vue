@@ -10,7 +10,7 @@
         </div>
       </div>
 
-      <div v-if="event.snapshot.full_prompt_truncated" role="alert" class="mt-4 rounded-md border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200" data-test="prompt-truncated-warning">
+      <div v-if="event.snapshot.full_prompt_truncated" role="alert" class="mt-4 rounded-lg border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200" data-test="prompt-truncated-warning">
         {{ t('admin.promptAudit.events.promptTruncatedWarning') }}
       </div>
 

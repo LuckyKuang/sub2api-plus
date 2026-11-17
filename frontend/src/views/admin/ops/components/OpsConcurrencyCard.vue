@@ -434,7 +434,7 @@ watch(
 
           <!-- 等待队列 -->
           <div v-if="row.waiting_in_queue > 0" class="mt-1.5 flex justify-end">
-            <span class="rounded-full bg-purple-100/[0.15] px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+            <span class="rounded-md bg-purple-100/[0.15] px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
               {{ t('admin.ops.concurrency.queued', { count: row.waiting_in_queue }) }}
             </span>
           </div>
@@ -491,7 +491,7 @@ watch(
             <!-- 限流账号 -->
             <span
               v-if="row.rate_limited_accounts > 0"
-              class="rounded-full bg-amber-100/[0.15] px-1.5 py-0.5 font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+              class="rounded-md bg-amber-100/[0.15] px-1.5 py-0.5 font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
             >
               {{ t('admin.ops.concurrency.rateLimited', { count: row.rate_limited_accounts }) }}
             </span>
@@ -499,7 +499,7 @@ watch(
             <!-- 异常账号 -->
             <span
               v-if="row.error_accounts > 0"
-              class="rounded-full bg-red-100/[0.15] px-1.5 py-0.5 font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-400"
+              class="rounded-md bg-red-100/[0.15] px-1.5 py-0.5 font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-400"
             >
               {{ t('admin.ops.concurrency.errorAccounts', { count: row.error_accounts }) }}
             </span>
@@ -507,7 +507,7 @@ watch(
             <!-- 等待队列 -->
             <span
               v-if="row.waiting_in_queue > 0"
-              class="rounded-full bg-purple-100/[0.15] px-1.5 py-0.5 font-semibold text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+              class="rounded-md bg-purple-100/[0.15] px-1.5 py-0.5 font-semibold text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
             >
               {{ t('admin.ops.concurrency.queued', { count: row.waiting_in_queue }) }}
             </span>
@@ -589,7 +589,7 @@ watch(
 
           <!-- 等待队列 -->
           <div v-if="row.waiting_in_queue > 0" class="mt-1.5 flex justify-end">
-            <span class="rounded-full bg-purple-100/[0.15] px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+            <span class="rounded-md bg-purple-100/[0.15] px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
               {{ t('admin.ops.concurrency.queued', { count: row.waiting_in_queue }) }}
             </span>
           </div>
@@ -615,7 +615,7 @@ watch(
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background-color: rgba(156, 163, 175, 0.3);
-  border-radius: 3px;
+  border-radius: var(--surface-radius-xs);
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {

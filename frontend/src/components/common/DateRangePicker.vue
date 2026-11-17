@@ -392,7 +392,9 @@ onUnmounted(() => {
 .date-picker-trigger {
   @apply flex items-center gap-2;
   @apply min-w-0 text-sm;
-  padding: 6.5px 12px;
+  min-height: var(--control-height);
+  padding: 7px 12px;
+  line-height: 20px;
   border-radius: var(--surface-radius-control);
   background-color: var(--surface-field);
   @apply border border-gray-200 dark:border-dark-600;

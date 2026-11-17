@@ -36,10 +36,10 @@
                   @change="applyFilters"
                 />
               </div>
-              <div class="filter-field">
+              <div class="filter-field filter-field--date">
                 <DateTimePicker v-model="filters.since" :max="filters.until || undefined" :aria-label="t('asyncImage.filters.since')" :placeholder="t('asyncImage.filters.since')" data-testid="async-image-since-filter" @change="applyFilters" />
               </div>
-              <div class="filter-field">
+              <div class="filter-field filter-field--date">
                 <DateTimePicker v-model="filters.until" :min="filters.since || undefined" :aria-label="t('asyncImage.filters.until')" :placeholder="t('asyncImage.filters.until')" data-testid="async-image-until-filter" @change="applyFilters" />
               </div>
             </div>
@@ -138,15 +138,16 @@
       </template>
 
       <template #pagination>
-        <div v-if="tasks.length || offset > 0" class="card flex flex-wrap items-center justify-end gap-3 px-4 py-3">
-          <span class="mr-auto text-sm surface-muted">{{ t('asyncImage.list.page', { page: currentPage }) }}</span>
-          <button type="button" class="btn btn-secondary btn-sm" :disabled="offset === 0 || loadingTasks" @click="previousPage">
-            {{ t('asyncImage.list.previous') }}
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm" :disabled="!hasMore || loadingTasks" @click="nextPage">
-            {{ t('asyncImage.list.next') }}
-          </button>
-        </div>
+        <Pagination
+          v-if="tasks.length || offset > 0"
+          :total="null"
+          :has-more="hasMore"
+          :page="currentPage"
+          :page-size="PAGE_SIZE"
+          :show-page-size-selector="false"
+          :disabled="loadingTasks"
+          @update:page="handlePageChange"
+        />
       </template>
     </TablePageLayout>
 
@@ -405,6 +406,7 @@ import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
@@ -851,14 +853,13 @@ async function confirmDeleteTask() {
   }
 }
 
-function previousPage() {
-  offset.value = Math.max(0, offset.value - PAGE_SIZE)
-  void loadTasks()
-}
-
-function nextPage() {
-  if (!hasMore.value) return
-  offset.value += PAGE_SIZE
+// The list is cursor-paged by offset, so the shared pager translates its page
+// number into the offset and keeps the forward limit honest.
+function handlePageChange(page: number) {
+  const next = Math.max(0, (page - 1) * PAGE_SIZE)
+  if (next === offset.value) return
+  if (next > offset.value && !hasMore.value) return
+  offset.value = next
   void loadTasks()
 }
 
@@ -981,7 +982,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .icon-button {
-  @apply inline-flex h-8 w-8 items-center justify-center rounded border border-gray-200 text-gray-600 transition-colors hover:border-primary-300 hover:bg-primary-50/25 hover:text-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 dark:border-dark-600 dark:text-dark-300 dark:hover:border-primary-700 dark:hover:bg-primary-900/20 dark:hover:text-primary-300;
+  @apply inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:border-primary-300 hover:bg-primary-50/25 hover:text-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 dark:border-dark-600 dark:text-dark-300 dark:hover:border-primary-700 dark:hover:bg-primary-900/20 dark:hover:text-primary-300;
 }
 
 .icon-button-danger {

@@ -4,30 +4,7 @@
       <!-- One card owns the workspace tabs and every shared query condition. -->
       <div class="usage-query-card card workspace-fixed flex flex-col gap-3 px-5 py-3" data-testid="usage-query-card">
         <div class="flex flex-wrap items-center justify-between gap-4">
-          <WorkspaceTabs v-model="workspaceTab" embedded :tabs="workspaceTabs" :label="t('usage.tabs.usage')" />
-          <div v-show="activeTab !== 'live'" class="filter-bar" data-testid="usage-chart-conditions">
-            <div class="filter-pair">
-              <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
-              <div class="filter-field">
-                <DateRangePicker
-                  v-model:start-date="startDate"
-                  v-model:end-date="endDate"
-                  @change="onDateRangeChange"
-                />
-              </div>
-            </div>
-            <div class="filter-pair">
-              <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.granularity') }}:</span>
-              <div class="filter-field">
-                <Select v-model="granularity" :options="granularityOptions" @change="loadChartData" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Records-tab controls live in the same card, below the workspace tabs. -->
-        <div v-show="workspaceTab === 'records'" class="usage-record-controls">
-          <div class="usage-detail-tabs card-tabs workspace-fixed" role="tablist" :aria-label="t('usage.tabs.usage')">
+          <div class="usage-detail-tabs card-tabs" role="tablist" :aria-label="t('usage.tabs.usage')">
             <button
               v-for="tab in detailTabs"
               :key="tab.key"
@@ -43,8 +20,23 @@
               {{ tab.label }}
             </button>
           </div>
+          <div class="filter-bar" data-testid="usage-range-conditions">
+            <div class="filter-pair">
+              <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
+              <div class="filter-field filter-field--date">
+                <DateRangePicker
+                  v-model:start-date="startDate"
+                  v-model:end-date="endDate"
+                  @change="onDateRangeChange"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
 
-          <UsageFilters workspace v-if="activeTab !== 'disconnects' && activeTab !== 'live'" v-model="filters" ref="usageFiltersRef" flat :mode="usageFilterMode" class="workspace-fixed" :start-date="startDate" :end-date="endDate" :exporting="exporting" :model-options="modelNameOptions" :error-view="errView" @update:error-view="onErrorViewChange" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
+        <!-- Detail-tab controls live in the same card, below the tabs. -->
+        <div class="usage-record-controls">
+          <UsageFilters workspace v-if="activeTab !== 'disconnects'" v-model="filters" ref="usageFiltersRef" flat :mode="usageFilterMode" class="workspace-fixed" :start-date="startDate" :end-date="endDate" :exporting="exporting" :model-options="modelNameOptions" :error-view="errView" @update:error-view="onErrorViewChange" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
             <template #after-reset>
               <div v-if="activeTab !== 'ranking'" class="relative" ref="columnDropdownRef">
                 <button
@@ -93,51 +85,7 @@
         </div>
       </div>
 
-      <section v-show="workspaceTab === 'charts' && activeTab !== 'live'" class="workspace-shell workspace-scroll space-y-4" data-testid="usage-charts-panel">
-      <UsageStatsCards :stats="usageStats" />
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <ModelDistributionChart
-            v-model:source="modelDistributionSource"
-            v-model:metric="modelDistributionMetric"
-            :model-stats="requestedModelStats"
-            :upstream-model-stats="upstreamModelStats"
-            :mapping-model-stats="mappingModelStats"
-            :loading="modelStatsLoading"
-            :show-source-toggle="true"
-            :show-metric-toggle="true"
-            :start-date="startDate"
-            :end-date="endDate"
-            :filters="breakdownFilters"
-          />
-          <GroupDistributionChart
-            v-model:metric="groupDistributionMetric"
-            :group-stats="groupStats"
-            :loading="chartsLoading"
-            :show-metric-toggle="true"
-            :start-date="startDate"
-            :end-date="endDate"
-            :filters="breakdownFilters"
-          />
-        </div>
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <EndpointDistributionChart
-            v-model:source="endpointDistributionSource"
-            v-model:metric="endpointDistributionMetric"
-            :endpoint-stats="inboundEndpointStats"
-            :upstream-endpoint-stats="upstreamEndpointStats"
-            :endpoint-path-stats="endpointPathStats"
-            :loading="endpointStatsLoading"
-            :show-source-toggle="true"
-            :show-metric-toggle="true"
-            :title="t('usage.endpointDistribution')"
-            :start-date="startDate"
-            :end-date="endDate"
-            :filters="breakdownFilters"
-          />
-          <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
-        </div>
-      </section>
-      <div ref="recordsPanel" v-show="workspaceTab === 'records'" class="workspace-body usage-records-workspace" data-testid="usage-records-panel">
+      <div ref="recordsPanel" class="workspace-body usage-records-workspace" data-testid="usage-records-panel">
         <div v-show="activeTab === 'usage'" class="workspace-body usage-history-workspace gap-4">
           <UsageTable
             workspace
@@ -156,7 +104,6 @@
           <Pagination class="workspace-fixed" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
 
         </div>
-        <LiveRequestsPanel workspace v-if="activeTab === 'live'" mode="admin" />
         <div v-show="activeTab === 'errors'" class="workspace-body usage-errors-workspace gap-4">
           <OpsErrorLogTable
             workspace
@@ -211,7 +158,7 @@
 
 <script setup lang="ts">
 import { firstByteMs, strictFirstTokenMs, averageTps, tpsNote } from '@/utils/usageTiming'
-import { ref, reactive, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { saveAs } from 'file-saver'
 import { useRoute, useRouter } from 'vue-router'
@@ -219,15 +166,13 @@ import { useAppStore } from '@/stores/app'; import { adminAPI } from '@/api/admi
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
-import WorkspaceTabs from '@/components/common/WorkspaceTabs.vue'
-import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination from '@/components/common/Pagination.vue'; import Select from '@/components/common/Select.vue'; import DateRangePicker from '@/components/common/DateRangePicker.vue'
-import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
+import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination from '@/components/common/Pagination.vue'; import DateRangePicker from '@/components/common/DateRangePicker.vue'
+import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'; import UsageExportProgress from '@/components/admin/usage/UsageExportProgress.vue'
 import ClientDisconnectEventsPanel from '@/components/admin/usage/ClientDisconnectEventsPanel.vue'
 import { useColumnPreferenceKey } from '@/composables/useColumnPreferenceKey'
 import { useAnchoredDropdown } from '@/composables/useAnchoredDropdown'
 import { useUsageSnapshot } from '@/composables/useUsageSnapshot'
-import LiveRequestsPanel from '@/components/usage/LiveRequestsPanel.vue'
 import UserTokenRanking from '@/components/admin/usage/UserTokenRanking.vue'
 import UsageCleanupDialog from '@/components/admin/usage/UsageCleanupDialog.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
@@ -235,42 +180,16 @@ import OpsErrorLogTable from '@/views/admin/ops/components/OpsErrorLogTable.vue'
 import OpsErrorDetailModal from '@/views/admin/ops/components/OpsErrorDetailModal.vue'
 import { listErrorLogs } from '@/api/admin/ops'
 import type { OpsErrorLog } from '@/api/admin/ops'
-import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'; import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'; import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
-import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
 import Icon from '@/components/icons/Icon.vue'
-import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'
+import type { AdminUsageLog, ModelStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'
 
 const { t } = useI18n()
 const appStore = useAppStore()
-type DistributionMetric = 'tokens' | 'actual_cost'
-type EndpointSource = 'inbound' | 'upstream' | 'path'
-type ModelDistributionSource = 'requested' | 'upstream' | 'mapping'
 const route = useRoute()
 const router = useRouter()
-const workspaceTab = ref(Object.keys(route.query).length ? 'records' : 'charts')
-const recordsPanel = ref<HTMLElement | null>(null)
-const workspaceTabs = computed(() => [
-  { value: 'charts', label: t('workspace.charts') },
-  { value: 'records', label: t('workspace.usageRecords') },
-])
 const usageStats = ref<AdminUsageStatsResponse | null>(null); const usageLogs = ref<AdminUsageLog[]>([]); const loading = ref(false); const exporting = ref(false)
-const trendData = ref<TrendDataPoint[]>([]); const requestedModelStats = ref<ModelStat[]>([]); const upstreamModelStats = ref<ModelStat[]>([]); const mappingModelStats = ref<ModelStat[]>([]); const groupStats = ref<GroupStat[]>([]); const chartsLoading = ref(false); const modelStatsLoading = ref(false); const granularity = ref<'day' | 'hour'>('hour')
-const modelDistributionMetric = ref<DistributionMetric>('tokens')
-const modelDistributionSource = ref<ModelDistributionSource>('requested')
-const loadedModelSources = reactive<Record<ModelDistributionSource, boolean>>({
-  requested: false,
-  upstream: false,
-  mapping: false,
-})
-const groupDistributionMetric = ref<DistributionMetric>('tokens')
-const endpointDistributionMetric = ref<DistributionMetric>('tokens')
-const endpointDistributionSource = ref<EndpointSource>('inbound')
-const inboundEndpointStats = ref<EndpointStat[]>([])
-const upstreamEndpointStats = ref<EndpointStat[]>([])
-const endpointPathStats = ref<EndpointStat[]>([])
-const endpointStatsLoading = ref(false)
+const requestedModelStats = ref<ModelStat[]>([])
 let abortController: AbortController | null = null; let exportAbortController: AbortController | null = null
-let chartReqSeq = 0
 let statsReqSeq = 0
 let modelStatsReqSeq = 0
 const exportProgress = reactive({ show: false, progress: 0, current: 0, total: 0, estimatedTime: '' })
@@ -310,12 +229,10 @@ const handleUserClick = async (userId: number) => {
 const handleRankingSelectUser = (userId: number, email: string) => {
   filters.value = { ...filters.value, user_id: userId }
   usageFiltersRef.value?.setUserKeyword?.(email || '')
-  workspaceTab.value = 'records'
   activeTab.value = 'usage'
   applyFilters()
 }
 
-const granularityOptions = computed(() => [{ value: 'day', label: t('admin.dashboard.day') }, { value: 'hour', label: t('admin.dashboard.hour') }])
 // Use local timezone to avoid UTC timezone issues
 const formatLD = (d: Date) => {
   const year = d.getFullYear()
@@ -330,12 +247,6 @@ const getLast24HoursRangeDates = (): { start: string; end: string } => {
     start: formatLD(start),
     end: formatLD(end)
   }
-}
-const getGranularityForRange = (start: string, end: string): 'day' | 'hour' => {
-  const startTime = new Date(`${start}T00:00:00`).getTime()
-  const endTime = new Date(`${end}T00:00:00`).getTime()
-  const daysDiff = Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24))
-  return daysDiff <= 1 ? 'hour' : 'day'
 }
 const defaultRange = getLast24HoursRangeDates()
 const startDate = ref(defaultRange.start); const endDate = ref(defaultRange.end)
@@ -379,7 +290,6 @@ const applyRouteQueryFilters = () => {
     start_date: startDate.value,
     end_date: endDate.value
   }
-  granularity.value = getGranularityForRange(startDate.value, endDate.value)
 }
 
 const loadRouteUserFilterLabel = async () => {
@@ -411,7 +321,6 @@ const onDateRangeChange = (range: { startDate: string; endDate: string; preset: 
     start_date: range.startDate,
     end_date: range.endDate
   }
-  granularity.value = getGranularityForRange(range.startDate, range.endDate)
   applyFilters()
 }
 
@@ -447,7 +356,6 @@ const loadLogs = async () => {
 }
 const loadStats = async (force = false) => {
   const seq = ++statsReqSeq
-  endpointStatsLoading.value = true
   try {
     const requestType = filters.value.request_type
     const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
@@ -458,34 +366,16 @@ const loadStats = async (force = false) => {
     })
     if (seq !== statsReqSeq) return
     usageStats.value = s
-    inboundEndpointStats.value = s.endpoints || []
-    upstreamEndpointStats.value = s.upstream_endpoints || []
-    endpointPathStats.value = s.endpoint_paths || []
   } catch (error) {
     if (seq !== statsReqSeq) return
     console.error('Failed to load usage stats:', error)
-    inboundEndpointStats.value = []
-    upstreamEndpointStats.value = []
-    endpointPathStats.value = []
-  } finally {
-    if (seq === statsReqSeq) endpointStatsLoading.value = false
   }
 }
 
-// 失效模型统计缓存:仅标记需要重取,保留旧数据直到新数据到达(避免刷新时图表闪空)。
-const invalidateModelStatsCache = () => {
-  loadedModelSources.requested = false
-  loadedModelSources.upstream = false
-  loadedModelSources.mapping = false
-}
-
-const loadModelStats = async (source: ModelDistributionSource, force = false) => {
-  if (!force && loadedModelSources[source]) {
-    return
-  }
-
+// Only the requested-model names feed the model filter; the charts moved to
+// the dashboard, which loads its own distributions.
+const loadModelStats = async () => {
   const seq = ++modelStatsReqSeq
-  modelStatsLoading.value = true
   try {
     const requestType = filters.value.request_type
     const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
@@ -504,73 +394,23 @@ const loadModelStats = async (source: ModelDistributionSource, force = false) =>
 	  upstream_model_mismatch: filters.value.upstream_model_mismatch,
     }
 
-    const response = await adminAPI.dashboard.getModelStats({ ...baseParams, model_source: source })
+    const response = await adminAPI.dashboard.getModelStats({ ...baseParams, model_source: 'requested' })
 
     if (seq !== modelStatsReqSeq) return
 
-    const models = response.models || []
-    if (source === 'requested') {
-      requestedModelStats.value = models
-    } else if (source === 'upstream') {
-      upstreamModelStats.value = models
-    } else {
-      mappingModelStats.value = models
-    }
-    loadedModelSources[source] = true
+    requestedModelStats.value = response.models || []
   } catch (error) {
     if (seq !== modelStatsReqSeq) return
     console.error('Failed to load model stats:', error)
-    if (source === 'requested') {
-      requestedModelStats.value = []
-    } else if (source === 'upstream') {
-      upstreamModelStats.value = []
-    } else {
-      mappingModelStats.value = []
-    }
-    loadedModelSources[source] = false
-  } finally {
-    if (seq === modelStatsReqSeq) modelStatsLoading.value = false
+    requestedModelStats.value = []
   }
 }
 
-const loadChartData = async () => {
-  const seq = ++chartReqSeq
-  chartsLoading.value = true
-  try {
-    const requestType = filters.value.request_type
-    const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
-    const snapshot = await adminAPI.dashboard.getSnapshotV2({
-      start_date: filters.value.start_date || startDate.value,
-      end_date: filters.value.end_date || endDate.value,
-      granularity: granularity.value,
-      user_id: filters.value.user_id,
-      model: filters.value.model,
-      api_key_id: filters.value.api_key_id,
-      account_id: filters.value.account_id,
-      group_id: filters.value.group_id,
-      request_type: requestType,
-      stream: legacyStream === null ? undefined : legacyStream,
-      native_compaction_v2: filters.value.native_compaction_v2,
-      billing_type: filters.value.billing_type,
-	  upstream_model_mismatch: filters.value.upstream_model_mismatch,
-      include_stats: false,
-      include_trend: true,
-      include_model_stats: false,
-      include_group_stats: true,
-      include_users_trend: false
-    })
-    if (seq !== chartReqSeq) return
-    trendData.value = snapshot.trend || []
-    groupStats.value = snapshot.groups || []
-  } catch (error) { console.error('Failed to load chart data:', error) } finally { if (seq === chartReqSeq) chartsLoading.value = false }
-}
 const applyFilters = () => {
   pagination.page = 1
-  invalidateModelStatsCache()
   loadLogs()
   loadStats()
-  loadModelStats(modelDistributionSource.value, true)
-  loadChartData()
+  loadModelStats()
   errPage.value = 1
   if (activeTab.value === 'errors') {
     loadAdminErrors()
@@ -580,8 +420,7 @@ const applyFilters = () => {
 }
 const refreshData = async () => {
   historySnapshot.reset()
-  invalidateModelStatsCache()
-  await Promise.all([loadLogs(), loadStats(true), loadModelStats(modelDistributionSource.value, true), loadChartData(), ...(activeTab.value === 'errors' ? [loadAdminErrors()] : [])])
+  await Promise.all([loadLogs(), loadStats(true), loadModelStats(), ...(activeTab.value === 'errors' ? [loadAdminErrors()] : [])])
   if (rankingMounted.value) await rankingRef.value?.reload()
 }
 const resetFilters = () => {
@@ -590,7 +429,6 @@ const resetFilters = () => {
   endDate.value = range.end
   errorDatePreset.value = 'last24Hours'
   filters.value = { start_date: startDate.value, end_date: endDate.value, request_type: undefined, native_compaction_v2: null, billing_type: null, billing_mode: undefined }
-  granularity.value = getGranularityForRange(startDate.value, endDate.value)
   applyFilters()
 }
 const handlePageChange = (p: number) => { pagination.page = p; loadLogs() }
@@ -838,18 +676,10 @@ const loadSavedColumns = () => {
 }
 
 // Detail tabs
-type DetailTab = 'usage' | 'errors' | 'ranking' | 'disconnects' | 'live'
+type DetailTab = 'usage' | 'errors' | 'ranking' | 'disconnects'
 const activeTab = ref<DetailTab>('usage')
-let lastHistoryTab: typeof activeTab.value = 'usage'
-watch(activeTab, (tab) => { if (tab !== 'live') lastHistoryTab = tab })
-watch(workspaceTab, async (tab) => {
-  if (tab === 'charts' && activeTab.value === 'live') activeTab.value = lastHistoryTab
-  await nextTick()
-  window.dispatchEvent(new Event('resize'))
-})
-const usageFilterMode = computed<'usage' | 'errors' | 'ranking'>(() => (activeTab.value === 'disconnects' || activeTab.value === 'live') ? 'usage' : activeTab.value)
+const usageFilterMode = computed<'usage' | 'errors' | 'ranking'>(() => activeTab.value === 'disconnects' ? 'usage' : activeTab.value)
 const detailTabs = computed(() => [
-  { key: 'live' as const, label: t('inspection.live'), icon: 'bolt' as const },
   { key: 'usage' as const, label: t('usage.tabs.usage'), icon: 'document' as const },
   { key: 'errors' as const, label: t('usage.tabs.errors'), icon: 'exclamationTriangle' as const },
   { key: 'ranking' as const, label: t('usage.tabs.ranking'), icon: 'chart' as const },
@@ -861,7 +691,6 @@ const disconnectEventsMounted = ref(false)
 const rankingRef = ref<InstanceType<typeof UserTokenRanking> | null>(null)
 
 const switchTab = (tab: DetailTab) => {
-  workspaceTab.value = 'records'
   activeTab.value = tab
   if (tab === 'errors' && errRows.value.length === 0) loadAdminErrors()
   if (tab === 'ranking') rankingMounted.value = true
@@ -948,26 +777,19 @@ onMounted(() => {
   void loadRouteUserFilterLabel()
   loadLogs()
   loadStats()
-  loadModelStats(modelDistributionSource.value, true)
-  window.setTimeout(() => {
-    void loadChartData()
-  }, 120)
+  loadModelStats()
   loadSavedColumns()
   loadSavedErrColumns()
   document.addEventListener('click', handleColumnClickOutside)
 })
 onUnmounted(() => { abortController?.abort(); exportAbortController?.abort(); document.removeEventListener('click', handleColumnClickOutside) })
 
-watch(modelDistributionSource, (source) => {
-  void loadModelStats(source)
-})
-
 defineExpose({ requestedModelStats, refreshData })
 
 </script>
 
 <style scoped>
-.usage-query-card .usage-detail-tabs { padding: 0; margin-bottom: 12px; border: 0; }
+.usage-query-card .usage-detail-tabs { padding: 0; border: 0; }
 @media (min-width: 1024px) {
   .usage-detail-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
   .usage-detail-tabs > button { flex: none; white-space: nowrap; }

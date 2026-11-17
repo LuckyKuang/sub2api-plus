@@ -148,25 +148,16 @@
       </div>
 
       <!-- Pagination -->
-      <div v-if="totalPages > 1" class="pagination-card card flex items-center justify-center gap-2 px-4 py-3">
-        <button
-          :disabled="currentPage <= 1"
-          class="btn btn-secondary px-3 py-1 text-sm"
-          @click="loadHistory(currentPage - 1)"
-        >
-          {{ t('pagination.previous') }}
-        </button>
-        <span class="text-sm surface-muted">
-          {{ currentPage }} / {{ totalPages }}
-        </span>
-        <button
-          :disabled="currentPage >= totalPages"
-          class="btn btn-secondary px-3 py-1 text-sm"
-          @click="loadHistory(currentPage + 1)"
-        >
-          {{ t('pagination.next') }}
-        </button>
-      </div>
+      <Pagination
+        v-if="totalPages > 1"
+        embedded
+        :total="total"
+        :page="currentPage"
+        :page-size="pageSize"
+        :show-page-size-selector="false"
+        :disabled="loading"
+        @update:page="loadHistory"
+      />
     </div>
   </BaseDialog>
 </template>
@@ -179,6 +170,7 @@ import { formatDateTime } from '@/utils/format'
 import type { AdminUser } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const props = defineProps<{ show: boolean; user: AdminUser | null; hideActions?: boolean }>()

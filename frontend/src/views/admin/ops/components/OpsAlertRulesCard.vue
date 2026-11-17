@@ -596,12 +596,12 @@ function cancelDelete() {
             <input v-model.number="draft!.cooldown_minutes" class="input" type="number" min="0" max="1440" />
           </div>
 
-          <div class="flex items-center justify-between rounded-xl surface-inset px-4 py-3 md:col-span-2">
+          <div class="flex items-center justify-between rounded-lg surface-inset px-4 py-3 md:col-span-2">
             <span class="text-xs font-bold surface-muted">{{ t('admin.ops.alertRules.form.enabled') }}</span>
             <input v-model="draft!.enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
           </div>
 
-          <div class="flex items-center justify-between rounded-xl surface-inset px-4 py-3 md:col-span-2">
+          <div class="flex items-center justify-between rounded-lg surface-inset px-4 py-3 md:col-span-2">
             <span class="text-xs font-bold surface-muted">{{ t('admin.ops.alertRules.form.notifyEmail') }}</span>
             <input v-model="draft!.notify_email" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
           </div>

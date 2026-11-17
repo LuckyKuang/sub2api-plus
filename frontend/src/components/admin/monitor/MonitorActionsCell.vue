@@ -13,31 +13,13 @@
       </button>
     </span>
     <button
-      data-testid="monitor-duplicate"
-      :title="duplicateTitle"
-      :disabled="duplicating || Boolean(row.api_key_decrypt_failed)"
-      @click="$emit('duplicate', row)"
-      class="table-action"
-    >
-      <Icon name="copy" size="sm" />
-      <span class="text-xs">
-        {{ duplicating ? t('admin.channelMonitor.duplicating') : t('admin.channelMonitor.duplicate') }}
-      </span>
-    </button>
-    <button
       @click="$emit('edit', row)"
       class="table-action"
     >
       <Icon name="edit" size="sm" />
       <span class="text-xs">{{ t('common.edit') }}</span>
     </button>
-    <button
-      @click="$emit('delete', row)"
-      class="table-action table-action-danger"
-    >
-      <Icon name="trash" size="sm" />
-      <span class="text-xs">{{ t('common.delete') }}</span>
-    </button>
+    <ActionMenu :items="menuItems" @select="handleSelect" />
   </div>
 </template>
 
@@ -45,6 +27,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChannelMonitor } from '@/api/admin/channelMonitor'
+import ActionMenu, { type ActionMenuItem } from '@/components/common/ActionMenu.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const props = defineProps<{
@@ -54,7 +37,7 @@ const props = defineProps<{
   duplicating: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'run', row: ChannelMonitor): void
   (e: 'duplicate', row: ChannelMonitor): void
   (e: 'edit', row: ChannelMonitor): void
@@ -67,9 +50,27 @@ const runTitle = computed(() => {
   if (props.probesEnabled === false) return t('admin.channelMonitor.probesDisabledHint')
   return t('admin.channelMonitor.runNow')
 })
+
 const duplicateTitle = computed(() => {
   if (props.row.api_key_decrypt_failed) return t('admin.channelMonitor.duplicateKeyUnavailable')
   if (props.duplicating) return t('admin.channelMonitor.duplicating')
   return t('admin.channelMonitor.duplicate')
 })
+
+// Run now and Edit stay visible; the rest live in one "more" menu.
+const menuItems = computed<ActionMenuItem[]>(() => [
+  {
+    key: 'duplicate',
+    label: props.duplicating ? t('admin.channelMonitor.duplicating') : t('admin.channelMonitor.duplicate'),
+    icon: 'copy',
+    disabled: props.duplicating || Boolean(props.row.api_key_decrypt_failed),
+    title: duplicateTitle.value,
+  },
+  { key: 'delete', label: t('common.delete'), icon: 'trash', tone: 'danger' },
+])
+
+function handleSelect(action: string) {
+  if (action === 'duplicate') emit('duplicate', props.row)
+  else if (action === 'delete') emit('delete', props.row)
+}
 </script>

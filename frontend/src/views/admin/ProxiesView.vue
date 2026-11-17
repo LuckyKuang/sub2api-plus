@@ -298,47 +298,13 @@
                 <span class="text-xs">{{ t('admin.proxies.testConnection') }}</span>
               </button>
               <button
-                @click="handleQualityCheck(row)"
-                :disabled="qualityCheckingProxyIds.has(row.id)"
-                class="table-action"
-              >
-                <svg
-                  v-if="qualityCheckingProxyIds.has(row.id)"
-                  class="h-4 w-4 animate-spin"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    class="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    stroke-width="4"
-                  ></circle>
-                  <path
-                    class="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-                <Icon v-else name="shield" size="sm" />
-                <span class="text-xs">{{ t('admin.proxies.qualityCheck') }}</span>
-              </button>
-              <button
                 @click="handleEdit(row)"
                 class="table-action"
               >
                 <Icon name="edit" size="sm" />
                 <span class="text-xs">{{ t('common.edit') }}</span>
               </button>
-              <button
-                @click="handleDelete(row)"
-                class="table-action table-action-danger"
-              >
-                <Icon name="trash" size="sm" />
-                <span class="text-xs">{{ t('common.delete') }}</span>
-              </button>
+              <ActionMenu :items="proxyRowActions(row)" @select="handleProxyRowAction(row, $event)" />
             </div>
           </template>
 
@@ -1015,6 +981,7 @@ import ImportDataModal from '@/components/admin/proxy/ImportDataModal.vue'
 import Select from '@/components/common/Select.vue'
 import { getTimezoneOptions } from '@/utils/timezones'
 import { getCountryOptions } from '@/utils/countries'
+import ActionMenu, { type ActionMenuItem } from '@/components/common/ActionMenu.vue'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import { useClipboard } from '@/composables/useClipboard'
@@ -1731,6 +1698,17 @@ const runProxyQualityCheck = async (proxyId: number, notify: boolean, captured?:
     }
   })()
   return run.promise
+}
+
+// Each row shows its two everyday actions; the rest live in one "more" menu.
+const proxyRowActions = (proxy: Proxy): ActionMenuItem[] => [
+  { key: 'quality', label: t('admin.proxies.qualityCheck'), icon: 'shield', disabled: qualityCheckingProxyIds.value.has(proxy.id) },
+  { key: 'delete', label: t('common.delete'), icon: 'trash', tone: 'danger' },
+]
+
+const handleProxyRowAction = (proxy: Proxy, action: string) => {
+  if (action === 'quality') handleQualityCheck(proxy)
+  else if (action === 'delete') handleDelete(proxy)
 }
 
 const handleQualityCheck = async (proxy: Proxy) => {

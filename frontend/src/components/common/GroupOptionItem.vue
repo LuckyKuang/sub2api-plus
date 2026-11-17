@@ -27,7 +27,7 @@
     <div class="flex shrink-0 items-center gap-2 pt-0.5">
       <div class="flex shrink-0 flex-col items-end gap-1">
         <!-- Rate pill (platform color) -->
-        <span v-if="!$slots.rates && rateMultiplier !== undefined" :class="['inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold', ratePillClass]">
+        <span v-if="!$slots.rates && rateMultiplier !== undefined" :class="['inline-flex items-center whitespace-nowrap rounded-md px-3 py-1 text-xs font-semibold', ratePillClass]">
           <template v-if="hasCustomRate">
             <span class="mr-1 line-through opacity-50">{{ rateMultiplier }}x</span>
             <span class="font-bold">{{ userRateMultiplier }}x</span>
@@ -38,7 +38,7 @@
         </span>
         <span
           v-if="!$slots.rates && hasPeakRate"
-          class="inline-flex items-center whitespace-nowrap rounded-full bg-amber-50/[0.15] px-3 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+          class="inline-flex items-center whitespace-nowrap rounded-md bg-amber-50/[0.15] px-3 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
           :title="peakRateTitle"
         >
           {{ peakRateText }}

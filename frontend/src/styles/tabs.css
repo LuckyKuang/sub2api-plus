@@ -24,10 +24,10 @@
   gap: 6px;
   min-width: 0;
   max-width: 100%;
-  min-height: 38px;
+  min-height: var(--control-height);
   padding: 7px 14px;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--surface-radius-control);
   background-color: transparent;
   box-shadow: none;
   color: var(--surface-muted);

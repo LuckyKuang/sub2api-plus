@@ -20,10 +20,10 @@
 .workspace-tab {
   flex: 0 0 auto;
   min-width: max-content;
-  min-height: 38px;
+  min-height: var(--control-height);
   padding: 7px 20px;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--surface-radius-control);
   background-color: transparent;
   box-shadow: none;
   color: var(--surface-muted);
@@ -131,8 +131,8 @@
 .filter-field > div { width: 100%; }
 .filter-field :where(.input, .select-trigger, .date-picker-trigger),
 .filter-actions > .btn, .filter-actions > .relative > .btn {
-  height: var(--filter-control-height, 38px);
-  min-height: var(--filter-control-height, 38px);
+  height: var(--filter-control-height, var(--control-height));
+  min-height: var(--filter-control-height, var(--control-height));
 }
 
 .filter-field {
@@ -143,6 +143,7 @@
 @media (min-width: 1024px) {
   .filter-field { width: var(--filter-control-width); }
   .filter-field--search { width: var(--filter-search-width); }
+  .filter-field--date { width: var(--filter-date-width); }
   /* Scoped so form controls elsewhere keep their own sizing. `:where` keeps
      this at zero specificity, letting a field opt out with its own width. */
   .filter-field :where(.input, .select-trigger, .date-picker-trigger, .date-time-picker, .date-picker-input) {

@@ -383,7 +383,7 @@ onBeforeUnmount(() => {
 .date-time-trigger-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .date-time-trigger-empty { color: var(--surface-muted); }
 .date-time-trigger[aria-readonly=true] { cursor: default; }
-.date-time-panel.surface-panel { position: fixed; z-index: 100000030; width: 352px; max-width: calc(100vw - 24px); overflow: auto; overscroll-behavior: contain; padding: 16px; border: 1px solid var(--surface-edge); border-radius: 20px; box-shadow: var(--surface-shadow); }
+.date-time-panel.surface-panel { position: fixed; z-index: 100000030; width: 352px; max-width: calc(100vw - 24px); overflow: auto; overscroll-behavior: contain; padding: 16px; border: 1px solid var(--surface-edge); border-radius: var(--surface-radius); box-shadow: var(--surface-shadow); }
 .date-time-month-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 .date-time-month-label { font-size: 14px; font-weight: 600; }
 .date-time-icon-button { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--surface-radius-item); }
@@ -398,12 +398,12 @@ onBeforeUnmount(() => {
 .date-time-panel .date-time-day-selected:not(:disabled):hover { background-color: rgb(var(--console-accent-400, 45 212 191)); }
 .date-time-panel button:disabled { cursor: not-allowed; opacity: 0.35; }
 .date-time-panel :is(button, input):focus-visible { outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 60%); outline-offset: 1px; }
-.date-time-clock { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--surface-edge); border-radius: 14px; background: var(--surface-soft); }
+.date-time-clock { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--surface-edge); border-radius: var(--surface-radius-card); background: var(--surface-soft); }
 .date-time-clock:first-child { margin-top: 0; }
 .date-time-clock-part { flex: 1 0 90px; min-width: 0; text-align: center; }
 .date-time-clock-part label { display: block; margin-bottom: 6px; font-size: 11px; color: var(--surface-muted); }
 .date-time-stepper { display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--surface-edge); border-radius: var(--surface-radius-control); background: var(--surface-field); }
-.date-time-stepper button { display: flex; flex: none; align-items: center; justify-content: center; width: 24px; height: 30px; border-radius: 8px; }
+.date-time-stepper button { display: flex; flex: none; align-items: center; justify-content: center; width: 24px; height: 30px; border-radius: var(--surface-radius-control); }
 .date-time-stepper input { width: 100%; min-width: 0; border: 0; padding: 4px 0; background: transparent; color: var(--surface-text); text-align: center; font-size: 16px; font-variant-numeric: tabular-nums; }
 .date-time-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--surface-edge); }
 .date-time-actions .btn { padding-inline: 10px; }

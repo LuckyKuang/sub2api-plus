@@ -8,7 +8,7 @@
         <!-- Custom Logo or Default Logo -->
         <template v-if="settingsLoaded">
           <div
-            class="mb-4 inline-flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl"
+            class="mb-4 inline-flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl"
           >
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </div>

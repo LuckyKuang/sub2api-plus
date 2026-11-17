@@ -508,6 +508,8 @@ export default {
       deleteConfirmMessage: "Are you sure you want to delete user '{email}'? This action cannot be undone.",
       searchPlaceholder: 'Search by email, username, notes, or API key...',
       searchUsers: 'Search by email, username, notes, or API key',
+      // Filter fields share one compact width; the full scope stays in the title.
+      searchUsersShort: 'Search users…',
       roleFilter: 'Role Filter',
       allRoles: 'All Roles',
       allStatus: 'All Status',

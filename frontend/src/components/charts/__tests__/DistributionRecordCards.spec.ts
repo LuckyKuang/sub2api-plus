@@ -39,30 +39,32 @@ const users: UserBreakdownItem[] = [1, 2].map(user_id => ({
   cache_tokens: 0, total_tokens: 500,
 }))
 
+// User audit: collapsed or expanded, every row is its own card. Summary rows
+// are the stronger parent cards; their per-user rows are lighter leaf cards.
 describe.each(cases)('$name distribution record cards', (config) => {
   function mountChart() {
     return mount(defineComponent({ setup: () => () => h(config.component, config.props) }))
   }
 
-  it('keeps the summary, loading state, and user details inside the same rounded record', async () => {
+  it('renders summary and user rows as separate parent and leaf cards', async () => {
     let resolveResponse!: (response: UserBreakdownResponse) => void
     vi.mocked(getUserBreakdown).mockReturnValueOnce(new Promise(resolve => { resolveResponse = resolve }))
     const wrapper = mountChart()
-    const groups = wrapper.findAll('tbody.record-group')
-    expect(groups).toHaveLength(2)
-    const record = groups[0]
+    // No business record spans several rows any more.
+    expect(wrapper.find('.record-group').exists()).toBe(false)
+    expect(wrapper.find('[data-record-edges]').exists()).toBe(false)
+    const bodies = wrapper.findAll('tbody')
+    expect(bodies).toHaveLength(2)
+    const record = bodies[0]
     const summary = record.get('tr')
+    expect(summary.classes()).toContain('record-row-parent')
     expect(summary.findAll('td')).toHaveLength(config.columns)
-    expect(summary.findAll('td')[0].attributes('data-record-edges')).toBe('t b l tl bl')
-    expect(summary.findAll('td').at(-1)!.attributes('data-record-edges')).toBe('t b r tr br')
 
     await summary.trigger('click')
     expect(record.findAll('tr')).toHaveLength(2)
     const loading = record.get('td[colspan]')
     expect(loading.attributes('colspan')).toBe(String(config.columns))
-    expect(loading.attributes('data-record-edges')).toBe('b l r bl br')
-    expect(summary.findAll('td')[0].attributes('data-record-edges')).toBe('t l tl')
-    expect(summary.findAll('td').at(-1)!.attributes('data-record-edges')).toBe('t r tr')
+    expect(record.findAll('tr')[1].classes()).toContain('record-row-leaf')
 
     resolveResponse({ users, start_date: '2026-10-01', end_date: '2026-10-24' })
     await flushPromises()
@@ -71,29 +73,26 @@ describe.each(cases)('$name distribution record cards', (config) => {
     expect(rows[1].text()).toContain('user1@example.com')
     expect(rows[2].text()).toContain('user2@example.com')
     expect(rows[1].findAll('td')).toHaveLength(config.columns)
-    expect(rows[1].findAll('td').map(cell => cell.attributes('data-record-edges')))
-      .toEqual(['l', ...Array(config.columns - 2).fill(''), 'r'])
-    expect(rows[2].findAll('td').map(cell => cell.attributes('data-record-edges')))
-      .toEqual(['b l bl', ...Array(config.columns - 2).fill('b'), 'b r br'])
-    expect(groups[1].findAll('tr')).toHaveLength(1)
+    expect(rows.slice(1).every(row => row.classes().includes('record-row-leaf'))).toBe(true)
+    expect(summary.classes()).toContain('record-row-parent')
+    expect(bodies[1].findAll('tr')).toHaveLength(1)
 
     await summary.trigger('click')
     expect(record.findAll('tr')).toHaveLength(1)
-    expect(summary.findAll('td')[0].attributes('data-record-edges')).toBe('t b l tl bl')
-    expect(summary.findAll('td').at(-1)!.attributes('data-record-edges')).toBe('t b r tr br')
+    expect(summary.classes()).toContain('record-row-parent')
     wrapper.unmount()
   })
 
-  it('closes the record around an empty details response', async () => {
+  it('shows an empty details response as its own leaf card', async () => {
     vi.mocked(getUserBreakdown).mockResolvedValueOnce({ users: [], start_date: '', end_date: '' })
     const wrapper = mountChart()
-    const record = wrapper.get('tbody.record-group')
+    const record = wrapper.get('tbody')
     await record.get('tr').trigger('click')
     await flushPromises()
     const empty = record.get('td[colspan]')
     expect(empty.text()).toBe('admin.dashboard.noDataAvailable')
     expect(empty.attributes('colspan')).toBe(String(config.columns))
-    expect(empty.attributes('data-record-edges')).toBe('b l r bl br')
+    expect(record.findAll('tr')[1].classes()).toContain('record-row-leaf')
     wrapper.unmount()
   })
 })

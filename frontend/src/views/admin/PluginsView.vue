@@ -58,7 +58,7 @@
       </p>
 
       <div
-        class="workspace-fixed rounded-xl border border-blue-200 bg-blue-50/[0.15] px-4 py-3 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
+        class="workspace-fixed rounded-lg border border-blue-200 bg-blue-50/[0.15] px-4 py-3 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
       >
         <p>{{ t("admin.plugins.runtimeNotice") }}</p>
         <p class="mt-1">{{ t("admin.plugins.menuNotice") }}</p>
@@ -105,7 +105,7 @@
                   >v{{ plugin.version }}</span
                 >
                 <span
-                  class="rounded px-2 py-0.5 text-xs font-medium"
+                  class="whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium"
                   :class="stateClass(plugin.state)"
                 >
                   {{ t(`admin.plugins.${plugin.state}`) }}
@@ -139,7 +139,7 @@
               </p>
               <div class="mt-2 flex items-center gap-2">
                 <span
-                  class="rounded px-2 py-0.5 text-xs font-medium"
+                  class="whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium"
                   :class="compatibilityClass(plugin.compatibility.status)"
                 >
                   {{ t(`admin.plugins.${plugin.compatibility.status}`) }}
@@ -178,7 +178,7 @@
               </p>
               <div class="mt-2 flex flex-wrap gap-2 text-xs">
                 <span
-                  class="rounded px-2 py-0.5"
+                  class="whitespace-nowrap rounded px-2 py-0.5"
                   :class="
                     plugin.runtime_healthy
                       ? 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'

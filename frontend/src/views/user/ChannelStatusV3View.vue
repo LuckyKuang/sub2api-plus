@@ -257,7 +257,7 @@ onBeforeUnmount(() => {
 .status-events-panel { display: flex; flex-direction: column; gap: 16px; }
 @media (min-width: 1024px) {
   .status-platform-panel, .status-events-panel { display: flex; flex: 1 1 0%; flex-direction: column; gap: 16px; min-height: 0; overflow: hidden; }
-  .status-card-grid { flex: 1 1 0%; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; border-radius: 16px; }
+  .status-card-grid { flex: 1 1 0%; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; border-radius: var(--surface-radius); }
 }
 .status-normal { --status-color: #16a34a; --status-tint: #16a34a0a; }
 .status-degraded { --status-color: #ca8a04; --status-tint: #ca8a040a; }
@@ -272,12 +272,12 @@ onBeforeUnmount(() => {
 .dark .status-unknown, .dark .status-insufficient { --status-color: var(--surface-muted); }
 .overview { background: var(--status-tint); border-color: color-mix(in srgb, var(--status-color) 25%, transparent); }
 .status-ink { color: var(--status-color); }
-.status-badge { display: inline-flex; align-items: center; white-space: nowrap; border-radius: 5px; padding: 3px 7px; font-size: 10px; color: var(--status-color); background: var(--status-tint); }
-.history-bar { display: block; border-radius: 2px; background: var(--status-color); height: 22px; }
+.status-badge { display: inline-flex; align-items: center; white-space: nowrap; border-radius: var(--surface-radius-tag); padding: 3px 7px; font-size: 10px; color: var(--status-color); background: var(--status-tint); }
+.history-bar { display: block; border-radius: var(--surface-radius-xs); background: var(--status-color); height: 22px; }
 .history-bar.status-degraded, .history-bar.status-recovering { height: 17px; }
 .history-bar.status-partial { height: 13px; }
 .history-bar.status-outage { height: 8px; }
 .history-bar.status-unknown, .history-bar.status-insufficient { height: 5px; background: #a3a3a34d; }
-.legend-dot { display: block; width: 8px; height: 8px; border-radius: 2px; background: var(--status-color); }
+.legend-dot { display: block; width: 8px; height: 8px; border-radius: var(--surface-radius-xs); background: var(--status-color); }
 .legend-dot.status-unknown { background: #a3a3a34d; }
 </style>

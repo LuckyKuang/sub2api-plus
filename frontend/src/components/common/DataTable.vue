@@ -1,7 +1,7 @@
 <template>
   <div v-if="!showDesktopTable" ref="cardsWrapperRef" v-bind="$attrs" class="record-cards space-y-3" :class="{ 'user-record-cards': userTableLayout }" :aria-busy="loading">
     <template v-if="loading && !data?.length">
-      <div v-for="i in 5" :key="i" class="glass-inset rounded-2xl border border-gray-200 p-4 dark:border-dark-700">
+      <div v-for="i in 5" :key="i" class="glass-inset rounded-xl border border-gray-200 p-4 dark:border-dark-700">
         <div class="space-y-3">
           <div v-for="column in dataColumns" :key="column.key" class="flex justify-between">
             <div class="h-4 w-20 animate-pulse rounded bg-gray-200 dark:bg-dark-700"></div>
@@ -15,7 +15,7 @@
     </template>
 
     <template v-else-if="!data || data.length === 0">
-      <div class="glass-inset rounded-2xl border border-gray-200 p-12 text-center dark:border-dark-700">
+      <div class="glass-inset rounded-xl border border-gray-200 p-12 text-center dark:border-dark-700">
         <slot name="empty">
           <div class="flex flex-col items-center">
             <Icon
@@ -48,7 +48,7 @@
       <div
         v-for="(row, index) in sortedData"
         :key="resolveRowKey(row, index)"
-        class="glass-inset rounded-2xl border border-gray-200 p-4 dark:border-dark-700"
+        class="glass-inset rounded-xl border border-gray-200 p-4 dark:border-dark-700"
         :class="{
           'cursor-pointer': clickableRows,
           'table-row-selected': (selectable && isRowSelected(row, index)) || activeRowKey === resolveRowKey(row, index)
@@ -1173,7 +1173,7 @@ defineExpose({
 
 .table-wrapper::-webkit-scrollbar-track {
   background-color: rgba(0, 0, 0, 0.03) !important;
-  border-radius: 6px !important;
+  border-radius: var(--surface-radius-tag) !important;
   margin: 0 4px !important;
 }
 .dark .table-wrapper::-webkit-scrollbar-track {
@@ -1183,7 +1183,7 @@ defineExpose({
 /* 常驻、不透明的滑块，无视鼠标是否 hover 都在那！ */
 .table-wrapper::-webkit-scrollbar-thumb {
   background-color: rgba(115, 115, 115, 0.75) !important;
-  border-radius: 6px !important;
+  border-radius: var(--surface-radius-tag) !important;
   border: 2px solid transparent !important;
   background-clip: padding-box !important;
   -webkit-appearance: none !important;

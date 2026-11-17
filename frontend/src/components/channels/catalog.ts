@@ -1,10 +1,5 @@
 import type { CatalogBillingUnit, CatalogGroup, CatalogOffer } from '@/api/channels'
 
-export interface CatalogFilters {
-  platform: string
-  search: string
-  sort: 'name' | 'price'
-}
 export interface CatalogQuote { group: CatalogGroup; offer: CatalogOffer }
 export interface CatalogPriceRange { min: number; max: number }
 export interface CatalogUnitPrice {
@@ -24,7 +19,6 @@ export interface CatalogModel {
   dynamic: 'none' | 'some' | 'all'
 }
 
-export const defaultCatalogFilters = (): CatalogFilters => ({ platform: '', search: '', sort: 'name' })
 export const modelIdentity = (offer: CatalogOffer, category: 'group' | 'composite' = 'group') => `${category}\0${offer.platform}\0${offer.name.toLowerCase()}`
 export function rateSource(_group: CatalogGroup | undefined, offer: CatalogOffer): 'media' | 'personal' | 'group' {
   return offer.rate_quote?.base_source ?? 'group'
@@ -80,26 +74,6 @@ export function catalogModels(groups: CatalogGroup[]): CatalogModel[] {
   })
 }
 
-export function normalizeCatalogFilters(models: CatalogModel[], filters: CatalogFilters): void {
-  if (filters.platform && !models.some(m => m.platform === filters.platform)) filters.platform = ''
-}
-export function visibleModels(models: CatalogModel[], filters: CatalogFilters): CatalogModel[] {
-  const query = filters.search.trim().toLowerCase()
-  return models.filter(m => (!filters.platform || m.platform === filters.platform) && (!query || m.name.toLowerCase().includes(query))).sort((a, b) => {
-    if (filters.sort === 'price') {
-      // Mixed-unit cards follow single-unit cards; never pick one arbitrary unit.
-      const au = a.prices.length === 1 ? units.indexOf(a.prices[0]!.unit) : units.length
-      const bu = b.prices.length === 1 ? units.indexOf(b.prices[0]!.unit) : units.length
-      if (au !== bu) return au - bu
-      const ap = a.prices.length === 1 ? a.prices[0]!.input?.min : undefined
-      const bp = b.prices.length === 1 ? b.prices[0]!.input?.min : undefined
-      if (ap == null && bp != null) return 1
-      if (ap != null && bp == null) return -1
-      if (ap != null && bp != null && ap !== bp) return ap - bp
-    }
-    return a.name.localeCompare(b.name) || a.platform.localeCompare(b.platform) || a.key.localeCompare(b.key)
-  })
-}
 
 const moneyFormatter = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 6 })
 

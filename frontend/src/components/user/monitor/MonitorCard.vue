@@ -7,7 +7,7 @@
     <!-- Header: icon + name/model + status chip -->
     <div class="flex items-start gap-3">
       <span
-        class="w-9 h-9 rounded-xl ring-1 ring-black/5 dark:ring-white/10 grid place-items-center flex-shrink-0"
+        class="w-9 h-9 rounded-lg ring-1 ring-black/5 dark:ring-white/10 grid place-items-center flex-shrink-0"
         :class="[providerGradient(item.provider), providerTintClass]"
       >
         <ProviderIcon :provider="item.provider" :size="20" />
@@ -36,7 +36,7 @@
         </div>
       </div>
       <span
-        class="px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0"
+        class="px-2.5 py-1 rounded-md text-xs font-semibold flex-shrink-0"
         :class="statusBadgeClass(item.primary_status)"
       >
         {{ statusLabel(item.primary_status) }}

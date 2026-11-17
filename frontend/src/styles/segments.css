@@ -9,7 +9,7 @@
   max-width: 100%;
   padding: 3px;
   border: 1px solid var(--surface-edge);
-  border-radius: 8px;
+  border-radius: var(--surface-radius-control);
   background-color: var(--surface-soft);
 }
 
@@ -24,7 +24,7 @@
   min-height: 26px;
   padding: 3px 12px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: calc(var(--surface-radius-control) - 3px);
   background-color: transparent;
   color: var(--surface-muted);
   font-size: 12px;

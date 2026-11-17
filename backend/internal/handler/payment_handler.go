@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -73,7 +74,7 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 		Currency           string           `json:"currency,omitempty"`
 		ValidityDays       int              `json:"validity_days"`
 		ValidityUnit       string           `json:"validity_unit"`
-		Features           string           `json:"features"`
+		Features           []string         `json:"features"`
 		ProductName        string           `json:"product_name"`
 		ForSale            bool             `json:"for_sale"`
 		SortOrder          int              `json:"sort_order"`
@@ -98,7 +99,7 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 			PeakStart: gi.PeakStart, PeakEnd: gi.PeakEnd, PeakRateMultiplier: gi.PeakRateMultiplier,
 			Name: p.Name, Description: p.Description, Price: p.Price, OriginalPrice: p.OriginalPrice,
 			Currency:     p.Currency,
-			ValidityDays: p.ValidityDays, ValidityUnit: p.ValidityUnit, Features: p.Features,
+			ValidityDays: p.ValidityDays, ValidityUnit: p.ValidityUnit, Features: parseFeatures(p.Features),
 			ProductName: p.ProductName, ForSale: p.ForSale, SortOrder: p.SortOrder,
 			ModelCatalog: catalog,
 		})
@@ -245,13 +246,22 @@ type checkoutPlan struct {
 	ModelCatalog       planModelCatalog `json:"model_catalog"`
 }
 
-// parseFeatures splits a newline-separated features string into a string slice.
+// parseFeatures turns the stored plan features into display lines. Features are
+// stored one per line; a value written as a JSON string array (for example by an
+// API client) yields its elements instead of one line of JSON text.
 func parseFeatures(raw string) []string {
 	if raw == "" {
 		return []string{}
 	}
+	lines := strings.Split(raw, "\n")
+	if trimmed := strings.TrimSpace(raw); strings.HasPrefix(trimmed, "[") {
+		var items []string
+		if err := json.Unmarshal([]byte(trimmed), &items); err == nil {
+			lines = items
+		}
+	}
 	var out []string
-	for _, line := range strings.Split(raw, "\n") {
+	for _, line := range lines {
 		if s := strings.TrimSpace(line); s != "" {
 			out = append(out, s)
 		}

@@ -718,9 +718,13 @@ describe('GroupsView duplicate action', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="group-duplicate"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="group-composite-routes"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="group-rate-multipliers"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="group-rpm-overrides"]').exists()).toBe(false)
+    // The advanced actions live in the row's "more" menu; open it and check
+    // that simple mode leaves only delete there.
+    const menu = wrapper.findComponent({ name: 'ActionMenu' })
+    expect(menu.exists()).toBe(true)
+    const visible = (menu.props('items') as Array<{ key: string; hidden?: boolean }>)
+      .filter(item => !item.hidden).map(item => item.key)
+    expect(visible).toEqual(['delete'])
     wrapper.unmount()
   })
 

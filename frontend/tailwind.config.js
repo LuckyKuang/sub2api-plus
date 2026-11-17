@@ -137,10 +137,19 @@ export default {
       },
       backdropBlur: {
         xs: '2px'
-      },
-      borderRadius: {
-        '4xl': '2rem'
       }
+    },
+    // Every rounded utility resolves to one step of the radius ladder in
+    // styles/console.css; there is no step above the container radius.
+    borderRadius: {
+      none: '0px',
+      sm: 'var(--surface-radius-xs)',
+      DEFAULT: 'var(--surface-radius-xs)',
+      md: 'var(--surface-radius-tag)',
+      lg: 'var(--surface-radius-control)',
+      xl: 'var(--surface-radius-card)',
+      '2xl': 'var(--surface-radius)',
+      full: '9999px'
     }
   },
   plugins: []

@@ -7,7 +7,7 @@
       <div class="flex min-w-0 items-center gap-3">
         <template v-if="settings">
           <span
-            class="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl surface-inset shadow-sm ring-1 ring-gray-200 dark:ring-dark-700"
+            class="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg surface-inset shadow-sm ring-1 ring-gray-200 dark:ring-dark-700"
           >
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </span>
@@ -16,7 +16,7 @@
           </span>
         </template>
         <template v-else>
-          <span class="h-9 w-9 flex-shrink-0 animate-pulse rounded-xl bg-gray-200 dark:bg-dark-700" aria-hidden="true"></span>
+          <span class="h-9 w-9 flex-shrink-0 animate-pulse rounded-lg bg-gray-200 dark:bg-dark-700" aria-hidden="true"></span>
           <span class="h-5 w-28 animate-pulse rounded bg-gray-200 dark:bg-dark-700" aria-hidden="true"></span>
         </template>
       </div>
@@ -25,14 +25,14 @@
       <RouterLink
         v-if="isAuthenticated"
         :to="backTarget"
-        class="inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-primary-500/25 transition-all duration-200 hover:from-primary-600 hover:to-primary-700 hover:shadow-lg hover:shadow-primary-500/30 active:scale-[0.98] dark:shadow-primary-500/20"
+        class="inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-primary-500 to-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-primary-500/25 transition-all duration-200 hover:from-primary-600 hover:to-primary-700 hover:shadow-lg hover:shadow-primary-500/30 active:scale-[0.98] dark:shadow-primary-500/20"
       >
         {{ t('modelPlaza.nav.backToDashboard') }}
       </RouterLink>
       <RouterLink
         v-else
         :to="{ path: '/login', query: { redirect: '/model-plaza' } }"
-        class="inline-flex flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-primary-500/25 transition-all duration-200 hover:from-primary-600 hover:to-primary-700 hover:shadow-lg hover:shadow-primary-500/30 active:scale-[0.98] dark:shadow-primary-500/20"
+        class="inline-flex flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-r from-primary-500 to-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-primary-500/25 transition-all duration-200 hover:from-primary-600 hover:to-primary-700 hover:shadow-lg hover:shadow-primary-500/30 active:scale-[0.98] dark:shadow-primary-500/20"
       >
         {{ t('modelPlaza.nav.login') }}
       </RouterLink>

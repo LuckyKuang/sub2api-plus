@@ -12,40 +12,64 @@
   /* Data-table filter bars read one control width everywhere; the free-text
      search field is the only wider sibling. Both floors are mirrored by
      SearchableSelect's dropdownMinimumWidth and .select-dropdown-portal. */
-  --filter-control-width: 200px;
-  --filter-search-width: 240px;
+  /* One width for every query control (search included), sized to the longest
+     default label ("全部Privacy状态"); date ranges need two dates. */
+  --filter-control-width: 160px;
+  --filter-search-width: var(--filter-control-width);
+  --filter-date-width: 200px;
   --filter-gap: 12px;
   --shell-header-height: 64px;
   --shell-inset-top: max(var(--shell-gutter), env(safe-area-inset-top));
   --shell-inset-bottom: max(var(--shell-gutter), env(safe-area-inset-bottom));
   --shell-sticky-offset: calc(var(--shell-inset-top) + var(--shell-header-height) + var(--shell-gap));
-  /* Concentric radius ladder. Every inner curve sits strictly inside its
-     clipping ancestor, so no curve is ever cut mid-arc:
-     L0 shell page + zone container > L1 inset frame / scrollport / dropdown
-     > L2 business card nested in a zone > L3 row / menu item > L4 control.
-     A zone container never takes the card radius. */
-  --surface-radius: 20px;
-  --surface-radius-card: 14px;
-  --surface-radius-panel: 16px;
-  --surface-radius-control: 9px;
-  --surface-radius-item: 10px;
+  /* The radius ladder: five steps, outermost first. Every rounded element takes
+     exactly one step by role, so an inner curve always sits inside its clipping
+     ancestor and no corner is cut mid-arc. Fully round (9999px) shapes are only
+     avatars, status dots, switches, progress tracks and spinners; text never
+     sits in a capsule.
+     L0 container: shell chrome, page zones, dialogs.
+     L1 card/panel: business cards, floating menus, popovers, inner frames.
+     L2 control/item: buttons, fields, select triggers, menu items, table rows.
+     L3 tag: badges, chips, segmented options, compact buttons.
+     L4 xs: checkboxes, inline code, micro marks. */
+  --surface-radius: 16px;
+  --surface-radius-panel: 12px;
+  --surface-radius-card: 12px;
+  --surface-radius-item: 8px;
+  --surface-radius-control: 8px;
+  --surface-radius-tag: 6px;
+  --surface-radius-xs: 4px;
+  /* One control height per size, shared by buttons, fields, select and date
+     triggers and pagination, so controls in one row always line up. */
+  --control-height: 36px;
+  --control-height-sm: 32px;
+  --control-height-xs: 26px;
+  --control-height-lg: 44px;
   --surface-fill: var(--surface-solid);
   --surface-shell: var(--surface-solid);
   --surface-soft: rgb(240 237 232 / var(--console-card-alpha, 1));
   --surface-field: var(--surface-solid);
-  --surface-panel: var(--surface-solid);
+  /* Floating layers (dialogs, menus, popovers) sit over content, so they keep
+     a near-opaque fill at any card transparency setting. */
+  --surface-panel: rgb(253 251 248 / 97%);
   --surface-sticky: var(--surface-solid);
   --surface-text: #221f1c;
   --surface-muted: #635e57;
   --surface-glint: rgb(255 255 255 / calc(.18 * var(--console-card-alpha, 1)));
   --surface-hover: rgb(var(--console-accent-500, 20 184 166) / calc(.12 * var(--console-card-alpha, 1)));
   --surface-selected: rgb(var(--console-accent-500, 20 184 166) / calc(.18 * var(--console-card-alpha, 1)));
-  --surface-overlay: rgb(24 20 18 / calc(.18 * var(--console-card-alpha, 1)));
+  /* The scrim dims the page behind a dialog by a fixed amount; it must not
+     fade out when the user makes cards more transparent. */
+  --surface-overlay: rgb(24 20 18 / 32%);
   --surface-solid: rgb(253 251 248 / var(--console-card-alpha, 1));
   /* Outlines remain visible even when all surface fills are transparent. The
      frame is the only separator once card fills sit this close to the canvas,
      so it keeps enough alpha to read as an edge rather than a stain. */
   --surface-edge: rgb(120 112 102 / 30%);
+  /* Record cards (tables.css): fixed strengths, independent of card alpha. */
+  --record-card-fill: rgb(120 112 102 / 7%);
+  --record-card-fill-strong: rgb(120 112 102 / 12%);
+  --record-card-fill-leaf: rgb(120 112 102 / 3.5%);
   --surface-shadow: 0 2px 8px -4px rgb(24 24 27 / calc(.1 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.5 * var(--console-card-alpha, 1)));
   --console-canvas: #f4f1ed;
   --console-glow: rgb(var(--console-accent-500, 20 184 166) / 13%);
@@ -63,9 +87,13 @@
   --surface-glint: rgb(255 255 255 / calc(.05 * var(--console-card-alpha, 1)));
   --surface-hover: rgb(var(--console-accent-400, 45 212 191) / calc(.13 * var(--console-card-alpha, 1)));
   --surface-selected: rgb(var(--console-accent-400, 45 212 191) / calc(.20 * var(--console-card-alpha, 1)));
-  --surface-overlay: rgb(4 3 2 / calc(.22 * var(--console-card-alpha, 1)));
+  --surface-overlay: rgb(4 3 2 / 55%);
+  --surface-panel: rgb(41 38 36 / 97%);
   --surface-solid: rgb(41 38 36 / var(--console-card-alpha, 1));
   --surface-edge: rgb(170 162 152 / 30%);
+  --record-card-fill: rgb(255 255 255 / 5%);
+  --record-card-fill-strong: rgb(255 255 255 / 9%);
+  --record-card-fill-leaf: rgb(255 255 255 / 2.5%);
   --surface-shadow: 0 2px 10px -4px rgb(0 0 0 / calc(.26 * var(--console-card-alpha, 1))), inset 0 1px 0 rgb(255 255 255 / calc(.04 * var(--console-card-alpha, 1)));
   --console-canvas: #1c1a18;
   --console-glow: rgb(var(--console-accent-500, 20 184 166) / 10%);
@@ -146,6 +174,58 @@
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+/* Announcement list: anchored under the bell like the user menu (position
+   and width are set inline from the bell's rect, see AnnouncementBell.vue). */
+.announcement-dropdown {
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  outline: none;
+}
+.announcement-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px 10px 16px;
+  border-bottom: 1px solid var(--surface-edge);
+}
+.announcement-dropdown-list {
+  display: flex;
+  min-height: 0;
+  /* Keep the panel to roughly a third of its former height: a few rows stay
+     visible and the rest scrolls inside the list. */
+  max-height: min(32dvh, 260px);
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.announcement-dropdown-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: var(--surface-radius-item);
+  text-align: left;
+  transition: background-color 150ms;
+}
+.announcement-dropdown-item.is-unread { background-color: var(--surface-soft); }
+.announcement-dropdown-item:is(:hover, :focus-visible) { background-color: var(--surface-hover); outline: none; }
+.announcement-dropdown-item:focus-visible { box-shadow: inset 0 0 0 2px rgb(var(--console-accent-500, 20 184 166) / 70%); }
+.announcement-dropdown-icon {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--surface-radius-control);
+}
 
 .sidebar {
   position: fixed;
@@ -171,7 +251,7 @@
 .sidebar-link { min-height: 44px; }
 .sidebar .sidebar-link {
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--surface-radius-control);
   background-color: transparent;
   background-image: none;
   box-shadow: none;
@@ -182,16 +262,20 @@
   background-color: var(--surface-hover);
   color: var(--surface-text);
 }
+/* The current page wears the same card tint as a hovered link (no edge
+   bar); only the icon keeps the accent so it stays findable at a glance. */
 .sidebar-nav .sidebar-link-active {
-  background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.12 * var(--console-card-alpha, 1)));
-  color: var(--console-accent-readable, #0f766e);
+  background-color: var(--surface-hover);
+  box-shadow: none;
+  color: var(--surface-text);
   font-weight: 600;
 }
-.dark .sidebar-nav .sidebar-link-active { color: var(--console-accent-readable, #5eead4); }
 .sidebar-nav .sidebar-link-active:is(:hover, :focus-visible) {
-  background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.18 * var(--console-card-alpha, 1)));
-  color: var(--console-accent-readable, #0f766e);
+  background-color: var(--surface-hover);
+  color: var(--surface-text);
 }
+.sidebar-nav .sidebar-link-active > :is(svg, .sidebar-svg-icon):first-child { color: var(--console-accent-readable, #0f766e); }
+.dark .sidebar-nav .sidebar-link-active > :is(svg, .sidebar-svg-icon):first-child { color: var(--console-accent-readable, #5eead4); }
 .sidebar .sidebar-link:focus-visible { outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 75%); outline-offset: 2px; }
 .sidebar-nav .sidebar-link:active { background-color: rgb(var(--console-accent-500, 20 184 166) / calc(.18 * var(--console-card-alpha, 1))); }
 
@@ -221,7 +305,7 @@
   :root { --shell-gap: 16px; --shell-gutter: 16px; }
 }
 @media (min-width: 1024px) {
-  :root { --shell-gap: 24px; --shell-gutter: 24px; --surface-radius: 24px; }
+  :root { --shell-gap: 24px; --shell-gutter: 24px; }
   .app-layout { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); transition: grid-template-columns 200ms ease-out; }
   .app-layout { --console-content-left: calc(max(var(--shell-gutter), env(safe-area-inset-left)) + var(--sidebar-width) + var(--shell-gap)); }
   .app-layout.sidebar-is-collapsed { --sidebar-width: 72px; }

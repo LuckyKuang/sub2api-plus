@@ -31,7 +31,7 @@
         </div>
         <span
           :class="[
-            'rounded-full px-2.5 py-1 text-xs font-semibold',
+            'rounded-md px-2.5 py-1 text-xs font-semibold',
             account.status === 'active'
               ? 'bg-green-100/[0.15] text-green-700 dark:bg-green-500/20 dark:text-green-400'
               : 'surface-inset text-gray-600 dark:surface-inset dark:text-gray-400'

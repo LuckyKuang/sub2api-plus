@@ -1,39 +1,46 @@
 <template>
-  <details v-if="catalog" class="space-y-3 rounded-lg surface-inset p-3 text-xs">
+  <!-- Purchase cards open the summary in a dialog that points to the full
+       list on 可用渠道; other hosts (already inside a dialog or checkout
+       panel) keep the inline disclosure. -->
+  <div v-if="catalog && dialog">
+    <button type="button" class="btn btn-secondary w-full justify-between text-xs" @click="open = true">
+      <span>{{ t('billingRates.models') }} · {{ catalog.models.length }}</span>
+      <Icon name="chevronRight" size="sm" />
+    </button>
+    <BaseDialog :show="open" :title="t('billingRates.models')" width="wide" @close="open = false">
+      <div class="space-y-3 text-xs">
+        <p class="rounded-lg surface-inset px-3 py-2 leading-5 surface-muted">{{ t('billingRates.catalogDialogHint') }}</p>
+        <PlanModelCatalogList :catalog="catalog" />
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <button type="button" class="btn btn-secondary" @click="open = false">{{ t('common.close') }}</button>
+          <button type="button" class="btn btn-primary" @click="goToChannels">{{ t('billingRates.viewAvailableChannels') }}</button>
+        </div>
+      </template>
+    </BaseDialog>
+  </div>
+  <details v-else-if="catalog" class="space-y-3 rounded-lg surface-inset p-3 text-xs">
     <summary class="cursor-pointer font-medium">{{ t('billingRates.models') }} · {{ catalog.models.length }}</summary>
-    <p class="leading-5 surface-muted">{{ t('billingRates.saleNote') }}</p>
-    <p v-if="!catalog.models.length" class="surface-muted">{{ t('billingRates.noModels') }}</p>
-    <details v-for="model in catalog.models" :key="model.offer_key" :open="openModels.has(model.offer_key)" class="border-t border-gray-200 py-2 dark:border-dark-600">
-      <summary class="flex min-w-0 cursor-pointer flex-wrap items-start justify-between gap-2" @click.prevent="toggleModel(model.offer_key)">
-      <div class="min-w-0 flex-1">
-        <span class="font-medium">{{ platformLabel(model.platform) }}</span>
-        <div class="break-words font-mono [overflow-wrap:anywhere]">{{ model.name }}</div>
-        <span class="surface-muted">{{ t(`billingRates.units.${model.billing_unit}`, model.billing_unit) }}</span>
-      </div>
-      <div class="text-right">
-        <strong>{{ model.rate_quote ? formatBillingRate(model.rate_quote.effective_multiplier) : t('billingRates.unknown') }}</strong>
-        <p v-if="model.rate_quote" class="mt-1 surface-muted">{{ t(`billingRates.source.${model.rate_quote.source}`) }}</p>
-      </div>
-      </summary>
-      <CatalogQuoteDetails v-if="openModels.has(model.offer_key)" class="mt-3" :offer="model" :rate-unavailable="!model.rate_quote" />
-    </details>
-    <p v-if="catalog.as_of" class="surface-muted">{{ t('billingRates.asOf', { time: catalog.as_of }) }}</p>
+    <PlanModelCatalogList :catalog="catalog" />
   </details>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { SaleModelCatalog } from '@/types/billingRate'
-import { formatBillingRate } from '@/utils/billingRate'
-import { platformLabel } from '@/utils/platformColors'
-import CatalogQuoteDetails from '@/components/channels/CatalogQuoteDetails.vue'
-const props = defineProps<{ catalog?: SaleModelCatalog }>()
+import BaseDialog from '@/components/common/BaseDialog.vue'
+import Icon from '@/components/icons/Icon.vue'
+import PlanModelCatalogList from './PlanModelCatalogList.vue'
+
+defineProps<{ catalog?: SaleModelCatalog; dialog?: boolean }>()
 const { t } = useI18n()
-const openModels = ref(new Set<string>())
-function toggleModel(key: string) {
-  if (openModels.value.has(key)) openModels.value.delete(key)
-  else openModels.value.add(key)
+const router = useRouter()
+const open = ref(false)
+function goToChannels() {
+  open.value = false
+  void router.push('/available-channels')
 }
-watch(() => props.catalog, () => { openModels.value = new Set() })
 </script>

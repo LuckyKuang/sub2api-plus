@@ -23,6 +23,7 @@ type saleUserRateReader interface {
 // frozen historical multiplier or a guarantee of live provider availability.
 type planModelCatalog struct {
 	group         service.Group
+	userRate      *float64       // personal override of the group base rate; not serialised
 	PolicyVersion int64          `json:"policy_version"`
 	AsOf          time.Time      `json:"as_of"`
 	Platforms     []string       `json:"platforms"`
@@ -34,6 +35,9 @@ type planModelCatalog struct {
 func toPlanModelCatalog(cg service.CatalogGroup, userRates map[int64]float64) planModelCatalog {
 	projected := toCatalogGroup(cg, userRates)
 	out := planModelCatalog{group: cg.Group, PolicyVersion: projected.PolicyVersion, AsOf: projected.AsOf, Platforms: []string{}, Models: projected.Models}
+	if rate, ok := userRates[cg.Group.ID]; ok {
+		out.userRate = &rate
+	}
 	platforms := make(map[string]struct{})
 	for _, model := range out.Models {
 		platforms[model.Platform] = struct{}{}
@@ -59,7 +63,14 @@ func toPlanModelCatalog(cg service.CatalogGroup, userRates map[int64]float64) pl
 
 func planGroupInfoFromCatalog(catalog planModelCatalog) service.PlanGroupInfo {
 	g := catalog.group
-	return service.PlanGroupInfo{Platform: g.Platform, Name: g.Name, I18n: g.I18n, RateMultiplier: g.RateMultiplier,
+	// The plan card shows the multiplier this user is actually charged, so a
+	// personal group rate wins over the group default even when the catalog has
+	// no priced model to derive a quote from.
+	rate := g.RateMultiplier
+	if catalog.userRate != nil {
+		rate = *catalog.userRate
+	}
+	return service.PlanGroupInfo{Platform: g.Platform, Name: g.Name, I18n: g.I18n, RateMultiplier: rate,
 		PeakRateEnabled: g.PeakRateEnabled, PeakStart: g.PeakStart, PeakEnd: g.PeakEnd, PeakRateMultiplier: g.PeakRateMultiplier,
 		DailyLimitUSD: g.DailyLimitUSD, WeeklyLimitUSD: g.WeeklyLimitUSD, MonthlyLimitUSD: g.MonthlyLimitUSD, FiveHourLimitUSD: g.FiveHourLimitUSD, ModelScopes: g.SupportedModelScopes}
 }

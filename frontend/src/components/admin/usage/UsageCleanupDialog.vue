@@ -10,7 +10,7 @@
         @change="noop"
       />
 
-      <div class="rounded-xl border border-amber-200 bg-amber-50/[0.15] px-4 py-3 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+      <div class="rounded-lg border border-amber-200 bg-amber-50/[0.15] px-4 py-3 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
         {{ t('admin.usage.cleanup.warning') }}
       </div>
 
@@ -39,7 +39,7 @@
             >
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="flex items-center gap-2">
-                  <span :class="statusClass(task.status)" class="rounded-full px-2 py-0.5 text-xs font-semibold">
+                  <span :class="statusClass(task.status)" class="rounded-md px-2 py-0.5 text-xs font-semibold">
                     {{ statusLabel(task.status) }}
                   </span>
                   <span class="text-xs surface-muted">#{{ task.id }}</span>

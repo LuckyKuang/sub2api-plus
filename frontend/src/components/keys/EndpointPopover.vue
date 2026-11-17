@@ -70,17 +70,17 @@ onBeforeUnmount(() => {
       :key="index"
       class="flex items-center gap-1.5 rounded-lg border border-gray-200 surface-inset px-2.5 py-1.5 text-xs transition-colors hover:border-primary-200 dark:border-dark-600 dark:hover:border-primary-700"
     >
-      <span class="font-medium surface-muted">{{ item.name }}</span>
+      <span class="shrink-0 whitespace-nowrap font-medium surface-muted">{{ item.name }}</span>
       <span
         v-if="item.isDefault"
-        class="rounded bg-primary-50/[0.15] px-1 py-px text-[10px] font-medium leading-tight text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"
+        class="shrink-0 whitespace-nowrap rounded bg-primary-50/[0.15] px-1 py-px text-[10px] font-medium leading-tight text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"
       >{{ t('keys.endpoints.default') }}</span>
 
       <span class="text-gray-300 dark:text-dark-500">|</span>
 
       <div class="group/endpoint relative flex items-center gap-1.5">
         <div
-          class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-max max-w-[24rem] -translate-x-1/2 translate-y-1 rounded-xl border border-slate-200 px-3 py-2.5 text-left opacity-0 shadow-[0_14px_36px_-20px_rgba(15,23,42,0.35)] ring-1 ring-slate-200/80 transition-all duration-150 group-hover/endpoint:translate-y-0 group-hover/endpoint:opacity-100 group-focus-within/endpoint:translate-y-0 group-focus-within/endpoint:opacity-100 dark:border-slate-700 dark:ring-slate-700/70 surface-panel"
+          class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-max max-w-[24rem] -translate-x-1/2 translate-y-1 rounded-lg border border-slate-200 px-3 py-2.5 text-left opacity-0 shadow-[0_14px_36px_-20px_rgba(15,23,42,0.35)] ring-1 ring-slate-200/80 transition-all duration-150 group-hover/endpoint:translate-y-0 group-hover/endpoint:opacity-100 group-focus-within/endpoint:translate-y-0 group-focus-within/endpoint:opacity-100 dark:border-slate-700 dark:ring-slate-700/70 surface-panel"
         >
           <p
             v-if="item.description"

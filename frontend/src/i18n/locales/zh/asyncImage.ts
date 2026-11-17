@@ -12,7 +12,6 @@ export default {
     list: {
       empty: '暂无异步图像任务',
       emptyHint: '点击右上角新建任务，提交生成或编辑请求后可在此查看状态和结果。',
-      previous: '上一页', next: '下一页', page: '第 {page} 页',
       historyHint: '历史记录归属你的账号，包含全部 API Key 的任务；删除 Key 不会影响历史图片。',
     },
     create: {

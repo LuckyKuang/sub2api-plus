@@ -44,7 +44,7 @@ onBeforeUnmount(() => resize?.disconnect())
 </script>
 
 <style scoped>
-.user-card-scroll-frame { min-width: 0; border-radius: 16px; }
+.user-card-scroll-frame { min-width: 0; border-radius: var(--surface-radius); }
 .user-card-scroll-content { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .user-card-scroll-content > :deep(*) { flex-shrink: 0; margin-block: 0; }
 @media (min-width: 1024px) {
@@ -57,7 +57,7 @@ onBeforeUnmount(() => resize?.disconnect())
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
-    border-radius: 16px;
+    border-radius: var(--surface-radius);
   }
 }
 </style>

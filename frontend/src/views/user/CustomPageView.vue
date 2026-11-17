@@ -523,7 +523,7 @@ onUnmounted(() => {
 
 .custom-embed-shell {
   @apply relative;
-  @apply h-full w-full overflow-hidden rounded-2xl;
+  @apply h-full w-full overflow-hidden rounded-xl;
   @apply bg-gradient-to-b from-gray-50 to-white dark:from-dark-900 dark:to-dark-950;
   @apply p-0;
 }
@@ -576,7 +576,7 @@ onUnmounted(() => {
   right: 8px;
   padding: 4px 10px;
   font-size: 12px;
-  border-radius: 4px;
+  border-radius: var(--surface-radius-xs);
   background: rgba(255, 255, 255, 0.15);
   color: #e2e8f0;
   border: 1px solid rgba(255, 255, 255, 0.2);
