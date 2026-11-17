@@ -52,15 +52,6 @@ func codexAccountIdentitySource(c *gin.Context, fallback *Account) *Account {
 	return fallback
 }
 
-// codexClientSessionID returns the client's own session header, before any
-// outbound rewrite.
-func codexClientSessionID(c *gin.Context) string {
-	if c == nil || c.Request == nil {
-		return ""
-	}
-	return extractClientSessionID(c.Request.Header)
-}
-
 // codexAccountIdentityNamespace returns a stable, credential-scoped namespace.
 // Multiple local rows that use the same ChatGPT account intentionally share the
 // same namespace. Setup tokens use an irreversible bearer fingerprint because
