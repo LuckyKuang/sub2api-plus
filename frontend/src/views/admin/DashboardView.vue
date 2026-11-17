@@ -249,7 +249,7 @@
 
         <!-- Charts Section -->
         <WorkspaceTabs v-if="compactCharts" v-model="chartTab" class="workspace-fixed" :tabs="dashboardTabs" :label="t('workspace.charts')" />
-        <div class="workspace-body dashboard-charts" :class="{ 'dashboard-charts-compact': compactCharts }">
+        <div class="workspace-body dashboard-charts">
           <!-- Charts Grid -->
           <div v-show="!compactCharts || chartTab === 'models'" class="dashboard-chart-grid grid grid-cols-1 gap-6 lg:grid-cols-2">
             <ModelDistributionChart

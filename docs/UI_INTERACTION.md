@@ -429,49 +429,14 @@ showing the optional API key column includes it in that prefix. Reordering or
 hiding columns must never leave a visible account label covered by the user
 column. Other tables retain their existing fixed-column choices.
 
-Usage and live rows have no side panel, row detail selection, or detail request.
+Usage rows have no side panel, row detail selection, or detail request.
 Old `record` query links return to the list while retaining other queries and
 hash. Established usage detail APIs remain available to other clients. Admin
 error records retain the established diagnostic modal. Shared detail workspaces
 on other pages retain their existing responsive behavior.
 
-Live columns are time, admin-only user/key, model, type, group, result, speed,
-performance, input → output, billed cost, client/IP. **Performance is visible by
-default**; only client/IP starts hidden. Time, model and result are fixed. Column
-menus retain integrated checkboxes. Layout-version preference keys isolate role,
-authenticated identity and support target; the restored layouts do not inherit
-compact-era hidden columns, and do not delete old preferences. Reset restores
-the stated defaults.
-
-Result uses a colored dot and short label/reason. Processing and observed
-transmission are active; completed is successful; explicit failures, rejections,
-cancellations, disconnects and incomplete responses are abnormal. Handler-returned
-`finished` is status pending; expired observations are unknown. Pending and unknown
-belong only to All, never the successful or abnormal filters. HTTP status is
-auxiliary metadata. Reasons use stable public categories, never raw diagnostics.
-Only the existing semantic first-output observer advances transmission; headers,
-keepalives and lifecycle frames do not. No response parser is added.
-
-Speed shows measured first byte and forwarding duration; active elapsed is labeled
-separately and never substitutes for forwarding duration or the TPS denominator.
-Performance uses strict first-token timing and the existing request-average TPS.
-Real timing version, native compaction and media counts govern availability. There
-is no independent reasoning-token count in usage, so none is displayed. TPS has
-no formula/native title tooltip; one latency popup retains measured timings and
-unavailability reasons, accessible on hover, focus and touch.
-
-Phone rows show model/type and cost, result/time, then tokens/cache and group.
-More fields expands within the same stable row, with full group, performance,
-client/IP and copy access, using only already-received data. No drawer or detail
-fetch is involved. Long model names, IPv6 and User-Agent wrap inside the row.
-Only the current desktop/mobile layout is mounted.
-
-Live result/model/group and admin user filters operate on the received window,
-not all historical requests. Export current window exports only those filtered
-rows, preserving exact numeric values and blanks for missing fields. CSV text
-cells are escaped against spreadsheet formula injection. Full-history export
-remains in history.
-
+History exports preserve exact numeric values and blanks for missing fields,
+and CSV text cells are escaped against spreadsheet formula injection.
 ## Historical insertion boundary
 
 `GET /usage` and `/admin/usage` accept optional `snapshot_max_id`: omit for existing
@@ -506,13 +471,7 @@ old data and an inline stale indicator, without repeated error toasts.
 | View | Default | Reads |
 | --- | --- | --- |
 | History | On, 30s; optional 15/30/60s | List only |
-| Live | On, 2s; at least 5s when empty | Redis observation snapshot + bounded canonical usage lookup |
 | Overview | 30s | Statistics; charts at least 60s apart unless explicitly requested |
-
-Visible live tabs of the same identity divide an approximate 30-reads/minute
-budget using expiring local-storage registrations. Hidden tabs unregister;
-restricted storage uses a conservative interval. This is best effort, not a quota
-guarantee. Existing global/Heavy limits remain authoritative and are not raised.
 
 Usage pages expose a switch, actual next-refresh countdown and manual refresh.
 Only the interval persists. Off lasts for the current stay: browser reload,

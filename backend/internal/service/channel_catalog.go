@@ -170,7 +170,7 @@ func (s *ModelPlazaService) listAvailableCatalog(ctx context.Context, groups []G
 	// search, platform and paging work on this cheap list, so Phase 2 prices only
 	// the cards the response renders.
 	type pendingOffer struct {
-		candidate CommercialModelCandidate
+		candidate commercialModelCandidate
 		model     SupportedModel
 		channel   *Channel
 	}

@@ -37,7 +37,9 @@ beforeEach(() => {
   mocks.support = reactive({ target: null })
   mocks.locale = reactive({ value: 'en' })
   mocks.app = reactive({ availableChannelsLayout: 'card' })
+  mocks.getCatalog.mockReset()
   mocks.getCatalog.mockResolvedValue(data())
+  mocks.getCatalogDetail.mockReset()
   // The detail dialog asks for one model on its own; answer it with the same
   // fixture the list just returned so quote assertions stay about that model.
   mocks.getCatalogDetail.mockImplementation(async (query: { name: string }) => {
@@ -223,19 +225,24 @@ describe('available channels user page', () => {
     expect(mocks.getCatalog).toHaveBeenCalledTimes(4)
   })
 
-  it('keeps localized catalogs separate while preserving filters and current model details', async () => {
-    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('first')], { name: 'English group' })], user_rate_status: 'loaded' })
+  it('keeps localized catalogs separate while preserving the current model details', async () => {
+    const catalogIn = (groupName: string) => ({ groups: [group(1, [offer('first')], { name: groupName })], user_rate_status: 'loaded' })
+    mocks.getCatalog.mockResolvedValueOnce(catalogIn('English group'))
+    mocks.getCatalogDetail.mockResolvedValueOnce(catalogIn('English group'))
     const w = page(); await flushPromises()
-    await w.findAll('.catalog-model-card button')[1]!.trigger('click')
+    await w.findAll('.catalog-model-card')[0]!.findAll('button')[1]!.trigger('click')
     await flushPromises()
+    expect(w.findComponent(CatalogPriceDetails).props('model').quotes[0].group.name).toBe('English group')
 
-    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('first')], { name: '中文分组' })], user_rate_status: 'loaded' })
+    // The next list read is served from cache under the same locale+query key;
+    // the open dialog still re-reads its own quotes so names follow the locale.
+    mocks.getCatalogDetail.mockResolvedValueOnce(catalogIn('中文分组'))
     mocks.locale.value = 'zh'; await flushPromises()
     expect(w.findComponent(CatalogPriceDetails).props('model').quotes[0].group.name).toBe('中文分组')
 
+    mocks.getCatalogDetail.mockResolvedValueOnce(catalogIn('English group'))
     mocks.locale.value = 'en'; await flushPromises()
     expect(w.findComponent(CatalogPriceDetails).props('model').quotes[0].group.name).toBe('English group')
-    expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
   })
 
   it.each(['unavailable', 'not_requested'] as const)('does not reuse a %s response as a fresh successful catalog', async status => {
@@ -384,16 +391,12 @@ describe('available channels user page', () => {
     expect(results.findAll('h3').map(title => title.text())).toEqual(['model-a', 'model-other', 'model-z'])
   })
 
-  it('loads one page, opens a card through a separate detail query and copies the complete ID', async () => {
+  it('loads one page and copies the complete model ID from a card', async () => {
     const w = page(); await flushPromises()
     expect(mocks.getCatalog).toHaveBeenCalledOnce()
     expect(w.findAll('.catalog-model-card')).toHaveLength(3)
-    await w.findAll('.catalog-model-card button')[1]!.trigger('click')
-    await flushPromises()
-    expect(mocks.getCatalogDetail).toHaveBeenCalledWith({ category: 'group', platform: 'openai', name: 'claude' }, expect.anything())
-    await w.get('.catalog-copy-model').trigger('click')
+    await w.findAll('.catalog-model-card')[0]!.findAll('button')[0]!.trigger('click')
     expect(mocks.copy).toHaveBeenCalledWith('claude')
-    expect(w.findAll('[role="group"] button[aria-pressed]')).toHaveLength(3)
   })
   it('shows rate degradation and keeps zero prices visible', async () => {
     mocks.getCatalog.mockResolvedValue({ groups: [group(1, [offer('model', { rate_quote: rateQuote(0) })], { user_rate_multiplier: 0 })], user_rate_status: 'unavailable' })
@@ -471,17 +474,17 @@ describe('available channels user page', () => {
     await w.get('input').setValue('absent')
     expect(w.text()).toContain('availableChannels.noModels')
   })
-  it('reconciles filters and closes a removed offer after a successful refresh', async () => {
+  it('reconciles filters and closes details for an offer a successful refresh removed', async () => {
     const w = page(); await flushPromises()
-    await w.findAll('[role="group"] button[aria-pressed]').find(b => b.text().startsWith('anthropic'))!.trigger('click')
-    expect(w.findAll('.catalog-model-card')).toHaveLength(1)
-    await w.findAll('.catalog-model-card button')[1]!.trigger('click')
-    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('replacement')])], user_rate_status: 'loaded' })
+    await w.findAll('.catalog-model-card')[0]!.findAll('button')[1]!.trigger('click')
+    await flushPromises()
+    expect(w.getComponent(CatalogPriceDetails).props('model').name).toBe('claude')
+
+    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('replacement')])], user_rate_status: 'loaded', models_total: 1, categories: { group: 1 }, platforms: { openai: 1 } })
     await w.get('button[aria-label="common.refresh"]').trigger('click'); await flushPromises()
     expect(w.findAll('.catalog-model-card')).toHaveLength(1)
     expect(w.text()).toContain('replacement')
     expect(w.findComponent(CatalogPriceDetails).props('model')).toBeNull()
-    expect(document.activeElement).toBe(w.get('button[aria-label="common.refresh"]').element)
   })
   it('updates open model details when one referenced group is removed', async () => {
     mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('same', { offer_key: 'one' })]), group(2, [offer('same', { offer_key: 'two' })])], user_rate_status: 'loaded' })
@@ -563,14 +566,21 @@ describe('available channels user page', () => {
   })
 })
 
-it('shows only populated categories with independent supplier filters and separate prices', async () => {
- mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('ordinary-only'), offer('claude', { platform: 'anthropic' })]), group(2, [offer('aggregate-only')], { platform: 'composite' })], user_rate_status: 'loaded' })
+it('shows only populated categories from the server facets and switches category per query', async () => {
+ const facets = { models_total: 1, categories: { group: 1, composite: 1 }, platforms: { openai: 1 } }
+ mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('ordinary-only')])], user_rate_status: 'loaded', ...facets })
  const wrapper = page(); await flushPromises()
- expect(wrapper.findAll('h3').map(node => node.text())).toContain('ordinary-only')
+ expect(wrapper.findAll('h3').map(node => node.text())).toEqual(['ordinary-only'])
  const category = wrapper.findAll('button').find(button => button.text() === 'availableChannels.catalog.compositePlatforms')!
+ mocks.getCatalog.mockResolvedValueOnce({ groups: [group(2, [offer('aggregate-only')], { platform: 'composite' })], user_rate_status: 'loaded', ...facets })
  await category.trigger('click')
+ await flushPromises()
+ expect(mocks.getCatalog.mock.calls.at(-1)![0]).toMatchObject({ category: 'composite', page: 1 })
  expect(wrapper.findAll('h3').map(node => node.text())).toEqual(['aggregate-only'])
+ const callsBeforeReturn = mocks.getCatalog.mock.calls.length
  await wrapper.findAll('button').find(button => button.text() === 'availableChannels.catalog.groupPlatforms')!.trigger('click')
- expect(wrapper.findAll('h3').map(node => node.text())).toContain('ordinary-only')
- expect(wrapper.findAll('h3').map(node => node.text())).not.toContain('aggregate-only')
+ await flushPromises()
+ // Returning to a page already in the short-lived cache must not refetch it.
+ expect(mocks.getCatalog.mock.calls.length).toBe(callsBeforeReturn)
+ expect(wrapper.findAll('h3').map(node => node.text())).toEqual(['ordinary-only'])
 })

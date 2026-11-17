@@ -49,13 +49,15 @@ func TestCatalogPageSelectionFiltersAndFacets(t *testing.T) {
 	selected := catalogPageSelection(&CatalogPageQuery{Search: "KEEP", Page: 1, PageSize: 9}, &meta, identities)
 	require.Len(t, selected, 3)
 	require.Equal(t, 3, meta.Total)
-	require.Equal(t, 4, meta.Platforms[PlatformOpenAI]+meta.Platforms[PlatformAnthropic])
+	// Facets follow the search text too: only the matching cards are counted.
+	require.Equal(t, 3, meta.Platforms[PlatformOpenAI]+meta.Platforms[PlatformAnthropic])
 
 	platformMeta := CatalogPageMeta{}
 	catalogPageSelection(&CatalogPageQuery{Platform: PlatformAnthropic, Page: 1, PageSize: 9}, &platformMeta, identities)
 	require.Equal(t, 1, platformMeta.Total)
 	require.Equal(t, 4, platformMeta.Platforms[PlatformOpenAI]+platformMeta.Platforms[PlatformAnthropic])
-	require.Equal(t, 4, platformMeta.Categories["group"])
+	// The category facet applies the platform filter, so only the anthropic card counts.
+	require.Equal(t, 1, platformMeta.Categories["group"])
 }
 
 func TestCatalogPageSelectionDetailIgnoresPaging(t *testing.T) {

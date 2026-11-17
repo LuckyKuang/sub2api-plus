@@ -484,6 +484,7 @@ describe('admin UsageView distribution metric toggles', () => {
     await flushPromises()
     expect((wrapper.vm as any).requestedModelStats).toEqual([{ model: 'B', total_tokens: 20 }])
   })
+})
 
 describe('admin UsageView column preferences', () => {
   // Approved requirement: service tier starts hidden; reasoning is model metadata,
@@ -801,7 +802,7 @@ describe('admin UsageView ranking tab', () => {
     expect(wrapper.find('[data-test="ranking"]').exists()).toBe(false)
 
     const tabs = wrapper.findAll('[data-testid="usage-detail-tab"]')
-    expect(tabs).toHaveLength(5)
+    expect(tabs).toHaveLength(4)
     // Audited navigation contract: one selected card, no underline or baseline.
     expect(wrapper.get('.usage-detail-tabs').classes()).not.toContain('border-b')
     for (const tab of tabs) {

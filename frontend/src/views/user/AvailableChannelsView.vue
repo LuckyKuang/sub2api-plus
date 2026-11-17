@@ -63,7 +63,7 @@
         :show-page-size-selector="false"
         @update:page="onPageChange"
       />
-      <CatalogPriceDetails :model="selected" :rate-unavailable="catalog.user_rate_status === 'unavailable'" @close="closeDetails" />
+      <CatalogPriceDetails :model="selectedModel" :rate-unavailable="catalog.user_rate_status === 'unavailable'" @close="closeDetails" />
     </div>
   </AppLayout>
 </template>
@@ -103,6 +103,9 @@ const catalogIdentity = computed(() => {
   return JSON.stringify([availableChannelCatalogGeneration(), actorId, support ? userId : null])
 })
 
+// Re-reads follow the actor/support identity and the API locale, so a locale
+// switch re-queries instead of showing the previous language's group names.
+const catalogKey = computed(() => catalogIdentity.value === null ? null : JSON.stringify([catalogIdentity.value, getLocale()]))
 const emptyCatalog = (): ChannelCatalog => ({ groups: [], user_rate_status: 'not_requested' })
 const catalog = ref<ChannelCatalog>(emptyCatalog())
 const category = ref<'group' | 'composite'>('group')
@@ -120,7 +123,10 @@ let controller: AbortController | undefined
 let detailController: AbortController | undefined
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 
-const models = computed(() => catalogModels(catalog.value.groups))
+// The server picks the page in this same order; sorting the page locally keeps
+// the rendered order identical even if a response arrives unsorted.
+const models = computed(() => catalogModels(catalog.value.groups)
+  .sort((a, b) => a.name.localeCompare(b.name) || a.platform.localeCompare(b.platform) || a.key.localeCompare(b.key)))
 const modelsTotal = computed(() => catalog.value.models_total ?? models.value.length)
 const categoryOptions = computed(() => {
   const counts = catalog.value.categories ?? {}
@@ -268,7 +274,7 @@ async function loadDetail(model: CatalogModel) {
 }
 
 let previousIdentity: string | null | undefined
-watch(catalogIdentity, () => {
+watch(catalogKey, () => {
   ++requestId
   controller?.abort()
   if (catalogIdentity.value !== previousIdentity) {
