@@ -1677,7 +1677,10 @@ const loadActiveUsage = async () => {
     const result = await adminAPI.accounts.getUsage(accountID, 'active', true)
     if (!unmounted.value && requestID === activeUsageRequestID) usageInfo.value = result
   } catch (e: any) {
-    if (!unmounted.value && requestID === activeUsageRequestID) console.error('Failed to load active usage:', e)
+    if (!unmounted.value && requestID === activeUsageRequestID) {
+      error.value = t('common.error')
+      console.error('Failed to load active usage:', e)
+    }
   } finally {
     if (!unmounted.value && requestID === activeUsageRequestID) activeQueryLoading.value = false
   }
