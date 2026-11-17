@@ -1901,6 +1901,8 @@
           </div>
           <Toggle
             v-model="openaiPassthroughEnabled"
+            data-testid="edit-openai-passthrough-toggle"
+            :aria-label="t('admin.accounts.openai.oauthPassthrough')"
           />
         </div>
         <label v-if="openaiPassthroughEnabled" class="mt-3 flex items-start gap-2">

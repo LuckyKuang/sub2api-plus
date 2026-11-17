@@ -168,7 +168,7 @@ const props = withDefaults(
     showMetricToggle: false,
     showSourceToggle: false,
     enableBreakdown: true,
-    showAccountCost: true
+    showAccountCost: false
   }
 )
 

@@ -410,7 +410,6 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		require.NotEqual(t, first.Header().Get("ETag"), second.Header().Get("ETag"))
 	})
 
-
 	t.Run("serves_fresh_html_when_cached_nonce_is_stale", func(t *testing.T) {
 		provider := &mockSettingsProvider{
 			settings: map[string]string{"test": "value"},

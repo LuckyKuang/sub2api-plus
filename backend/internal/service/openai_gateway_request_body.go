@@ -2364,7 +2364,16 @@ func openAIFastPolicySettingsFromContext(ctx context.Context) *OpenAIFastPolicyS
 // multiplier, so a model can never be forced onto Ultrafast yet billed below it.
 func openAIModelSupportsUltrafast(model string) bool {
 	normalized := normalizeKnownOpenAICodexModel(model)
-	return isOpenAIGPT6AstraModel(normalized) || normalized == "gpt-6.1-sol"
+	if normalized == "" {
+		// 裸版本号 "gpt-6" 属于 Astra 家族，归一化器只识别完整 SKU。
+		normalized = lastPricingSegment(strings.ToLower(strings.TrimSpace(model)))
+	}
+	if isOpenAIGPT6AstraModel(normalized) || normalized == "gpt-6" {
+		return true
+	}
+	// Sol 的变体（-high、-openai-compact 等）沿用同一档位声明；
+	// "gpt-6.1-solar" 之类不同型号不会被前缀误判。
+	return normalized == "gpt-6.1-sol" || strings.HasPrefix(normalized, "gpt-6.1-sol-")
 }
 
 // openAIGroupForcedServiceTier returns the service_tier that the trusted request
