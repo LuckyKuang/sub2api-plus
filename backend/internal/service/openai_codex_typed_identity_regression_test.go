@@ -28,7 +28,7 @@ func TestCodexTypedIdentityPreservesTimeAndReferenceGraph(t *testing.T) {
 	encoded, err := json.Marshal(metadata)
 	require.NoError(t, err)
 	body := map[string]any{"client_metadata": map[string]any{"thread_id": thread, "turn_id": turn, "parent_turn_id": turn, "root_turn_id": turn, "x-codex-window-id": thread + ":3", "x-codex-turn-metadata": string(encoded)}}
-	changed, err := applyCodexAccountIdentityClientMetadataMap(ctx, body, account, 9, "")
+	changed, err := applyCodexAccountIdentityClientMetadataMap(ctx, body, account, 9)
 	require.NoError(t, err)
 	require.True(t, changed)
 	cm, ok := body["client_metadata"].(map[string]any)
@@ -68,7 +68,7 @@ func TestCodexConvergenceDoesNotInventTurnsOrResetWindows(t *testing.T) {
 			account := turnStateAccount(17, "principal")
 			account.Extra = map[string]any{CodexFingerprintModeExtraKey: mode}
 			body := map[string]any{"client_metadata": map[string]any{"thread_id": "01912345-6789-7abc-8def-0123456789ab", "x-codex-window-id": "01912345-6789-7abc-8def-0123456789ab:2"}}
-			_, err := applyCodexAccountIdentityClientMetadataMap(ctx, body, account, 9, "")
+			_, err := applyCodexAccountIdentityClientMetadataMap(ctx, body, account, 9)
 			require.NoError(t, err)
 			ids, err := resolveCodexFingerprintIDsContext(ctx, account, http.Header{}, account.GetCodexFingerprintMode(), 9)
 			require.NoError(t, err)

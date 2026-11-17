@@ -239,7 +239,9 @@ func TestOpenAIStreamMetadataAndKeepaliveBeforeOverloadFailOver(t *testing.T) {
 			require.Error(t, err)
 			var failoverErr *UpstreamFailoverError
 			require.ErrorAs(t, err, &failoverErr)
-			require.True(t, failoverErr.RetryableOnSameAccount)
+			// Plus 的契约：请求级降载不原地重试（同一账号只会继续过载），
+			// 但保持账号健康并允许调度到其它账号。
+			require.False(t, failoverErr.RetryableOnSameAccount)
 			require.True(t, failoverErr.RequestScopedTransient)
 			require.Equal(t, http.StatusServiceUnavailable, failoverErr.ClientStatusCode)
 			require.Contains(t, failoverErr.ClientMessage, "servers are currently overloaded")
@@ -361,7 +363,9 @@ func TestOpenAIStreamKeepaliveOnlyFailureDoesNotRecordFirstToken(t *testing.T) {
 			}
 			var failoverErr *UpstreamFailoverError
 			require.ErrorAs(t, err, &failoverErr)
-			require.True(t, failoverErr.RetryableOnSameAccount)
+			// 同 TestOpenAIStreamMetadataAndKeepaliveBeforeOverloadFailOver：降载
+			// 属于请求级瞬态，Plus 不在同一账号上重试。
+			require.False(t, failoverErr.RetryableOnSameAccount)
 			require.True(t, failoverErr.RequestScopedTransient)
 			if !passthrough {
 				// Only the upstream keepalive event reaches the client before first output.

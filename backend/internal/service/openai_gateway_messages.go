@@ -305,7 +305,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		if codexResult.PromptCacheKey != "" {
 			promptCacheKey = codexResult.PromptCacheKey
 		}
-		if _, scopeErr := applyCodexAccountIdentityClientMetadataMap(ctx, reqBody, codexAccountIdentitySource(c, account), apiKeyID, codexClientSessionID(c)); scopeErr != nil {
+		if _, scopeErr := applyCodexAccountIdentityClientMetadataMap(ctx, reqBody, codexAccountIdentitySource(c, account), apiKeyID); scopeErr != nil {
 			return nil, scopeErr
 		}
 		delete(reqBody, "prompt_cache_key")
@@ -393,7 +393,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	}
 
 	if credentialAccount.UsesOpenAICodexProtocol() && credentialAccount.Platform != PlatformGrok {
-		responsesBody, _, err = applyCodexAccountIdentityClientMetadataRaw(responsesBody, codexAccountIdentitySource(c, account), apiKeyID, codexClientSessionID(c), ctx)
+		responsesBody, _, err = applyCodexAccountIdentityClientMetadataRaw(responsesBody, codexAccountIdentitySource(c, account), apiKeyID, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -731,7 +731,7 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 	// accumulated delta events so the client receives the full content.
 	acc.SupplementResponseOutput(finalResponse)
 
-	anthropicResp := apicompat.ResponsesToAnthropic(finalResponse, compositeClientModel(c.Request.Context(), originalModel))
+	anthropicResp := apicompat.ResponsesToAnthropicForUpstream(finalResponse, compositeClientModel(c.Request.Context(), originalModel), account != nil && account.IsGrok())
 
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
@@ -1291,16 +1291,12 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 					pendingRouteEvents = append(pendingRouteEvents, sse)
 					continue
 				}
-				writeStreamHeaders()
-				for _, pending := range pendingRouteEvents {
-					if _, err := fmt.Fprint(c.Writer, pending); err != nil {
-						clientDisconnected = true
-						break
-					}
-				}
-				pendingRouteEvents = nil
-				if clientDisconnected {
-					break
+				if len(pendingRouteEvents) > 0 {
+					// 路由切换已完成：缓冲的事件必须排在当前事件之前，并同样交给
+					// emit 决定是否释放，否则会提前写出上游响应头、破坏前置内容
+					// 仍可失败切换的契约。
+					sse = strings.Join(pendingRouteEvents, "") + sse
+					pendingRouteEvents = nil
 				}
 				if err := emit(sse, isTerminalEvent || evt.Type == "content_block_delta"); err != nil {
 					clientDisconnected = true

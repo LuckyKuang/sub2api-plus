@@ -17,7 +17,21 @@ import (
 // Completions response. Text output items are concatenated into
 // choices[0].message.content, refusal parts into choices[0].message.refusal;
 // function_call items become tool_calls.
+// ResponsesToChatCompletions converts without platform knowledge and therefore
+// treats any xs_/as_ custom tool call as a server-run search.
 func ResponsesToChatCompletions(resp *ResponsesResponse, model string) *ChatCompletionsResponse {
+	return responsesToChatCompletions(resp, model, true)
+}
+
+// ResponsesToChatCompletionsForUpstream converts a buffered Responses payload
+// for a caller that knows the upstream platform: only on xAI is a custom tool
+// call with an xs_/as_ call_id a search the server already ran instead of a
+// client tool call (see IsServerSideSearchCall).
+func ResponsesToChatCompletionsForUpstream(resp *ResponsesResponse, model string, xaiServerSideSearch bool) *ChatCompletionsResponse {
+	return responsesToChatCompletions(resp, model, xaiServerSideSearch)
+}
+
+func responsesToChatCompletions(resp *ResponsesResponse, model string, suppressServerSideSearch bool) *ChatCompletionsResponse {
 	id := resp.ID
 	if id == "" {
 		id = generateChatCmplID()
@@ -50,7 +64,8 @@ func ResponsesToChatCompletions(resp *ResponsesResponse, model string) *ChatComp
 		case "function_call", "custom_tool_call", "tool_search_call":
 			// xAI 服务端搜索调用由 xAI 自行执行，用户从未声明该工具；
 			// 转成 Chat Completions 的工具调用会让下游误以为需要回传结果。
-			if IsServerSideSearchCall(item.Type, item.CallID) {
+			// 其它上游的同一 call_id 只是普通客户端工具调用，必须保留。
+			if suppressServerSideSearch && IsServerSideSearchCall(item.Type, item.CallID) {
 				continue
 			}
 			toolCalls = append(toolCalls, ChatToolCall{

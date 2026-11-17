@@ -97,6 +97,9 @@ func TestInflightConvertedEffortCoversActualWireAndSettlement(t *testing.T) {
 					}}
 				user := &User{ID: 22}
 				key := &APIKey{ID: 11, Group: group, GroupID: &group.ID, User: user}
+				// 调度快照在生产中只包含当前可调度的账号；夹具同样要满足该前提，
+				// 否则读取期过滤会把它们全部剔除。
+				account.Status, account.Schedulable = StatusActive, true
 				cache := &inflightSnapshotCacheStub{byBucket: map[string][]Account{
 					inflightBucketKey(group.ID, platform): {*account},
 				}}

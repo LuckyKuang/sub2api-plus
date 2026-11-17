@@ -243,21 +243,7 @@ func applyCodexAccountIdentityEmbeddedMetadata(ctx context.Context, values map[s
 	return true, nil
 }
 
-// codexPromptCacheKeyKind scopes a prompt_cache_key that names the client's
-// session in the session namespace, so it stays equal to the scoped session.
-// Codex derives the key from its session-id header, which matches
-// client_metadata.session_id except on an ephemeral fork such as thread/sample:
-// the fork names itself in the metadata but keeps its parent's header and key.
-func codexPromptCacheKeyKind(promptCacheKey, bodySessionID, clientSessionID string) string {
-	for _, sessionID := range []string{bodySessionID, clientSessionID} {
-		if strings.TrimSpace(sessionID) != "" && promptCacheKey == sessionID {
-			return "session"
-		}
-	}
-	return "prompt-cache"
-}
-
-func applyCodexAccountIdentityClientMetadataMap(ctx context.Context, requestBody map[string]any, account *Account, apiKeyID int64, clientSessionID string) (bool, error) {
+func applyCodexAccountIdentityClientMetadataMap(ctx context.Context, requestBody map[string]any, account *Account, apiKeyID int64) (bool, error) {
 	var err error
 	account, err = codexRequestIdentityOwner(ctx, account)
 	if err != nil {
@@ -268,9 +254,7 @@ func applyCodexAccountIdentityClientMetadataMap(ctx context.Context, requestBody
 	}
 	changed := false
 	clientMetadata, _ := requestBody["client_metadata"].(map[string]any)
-	originalBodySessionID := ""
 	if clientMetadata != nil {
-		originalBodySessionID, _ = clientMetadata["session_id"].(string)
 		flatChanged, err := applyCodexAccountIdentityFields(ctx, clientMetadata, account, apiKeyID)
 		if err != nil {
 			return false, err
@@ -281,25 +265,16 @@ func applyCodexAccountIdentityClientMetadataMap(ctx context.Context, requestBody
 		}
 		changed = flatChanged || embeddedChanged
 	}
-	if raw, ok := requestBody["prompt_cache_key"].(string); ok && strings.TrimSpace(raw) != "" {
-		kind := codexPromptCacheKeyKind(raw, originalBodySessionID, clientSessionID)
-		scoped, resolveErr := resolveCodexAccountIdentityValue(ctx, account, apiKeyID, kind, raw)
-		if resolveErr != nil {
-			return false, resolveErr
-		}
-		if scoped != raw {
-			requestBody["prompt_cache_key"] = scoped
-			changed = true
-		}
-	}
 	// Cache identity has its own tenant-only resolver and is independent of IDs.
+	// In particular the client's prompt_cache_key is never rewritten: it is the
+	// caller's logical cache key and must survive a credential-owner migration.
 	return changed, nil
 }
 
 // applyCodexAccountIdentityClientMetadataRaw scopes only the small identity
 // subobjects with gjson/sjson. The passthrough hot path never unmarshals the
 // potentially multi-megabyte request body.
-func applyCodexAccountIdentityClientMetadataRaw(body []byte, account *Account, apiKeyID int64, clientSessionID string, contexts ...context.Context) ([]byte, bool, error) {
+func applyCodexAccountIdentityClientMetadataRaw(body []byte, account *Account, apiKeyID int64, contexts ...context.Context) ([]byte, bool, error) {
 	if len(body) == 0 || codexAccountIdentityNamespace(account) == "" || !gjson.ParseBytes(body).IsObject() {
 		return body, false, nil
 	}
@@ -308,43 +283,24 @@ func applyCodexAccountIdentityClientMetadataRaw(body []byte, account *Account, a
 		ctx = contexts[0]
 	}
 	cm := gjson.GetBytes(body, "client_metadata")
-	promptCacheKey := gjson.GetBytes(body, "prompt_cache_key")
-	hasPromptCacheKey := promptCacheKey.Type == gjson.String && strings.TrimSpace(promptCacheKey.String()) != ""
-	if !cm.IsObject() && !hasPromptCacheKey {
+	if !cm.IsObject() {
 		return body, false, nil
 	}
 	values := map[string]any{}
-	if cm.IsObject() {
-		if err := json.Unmarshal([]byte(cm.Raw), &values); err != nil {
-			return body, false, fmt.Errorf("decode client metadata: %w", err)
-		}
+	if err := json.Unmarshal([]byte(cm.Raw), &values); err != nil {
+		return body, false, fmt.Errorf("decode client metadata: %w", err)
 	}
 	wrapper := map[string]any{"client_metadata": values}
-	if hasPromptCacheKey {
-		wrapper["prompt_cache_key"] = promptCacheKey.String()
-	}
-	changed, err := applyCodexAccountIdentityClientMetadataMap(ctx, wrapper, account, apiKeyID, clientSessionID)
+	changed, err := applyCodexAccountIdentityClientMetadataMap(ctx, wrapper, account, apiKeyID)
 	if err != nil || !changed {
 		return body, false, err
 	}
-	next := body
-	if cm.IsObject() {
-		raw, marshalErr := json.Marshal(values)
-		if marshalErr != nil {
-			return body, false, marshalErr
-		}
-		next, err = sjson.SetRawBytes(next, "client_metadata", raw)
-		if err != nil {
-			return body, false, err
-		}
+	raw, err := json.Marshal(values)
+	if err != nil {
+		return body, false, err
 	}
-	if scoped, ok := wrapper["prompt_cache_key"].(string); ok && hasPromptCacheKey {
-		next, err = sjson.SetBytes(next, "prompt_cache_key", scoped)
-		if err != nil {
-			return body, false, fmt.Errorf("splice account-scoped prompt_cache_key: %w", err)
-		}
-	}
-	return next, true, nil
+	next, err := sjson.SetRawBytes(body, "client_metadata", raw)
+	return next, err == nil, err
 }
 
 func applyCodexAccountIdentityHeaders(ctx context.Context, headers http.Header, account *Account, apiKeyID int64) error {

@@ -465,9 +465,9 @@ func (s *PricingService) checkAndUpdatePricing() error {
 	}
 
 	if validatedLocalCache {
-		if err := s.syncWithRemote(); err != nil {
-			logger.LegacyPrintf("service.pricing", "[Pricing] Release refresh failed; keeping validated local cache: %v", err)
-		}
+		// 验证过的缓存已可计费：刷新移出启动关键路径，远端慢或不可达
+		// 都不能拖慢监听（fetch 会一直等到客户端超时）。
+		s.refreshReleaseInBackground()
 		return nil
 	}
 
@@ -495,13 +495,36 @@ func (s *PricingService) checkAndUpdatePricing() error {
 	if !s.remoteSyncEnabled() {
 		return nil
 	}
+	if validatedLocalCache {
+		s.refreshReleaseInBackground()
+		return nil
+	}
+	// 未验证的本地价格文件可能来自任意写入：必须先由受信任的 Release
+	// 替换（或明确失败），不能像验证缓存那样降级到后台。
 	if err := s.syncWithRemote(); err != nil {
-		if !validatedLocalCache {
-			return fmt.Errorf("refresh release pricing for unvalidated local cache: %w", err)
-		}
-		logger.LegacyPrintf("service.pricing", "[Pricing] Release refresh failed; keeping validated local cache: %v", err)
+		return fmt.Errorf("refresh release pricing for unvalidated local cache: %w", err)
 	}
 	return nil
+}
+
+// refreshReleaseInBackground runs one Release refresh off the startup path. It
+// shares the service lifecycle so Stop still waits for the attempt to finish.
+func (s *PricingService) refreshReleaseInBackground() {
+	if s == nil {
+		return
+	}
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		select {
+		case <-s.stopCh:
+			return
+		default:
+		}
+		if err := s.syncWithRemote(); err != nil {
+			logger.LegacyPrintf("service.pricing", "[Pricing] Release refresh failed; keeping validated local cache: %v", err)
+		}
+	}()
 }
 
 // syncWithRemote accepts only a strictly newer Release manifest whose pricing

@@ -125,7 +125,9 @@ func TestParseKimiUsageTiers_MonthlyPlan(t *testing.T) {
 		}
 	}`)
 	tiers := parseKimiUsageTiers(body)
-	require.Len(t, tiers, 2, "新套餐应为 5h + monthly，且不得产出已废弃的 weekly")
+	// Plus 把 limit_month_total 与 limit_month_code 当作两个独立的限流窗口上报，
+	// 因此新套餐是 5h + monthly + monthly_code；已废弃的 weekly 不得产出。
+	require.Len(t, tiers, 3, "新套餐应为 5h + monthly + monthly_code，且不得产出已废弃的 weekly")
 
 	require.Equal(t, "5h", tiers[0].Window)
 	require.InDelta(t, 10.0, tiers[0].UsedPercent, 1e-9, "5h 用 limits[].detail 的绝对计数")
@@ -134,6 +136,10 @@ func TestParseKimiUsageTiers_MonthlyPlan(t *testing.T) {
 	require.Equal(t, "monthly", tiers[1].Window)
 	require.InDelta(t, 65.64, tiers[1].UsedPercent, 1e-9, "used_ratio 0-1 换算为百分比")
 	require.Equal(t, "2026-11-26T00:00:00Z", tiers[1].ResetAt)
+
+	require.Equal(t, "monthly_code", tiers[2].Window)
+	require.InDelta(t, 62.52, tiers[2].UsedPercent, 1e-9)
+	require.Equal(t, "2026-11-26T00:00:00Z", tiers[2].ResetAt)
 }
 
 // TestParseKimiUsageTiers_MonthlyPicksMaxUsage total/code 任一耗尽都会限流：
@@ -144,23 +150,26 @@ func TestParseKimiUsageTiers_MonthlyPicksMaxUsage(t *testing.T) {
 		"limit_month_total":{"used_ratio":0.4,"reset_time":"2026-11-26T00:00:00Z"},
 		"limit_month_code":{"used_ratio":0.9,"reset_time":"2026-11-20T00:00:00Z"}}}`)
 	tiers := parseKimiUsageTiers(body)
-	require.Len(t, tiers, 1)
+	// total 与 code 是两个独立限流窗口：各自保留自己的用量与重置时间，
+	// 合并会让「先到期的 code」掩盖「仍耗尽的 total」。
+	require.Len(t, tiers, 2)
 	require.Equal(t, "monthly", tiers[0].Window)
-	require.InDelta(t, 90.0, tiers[0].UsedPercent, 1e-9)
-	// total 与 code 是两个独立限流窗口：reset 必须取较晚者，否则 code 先到期的
-	// 11-20 会让仍处于 40% 的 total 窗口提前放行。
+	require.InDelta(t, 40.0, tiers[0].UsedPercent, 1e-9)
 	require.Equal(t, "2026-11-26T00:00:00Z", tiers[0].ResetAt)
+	require.Equal(t, "monthly_code", tiers[1].Window)
+	require.InDelta(t, 90.0, tiers[1].UsedPercent, 1e-9)
+	require.Equal(t, "2026-11-20T00:00:00Z", tiers[1].ResetAt)
 
-	// 两窗口同为 100% 时也不得取更早的 reset。
 	bothFull := parseKimiUsageTiers([]byte(`{"usages":{
 		"limit_month_total":{"used_ratio":1,"reset_time":"2026-11-26T00:00:00Z"},
 		"limit_month_code":{"used_ratio":1,"reset_time":"2026-11-20T00:00:00Z"}}}`))
-	require.Len(t, bothFull, 1)
+	require.Len(t, bothFull, 2)
 	require.Equal(t, "2026-11-26T00:00:00Z", bothFull[0].ResetAt)
+	require.Equal(t, "2026-11-20T00:00:00Z", bothFull[1].ResetAt)
 
 	onlyCode := parseKimiUsageTiers([]byte(`{"usages":{"limit_month_code":{"used_ratio":0.5,"reset_time":"2026-11-20T00:00:00Z"}}}`))
 	require.Len(t, onlyCode, 1)
-	require.Equal(t, "monthly", onlyCode[0].Window)
+	require.Equal(t, "monthly_code", onlyCode[0].Window)
 	require.InDelta(t, 50.0, onlyCode[0].UsedPercent, 1e-9)
 }
 
@@ -396,9 +405,11 @@ func TestParseZhipuTokenTiers_SkipsMissingPercentage(t *testing.T) {
 		"missing percentage": {`{"limits":[{"type":"TOKENS_LIMIT","unit":3}]}`, 0},
 		"non numeric":        {`{"limits":[{"type":"TOKENS_LIMIT","unit":3,"percentage":"abc"}]}`, 0},
 		"negative":           {`{"limits":[{"type":"TOKENS_LIMIT","unit":3,"percentage":-5}]}`, 0},
-		"over 100":           {`{"limits":[{"type":"TOKENS_LIMIT","unit":3,"percentage":120}]}`, 0},
-		"legal zero":         {`{"limits":[{"type":"TOKENS_LIMIT","unit":3,"percentage":0}]}`, 1},
-		"legal five hour":    {`{"limits":[{"type":"TOKENS_LIMIT","unit":3,"percentage":42}]}`, 1},
+		// Plus 保留上游真实的超用观测：120% 是一个「已耗尽」的有效窗口，
+		// 丢弃会让阈值停调看不到超额。
+		"over 100":        {`{"limits":[{"type":"TOKENS_LIMIT","unit":3,"percentage":120}]}`, 1},
+		"legal zero":      {`{"limits":[{"type":"TOKENS_LIMIT","unit":3,"percentage":0}]}`, 1},
+		"legal five hour": {`{"limits":[{"type":"TOKENS_LIMIT","unit":3,"percentage":42}]}`, 1},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

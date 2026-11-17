@@ -324,7 +324,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	ctx = withRequestCredentialOwner(ctx, account, token)
 	defer bindRequestCredentialOwnerContext(ctx, c)()
 	if account.UsesOpenAICodexProtocol() || account.Type == AccountTypeAPIKey && !isOpenAIResponsesCompactPath(c) {
-		body, _, err = applyCodexAccountIdentityClientMetadataRaw(body, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), codexClientSessionID(c), ctx)
+		body, _, err = applyCodexAccountIdentityClientMetadataRaw(body, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), ctx)
 		if err != nil {
 			return nil, err
 		}

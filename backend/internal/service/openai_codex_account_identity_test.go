@@ -33,13 +33,13 @@ func TestCodexRequestBodyIdentityNamespaceIsStablePerOAuthAccount(t *testing.T) 
 	account11 := &Account{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"chatgpt_account_id": "chatgpt-account-11"}}
 	account19 := &Account{ID: 19, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"chatgpt_account_id": "chatgpt-account-19"}}
 
-	first, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account11, 77, "", t.Context())
+	first, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account11, 77, t.Context())
 	require.NoError(t, err)
 	require.True(t, changed)
-	firstAgain, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account11, 77, "", t.Context())
+	firstAgain, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account11, 77, t.Context())
 	require.NoError(t, err)
 	require.True(t, changed)
-	second, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account19, 77, "", t.Context())
+	second, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account19, 77, t.Context())
 	require.NoError(t, err)
 	require.True(t, changed)
 	require.JSONEq(t, string(first), string(firstAgain))
@@ -260,7 +260,9 @@ func scopeCodexAccountIdentityValue(account *Account, tenant int64, kind, raw st
 
 // An ephemeral Codex fork, such as thread/sample, names itself in
 // client_metadata.session_id but keeps its parent's session-id header and
-// prompt_cache_key. Upstream, the fork must keep the parent's cache key.
+// prompt_cache_key. Plus resolves that key once through its tenant-scoped
+// cache authority (never the credential-owner namespace, A01), so a fork keeps
+// its parent's key while the per-owner session identity still converges.
 func TestCodexForkKeepsParentPromptCacheKeyUpstream(t *testing.T) {
 	for _, passthrough := range []bool{false, true} {
 		t.Run(map[bool]string{false: "transformed", true: "passthrough"}[passthrough], func(t *testing.T) {
@@ -302,8 +304,11 @@ func TestCodexForkKeepsParentPromptCacheKeyUpstream(t *testing.T) {
 
 			parentHeader, parentBody := forward("parent-session", "parent-session")
 			parentKey := gjson.GetBytes(parentBody, "prompt_cache_key").String()
-			require.NotEqual(t, "parent-session", parentKey, "the key is account-scoped")
-			require.Equal(t, gjson.GetBytes(parentBody, "client_metadata.session_id").String(), parentKey)
+			// Plus 的专用解析器按租户/会话共享作用域重写为确定性 UUID；它与
+			// 按凭证所有者收敛的 session_id 属于不同作用域，因此不相等。
+			require.NotEqual(t, "parent-session", parentKey, "the cache key is tenant-scoped")
+			require.NotEqual(t, parentKey, gjson.GetBytes(parentBody, "client_metadata.session_id").String(),
+				"the per-owner session identity is a separate scope")
 
 			forkHeader, forkBody := forward("parent-session", "fork-session")
 			require.Equal(t, parentKey, gjson.GetBytes(forkBody, "prompt_cache_key").String(),

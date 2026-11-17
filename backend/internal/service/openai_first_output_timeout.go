@@ -41,8 +41,11 @@ type openAIFirstOutputStage struct {
 	createTemp func() (*os.File, error)
 	removeFile func(string) error
 	memoryOnly bool
-	cleanupErr error
-	closed     bool
+	// spoolRequired 表示该阶段没有可信的内存上限（安全缓冲使用 MaxInt64），
+	// 因此磁盘暂存不可用时必须失败，不能退化为无界内存缓冲。
+	spoolRequired bool
+	cleanupErr    error
+	closed        bool
 }
 
 func newOpenAIFirstOutputStage(limit int64) *openAIFirstOutputStage {
@@ -145,8 +148,12 @@ func (s *openAIFirstOutputStage) prepareWrite(incoming int) error {
 	}
 	file, err := s.createTemp()
 	if err != nil {
-		// Unavailable temporary storage must not fail an otherwise valid stream.
-		// Keep buffering in memory under the same stage limit.
+		if s.spoolRequired {
+			// 无界阶段（安全缓冲）没有可退回的内存上限：失败必须上抛，
+			// 否则会把任意长度的明文滞留在内存里。
+			return fmt.Errorf("create first-output spool: %w", err)
+		}
+		// 有界阶段遇到不可用的临时存储时继续在内存中缓冲，仍受同一上限约束。
 		s.memoryOnly = true
 		return nil
 	}

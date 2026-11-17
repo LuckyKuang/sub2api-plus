@@ -34,6 +34,13 @@ func (r *compatStreamSideEffectsRepo) SetError(_ context.Context, _ int64, msg s
 	return nil
 }
 
+// SetCredentialErrorIfUnchanged 是 Plus 的 401 exact-grant CAS 通道：OpenAI 账号
+// 的认证失败不会绕过它直接 SetError，因此替身必须实现它才能观测到一次标记。
+func (r *compatStreamSideEffectsRepo) SetCredentialErrorIfUnchanged(_ context.Context, _ *Account, msg string) (bool, error) {
+	r.errorCalls = append(r.errorCalls, msg)
+	return true, nil
+}
+
 func compatStreamSideEffectsAccount() Account {
 	return Account{
 		ID:          601,

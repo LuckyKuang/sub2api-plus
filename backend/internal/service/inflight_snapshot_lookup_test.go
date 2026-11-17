@@ -17,7 +17,7 @@ type inflightPoolIdentityCache struct {
 }
 
 func (c *inflightPoolIdentityCache) GetSnapshot(context.Context, SchedulerBucket) ([]*Account, bool, error) {
-	return []*Account{{ID: c.reads.Add(1)}}, true, nil
+	return []*Account{{ID: c.reads.Add(1), Status: StatusActive, Schedulable: true}}, true, nil
 }
 
 func TestInflightSnapshotLookupSeparatesPoolsAndRequests(t *testing.T) {
@@ -62,7 +62,7 @@ type inflightLookupBudgetCache struct {
 
 func (c *inflightLookupBudgetCache) GetSnapshot(ctx context.Context, _ SchedulerBucket) ([]*Account, bool, error) {
 	c.contexts = append(c.contexts, ctx)
-	return []*Account{{ID: int64(len(c.contexts))}}, true, nil
+	return []*Account{{ID: int64(len(c.contexts)), Status: StatusActive, Schedulable: true}}, true, nil
 }
 
 func TestInflightSnapshotLookupSharesDeadlineAcrossPoolsWithoutCancellingParent(t *testing.T) {

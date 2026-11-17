@@ -145,10 +145,16 @@ func TestOpenAIResponsesCompatibility_AdditionalToolsUUID(t *testing.T) {
 	}
 	t.Run("undeclared_reference", func(t *testing.T) {
 		body := []byte(`{"model":"gpt-6.1-sol","input":[{"type":"item_reference","id":"` + uuidID + `"}]}`)
-		normalized, changed, err := normalizeOpenAIResponsesCompatibilityBodyWithOptions(body, &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}, openAIResponsesCompatibilityOptions{})
+		normalized, _, err := normalizeOpenAIResponsesCompatibilityBodyWithOptions(body, &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}, openAIResponsesCompatibilityOptions{})
 		require.NoError(t, err)
-		require.False(t, changed)
-		require.Equal(t, body, normalized)
+		// Plus 的 OAuth 兼容层会额外声明 include:["reasoning.encrypted_content"]，
+		// 那是平台策略而非 ID 改写；此用例只要求未声明的 at_ 引用原样保留。
+		require.Equal(t, gjson.GetBytes(body, "input").Raw, gjson.GetBytes(normalized, "input").Raw)
+		require.Equal(t, uuidID, gjson.GetBytes(normalized, "input.0.id").String())
+		again, againChanged, err := normalizeOpenAIResponsesCompatibilityBodyWithOptions(normalized, &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}, openAIResponsesCompatibilityOptions{})
+		require.NoError(t, err)
+		require.False(t, againChanged, "a second pass has nothing left to normalize")
+		require.Equal(t, normalized, again)
 	})
 }
 

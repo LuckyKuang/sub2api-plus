@@ -14,7 +14,24 @@ import (
 // ResponsesToAnthropic converts a Responses API response directly into an
 // Anthropic Messages response. Reasoning output items are mapped to thinking
 // blocks; function_call items become tool_use blocks.
+// ResponsesToAnthropic converts without platform knowledge. It conservatively
+// treats any xs_/as_ custom tool call as a server-run search, because handing a
+// search back as a client tool leaves the caller waiting for a result it never
+// asked for.
 func ResponsesToAnthropic(resp *ResponsesResponse, model string) *AnthropicResponse {
+	return responsesToAnthropic(resp, model, true)
+}
+
+// ResponsesToAnthropicForUpstream converts a buffered Responses payload for a
+// caller that knows the upstream platform: only on xAI does a custom_tool_call
+// whose call_id starts with xs_/as_ represent a search the server already ran
+// (see IsServerSideSearchCall). On any other upstream the same item is an
+// ordinary client tool call and must stay a tool_use block.
+func ResponsesToAnthropicForUpstream(resp *ResponsesResponse, model string, xaiServerSideSearch bool) *AnthropicResponse {
+	return responsesToAnthropic(resp, model, xaiServerSideSearch)
+}
+
+func responsesToAnthropic(resp *ResponsesResponse, model string, suppressServerSideSearch bool) *AnthropicResponse {
 	out := &AnthropicResponse{
 		ID:    resp.ID,
 		Type:  "message",
@@ -47,12 +64,21 @@ func ResponsesToAnthropic(resp *ResponsesResponse, model string) *AnthropicRespo
 					})
 				}
 			}
-		case "function_call":
+		case "function_call", "custom_tool_call":
+			// custom/freeform 工具（如新版 apply_patch、exec）与 function_call 一样
+			// 是客户端工具调用；只有 xAI 服务端自查的 xs_/as_ 调用不能回传给客户端。
+			if suppressServerSideSearch && IsServerSideSearchCall(item.Type, item.CallID) {
+				continue
+			}
+			arguments := item.Arguments
+			if item.Type == "custom_tool_call" {
+				arguments = item.Input
+			}
 			blocks = append(blocks, AnthropicContentBlock{
 				Type:  "tool_use",
 				ID:    fromResponsesCallID(item.CallID),
 				Name:  item.Name,
-				Input: sanitizeAnthropicToolUseInput(item.Name, item.Arguments),
+				Input: sanitizeAnthropicToolUseInput(item.Name, arguments),
 			})
 		case "web_search_call":
 			toolUseID := "srvtoolu_" + item.ID

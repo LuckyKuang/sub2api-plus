@@ -800,7 +800,8 @@ func (s *AccountUsageService) getOpenAIUsage(ctx context.Context, account *Accou
 	}
 
 	applyExtraToUsage(usage, account.Extra, now)
-	if account.IsShadow() {
+	// 没有仓储就没有所有者证据：跳过 generation 比对，而不是对 nil 仓储取母账号。
+	if account.IsShadow() && s.accountRepo != nil {
 		if owner, err := resolveCredentialAccount(ctx, s.accountRepo, account); err == nil && owner != nil {
 			if generation, _ := account.Extra[OpenAICodexUsageOwnerGenerationExtraKey].(string); generation != "" && generation != credentialStateGeneration(owner) {
 				force = true

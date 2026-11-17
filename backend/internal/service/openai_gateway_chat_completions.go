@@ -327,9 +327,6 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 		} else if promptCacheKey != "" {
 			reqBody["prompt_cache_key"] = promptCacheKey
 		}
-		if _, scopeErr := applyCodexAccountIdentityClientMetadataMap(ctx, reqBody, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), codexClientSessionID(c)); scopeErr != nil {
-			return nil, scopeErr
-		}
 		responsesBody, err = json.Marshal(reqBody)
 		if err != nil {
 			return nil, fmt.Errorf("remarshal after codex transform: %w", err)
@@ -399,7 +396,7 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 	if account.UsesOpenAICodexProtocol() {
 		// Metadata and fingerprints must use the owner of the acquired token.
 		// Prompt-cache identity was aligned independently above and is preserved.
-		responsesBody, _, err = applyCodexAccountIdentityClientMetadataRaw(responsesBody, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), codexClientSessionID(c), ctx)
+		responsesBody, _, err = applyCodexAccountIdentityClientMetadataRaw(responsesBody, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -814,7 +811,7 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 	// accumulated delta events so the client receives the full content.
 	acc.SupplementResponseOutput(finalResponse)
 
-	chatResp := apicompat.ResponsesToChatCompletions(finalResponse, originalModel)
+	chatResp := apicompat.ResponsesToChatCompletionsForUpstream(finalResponse, originalModel, account != nil && account.IsGrok())
 
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)

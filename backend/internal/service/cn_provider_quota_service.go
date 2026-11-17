@@ -491,21 +491,8 @@ func parseKimiUsageTiers(body []byte) []CNQuotaTier {
 		return nil
 	}
 	var tiers []CNQuotaTier
-	// Native Code ratios differ from the separate older API-key schema below.
-	if usages := gjson.GetBytes(body, "usages"); usages.Exists() {
-		for _, bucket := range []struct{ field, window string }{
-			{"limit_5h", "5h"}, {"limit_7d", "weekly"}, {"limit_month_total", "monthly"}, {"limit_month_code", "monthly_code"},
-		} {
-			observation := usages.Get(bucket.field)
-			ratio, ok := cnParseF64(observation.Get("used_ratio").Value())
-			percent := ratio * 100
-			if !ok || ratio < 0 || math.IsInf(percent, 0) || math.IsNaN(percent) {
-				continue
-			}
-			tiers = append(tiers, CNQuotaTier{Window: bucket.window, UsedPercent: percent, ResetAt: cnNormalizeResetTime(observation.Get("reset_time").Value())})
-		}
-		return tiers
-	}
+	// Native Code ratios 与老 API-key schema 共用同一条解析路径：usages 提供
+	// 0-1 比例，limits[].detail 提供绝对计数（对 5h 更精确，优先采用）。
 	// A zero/missing denominator cannot establish a percentage. Keep the
 	// window unknown, rather than inventing a fresh zero utilization.
 
@@ -556,25 +543,13 @@ func parseKimiUsageTiers(body []byte) []CNQuotaTier {
 		}
 	}
 
-	// 月度限额（新套餐）：total 与 code 是两个**独立**的限流窗口，任一耗尽都会限流。
-	// 用量取两者较大值；重置时间取**较晚**者——取较早会在另一个窗口仍耗尽时提前
-	// 解除预停调（例如 total 到 11-26 才恢复、code 到 11-20 恢复）。宁可晚回池，
-	// 不可提前撞 429。
-	total, hasTotal := kimiUsedRatioTier(body, "limit_month_total", "monthly")
-	code, hasCode := kimiUsedRatioTier(body, "limit_month_code", "monthly")
-	if hasTotal || hasCode {
-		monthly := total
-		if !hasTotal {
-			monthly = code
-		} else if hasCode {
-			if code.UsedPercent > monthly.UsedPercent {
-				monthly.UsedPercent = code.UsedPercent
-			}
-			if code.ResetAt != "" && (monthly.ResetAt == "" || code.ResetAt > monthly.ResetAt) {
-				monthly.ResetAt = code.ResetAt
-			}
-		}
-		tiers = append(tiers, monthly)
+	// 月度限额（新套餐）：total 与 code 是两个**独立**的限流窗口，各自独立上报，
+	// 任一耗尽都会限流；合并成一个窗口会隐藏另一个窗口的恢复时间。
+	if tier, ok := kimiUsedRatioTier(body, "limit_month_total", "monthly"); ok {
+		tiers = append(tiers, tier)
+	}
+	if tier, ok := kimiUsedRatioTier(body, "limit_month_code", "monthly_code"); ok {
+		tiers = append(tiers, tier)
 	}
 
 	return tiers
@@ -595,9 +570,10 @@ func kimiUsedRatioTier(body []byte, key, window string) (CNQuotaTier, bool) {
 	if !ok {
 		return CNQuotaTier{}, false
 	}
-	// 必须落在上游声明区间 [0,1]：越界值（例如把百分数 65 直接塞进 used_ratio）
-	// 会算出 6500%，NaN/Inf 同理不可信。
-	if ratio < 0 || ratio > 1 {
+	// 必须是可信的比例：负值、NaN/Inf 不可信；把百分数直接塞进 used_ratio
+	// （例如 65）会算出 6500%，同样丢弃。轻微超额（如 1.1 = 110%）是真实的
+	// 超用观测，必须保留，因此上限取 10 而不是 1。
+	if ratio < 0 || ratio > 10 || math.IsNaN(ratio) || math.IsInf(ratio, 0) {
 		return CNQuotaTier{}, false
 	}
 	return CNQuotaTier{
@@ -748,6 +724,11 @@ func parseZhipuTokenTiers(data gjson.Result) []CNQuotaTier {
 		limitType := strings.ToUpper(strings.TrimSpace(item.Get("type").String()))
 		if limitType != "TOKENS_LIMIT" && limitType != "CREDIT_LIMIT" {
 			return true
+		}
+		// TOKENS_LIMIT 只要出现过，就不再降级使用 CREDIT_LIMIT 展示额度：
+		// 两者同时返回时后者只是同一额度的换算视图。
+		if limitType == "TOKENS_LIMIT" {
+			hasTokensLimit = true
 		}
 		// percentage 缺失/非数字/NaN 时不能默认 0：那会产出一个「已用 0%」的
 		// 合法窗口，既掩盖真实耗尽状态，也会被缺席清理当成有效快照落库。

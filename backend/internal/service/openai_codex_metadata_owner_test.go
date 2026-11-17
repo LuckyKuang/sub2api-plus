@@ -298,7 +298,7 @@ func TestCodexMetadataMapperRejectsAmbiguousSelectedAndShadowOwner(t *testing.T)
 				body, _ := codexMetadataOwnerInput(t, false)
 				var parsed map[string]any
 				require.NoError(t, json.Unmarshal(body, &parsed))
-				changed, err := applyCodexAccountIdentityClientMetadataMap(ctx, parsed, source, 9701, "")
+				changed, err := applyCodexAccountIdentityClientMetadataMap(ctx, parsed, source, 9701)
 				require.Error(t, err, "an ambiguous acquisition cannot fall back to the selected row or a staged shadow parent")
 				require.False(t, changed)
 				unchanged, err := json.Marshal(parsed)
@@ -323,12 +323,12 @@ func TestCodexMetadataShadowParentUsesAcquiredGrantWithoutReread(t *testing.T) {
 	original, _ := codexMetadataOwnerInput(t, false)
 	var expected map[string]any
 	require.NoError(t, json.Unmarshal(original, &expected))
-	_, err := applyCodexAccountIdentityClientMetadataMap(WithOutboundIDStore(t.Context(), store), expected, owner, 9701, "")
+	_, err := applyCodexAccountIdentityClientMetadataMap(WithOutboundIDStore(t.Context(), store), expected, owner, 9701)
 	require.NoError(t, err)
 	for _, source := range []*Account{shadow, relinked} {
 		var body map[string]any
 		require.NoError(t, json.Unmarshal(original, &body))
-		_, err := applyCodexAccountIdentityClientMetadataMap(ctx, body, source, 9701, "")
+		_, err := applyCodexAccountIdentityClientMetadataMap(ctx, body, source, 9701)
 		require.NoError(t, err)
 		require.Equal(t, expected, body)
 		fingerprintOwner, err := (&OpenAIGatewayService{}).resolveCodexFingerprintAccount(ctx, source)
