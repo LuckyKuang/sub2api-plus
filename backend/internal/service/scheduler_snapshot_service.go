@@ -253,15 +253,14 @@ func (s *SchedulerSnapshotService) readSnapshotAccounts(ctx context.Context, buc
 		if err != nil || !hit {
 			return nil, false, err
 		}
-		// GetSnapshotValues 返回的切片由本次调用独占；调用方各自按下发策略判定，
-		// 这里不再二次压缩，避免把配置池与每一次读取的封禁判定耦合。
-		return accounts, true, nil
+		// GetSnapshotValues 返回的切片由本次调用独占，可以原地压缩。
+		return compactSchedulableAccounts(accounts), true, nil
 	}
 	cached, hit, err := s.cache.GetSnapshot(ctx, bucket)
 	if err != nil || !hit {
 		return nil, false, err
 	}
-	return derefAccounts(cached), true, nil
+	return derefSchedulableAccounts(cached), true, nil
 }
 
 // loadFallbackAccounts 回源数据库读取 bucket 的账号，取得发布令牌时尽力回写快照。
