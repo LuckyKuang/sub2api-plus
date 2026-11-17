@@ -6,15 +6,30 @@ publication status. Release naming and procedures live in
 
 ## Integrated Baseline
 
-The current tree integrates official `v0.2.21`, peeled commit
-`10ba8f9b4dc2e6023d4a9879ab77b21841babd10`, after official `v0.2.20`
-`dab829a4e9b7d1cc307189aea8b0319eb29e29d0`. The sync branch starts at
-Plus main `86db896584174e19c44a85ec3becf80c15bd0d33`.
+The current tree integrates official `v0.2.22`, peeled commit
+`b0fa9f3e6eeab1968a53e1289b69daa4bb40ca2b`, after official `v0.2.21`
+`10ba8f9b4dc2e6023d4a9879ab77b21841babd10`. The sync branch starts at
+Plus main `4bb155f1a45bc11ba22be3ed15fe98f7b49cd279`.
 Plus remains authoritative when upstream behavior conflicts with an intentional
-Plus contract. The current tree releases `v0.2.21+custom.002` on this baseline;
-its publication status is recorded in the mapping table below. Integration and
+Plus contract. The current tree carries the `v0.2.22` baseline in `VERSION`;
+its release mapping is recorded once an artifact is published. Integration and
 local validation do not publish artifacts.
 Post-tag official main is excluded.
+
+The v0.2.22 import (187 upstream commits, 340 files) adds the group
+`force_openai_ultrafast` tier gated per model, `openai_passthrough_model_filter`,
+scheduler-snapshot projection fixes, SSE-error framing after keepalives,
+first-output spool fallback, tool-schema regex sanitation, Codex
+`additional_tools` declaration-ID preservation with prompt-cache-key fork
+inheritance, Vertex multi-region pricing and Gemini 4 Hydrogen/Carbon,
+group-usage-rollup non-blocking rebuild, DeepSeek explicit-price semantics, and
+the Kimi new-plan quota parser. Official migrations `251` (two independent
+files) become Plus `314_group_force_openai_ultrafast.sql` and
+`315_group_usage_rollup_nonblocking_build.sql`; no historical migration is
+rewritten. Upstream's `tryImmediate` concurrency parameter, generic Grok
+transport fallback and zero-allocation call-output gate are not imported:
+Plus keeps its own slot acquisition, transport and canonical extraction
+contracts.
 
 The v0.2.21 import adds disjoint OpenAI 30-minute/12-hour cache-write meters and
 optional 12-hour prices, atomic console refresh-token consumption, prompt-audit
@@ -253,6 +268,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.21-custom.002
 | `v0.2.20+custom.001` | `v0.2.20` | `dab829a4e9b7d1cc307189aea8b0319eb29e29d0` | published |
 | `v0.2.21+custom.001` | `v0.2.21` | `10ba8f9b4dc2e6023d4a9879ab77b21841babd10` | published |
 | `v0.2.21+custom.002` | `v0.2.21` | `10ba8f9b4dc2e6023d4a9879ab77b21841babd10` | published |
+| `v0.2.22+custom.001` | `v0.2.22` | `b0fa9f3e6eeab1968a53e1289b69daa4bb40ca2b` | pending |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains

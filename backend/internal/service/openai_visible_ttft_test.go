@@ -76,6 +76,44 @@ func TestOpenAIResponsesFirstOutputStartsAtCompletedImage(t *testing.T) {
 }
 
 func TestOpenAIResponsesCompactionDoesNotFabricateTokenTiming(t *testing.T) {
+
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{
+		MaxLineSize:                     defaultMaxLineSize,
+		OpenAIFirstOutputTimeoutSeconds: 1,
+	}}}
+	reader, writer := io.Pipe()
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		defer func() { _ = writer.Close() }()
+		_, _ = io.WriteString(writer, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_test\"}}\n\n")
+		_, _ = io.WriteString(writer, "data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"item_test\",\"type\":\"reasoning\",\"summary\":[]}}\n\n")
+		_, _ = io.WriteString(writer, "data: {\"type\":\"keepalive\"}\n\n")
+		time.Sleep(1200 * time.Millisecond)
+	}()
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: reader}
+	account := &Account{ID: 1, Name: "account_test", Platform: PlatformOpenAI}
+
+	_, err := svc.handleStreamingResponse(context.Background(), resp, c, account, time.Now(), "test-model", "test-model")
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.True(t, failoverErr.SafeToFailoverAfterWrite)
+	// Only the upstream keepalive event reaches the client; it is not output.
+	require.Equal(t, "data: {\"type\":\"keepalive\"}\n\n", recorder.Body.String())
+	require.Equal(t, -1, OpenAICompactKeepaliveAdjustedWrittenSize(c))
+	select {
+	case <-writerDone:
+	case <-time.After(time.Second):
+		t.Fatal("synthetic upstream writer did not exit")
+	}
+}
+
+func TestOpenAIResponsesTTFTDefaultsToSemanticOutput(t *testing.T) {
 	for _, passthrough := range []bool{false, true} {
 		name := "native"
 		if passthrough {

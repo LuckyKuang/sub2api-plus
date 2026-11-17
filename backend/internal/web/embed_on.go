@@ -149,9 +149,13 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	// Check cache first
 	cached := s.cache.Get()
 	if cached != nil {
+		// The document embeds the per-request nonce, so the ETag is derived from
+		// that nonce: a 304 can only be honoured for the exact nonce the browser
+		// already holds, which keeps HTML and the CSP header of this request
+		// coherent instead of reusing a document with a stale nonce.
 		etag := cached.etagForNonce(nonce)
-		// Check If-None-Match for 304 response
 		if match := c.GetHeader("If-None-Match"); match == etag {
+			applyHTMLNoCacheHeaders(c.Writer.Header())
 			c.Status(http.StatusNotModified)
 			c.Abort()
 			return
@@ -161,7 +165,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 		content := replaceNoncePlaceholder(cached.Content, nonce)
 
 		c.Header("ETag", etag)
-		c.Header("Cache-Control", "no-cache") // Must revalidate
+		applyHTMLNoCacheHeaders(c.Writer.Header())
 		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 		c.Abort()
 		return
@@ -174,6 +178,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	settings, err := s.settings.GetPublicSettingsForInjection(ctx)
 	if err != nil {
 		// Fallback: serve without injection
+		applyHTMLNoCacheHeaders(c.Writer.Header())
 		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
 		c.Abort()
 		return
@@ -182,6 +187,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {
 		// Fallback: serve without injection
+		applyHTMLNoCacheHeaders(c.Writer.Header())
 		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
 		c.Abort()
 		return
@@ -197,7 +203,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	if cached != nil {
 		c.Header("ETag", cached.etagForNonce(nonce))
 	}
-	c.Header("Cache-Control", "no-cache")
+	applyHTMLNoCacheHeaders(c.Writer.Header())
 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 	c.Abort()
 }

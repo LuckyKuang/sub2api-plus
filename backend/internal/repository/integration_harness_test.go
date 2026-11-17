@@ -37,6 +37,7 @@ const (
 
 var (
 	integrationDB          *sql.DB
+	integrationDSN         string
 	integrationEntClient   *dbent.Client
 	integrationRedis       *redisclient.Client
 	integrationPostgresDSN string
@@ -101,6 +102,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	integrationDSN = dsn
 	integrationPostgresDSN = dsn
 	integrationDB, err = openSQLWithRetry(ctx, dsn, 30*time.Second)
 	if err != nil {

@@ -136,7 +136,9 @@ func ExportBillingPricingSnapshot(ctx context.Context, models ...string) (json.R
 				copy.FastMultiplier = &fast
 			}
 			copy.FlexMultiplier = &flex
-			if copy.UltrafastMultiplier <= 0 {
+			// 只有真正支持 Ultrafast 的模型才携带该档位价格：否则目录会把
+			// 每个模型都列成三档，且分组强制档位本就不会作用于不支持它的模型。
+			if copy.UltrafastMultiplier <= 0 && openAIModelSupportsUltrafast(model) {
 				copy.UltrafastMultiplier = configuredServiceTierMultiplier(OpenAIFastTierUltrafast, price)
 			}
 			price = &copy

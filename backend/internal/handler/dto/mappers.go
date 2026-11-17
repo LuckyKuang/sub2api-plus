@@ -159,6 +159,7 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 		QuotaResetIncludeMonthly:    g.QuotaResetIncludeMonthly,
 		QuotaResetSourceStatus:      quotaResetSourceStatus(g),
 		ForceOpenAIFast:             g.ForceOpenAIFast,
+		ForceOpenAIUltrafast:        g.ForceOpenAIUltrafast,
 		FreeOpenAIFast:              g.FreeOpenAIFast,
 		ProfitControlEnabled:        g.ProfitControlEnabled,
 		ProfitMinMargin:             g.ProfitMinMargin,
