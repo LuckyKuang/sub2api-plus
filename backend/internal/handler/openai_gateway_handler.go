@@ -593,9 +593,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		body = cappedBody
 	}
 	// rawStream 取审计副本：入站审计必须看到客户端原始「stream」语义，
-	// 归一化只能在其后改写请求体。
+	// 归一化只能在其后改写请求体；请求体自身的 stream 在归一化后重新解析。
 	rawStream, ok := parseOpenAICompatibleStream(securityAuditBody)
-	reqStream := rawStream
 	if !ok {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", invalidStreamFieldTypeMessage)
 		return

@@ -167,7 +167,6 @@ func TestPricingHotReload_DeletedFileDropsItsLayer(t *testing.T) {
 
 type stubPricingRemoteClient struct {
 	body string
-	hash string
 }
 
 func (c stubPricingRemoteClient) FetchPricingJSON(context.Context, string, int64) ([]byte, error) {

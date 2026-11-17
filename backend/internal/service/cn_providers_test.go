@@ -318,23 +318,22 @@ func TestCNQuotaExtraUpdates(t *testing.T) {
 
 // 缺席窗口必须显式写 nil：extra 走 JSONB 合并（`extra || $1`），只"不写"会保留
 // 旧值。Kimi 老套餐 → 新套餐（月度）切换后 weekly 不再上报，不清理就会把切换前
-// 的用量永久冻结在快照里（生产实测冻结 13 天）。
-func TestCNQuotaExtraUpdatesClearsAbsentWindows(t *testing.T) {
+// 的用量永久冻结在快照里（生产实测冻结 13 天）。完整快照路径由
+// cnQuotaSnapshotExtraUpdates 负责，覆盖全部四档（含 monthly_code）。
+func TestCNQuotaSnapshotExtraUpdatesClearsAbsentWindows(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC)
 	tiers := []CNQuotaTier{
 		{Window: "5h", UsedPercent: 10, ResetAt: "2026-11-13T16:10:29Z"},
 		{Window: "monthly", UsedPercent: 65.64, ResetAt: "2026-11-26T00:00:00Z"},
 	}
-	updates := cnQuotaExtraUpdates(PlatformKimi, tiers, now)
-	clearAbsentCNQuotaWindows(PlatformKimi, tiers, updates)
+	updates := cnQuotaSnapshotExtraUpdates(PlatformKimi, tiers, now)
 
-	value, present := updates["kimi_weekly_used_percent"]
-	require.True(t, present, "缺席的 weekly 必须显式出现在更新里")
-	require.Nil(t, value)
-	_, resetPresent := updates["kimi_weekly_reset_at"]
-	require.True(t, resetPresent)
-
+	for _, suffix := range []string{"weekly_used_percent", "weekly_reset_at", "monthly_code_used_percent", "monthly_code_reset_at"} {
+		value, present := updates["kimi_"+suffix]
+		require.True(t, present, "缺席的 %s 必须显式出现在更新里", suffix)
+		require.Nil(t, value, "缺席的 %s 必须写 nil 以清除旧快照", suffix)
+	}
 	require.Equal(t, 10.0, updates["kimi_5h_used_percent"])
 	require.Equal(t, 65.64, updates["kimi_monthly_used_percent"])
 	require.Equal(t, "2026-11-26T00:00:00Z", updates["kimi_monthly_reset_at"])

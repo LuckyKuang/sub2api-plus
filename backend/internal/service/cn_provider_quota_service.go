@@ -870,35 +870,6 @@ func cnQuotaSnapshotExtraUpdates(provider string, tiers []CNQuotaTier, now time.
 	return updates
 }
 
-// clearAbsentCNQuotaWindows 把本次探测缺席的窗口显式写 nil（JSONB 合并语义下等于
-// 移除按键）：账号 extra 的更新走 `extra || $1`，只"不写"会保留旧值。上游改套餐
-// （Kimi 老套餐 7d → 新套餐月度）后旧窗口不再上报，不清理就会把切换前的用量永久
-// 冻结在快照里（生产实测冻结 13 天，列表一直显示过期的 7D 用量）。
-//
-// 仅供 5h/weekly/monthly 三档通吃的供应商调用；Command Code / Cline 有自己的
-// 取舍（周期端点抓取失败时保留月度值），不在此列。
-func clearAbsentCNQuotaWindows(provider string, tiers []CNQuotaTier, updates map[string]any) {
-	present := make(map[string]CNQuotaTier, len(tiers))
-	for _, tier := range tiers {
-		present[tier.Window] = tier
-	}
-	for _, window := range []struct{ name, used, reset string }{
-		{"5h", cnExtraSuffix5hUsed, cnExtraSuffix5hReset},
-		{"weekly", cnExtraSuffixWeeklyUsed, cnExtraSuffixWeeklyReset},
-		{"monthly", cnExtraSuffixMonthlyUsed, cnExtraSuffixMonthlyReset},
-	} {
-		tier, ok := present[window.name]
-		if !ok {
-			updates[cnExtraKey(provider, window.used)] = nil
-			updates[cnExtraKey(provider, window.reset)] = nil
-			continue
-		}
-		if tier.ResetAt == "" {
-			updates[cnExtraKey(provider, window.reset)] = nil
-		}
-	}
-}
-
 // parseOpenCodeGoUsageTiers 解析 OpenCode Go GET /usage 响应。
 //
 // 结构对齐 cc-switch extractor：
