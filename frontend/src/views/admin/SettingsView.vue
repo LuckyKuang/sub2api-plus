@@ -13231,11 +13231,25 @@ watch(
 }
 
 /* ============ 系统设置 保存浮标 ============ */
+/* A floating action panel uses the same surface tokens as menus and dialogs:
+   the hardcoded white/dark-800 fill and its white inset line ignored the theme
+   (and the user's card transparency), so the button looked pasted onto a
+   foreign strip in dark mode. */
 .settings-save-dock {
-  @apply sticky bottom-3 z-20 ml-auto flex w-fit items-center rounded-xl border border-gray-200/80 bg-white/90 p-1.5 backdrop-blur-xl dark:border-dark-600/80 dark:bg-dark-800/90;
+  @apply sticky bottom-3 z-20 ml-auto flex w-fit items-center rounded-xl p-1.5 backdrop-blur-xl;
+  background-color: var(--surface-panel);
+  /* The rim carries the same accent as the action it frames, so the panel and
+     its button read as one control instead of two unrelated surfaces. */
+  border: 1px solid rgb(var(--console-accent-500, 20 184 166) / 28%);
   box-shadow:
-    0 10px 26px rgb(15 23 42 / 0.12),
-    0 1px 0 rgb(255 255 255 / 0.9) inset;
+    var(--surface-shadow),
+    0 10px 26px rgb(15 23 42 / 0.12);
+}
+
+/* The primary glow belongs to the page, not to the panel that contains it:
+   inside the dock it tinted the surface around the button. */
+.settings-save-dock .btn-primary {
+  box-shadow: inset 0 1px 0 var(--surface-glint);
 }
 </style>
 
