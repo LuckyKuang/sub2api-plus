@@ -41,7 +41,7 @@
             <div class="mt-4 grid gap-4 md:grid-cols-2">
               <div class="min-w-0 space-y-2">
                 <p class="text-sm font-medium surface-muted">{{ t('affiliate.yourCode') }}</p>
-                <div class="flex flex-col items-stretch gap-2 rounded-xl border border-gray-200 surface-inset px-3 py-2 dark:border-dark-700 sm:flex-row sm:items-center">
+                <div class="flex flex-col items-stretch gap-2 rounded-lg border border-gray-200 surface-inset px-3 py-2 dark:border-dark-700 sm:flex-row sm:items-center">
                   <code class="min-w-0 break-all text-xs font-semibold sm:flex-1 sm:truncate">{{ detail.aff_code }}</code>
                   <button class="btn btn-secondary btn-sm w-full sm:w-auto sm:shrink-0" @click="copyCode">
                     <Icon name="copy" size="sm" /><span>{{ t('affiliate.copyCode') }}</span>
@@ -50,7 +50,7 @@
               </div>
               <div class="min-w-0 space-y-2">
                 <p class="text-sm font-medium surface-muted">{{ t('affiliate.inviteLink') }}</p>
-                <div class="flex flex-col items-stretch gap-2 rounded-xl border border-gray-200 surface-inset px-3 py-2 dark:border-dark-700 sm:flex-row sm:items-center">
+                <div class="flex flex-col items-stretch gap-2 rounded-lg border border-gray-200 surface-inset px-3 py-2 dark:border-dark-700 sm:flex-row sm:items-center">
                   <code class="min-w-0 break-all text-xs sm:flex-1 sm:truncate surface-muted">{{ inviteLink }}</code>
                   <button class="btn btn-secondary btn-sm w-full sm:w-auto sm:shrink-0" @click="copyInviteLink">
                     <Icon name="copy" size="sm" /><span>{{ t('affiliate.copyLink') }}</span>
@@ -122,20 +122,14 @@
           </div>
         </section>
 
-        <nav class="card workspace-fixed affiliate-pagination" :aria-label="t('affiliate.invitees.title')">
-          <div class="affiliate-pagination-info">
-            <span>{{ t('common.total') }}: {{ detail.invitees.length }} {{ t('pagination.results') }}</span>
-            <span>{{ t('pagination.perPage') }}: {{ inviteePageSize }}</span>
-          </div>
-          <div class="affiliate-pagination-actions">
-            <button class="btn btn-secondary" :disabled="inviteePage <= 1" @click="changeInviteePage(inviteePage - 1)">{{ t('pagination.previous') }}</button>
-            <template v-for="(page, index) in visibleInviteePages" :key="`${page}-${index}`">
-              <span v-if="page === 'ellipsis'" class="px-1 text-sm surface-muted" aria-hidden="true">…</span>
-              <button v-else type="button" class="affiliate-page-number surface-control" :aria-label="t('pagination.goToPage', { page })" :aria-current="page === inviteePage ? 'page' : undefined" @click="changeInviteePage(page)">{{ page }}</button>
-            </template>
-            <button class="btn btn-secondary" :disabled="inviteePage >= inviteePageCount" @click="changeInviteePage(inviteePage + 1)">{{ t('pagination.next') }}</button>
-          </div>
-        </nav>
+        <Pagination
+          class="workspace-fixed affiliate-pagination"
+          :total="detail.invitees.length"
+          :page="inviteePage"
+          :page-size="inviteePageSize"
+          :show-page-size-selector="false"
+          @update:page="changeInviteePage"
+        />
       </template>
     </div>
   </AppLayout>
@@ -147,6 +141,7 @@ import { computed, onMounted, ref, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import userAPI from '@/api/user'
 import type { UserAffiliateDetail } from '@/types'
 import { useAppStore } from '@/stores/app'
@@ -168,19 +163,6 @@ const inviteePage = ref(1)
 const inviteeViewport = ref<HTMLElement | null>(null)
 const inviteePageCount = computed(() => Math.max(1, Math.ceil((detail.value?.invitees.length || 0) / inviteePageSize)))
 const pagedInvitees = computed(() => (detail.value?.invitees || []).slice((inviteePage.value - 1) * inviteePageSize, inviteePage.value * inviteePageSize))
-const visibleInviteePages = computed(() => {
-  const total = inviteePageCount.value
-  const candidates = new Set([1, total, inviteePage.value - 1, inviteePage.value, inviteePage.value + 1])
-  if (total <= 7) for (let page = 1; page <= total; page++) candidates.add(page)
-  const pages = [...candidates].filter(page => page >= 1 && page <= total).sort((a, b) => a - b)
-  const result: Array<number | 'ellipsis'> = []
-  for (const page of pages) {
-    const previous = result[result.length - 1]
-    if (typeof previous === 'number' && page - previous > 1) result.push('ellipsis')
-    result.push(page)
-  }
-  return result
-})
 const affiliateTips = [
   { title: 'affiliate.tips.shareTitle', body: 'affiliate.tips.line1', icon: 'link' },
   { title: 'affiliate.tips.earnTitle', body: 'affiliate.tips.line2', icon: 'dollar' },
@@ -265,26 +247,19 @@ onMounted(() => {
 
 <style scoped>
 .affiliate-top-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
-.affiliate-top-row > .card { min-width: 0; min-height: 190px; padding: 20px 24px; border-radius: 16px; }
+.affiliate-top-row > .card { min-width: 0; min-height: 190px; padding: 20px 24px; border-radius: var(--surface-radius); }
 .affiliate-transfer { display: flex; flex-direction: column; justify-content: center; }
 .affiliate-transfer-value { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin-top: 14px; }
 .affiliate-transfer-value strong { font-size: 30px; line-height: 1.3; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
 .affiliate-transfer-value span { color: var(--surface-muted); font-size: 12px; }
 .affiliate-guide-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-.affiliate-guide-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 16px 20px; border-radius: 16px; }
+.affiliate-guide-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 16px 20px; border-radius: var(--surface-radius); }
 .affiliate-guide-top { display: flex; align-items: center; justify-content: space-between; }
-.affiliate-guide-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 12px; background: var(--surface-soft); color: var(--console-accent-readable); }
+.affiliate-guide-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: var(--surface-radius-control); background: var(--surface-soft); color: var(--console-accent-readable); }
 .affiliate-guide-step { color: var(--surface-muted); opacity: .65; font: 500 12px/1.5 ui-monospace, monospace; }
 .affiliate-invitees { border-radius: var(--surface-radius); overflow: hidden; }
 .affiliate-invitees-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; }
 .affiliate-invitees-viewport { padding: 0 16px 12px; }
-.affiliate-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; padding: 14px 20px; }
-.affiliate-pagination-info, .affiliate-pagination-actions { display: flex; align-items: center; gap: 16px; min-width: 0; }
-.affiliate-pagination-info { color: var(--surface-muted); font-size: 13px; }
-.affiliate-pagination-actions { gap: 8px; margin-left: auto; }
-.affiliate-pagination-actions > .btn { min-width: 80px; white-space: nowrap; }
-.affiliate-page-number { min-width: 34px; height: 34px; padding: 0 9px; border: 1px solid transparent; border-radius: 9px; color: var(--surface-muted); background: transparent; font-size: 13px; }
-.affiliate-page-number[aria-current="page"] { border-color: var(--surface-edge); background: var(--surface-soft); color: var(--surface-text); font-weight: 600; }
 @media (min-width: 1024px) {
   .affiliate-invitees :deep(.static-table-frame) { flex: 1 1 0; min-height: 0; height: 0; overflow: hidden; }
   .affiliate-invitees :deep([data-static-table-body-viewport]) { flex: 1 1 0; min-height: 0; height: 0 !important; overflow: auto; }
@@ -298,7 +273,7 @@ onMounted(() => {
   .affiliate-top-row > .card { min-height: 170px; padding: 16px 20px; }
   .affiliate-guide-card { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 8px; padding: 12px 16px; }
   .affiliate-guide-top { display: contents; }
-  .affiliate-guide-icon { grid-column: 1; grid-row: 1; width: 32px; height: 32px; border-radius: 10px; }
+  .affiliate-guide-icon { grid-column: 1; grid-row: 1; width: 32px; height: 32px; border-radius: var(--surface-radius-control); }
   .affiliate-guide-step { grid-column: 3; grid-row: 1; align-self: center; }
   .affiliate-guide-card > h4 { grid-column: 2; grid-row: 1; align-self: center; }
   .affiliate-guide-card > p { grid-column: 1 / -1; grid-row: 2; }
@@ -310,8 +285,5 @@ onMounted(() => {
 }
 @media (max-width: 639px) {
   .affiliate-guide-grid { grid-template-columns: 1fr; }
-  .affiliate-pagination { flex-wrap: wrap; }
-  .affiliate-pagination-info { width: 100%; justify-content: space-between; }
-  .affiliate-pagination-actions { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
 }
 </style>

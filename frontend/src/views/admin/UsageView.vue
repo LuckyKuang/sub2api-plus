@@ -8,7 +8,7 @@
           <div v-show="activeTab !== 'live'" class="filter-bar" data-testid="usage-chart-conditions">
             <div class="filter-pair">
               <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
-              <div class="filter-field">
+              <div class="filter-field filter-field--date">
                 <DateRangePicker
                   v-model:start-date="startDate"
                   v-model:end-date="endDate"

@@ -226,7 +226,7 @@ function downloadChart() {
         v-for="g in props.topGroups"
         :key="g.group_id"
         type="button"
-        class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-[11px] font-semibold hover:surface-hover dark:border-dark-700 surface-control surface-muted"
+        class="inline-flex items-center gap-2 rounded-md border border-gray-200 px-3 py-1 text-[11px] font-semibold hover:surface-hover dark:border-dark-700 surface-control surface-muted"
         @click="emit('selectGroup', g.group_id)"
       >
         <span class="max-w-[180px] truncate">{{ g.group_name || `#${g.group_id}` }}</span>
@@ -239,7 +239,7 @@ function downloadChart() {
         v-for="p in props.byPlatform"
         :key="p.platform"
         type="button"
-        class="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1 text-[11px] font-semibold hover:surface-hover dark:border-dark-700 surface-control surface-muted"
+        class="inline-flex items-center gap-2 rounded-md border border-gray-200 px-3 py-1 text-[11px] font-semibold hover:surface-hover dark:border-dark-700 surface-control surface-muted"
         @click="emit('selectPlatform', p.platform)"
       >
         <span class="uppercase">{{ p.platform }}</span>

@@ -97,14 +97,14 @@ test('available-channel list fits both themes and supports quote details, filter
     await expect(page.getByTestId('catalog-results')).toBeVisible({ timeout: 60_000 })
     const list = page.getByTestId('catalog-model-list')
     await expect(list.locator('h3')).toHaveCount(13)
-    // Shared filter contract: 240px search and 200px selection fields on
-    // desktop; full-width stacked fields below 1024px, with natural actions.
+    // Shared filter contract: one 160px width for search and selection fields
+    // on desktop; full-width stacked fields below 1024px, with natural actions.
     const filterBar = page.getByTestId('catalog-filters').locator('.filter-bar')
     const searchBox = (await filterBar.locator('.filter-field--search').boundingBox())!
     const sortBox = (await filterBar.locator('.filter-field:not(.filter-field--search)').boundingBox())!
     if (width >= 1024) {
-      expect(searchBox.width).toBeCloseTo(240, 0)
-      expect(sortBox.width).toBeCloseTo(200, 0)
+      expect(searchBox.width).toBeCloseTo(160, 0)
+      expect(sortBox.width).toBeCloseTo(160, 0)
       expect(sortBox.y).toBeCloseTo(searchBox.y, 0)
     } else {
       const barBox = (await filterBar.boundingBox())!
@@ -278,7 +278,7 @@ async function assertFooterAtWorkspaceBottom(footer: Locator, anchor: Locator) {
   expect(Math.abs(values.left)).toBeLessThanOrEqual(1)
   expect(Math.abs(values.right)).toBeLessThanOrEqual(1)
   expect(Math.abs(values.bottom)).toBeLessThanOrEqual(1)
-  expect(values.radius.every(radius => radius >= 14)).toBe(true)
+  expect(values.radius.every(radius => radius >= 12)).toBe(true)
   expect(values.mainOverflow).toBeLessThanOrEqual(1)
   expect(values.documentOverflow).toBeLessThanOrEqual(1)
   expect(values.hit).toBe(true)
@@ -425,7 +425,7 @@ for (const width of [1440, 2560]) {
     const frameBox = (await frame.boundingBox())!
     expect(Math.abs(frameBox.x - headingBox.x)).toBeLessThanOrEqual(1)
     expect(Math.abs(frameBox.width - headingBox.width)).toBeLessThanOrEqual(1)
-    expect(await viewport.evaluate(el => ['borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius'].every(property => parseFloat(getComputedStyle(el).getPropertyValue(property.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`))) >= 14))).toBe(true)
+    expect(await viewport.evaluate(el => ['borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius'].every(property => parseFloat(getComputedStyle(el).getPropertyValue(property.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`))) >= 12))).toBe(true)
     await assertFooterAtWorkspaceBottom(footer, page.locator('.subscriptions-page'))
     const beforeHeader = await header.boundingBox()
     await wheelBodyWithoutMovingFooter(page, viewport, footer)

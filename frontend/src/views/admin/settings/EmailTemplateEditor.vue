@@ -87,12 +87,12 @@
               {{ selectedEventMeta.label }}
             </div>
             <span
-              class="rounded-full surface-inset px-2.5 py-1 text-xs font-medium shadow-sm ring-1 ring-gray-200 dark:ring-dark-600 surface-muted"
+              class="rounded-md surface-inset px-2.5 py-1 text-xs font-medium shadow-sm ring-1 ring-gray-200 dark:ring-dark-600 surface-muted"
             >
               {{ selectedEventMeta.categoryLabel }}
             </span>
             <span
-              class="rounded-full px-2.5 py-1 text-xs font-medium"
+              class="rounded-md px-2.5 py-1 text-xs font-medium"
               :class="
                 selectedEventMeta.optional
                   ? 'bg-amber-100/[0.15] text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
@@ -164,7 +164,7 @@
                   v-for="placeholder in placeholderList"
                   :key="placeholder"
                   type="button"
-                  class="rounded-full border border-gray-200 px-3 py-1 font-mono text-xs transition-colors hover:border-primary-300 hover:text-primary-600 dark:border-dark-600 dark:hover:border-primary-500 dark:hover:text-primary-300 surface-control surface-muted"
+                  class="rounded-md border border-gray-200 px-3 py-1 font-mono text-xs transition-colors hover:border-primary-300 hover:text-primary-600 dark:border-dark-600 dark:hover:border-primary-500 dark:hover:text-primary-300 surface-control surface-muted"
                   @click="copyPlaceholder(placeholder)"
                 >
                   {{ placeholder }}
@@ -190,7 +190,7 @@
                 </div>
                 <span
                   v-if="isCustomTemplate"
-                  class="rounded-full bg-primary-50/[0.15] px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
+                  class="rounded-md bg-primary-50/[0.15] px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
                 >
                   {{ t("admin.settings.emailTemplates.customized") }}
                 </span>

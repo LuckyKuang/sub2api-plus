@@ -13,6 +13,8 @@ vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showSuccess, showError })
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string, params?: Record<string, unknown>) => `${key} ${JSON.stringify(params ?? {})}` })
 }))
+// The shared catalog list formats its quote time; keep the i18n runtime out.
+vi.mock('@/utils/format', () => ({ formatDateTime: (value: string) => value }))
 
 const mountModal = () => mount(BulkEditKeysModal, {
   props: {

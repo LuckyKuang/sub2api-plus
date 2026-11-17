@@ -239,7 +239,7 @@ onBeforeUnmount(() => {
 <style scoped>
 /* Keep the hover bridge between the trigger and the solid tooltip panel. */
 .help-tooltip-panel {
-  border-radius: var(--surface-radius-panel, 16px);
+  border-radius: var(--surface-radius-panel);
   max-width: calc(100vw - 24px);
 }
 .help-tooltip-content {

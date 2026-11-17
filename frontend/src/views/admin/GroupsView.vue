@@ -141,7 +141,7 @@
           <template #cell-platform="{ value }">
             <span
               :class="[
-                'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium',
+                'inline-flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-xs font-medium',
                 value === 'anthropic'
                   ? 'bg-orange-100/[0.15] text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
                   : value === 'openai'
@@ -173,7 +173,7 @@
               <!-- Type Badge -->
               <span
                 :class="[
-                  'inline-block rounded-full px-2 py-0.5 text-xs font-medium',
+                  'inline-block rounded-md px-2 py-0.5 text-xs font-medium',
                   row.subscription_type === 'subscription'
                     ? 'bg-violet-100/[0.15] text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'
                     : 'surface-inset text-gray-600 dark:surface-inset dark:text-gray-300',
@@ -437,46 +437,10 @@
                   }}
                 </span>
               </button>
-              <button
-                v-if="!authStore.isSimpleMode && row.platform === 'composite'"
-                data-testid="group-composite-routes"
-                @click="handleCompositeRoutes(row)"
-                class="table-action"
-              >
-                <Icon name="swap" size="sm" />
-                <span class="text-xs">{{
-                  t("admin.groups.compositeRoutes.action")
-                }}</span>
-              </button>
-              <button
-                v-if="!authStore.isSimpleMode"
-                data-testid="group-rate-multipliers"
-                @click="handleRateMultipliers(row)"
-                class="table-action"
-              >
-                <Icon name="dollar" size="sm" />
-                <span class="text-xs">{{
-                  t("admin.groups.rateMultipliers")
-                }}</span>
-              </button>
-              <button
-                v-if="!authStore.isSimpleMode"
-                data-testid="group-rpm-overrides"
-                @click="handleRPMOverrides(row)"
-                class="table-action table-action-warning"
-              >
-                <Icon name="bolt" size="sm" />
-                <span class="text-xs">{{
-                  t("admin.groups.rpmOverrides")
-                }}</span>
-              </button>
-              <button
-                @click="handleDelete(row)"
-                class="table-action table-action-danger"
-              >
-                <Icon name="trash" size="sm" />
-                <span class="text-xs">{{ t("common.delete") }}</span>
-              </button>
+              <ActionMenu
+                :items="groupRowActions(row)"
+                @select="handleGroupRowAction(row, $event)"
+              />
             </div>
           </template>
 
@@ -569,7 +533,7 @@
             <span
               v-for="groupId in createForm.copy_accounts_from_group_ids"
               :key="groupId"
-              class="inline-flex items-center gap-1 rounded-full bg-primary-100/[0.15] px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
+              class="inline-flex items-center gap-1 rounded-md bg-primary-100/[0.15] px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
             >
               {{
                 copyAccountsGroupOptions.find((o) => o.value === groupId)
@@ -1968,7 +1932,7 @@
                       <span
                         v-for="account in rule.accounts"
                         :key="account.id"
-                        class="inline-flex items-center gap-1 rounded-full bg-primary-100/[0.15] px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
+                        class="inline-flex items-center gap-1 rounded-md bg-primary-100/[0.15] px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
                       >
                         {{ account.name }}
                         <button
@@ -2167,7 +2131,7 @@
             <span
               v-for="groupId in editForm.copy_accounts_from_group_ids"
               :key="groupId"
-              class="inline-flex items-center gap-1 rounded-full bg-primary-100/[0.15] px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
+              class="inline-flex items-center gap-1 rounded-md bg-primary-100/[0.15] px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
             >
               {{
                 copyAccountsGroupOptionsForEdit.find((o) => o.value === groupId)
@@ -3607,7 +3571,7 @@
                       <span
                         v-for="account in rule.accounts"
                         :key="account.id"
-                        class="inline-flex items-center gap-1 rounded-full bg-primary-100/[0.15] px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
+                        class="inline-flex items-center gap-1 rounded-md bg-primary-100/[0.15] px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
                       >
                         {{ account.name }}
                         <button
@@ -3794,7 +3758,7 @@
               <div class="text-xs surface-muted">
                 <span
                   :class="[
-                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+                    'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium',
                     group.platform === 'anthropic'
                       ? 'bg-orange-100/[0.15] text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
                       : group.platform === 'openai'
@@ -4281,6 +4245,9 @@ import Select from "@/components/common/Select.vue";
 import PlatformIcon from "@/components/common/PlatformIcon.vue";
 import { platformLabel } from "@/utils/platformColors";
 import Icon from "@/components/icons/Icon.vue";
+import ActionMenu, {
+  type ActionMenuItem,
+} from "@/components/common/ActionMenu.vue";
 import HelpTooltip from "@/components/common/HelpTooltip.vue";
 import GroupI18nField from "@/components/admin/group/GroupI18nField.vue";
 import LongContextPolicyFields from "@/components/admin/group/LongContextPolicyFields.vue";
@@ -6889,6 +6856,42 @@ const previewCompositeRoute = async () => {
   } finally {
     compositePreviewLoading.value = false;
   }
+};
+
+// Each row shows edit and duplicate; the rest live in one "more" menu.
+const groupRowActions = (group: AdminGroup): ActionMenuItem[] => [
+  {
+    key: "composite-routes",
+    label: t("admin.groups.compositeRoutes.action"),
+    icon: "swap",
+    hidden: !(!authStore.isSimpleMode && group.platform === "composite"),
+  },
+  {
+    key: "rate-multipliers",
+    label: t("admin.groups.rateMultipliers"),
+    icon: "dollar",
+    hidden: !!authStore.isSimpleMode,
+  },
+  {
+    key: "rpm-overrides",
+    label: t("admin.groups.rpmOverrides"),
+    icon: "bolt",
+    tone: "warning",
+    hidden: !!authStore.isSimpleMode,
+  },
+  {
+    key: "delete",
+    label: t("common.delete"),
+    icon: "trash",
+    tone: "danger",
+  },
+];
+
+const handleGroupRowAction = (group: AdminGroup, action: string) => {
+  if (action === "composite-routes") handleCompositeRoutes(group);
+  else if (action === "rate-multipliers") handleRateMultipliers(group);
+  else if (action === "rpm-overrides") handleRPMOverrides(group);
+  else if (action === "delete") handleDelete(group);
 };
 
 const handleDelete = (group: AdminGroup) => {

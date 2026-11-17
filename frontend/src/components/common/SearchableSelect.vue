@@ -203,9 +203,9 @@ const optionsListRef = ref<HTMLElement | null>(null)
 const dropdownPosition = ref<'bottom' | 'top'>('bottom')
 const triggerRect = ref<DOMRect | null>(null)
 const dropdownViewportPadding = 8
-// Mirrors --filter-control-width: an expanded menu never renders narrower than
-// the unified filter control it belongs to. styles/__tests__/filterWidths
-// keeps the two in sync.
+// At least --filter-control-width: an expanded menu never renders narrower than
+// the unified filter control it belongs to, and keeps a little extra room for
+// option labels. styles/__tests__/filterWidths keeps the two in step.
 const dropdownMinimumWidth = 200
 // Content-sized menus stay readable; longer labels ellipsize instead of
 // stretching the panel across the viewport.

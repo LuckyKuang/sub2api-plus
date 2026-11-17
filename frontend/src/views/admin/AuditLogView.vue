@@ -671,7 +671,7 @@ function statusText(status: number): string {
 }
 
 function statusBadgeClass(status: number): string {
-  const base = 'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold'
+  const base = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-xs font-semibold'
   if (status >= 500) return base + 'bg-red-100/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300'
   if (status >= 400) return base + 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
   return base + 'bg-green-100/[0.15] text-green-700 dark:bg-green-900/30 dark:text-green-300'

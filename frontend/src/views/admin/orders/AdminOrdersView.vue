@@ -45,7 +45,7 @@
                 {{ t('payment.admin.retry') }}
               </button>
               <template v-if="row.order_source !== 'redeem' && row.status === 'REFUND_REQUESTED'">
-                <span v-if="row.refund_amount" class="rounded-full bg-purple-100/[0.15] px-1.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">{{ creditedAmountSymbol }}{{ row.refund_amount.toFixed(2) }}</span>
+                <span v-if="row.refund_amount" class="rounded-md bg-purple-100/[0.15] px-1.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">{{ creditedAmountSymbol }}{{ row.refund_amount.toFixed(2) }}</span>
                 <button @click="openRefundDialog(row)" class="table-action">
                   <Icon name="check" size="sm" />
                   {{ t('payment.admin.approveRefund') }}

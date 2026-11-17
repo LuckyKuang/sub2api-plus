@@ -319,7 +319,7 @@
                     />
                     <span :class="['font-medium', platformTextClass(group.platform)]">{{ group.name }}</span>
                     <span
-                      :class="['rounded-full px-1 py-0 text-[10px]', platformBadgeLightClass(group.platform)]"
+                      :class="['rounded-md px-1 py-0 text-[10px]', platformBadgeLightClass(group.platform)]"
                     >{{ group.rate_multiplier }}x</span>
                     <span class="text-[10px] surface-muted">{{ group.account_count || 0 }}</span>
                     <span

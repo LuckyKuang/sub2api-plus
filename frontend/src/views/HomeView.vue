@@ -74,7 +74,7 @@
         <img
           :src="siteLogo || '/logo.svg'"
           alt="Logo"
-          class="mx-auto mb-6 h-20 w-20 rounded-2xl object-contain"
+          class="mx-auto mb-6 h-20 w-20 rounded-xl object-contain"
         />
         <h1 class="[overflow-wrap:anywhere] text-3xl font-bold md:text-4xl">{{ siteName }}</h1>
         <p class="mt-4 whitespace-pre-wrap [overflow-wrap:anywhere] text-base surface-muted">{{ siteSubtitle }}</p>
@@ -102,7 +102,7 @@
       <nav class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
         <!-- Logo -->
         <div class="flex min-w-0 items-center gap-3">
-          <div class="h-10 w-10 shrink-0 overflow-hidden rounded-xl">
+          <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg">
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </div>
           <span class="max-w-[14rem] truncate text-base font-semibold tracking-tight">{{ siteName }}</span>
@@ -150,7 +150,7 @@
           <router-link
             v-if="isAuthenticated"
             :to="dashboardPath"
-            class="inline-flex items-center gap-1.5 rounded-full bg-gray-900 py-1 pl-1 pr-2.5 transition-colors hover:bg-gray-800 dark:bg-gray-800 dark:hover:bg-gray-700"
+            class="inline-flex items-center gap-1.5 rounded-md bg-gray-900 py-1 pl-1 pr-2.5 transition-colors hover:bg-gray-800 dark:bg-gray-800 dark:hover:bg-gray-700"
           >
             <span
               class="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-primary-400 to-primary-600 text-[10px] font-semibold text-white"
@@ -175,7 +175,7 @@
           <router-link
             v-else
             to="/login"
-            class="inline-flex items-center rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-800 dark:hover:bg-gray-700"
+            class="inline-flex items-center rounded-md bg-gray-900 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-800 dark:hover:bg-gray-700"
           >
             {{ t('home.login') }}
           </router-link>
@@ -252,7 +252,7 @@
         <!-- Feature Tags - Centered -->
         <div class="flex flex-wrap items-center justify-center gap-3 md:gap-4">
           <div
-            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 surface-inset px-5 py-2.5 shadow-sm dark:border-dark-700/50"
+            class="inline-flex items-center gap-2.5 rounded-lg border border-gray-200/50 surface-inset px-5 py-2.5 shadow-sm dark:border-dark-700/50"
           >
             <Icon name="swap" size="sm" class="text-primary-500" />
             <span class="text-sm font-medium surface-muted">{{
@@ -260,7 +260,7 @@
             }}</span>
           </div>
           <div
-            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 surface-inset px-5 py-2.5 shadow-sm dark:border-dark-700/50"
+            class="inline-flex items-center gap-2.5 rounded-lg border border-gray-200/50 surface-inset px-5 py-2.5 shadow-sm dark:border-dark-700/50"
           >
             <Icon name="shield" size="sm" class="text-primary-500" />
             <span class="text-sm font-medium surface-muted">{{
@@ -268,7 +268,7 @@
             }}</span>
           </div>
           <div
-            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 surface-inset px-5 py-2.5 shadow-sm dark:border-dark-700/50"
+            class="inline-flex items-center gap-2.5 rounded-lg border border-gray-200/50 surface-inset px-5 py-2.5 shadow-sm dark:border-dark-700/50"
           >
             <Icon name="chart" size="sm" class="text-primary-500" />
             <span class="text-sm font-medium surface-muted">{{
@@ -284,7 +284,7 @@
             class="card home-feature p-6"
           >
             <div
-              class="home-feature-icon mb-5 flex h-10 w-10 items-center justify-center rounded-xl"
+              class="home-feature-icon mb-5 flex h-10 w-10 items-center justify-center rounded-lg"
             >
               <Icon name="server" size="md" />
             </div>
@@ -301,7 +301,7 @@
             class="card home-feature p-6"
           >
             <div
-              class="home-feature-icon mb-5 flex h-10 w-10 items-center justify-center rounded-xl"
+              class="home-feature-icon mb-5 flex h-10 w-10 items-center justify-center rounded-lg"
             >
               <svg
                 class="h-5 w-5"
@@ -330,7 +330,7 @@
             class="card home-feature p-6"
           >
             <div
-              class="home-feature-icon mb-5 flex h-10 w-10 items-center justify-center rounded-xl"
+              class="home-feature-icon mb-5 flex h-10 w-10 items-center justify-center rounded-lg"
             >
               <svg
                 class="h-5 w-5"
@@ -369,7 +369,7 @@
           <div class="flex flex-wrap items-center justify-center gap-4">
             <!-- Claude - Supported -->
             <div
-              class="flex items-center gap-2 rounded-xl border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 dark:border-primary-800"
+              class="flex items-center gap-2 rounded-lg border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 dark:border-primary-800"
             >
               <div
                 class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-500"
@@ -384,7 +384,7 @@
             </div>
             <!-- GPT - Supported -->
             <div
-              class="flex items-center gap-2 rounded-xl border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 dark:border-primary-800"
+              class="flex items-center gap-2 rounded-lg border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 dark:border-primary-800"
             >
               <div
                 class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-green-600"
@@ -399,7 +399,7 @@
             </div>
             <!-- Gemini - Supported -->
             <div
-              class="flex items-center gap-2 rounded-xl border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 dark:border-primary-800"
+              class="flex items-center gap-2 rounded-lg border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 dark:border-primary-800"
             >
               <div
                 class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600"
@@ -414,7 +414,7 @@
             </div>
             <!-- Antigravity - Supported -->
             <div
-              class="flex items-center gap-2 rounded-xl border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 dark:border-primary-800"
+              class="flex items-center gap-2 rounded-lg border border-primary-200 surface-inset px-5 py-3 ring-1 ring-primary-500/20 dark:border-primary-800"
             >
               <div
                 class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-pink-600"
@@ -429,7 +429,7 @@
             </div>
             <!-- More - Coming Soon -->
             <div
-              class="flex items-center gap-2 rounded-xl border border-gray-200/50 surface-inset px-5 py-3 opacity-60 dark:border-dark-700/50"
+              class="flex items-center gap-2 rounded-lg border border-gray-200/50 surface-inset px-5 py-3 opacity-60 dark:border-dark-700/50"
             >
               <div
                 class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-gray-500 to-gray-600"
@@ -689,7 +689,7 @@ onMounted(() => {
   color: #22c55e;
   background: rgba(34, 197, 94, 0.15);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--surface-radius-xs);
   font-weight: 600;
 }
 .code-response {

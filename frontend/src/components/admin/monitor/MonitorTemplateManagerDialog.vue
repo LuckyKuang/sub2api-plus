@@ -20,7 +20,7 @@
           {{ tab.label }}
           <span
             v-if="countByProvider[tab.value] > 0"
-            class="ml-1.5 rounded-full surface-inset px-2 py-0.5 text-xs"
+            class="ml-1.5 rounded-md surface-inset px-2 py-0.5 text-xs"
           >
             {{ countByProvider[tab.value] }}
           </span>

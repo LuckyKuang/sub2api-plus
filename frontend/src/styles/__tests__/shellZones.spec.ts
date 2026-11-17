@@ -81,14 +81,30 @@ describe('console shell zones', () => {
     }
   })
 
-  it('keeps the radius ladder monotonic so no inner curve can be cut mid-arc', () => {
+  // Five roles, outermost first; names in one role share one value, and every
+  // role is strictly smaller than the one that encloses it.
+  it('keeps the radius ladder strictly decreasing by role so no inner curve can be cut mid-arc', () => {
     const declared = tokens()
-    const ladder = ['--surface-radius', '--surface-radius-panel', '--surface-radius-card', '--surface-radius-item', '--surface-radius-control']
-      .map(token => ({ token, value: parseFloat(declared.get(token) ?? '') }))
-    expect(ladder.every(step => Number.isFinite(step.value))).toBe(true)
-    for (let index = 1; index < ladder.length; index += 1) {
-      expect(ladder[index]!.value, ladder[index]!.token).toBeLessThan(ladder[index - 1]!.value)
+    const roles = [
+      ['--surface-radius'],
+      ['--surface-radius-card', '--surface-radius-panel'],
+      ['--surface-radius-control', '--surface-radius-item'],
+      ['--surface-radius-tag'],
+      ['--surface-radius-xs'],
+    ].map(names => names.map(token => ({ token, value: parseFloat(declared.get(token) ?? '') })))
+    for (const role of roles) {
+      for (const step of role) {
+        expect(Number.isFinite(step.value), step.token).toBe(true)
+        expect(step.value, step.token).toBe(role[0]!.value)
+      }
     }
+    for (let index = 1; index < roles.length; index += 1) {
+      expect(roles[index]![0]!.value, roles[index]![0]!.token).toBeLessThan(roles[index - 1]![0]!.value)
+    }
+    // One container radius at every viewport: no breakpoint enlarges it.
+    stylesheet.walkDecls('--surface-radius', declaration => {
+      expect(declaration.value).toBe('16px')
+    })
   })
 
   it('lets the static table frame own every outer corner while its scrollport owns none', () => {

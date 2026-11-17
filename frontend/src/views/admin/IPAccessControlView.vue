@@ -162,7 +162,7 @@
               <span v-for="proxy in trustedProxies" :key="proxy" class="rounded surface-inset px-2 py-1 font-mono text-xs surface-muted">{{ proxy }}</span>
             </div>
             <p v-else class="mt-1 text-sm surface-muted">{{ t('admin.ipAccessControl.trustedProxy.noneConfigured') }}</p>
-            <p :class="proxyStatusMessageClass" class="mt-4 rounded-md border px-3 py-2 text-xs leading-5">{{ proxyStatusMessage }}</p>
+            <p :class="proxyStatusMessageClass" class="mt-4 rounded-lg border px-3 py-2 text-xs leading-5">{{ proxyStatusMessage }}</p>
             <div class="mt-4 grid grid-cols-1 gap-3 text-xs sm:grid-cols-3 xl:grid-cols-5">
               <p class="rounded border border-gray-200 px-3 py-2 dark:border-dark-700 surface-muted"><span class="font-medium">{{ t('admin.ipAccessControl.trustedProxy.identitySafety') }}</span><br>{{ proxyStatus.safe_for_enforcement ? t('admin.ipAccessControl.trustedProxy.safe') : t('admin.ipAccessControl.trustedProxy.unsafe') }}</p>
               <p class="rounded border border-gray-200 px-3 py-2 dark:border-dark-700 surface-muted"><span class="font-medium">{{ t('admin.ipAccessControl.trustedProxy.legacyMode') }}</span><br>{{ proxyStatus.legacy_forwarded_mode ? t('admin.ipAccessControl.trustedProxy.enabled') : t('admin.ipAccessControl.trustedProxy.disabled') }}</p>
@@ -207,9 +207,9 @@
             <label v-if="settings.login_failure_auto_block_enabled" class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.window') }}</span><input v-model.number="settings.login_failure_window_minutes" min="1" max="525600" type="number" class="input" /></label>
             <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.protection.duration') }}</span><input v-model.number="settings.login_failure_block_minutes" min="1" max="525600" type="number" class="input" /></label>
           </div>
-          <p v-if="!featureEnabled" class="rounded-md border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.masterSwitchOff') }}</p>
-          <p class="rounded-md border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.proxyHint') }}</p>
-          <p v-if="!proxyStatusLoading && !automaticBlockingReady" class="rounded-md border border-rose-200 bg-rose-50/[0.15] px-3 py-2 text-xs leading-5 text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-200">
+          <p v-if="!featureEnabled" class="rounded-lg border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.masterSwitchOff') }}</p>
+          <p class="rounded-lg border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.protection.proxyHint') }}</p>
+          <p v-if="!proxyStatusLoading && !automaticBlockingReady" class="rounded-lg border border-rose-200 bg-rose-50/[0.15] px-3 py-2 text-xs leading-5 text-rose-800 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-200">
             {{ t('admin.ipAccessControl.protection.proxyNotReady') }}
             <button type="button" class="ml-1 underline surface-control" @click="showDeployGuide = true">{{ t('admin.ipAccessControl.trustedProxy.guideLink') }}</button>
           </p>
@@ -256,7 +256,7 @@
       <div class="space-y-4 py-2">
         <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.rules.ip') }}</span><input v-model.trim="createForm.ip_or_cidr" class="input font-mono" placeholder="203.0.113.8 or 2001:db8::/32" /></label>
         <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.rules.type') }}</span><Select v-model="createForm.rule_kind" :options="createKindOptions" /></label>
-        <p v-if="!manualBlockingReady" class="rounded-md border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.rules.manualBlockUnavailable') }}</p>
+        <p v-if="!manualBlockingReady" class="rounded-lg border border-amber-200 bg-amber-50/[0.15] px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.ipAccessControl.rules.manualBlockUnavailable') }}</p>
         <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.rules.reason') }}</span><textarea v-model.trim="createForm.reason" rows="3" class="input resize-y" /></label>
         <label class="block"><span class="input-label">{{ t('admin.ipAccessControl.rules.expiresAt') }}</span><DateTimePicker :aria-label="t('admin.ipAccessControl.rules.expiresAt')" v-model="createForm.expires_at" type="datetime-local" class="input" /></label>
       </div>

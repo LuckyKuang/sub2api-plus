@@ -1,13 +1,16 @@
-/* Native table layout and zero border-spacing keep virtual row measurements
-   accurate. The enclosing card owns the static fill; cells paint only states
-   and outlines inside their padding boxes, including pinned cells.
-   The scroll viewport clips its rows, so it rounds to the card's corner rather
-   than to the shell radius, which would let row paint escape a 14px card
-   corner under a 20px clip. */
+/* One table style for every record table, desktop and dialog alike.
+   Every record is its own card: a soft fill, a hairline outline and
+   item-radius corners, separated from its neighbours by a small gap. Hover,
+   focus and selection deepen the fill and tint the outline. Hierarchical
+   tables (a parent row with expandable child rows) give every row its own
+   card too: parents take the strong fill, children the light fill plus an
+   indent. Native table layout and zero border-spacing keep virtual row
+   measurements accurate; cells paint inside their padding boxes, so the
+   transparent block border is the gap between cards. */
 .record-table-scroll {
   border: 0 !important;
   border-inline: 12px solid transparent !important;
-  padding: 8px 0 !important;
+  padding: 4px 0 8px !important;
   overflow-x: auto;
   background-color: transparent !important;
   background-image: none !important;
@@ -15,7 +18,16 @@
 }
 
 table.record-table {
-  --record-row-edge: var(--surface-edge);
+  /* Card fills and state tints keep a fixed strength so records stay
+     distinct even when the user makes the enclosing cards fully transparent. */
+  --record-row-fill: var(--record-card-fill);
+  --record-row-hover: rgb(var(--console-accent-500, 20 184 166) / 10%);
+  --record-row-selected: rgb(var(--console-accent-500, 20 184 166) / 16%);
+  --record-row-edge-rest: var(--surface-edge);
+  --record-row-edge-active: rgb(var(--console-accent-500, 20 184 166) / 55%);
+  --record-row-radius: var(--surface-radius-item);
+  --record-row-gap: 3px;
+  --record-row-indent: 20px;
   border-collapse: separate !important;
   border-spacing: 0 !important;
   border: 0 !important;
@@ -44,10 +56,10 @@ table.record-table {
   color: var(--surface-muted);
 }
 
-/* Eight pixels below the complete header plus the first record's four pixels. */
+/* Cards delimit themselves, so the header needs only a gap before them. */
 :root table.record-table > thead > tr:last-child > :is(th, td),
 :root table.record-table > thead > tr > [data-header-edge-bottom] {
-  border-bottom-width: 8px !important;
+  border-bottom-width: 6px !important;
 }
 
 :root table.record-table > :is(tbody, tfoot) > tr:not([aria-hidden="true"]) > :is(td, th) {
@@ -56,53 +68,68 @@ table.record-table {
   --record-edge-left: inset 0 0 0 transparent;
   --record-edge-right: inset 0 0 0 transparent;
   border: 0 solid transparent !important;
-  border-block-width: 4px !important;
+  border-block-width: var(--record-row-gap) !important;
   border-radius: 0 !important;
   background-color: transparent !important;
-  background-image: linear-gradient(var(--record-row-tint, transparent), var(--record-row-tint, transparent)) !important;
+  background-image:
+    linear-gradient(var(--record-row-tint, transparent), var(--record-row-tint, transparent)),
+    linear-gradient(var(--record-row-fill, transparent), var(--record-row-fill, transparent)) !important;
   background-clip: padding-box !important;
   box-shadow: var(--record-edge-top), var(--record-edge-bottom), var(--record-edge-left), var(--record-edge-right) !important;
-  transition: background-color 150ms, background-image 150ms;
+  transition: background-color 150ms, background-image 150ms, box-shadow 150ms;
 }
 
+/* The transparent block border shortens the visible arc vertically, so the
+   vertical radius adds the gap back and the card corner stays circular. */
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr > :first-child {
   --record-edge-left: inset 1px 0 0 var(--record-row-edge);
-  /* The 4px transparent border leaves a visible inner curve, so the row arc
-     tracks the panel token and the zone container arc minus that border. */
-  border-top-left-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important;
-  border-bottom-left-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important;
+  border-top-left-radius: var(--record-row-radius) calc(var(--record-row-radius) + var(--record-row-gap)) !important;
+  border-bottom-left-radius: var(--record-row-radius) calc(var(--record-row-radius) + var(--record-row-gap)) !important;
 }
 
 :root table.record-table > :is(tbody, tfoot):not(.record-group) > tr > :last-child {
   --record-edge-right: inset -1px 0 0 var(--record-row-edge);
-  border-top-right-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important;
-  border-bottom-right-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important;
+  border-top-right-radius: var(--record-row-radius) calc(var(--record-row-radius) + var(--record-row-gap)) !important;
+  border-bottom-right-radius: var(--record-row-radius) calc(var(--record-row-radius) + var(--record-row-gap)) !important;
 }
 
-/* Each logical record starts its own edge state, including nested tables. */
+/* Each logical record starts its own state, including nested tables. */
 table.record-table > :is(tbody, tfoot):not(.record-group) > tr,
 table.record-table > .record-group {
-  --record-row-edge: var(--surface-edge);
+  --record-row-edge: var(--record-row-edge-rest);
+  --record-row-tint: transparent;
 }
 
 table.record-table > :is(tbody, tfoot):not(.record-group) > tr:hover,
 table.record-table > .record-group:hover {
-  --record-row-tint: var(--surface-hover);
-  --record-row-edge: rgb(var(--console-accent-500, 20 184 166) / 80%);
+  --record-row-tint: var(--record-row-hover);
+  --record-row-edge: var(--record-row-edge-active);
 }
 
 table.record-table > :is(tbody, tfoot):not(.record-group) > tr:focus-within,
 table.record-table > .record-group:focus-within {
-  --record-row-edge: rgb(var(--console-accent-500, 20 184 166) / 80%);
+  --record-row-tint: var(--record-row-hover);
+  --record-row-edge: var(--record-row-edge-active);
 }
 
 table.record-table > :is(tbody, tfoot) > tr:is(.table-row-selected, [aria-selected="true"]),
 table.record-table > .record-group:is(.table-row-selected, [aria-selected="true"]) {
-  --record-row-tint: var(--surface-selected);
-  --record-row-edge: rgb(var(--console-accent-500, 20 184 166) / 95%);
+  --record-row-tint: var(--record-row-selected);
+  --record-row-edge: var(--record-row-edge-active);
 }
 
-/* Rowspans and expanded details belong to one business record, not one tr. */
+/* Hierarchical rows: a parent and each of its expanded children are separate
+   cards. Parents read stronger, children lighter and indented under them. */
+table.record-table > :is(tbody, tfoot) > tr.record-row-parent { --record-row-fill: var(--record-card-fill-strong); }
+table.record-table > :is(tbody, tfoot) > tr.record-row-leaf { --record-row-fill: var(--record-card-fill-leaf); }
+:root table.record-table > :is(tbody, tfoot) > tr.record-row-leaf > :first-child {
+  border-left-width: var(--record-row-indent) !important;
+  border-top-left-radius: calc(var(--record-row-radius) + var(--record-row-indent)) calc(var(--record-row-radius) + var(--record-row-gap)) !important;
+  border-bottom-left-radius: calc(var(--record-row-radius) + var(--record-row-indent)) calc(var(--record-row-radius) + var(--record-row-gap)) !important;
+}
+
+/* Rowspans belong to one business record, not one tr: the group is a single
+   card, so only its outside edges take the gap, outline and corners. */
 :root table.record-table > .record-group > tr > :is(td, th) {
   border-block-width: 0 !important;
 }
@@ -114,26 +141,25 @@ table.record-table > .record-group:is(.table-row-selected, [aria-selected="true"
 :root table.record-table > .record-group > tr:not([aria-hidden="true"]) > [data-record-edges~="b"] { --record-edge-bottom: inset 0 -1px 0 var(--record-row-edge); }
 :root table.record-table > .record-group > tr:not([aria-hidden="true"]) > [data-record-edges~="l"] { --record-edge-left: inset 1px 0 0 var(--record-row-edge); }
 :root table.record-table > .record-group > tr:not([aria-hidden="true"]) > [data-record-edges~="r"] { --record-edge-right: inset -1px 0 0 var(--record-row-edge); }
-:root table.record-table > .record-group > tr > [data-record-edges~="t"] { border-top-width: 4px !important; }
-:root table.record-table > .record-group > tr > [data-record-edges~="b"] { border-bottom-width: 4px !important; }
-:root table.record-table > .record-group > tr > [data-record-edges~="tl"] { border-top-left-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important; }
-:root table.record-table > .record-group > tr > [data-record-edges~="tr"] { border-top-right-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important; }
-:root table.record-table > .record-group > tr > [data-record-edges~="bl"] { border-bottom-left-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important; }
-:root table.record-table > .record-group > tr > [data-record-edges~="br"] { border-bottom-right-radius: var(--surface-radius-panel) calc(var(--surface-radius) - 4px) !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="t"] { border-top-width: var(--record-row-gap) !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="b"] { border-bottom-width: var(--record-row-gap) !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="tl"] { border-top-left-radius: var(--record-row-radius) calc(var(--record-row-radius) + var(--record-row-gap)) !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="tr"] { border-top-right-radius: var(--record-row-radius) calc(var(--record-row-radius) + var(--record-row-gap)) !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="bl"] { border-bottom-left-radius: var(--record-row-radius) calc(var(--record-row-radius) + var(--record-row-gap)) !important; }
+:root table.record-table > .record-group > tr > [data-record-edges~="br"] { border-bottom-right-radius: var(--record-row-radius) calc(var(--record-row-radius) + var(--record-row-gap)) !important; }
 
-/* Short data rows use 10px visible corners in every state. Expanded details
-   keep only the business record's outside corners, just like full-size rows. */
-table.record-table-compact { --record-compact-radius: 10px; }
-table.record-table-compact.record-table-dense { --record-compact-radius: 6px; }
+/* A frozen actions column keeps a hairline on its leading edge, so columns
+   scrolled underneath it read as continuing rather than cut off. */
+:root table.record-table > :is(tbody, tfoot) > tr:not([aria-hidden="true"]) > .sticky-col-right {
+  box-shadow: var(--record-edge-top), var(--record-edge-bottom), inset 1px 0 0 var(--surface-edge), var(--record-edge-right) !important;
+}
+:root table.record-table > thead > tr > .sticky-col-right {
+  box-shadow: inset 1px 0 0 var(--surface-edge) !important;
+}
 
-:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > :first-child,
-:root table.record-table.record-table-compact > .record-group > tr > [data-record-edges~="tl"] { border-top-left-radius: var(--record-compact-radius) calc(var(--record-compact-radius) + 4px) !important; }
-:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > :last-child,
-:root table.record-table.record-table-compact > .record-group > tr > [data-record-edges~="tr"] { border-top-right-radius: var(--record-compact-radius) calc(var(--record-compact-radius) + 4px) !important; }
-:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > :first-child,
-:root table.record-table.record-table-compact > .record-group > tr > [data-record-edges~="bl"] { border-bottom-left-radius: var(--record-compact-radius) calc(var(--record-compact-radius) + 4px) !important; }
-:root table.record-table.record-table-compact > :is(tbody, tfoot):not(.record-group) > tr:not([aria-hidden="true"]) > :last-child,
-:root table.record-table.record-table-compact > .record-group > tr > [data-record-edges~="br"] { border-bottom-right-radius: var(--record-compact-radius) calc(var(--record-compact-radius) + 4px) !important; }
+/* Short data rows (dialogs, nested detail tables) use the tag radius. */
+table.record-table-compact { --record-row-radius: var(--surface-radius-tag); }
+table.record-table-compact.record-table-dense { --record-row-radius: var(--surface-radius-xs); }
 
 /* Spacer heights belong entirely to the virtualizer. Never add card gaps. */
 :root table.record-table > tbody > tr[aria-hidden="true"] > :is(td, th) {
@@ -187,7 +213,7 @@ table.record-table .sticky-col::after {
   gap: 4px;
   padding: 4px 8px;
   border: 1px solid var(--surface-edge);
-  border-radius: 6px;
+  border-radius: var(--surface-radius-tag);
   background: var(--surface-soft);
   color: var(--surface-muted);
   box-shadow: 0 1px 2px rgb(0 0 0 / calc(.08 * var(--console-card-alpha, 1)));
@@ -221,3 +247,87 @@ table.record-table .sticky-col::after {
 @media (pointer: coarse) {
   .table-action { min-height: 44px; }
 }
+
+/* Row action menus open from a table's “more” action and share the dropdown
+   shape: panel radius, a 4px inset and item-radius rows. */
+.action-menu-content {
+  position: fixed;
+  z-index: 9999;
+  min-width: 176px;
+  max-width: min(280px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--surface-edge);
+  border-radius: var(--surface-radius-panel);
+}
+.action-menu-content :where(button, a) { border-radius: var(--surface-radius-item); }
+.action-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--control-height-sm);
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--surface-text);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: left;
+  white-space: nowrap;
+  transition: background-color 150ms, color 150ms;
+}
+.action-menu-item > svg { flex: none; color: var(--surface-muted); }
+.action-menu-item:not(:disabled):is(:hover, :focus-visible) { background-color: var(--surface-hover); outline: none; }
+.action-menu-item:disabled { cursor: not-allowed; opacity: .5; }
+.action-menu-item--danger, .action-menu-item--danger > svg { color: #dc2626; }
+.dark :is(.action-menu-item--danger, .action-menu-item--danger > svg) { color: #f87171; }
+.action-menu-item--warning, .action-menu-item--warning > svg { color: #b45309; }
+.dark :is(.action-menu-item--warning, .action-menu-item--warning > svg) { color: #fbbf24; }
+
+/* Pagers: every list pages through Pagination.vue with numbered pages (no
+   bare previous/next pagers). Each page control is one ghost button with the
+   small control height and control radius; only the current page is tinted.
+   `embedded` drops the card shell for pagers inside a card or dialog. */
+.pagination-embedded { padding-top: 12px; }
+.pagination-pages {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  align-self: flex-end;
+}
+.pagination-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--surface-radius-control);
+  background: transparent;
+  color: var(--surface-muted);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 150ms, border-color 150ms, color 150ms;
+}
+.pagination-button:not(:disabled):hover { background-color: var(--surface-hover); color: var(--surface-text); }
+.pagination-button:focus-visible { outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 70%); outline-offset: 2px; }
+.pagination-button:disabled { cursor: not-allowed; opacity: .4; }
+.pagination-button--current,
+.pagination-button--current:disabled {
+  border-color: rgb(var(--console-accent-500, 20 184 166) / 45%);
+  background-color: rgb(var(--console-accent-500, 20 184 166) / 14%);
+  color: var(--console-accent-readable);
+  font-weight: 600;
+  opacity: 1;
+  cursor: default;
+}
+.pagination-button--gap,
+.pagination-button--gap:disabled { opacity: 1; cursor: default; }

@@ -28,7 +28,7 @@ test('admin keeps original horizontal reservations and fixed record chrome', asy
   for (const surface of [toolbar, pagination]) {
     const style = await surface.evaluate(el => ({ radius: parseFloat(getComputedStyle(el).borderRadius), border: parseFloat(getComputedStyle(el).borderTopWidth), fill: getComputedStyle(el).backgroundColor }))
     // Zone containers carry the shell page radius, never the card radius.
-    expect(style.radius).toBe(24)
+    expect(style.radius).toBe(16)
     expect(style.border).toBe(1)
     expect(style.fill).not.toBe('rgba(0, 0, 0, 0)')
   }
@@ -241,7 +241,7 @@ async function assertAdminSurfaceStack(page: Page, surfaces: Locator[]) {
       return { radius: parseFloat(css.borderRadius), border: parseFloat(css.borderTopWidth), fill: css.backgroundColor }
     })
     // Every zone surface shares the shell page radius, never the card radius.
-    expect(style.radius).toBe(24)
+    expect(style.radius).toBe(16)
     expect(style.border).toBe(1)
     expect(style.fill).not.toBe('rgba(0, 0, 0, 0)')
     if (bottom !== undefined) expect(Math.abs(box.y - bottom - 16)).toBeLessThanOrEqual(1)
@@ -385,7 +385,8 @@ test('admin live paging stays at the workspace bottom while records scroll', asy
     await workspace.locator('[role="group"] button').nth(2).click()
     await expect(viewport.getByText(locale === 'zh' ? '暂无数据' : 'No data found', { exact: true })).toBeVisible()
     await expect(footer).toBeInViewport()
-    await expect(footer.locator('[aria-current="page"]')).toHaveText('1')
+    // Wide and narrow pagers are both numbered; only one is rendered visibly.
+    await expect(footer.locator('[aria-current="page"]').filter({ visible: true })).toHaveText('1')
     await expect(next).toBeDisabled()
     expect(await footer.boundingBox()).toEqual(before)
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight)).toBe(false)
@@ -492,13 +493,14 @@ for (const view of ['', 'users=1', 'groups=1', 'ipAccessControl=1', 'usage=1']) 
       const control = element.querySelector('.input, .select-trigger, .date-picker-trigger, .date-time-picker')
       return {
         width: Math.round(box.width),
-        search: element.classList.contains('filter-field--search'),
+        date: element.classList.contains('filter-field--date'),
         controlWidth: control ? Math.round(control.getBoundingClientRect().width) : null,
       }
     }).filter(field => field.width > 0))
     expect(measured.length, JSON.stringify(measured)).toBeGreaterThan(0)
     for (const field of measured) {
-      expect(field.width, JSON.stringify(field)).toBe(field.search ? 240 : 200)
+      // One compact width for search and select alike; only date ranges are wider.
+      expect(field.width, JSON.stringify(field)).toBe(field.date ? 200 : 160)
       // The control fills its field, so no wrapper can size itself to the
       // longest option label.
       expect(field.controlWidth, JSON.stringify(field)).toBe(field.width)
@@ -615,14 +617,14 @@ test('proxy filters and wrapping actions share control heights and stay within t
     }))
     expect(buttons).toHaveLength(7)
     for (const button of buttons) {
-      expect(button.height).toBe(38)
+      expect(button.height).toBe(36)
       expect(button.x).toBeGreaterThanOrEqual(barBox.x - 1)
       expect(button.right).toBeLessThanOrEqual(barBox.x + barBox.width + 1)
     }
     const last = buttons.at(-1)!
     expect(Math.abs(last.right - barBox.x - barBox.width)).toBeLessThanOrEqual(1)
     const heights = await bar.locator('.input, .select-trigger').evaluateAll(elements => elements.map(el => el.getBoundingClientRect().height))
-    expect(new Set(heights)).toEqual(new Set([38]))
+    expect(new Set(heights)).toEqual(new Set([36]))
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
   }
 })

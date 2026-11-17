@@ -4,7 +4,7 @@
       <div v-show="activeTab !== 'live'" class="card workspace-fixed usage-date p-4">
         <div class="filter-bar">
           <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
-          <div class="filter-field">
+          <div class="filter-field filter-field--date">
             <DateRangePicker
               v-model:start-date="startDate"
               v-model:end-date="endDate"
@@ -836,9 +836,7 @@ useLocaleRefresh(() => Promise.all([loadLogs(), loadFilterOptions()]))
   .usage-date, .usage-workspace-filters { padding: 10px 14px; }
   .usage-filter-layout { flex-direction: column; align-items: stretch; gap: 8px; }
   .usage-filter-fields .input-label { min-height: 16px; margin-bottom: 4px; font-size: 12px; line-height: 16px; }
-  .usage-filter-fields :deep(.select-trigger) { min-height: 34px; padding: 6px 10px; }
   .usage-filter-actions { width: 100%; gap: 8px; }
-  .usage-workspace :deep(.workspace-fixed .btn) { min-height: 34px; padding-top: 6px; padding-bottom: 6px; }
 }
 @media (min-width: 1024px) and (max-height: 799px) {
   .usage-date, .usage-workspace-filters { padding: 8px 12px; }

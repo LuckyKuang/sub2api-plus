@@ -7,34 +7,28 @@
       <div class="flex flex-wrap items-center justify-end gap-2">
         <div
           v-if="showSourceToggle"
-          class="inline-flex rounded-lg border border-gray-200 surface-inset p-0.5 dark:border-dark-700"
+          class="segmented-control"
         >
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
-            :class="source === 'inbound'
-              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
-              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+            class="segmented-option"
+            :aria-pressed="source === 'inbound'"
             @click="emit('update:source', 'inbound')"
           >
             {{ t('usage.inbound') }}
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
-            :class="source === 'upstream'
-              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
-              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+            class="segmented-option"
+            :aria-pressed="source === 'upstream'"
             @click="emit('update:source', 'upstream')"
           >
             {{ t('usage.upstream') }}
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
-            :class="source === 'path'
-              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
-              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+            class="segmented-option"
+            :aria-pressed="source === 'path'"
             @click="emit('update:source', 'path')"
           >
             {{ t('usage.path') }}
@@ -43,24 +37,20 @@
 
         <div
           v-if="showMetricToggle"
-          class="inline-flex rounded-lg border border-gray-200 surface-inset p-0.5 dark:border-dark-700"
+          class="segmented-control"
         >
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
-            :class="metric === 'tokens'
-              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
-              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+            class="segmented-option"
+            :aria-pressed="metric === 'tokens'"
             @click="emit('update:metric', 'tokens')"
           >
             {{ t('admin.dashboard.metricTokens') }}
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors surface-control"
-            :class="metric === 'actual_cost'
-              ? 'surface-field text-gray-900 shadow-sm dark:surface-field dark:text-white'
-              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+            class="segmented-option"
+            :aria-pressed="metric === 'actual_cost'"
             @click="emit('update:metric', 'actual_cost')"
           >
             {{ t('admin.dashboard.metricActualCost') }}
@@ -86,29 +76,29 @@
               <th class="pb-2 text-right">{{ t('admin.dashboard.standard') }}</th>
             </tr>
           </thead>
-          <tbody v-for="item in displayEndpointStats" :key="item.endpoint" class="record-group">
+          <tbody v-for="item in displayEndpointStats" :key="item.endpoint">
             <tr
-              class="transition-colors"
+              class="record-row-parent transition-colors"
               :class="enableBreakdown ? 'cursor-pointer hover:surface-hover dark:hover:surface-hover' : ''"
               @click="enableBreakdown && toggleBreakdown(item.endpoint)"
             >
-              <td :data-record-edges="expandedKey === item.endpoint ? 't l tl' : 't b l tl bl'" class="max-w-[180px] truncate py-1.5 font-medium" :class="enableBreakdown ? 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300' : 'text-gray-900 dark:text-white'" :title="item.endpoint">
+              <td class="max-w-[180px] truncate py-1.5 font-medium" :class="enableBreakdown ? 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300' : 'text-gray-900 dark:text-white'" :title="item.endpoint">
                 <span class="inline-flex items-center gap-1">
                   <svg v-if="enableBreakdown && expandedKey === item.endpoint" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                   <svg v-else-if="enableBreakdown" class="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                   {{ item.endpoint }}
                 </span>
               </td>
-              <td :data-record-edges="expandedKey === item.endpoint ? 't' : 't b'" class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right surface-muted">
                 {{ formatNumber(item.requests) }}
               </td>
-              <td :data-record-edges="expandedKey === item.endpoint ? 't' : 't b'" class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right surface-muted">
                 {{ formatTokens(item.total_tokens) }} <span v-if="endpointTokenShare(item.total_tokens)" class="surface-muted">({{ endpointTokenShare(item.total_tokens) }})</span>
               </td>
-              <td :data-record-edges="expandedKey === item.endpoint ? 't' : 't b'" class="py-1.5 text-right text-green-600 dark:text-green-400">
+              <td class="py-1.5 text-right text-green-600 dark:text-green-400">
                 ${{ formatCost(item.actual_cost) }}
               </td>
-              <td :data-record-edges="expandedKey === item.endpoint ? 't r tr' : 't b r tr br'" class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right surface-muted">
                 ${{ formatCost(item.cost) }}
               </td>
             </tr>

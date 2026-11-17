@@ -120,26 +120,13 @@
                 <Icon name="link" size="sm" />
               </button>
               <button
-                @click="handleViewUsages(row)"
-                class="table-action"
-                :title="t('admin.promo.viewUsages')"
-              >
-                <Icon name="eye" size="sm" />
-              </button>
-              <button
                 @click="handleEdit(row)"
                 class="table-action table-action-neutral"
                 :title="t('common.edit')"
               >
                 <Icon name="edit" size="sm" />
               </button>
-              <button
-                @click="handleDelete(row)"
-                class="table-action table-action-danger"
-                :title="t('common.delete')"
-              >
-                <Icon name="trash" size="sm" />
-              </button>
+              <ActionMenu :items="promoRowActions()" @select="handlePromoRowAction(row, $event)" />
             </div>
           </template>
         </DataTable>
@@ -405,6 +392,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
+import ActionMenu, { type ActionMenuItem } from '@/components/common/ActionMenu.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -686,6 +674,17 @@ const copyRegisterLink = async (code: PromoCode) => {
 }
 
 // Delete
+// Each row shows copy-link and edit; the rest live in one "more" menu.
+const promoRowActions = (): ActionMenuItem[] => [
+  { key: 'usages', label: t('admin.promo.viewUsages'), icon: 'eye' },
+  { key: 'delete', label: t('common.delete'), icon: 'trash', tone: 'danger' },
+]
+
+const handlePromoRowAction = (code: PromoCode, action: string) => {
+  if (action === 'usages') void handleViewUsages(code)
+  else if (action === 'delete') handleDelete(code)
+}
+
 const handleDelete = (code: PromoCode) => {
   deletingCode.value = code
   showDeleteDialog.value = true

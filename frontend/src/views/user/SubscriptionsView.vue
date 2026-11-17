@@ -71,7 +71,7 @@
             <div class="flex shrink-0 flex-wrap items-center justify-between gap-2">
               <span
                 :class="[
-                  'rounded-full px-2 py-0.5 text-xs font-medium',
+                  'rounded-md px-2 py-0.5 text-xs font-medium',
                   subscription.status === 'active'
                     ? 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                     : subscription.status === 'expired'
@@ -463,5 +463,5 @@ useLocaleRefresh(loadSubscriptions)
   flex: none;
 }
 .subscriptions-grid { grid-auto-rows: max-content; align-content: start; }
-.subscriptions-grid > .glass-surface { min-width: 0; border-radius: 16px !important; }
+.subscriptions-grid > .glass-surface { min-width: 0; border-radius: var(--surface-radius) !important; }
 </style>

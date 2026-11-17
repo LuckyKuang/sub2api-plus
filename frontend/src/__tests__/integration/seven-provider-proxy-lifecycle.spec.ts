@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { DOMWrapper, enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import type { AxiosAdapter, InternalAxiosRequestConfig } from 'axios'
 import { apiClient } from '@/api/client'
 import type { Account, Proxy } from '@/types'
@@ -110,6 +110,16 @@ function button(wrapper: VueWrapper, text: string) {
   expect(match, `visible button ${text}`).toBeDefined()
   return match!
 }
+// Opens the row's more menu and returns the menu item with the given label.
+// The menu is teleported to the document body, as in the running app.
+async function menuItem(view: VueWrapper, text: string) {
+  await row(view).get('[aria-haspopup="menu"]').trigger('click')
+  await flushPromises()
+  const match = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+    .find(candidate => candidate.textContent?.trim() === text)
+  expect(match, `menu item ${text}`).toBeDefined()
+  return new DOMWrapper(match!)
+}
 function row(view: VueWrapper, id = 31) { return view.get(`[data-row="${id}"]`) }
 async function refresh(view: VueWrapper) {
   await view.get('button[title="common.refresh"]').trigger('click')
@@ -184,7 +194,7 @@ describe('seven-provider proxy management business chain', () => {
     })
     await bindProxy(31)
     await refresh(view)
-    await button(row(view) as unknown as VueWrapper, 'common.delete').trigger('click')
+    await (await menuItem(view, 'common.delete')).trigger('click')
     expect(messages.error).toHaveBeenLastCalledWith('admin.proxies.deleteBlockedInUse')
     expect(calls.filter(call => call.method === 'delete')).toHaveLength(0)
 
@@ -216,7 +226,7 @@ describe('seven-provider proxy management business chain', () => {
     expect(account.proxy_id).toBe(31)
     await bindProxy(null)
     await refresh(view)
-    await button(row(view) as unknown as VueWrapper, 'common.delete').trigger('click')
+    await (await menuItem(view, 'common.delete')).trigger('click')
     await button(view.get('[data-dialog="admin.proxies.deleteProxy"]') as unknown as VueWrapper, 'common.delete').trigger('click')
     await flushPromises()
     expect(proxies).toEqual([])
@@ -241,7 +251,7 @@ describe('proxy quality observations after an in-flight route edit', () => {
     let finishOld!: (result: object) => void
     quality = () => new Promise(resolve => { finishOld = resolve })
     await (mode === 'single'
-      ? button(row(view) as unknown as VueWrapper, 'admin.proxies.qualityCheck')
+      ? await menuItem(view, 'admin.proxies.qualityCheck')
       : button(view, 'admin.proxies.batchQualityCheck')).trigger('click')
     await flushPromises()
     await editProxy(view, 'initial.proxy.example', 'repaired.proxy.example')

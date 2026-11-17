@@ -147,13 +147,15 @@ menus inside dialogs and scrollable cards; checking only the closed trigger is i
 Data-table query rows read one control width everywhere. `.filter-bar` is the row
 and `.filter-field` wraps exactly one control; both live in
 `frontend/src/styles/workspace.css` and take their sizes from
-`--filter-control-width` (200px), `--filter-search-width` (240px) and
+`--filter-control-width` (160px, shared by search boxes and selects; the
+search token is an alias, not a wider size), `--filter-date-width` (200px,
+`.filter-field--date`, for date and date-range pickers only) and
 `--filter-gap`. Action buttons stay outside `.filter-field` so they keep their
 natural width, and labels belong inside the field they name. Controls fill their
 field (`width: 100%`), so a select wrapper can never size itself to its longest
 option label. Below 1024px fields stack at full width instead of squeezing.
-Expanded select menus stay content-sized (`w-max`), floored at the same
-`--filter-control-width` and capped at 480px so one long label cannot stretch the
+Expanded select menus stay content-sized (`w-max`), floored at 200px (never
+narrower than `--filter-control-width`) and capped at 480px so one long label cannot stretch the
 panel across the viewport. `src/styles/__tests__/filterWidths.spec.ts` owns the
 stylesheet contract and the `SearchableSelect` floor; the component layout suite
 measures the rendered rows. The 480px ceiling also constrains the menu minimum
@@ -170,6 +172,45 @@ and use their natural widths with the group aligned right. A label displayed
 beside its control stays with it in `.filter-pair`. Embedded `WorkspaceTabs`
 use `.workspace-tabs--embedded` so the owning card supplies the only frame and
 padding.
+
+Console shapes and control sizes come from one set of tokens in
+`frontend/src/styles/console.css`. Every rounded element takes exactly one step
+of the radius ladder by role: container `--surface-radius` (16px: shell chrome,
+page zones, dialogs, toasts) > card/panel (12px: business cards, floating menus,
+popovers) > control/item (8px: buttons, fields, select and date triggers, tabs,
+menu items, table rows) > tag (6px: badges, chips, segmented options, compact
+buttons) > xs (4px: checkboxes, inline code). No breakpoint enlarges a step.
+Tailwind `rounded-*` utilities resolve to these tokens (`sm`/default xs, `md`
+tag, `lg` control, `xl` card, `2xl` container) and pages use `rounded-md`,
+`rounded-lg` or `rounded-xl`; the container radius belongs to the shared
+container classes. Square icon tiles up to 40px take the control radius.
+`rounded-full` is reserved for avatars, status dots, switches, progress tracks
+and spinners and never wraps text. Stylesheets declare radii only through the
+ladder tokens. Buttons, fields, select and date triggers and tabs share
+`--control-height` (36px), with `-sm` 32px, `-xs` 26px and `-lg` 44px variants;
+button labels break only between words, never inside one. Status labels
+use `.badge` (20px tag). Dialogs, menus and popovers use `--surface-panel`,
+which stays near-opaque, and the dialog scrim dims by a fixed amount; only
+in-page surfaces follow the card transparency setting.
+`src/styles/__tests__/radiusLadder.spec.ts` and `controls.spec.ts` own this
+contract.
+
+Every record table uses `.record-table` from `frontend/src/styles/tables.css`:
+every record is its own card (soft fill, hairline outline, item-radius corners,
+a small gap to its neighbours); hover and selection deepen the fill and tint
+the outline, and a frozen actions column carries a leading hairline. In
+hierarchical tables every row is still a separate card: mark summary rows
+`.record-row-parent` (stronger fill) and their expanded rows `.record-row-leaf`
+(lighter fill, indented). Keep `.record-group` for one business record that
+spans several rows through `rowspan`.
+Row actions show at most two everyday actions as `.table-action` buttons
+followed by one "more" menu; use `components/common/ActionMenu.vue` for a new
+menu, with `mutates` set on actions that read-only assistance must lock. Every
+list pages through `components/common/Pagination.vue` with numbered pages; do
+not hand-build previous/next pagers. Use `embedded` inside a card or dialog,
+`disabled` while loading, and `:total="null"` with `has-more` for cursor lists.
+Two-to-four way view switches use `.segmented-control`/`.segmented-option` with
+`aria-pressed`.
 
 All validation, including focused checks while iterating, must run in the
 platform validation container: Apple Containers on macOS, Docker inside WSL2

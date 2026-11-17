@@ -4,6 +4,7 @@ import { useMediaQuery } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import Select from '@/components/common/Select.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import { opsAPI, type OpsOpenAITokenStatsResponse, type OpsOpenAITokenStatsTimeRange } from '@/api/admin/ops'
 import { formatNumber } from '@/utils/format'
 import { formatTokenShare } from '@/utils/tokenShare'
@@ -65,12 +66,6 @@ const topNOptions = computed(() => [
   { value: 100, label: 'Top 100' }
 ])
 
-const pageSizeOptions = computed(() => [
-  { value: 10, label: '10' },
-  { value: 20, label: '20' },
-  { value: 50, label: '50' },
-  { value: 100, label: '100' }
-])
 
 function formatRate(v?: number | null): string {
   if (typeof v !== 'number' || !Number.isFinite(v)) return '-'
@@ -151,16 +146,6 @@ watch(
   },
   { immediate: true }
 )
-
-function onPrevPage() {
-  if (viewMode.value !== 'pagination') return
-  if (page.value > 1) page.value -= 1
-}
-
-function onNextPage() {
-  if (viewMode.value !== 'pagination') return
-  if (page.value < totalPages.value) page.value += 1
-}
 </script>
 
 <template>
@@ -179,28 +164,6 @@ function onNextPage() {
         <div v-if="viewMode === 'topn'" class="w-32">
           <Select v-model="topN" :options="topNOptions" />
         </div>
-        <template v-else>
-          <div class="w-24">
-            <Select v-model="pageSize" :options="pageSizeOptions" />
-          </div>
-          <button
-            class="btn btn-secondary btn-sm"
-            :disabled="loading || page <= 1"
-            @click="onPrevPage"
-          >
-            {{ t('admin.ops.openaiTokenStats.prevPage') }}
-          </button>
-          <button
-            class="btn btn-secondary btn-sm"
-            :disabled="loading || page >= totalPages"
-            @click="onNextPage"
-          >
-            {{ t('admin.ops.openaiTokenStats.nextPage') }}
-          </button>
-          <span class="text-xs surface-muted">
-            {{ t('admin.ops.openaiTokenStats.pageInfo', { page, total: totalPages }) }}
-          </span>
-        </template>
       </div>
     </div>
 
@@ -285,6 +248,16 @@ function onNextPage() {
       <div v-if="viewMode === 'topn'" class="mt-3 text-xs surface-muted">
         {{ t('admin.ops.openaiTokenStats.totalModels', { total }) }}
       </div>
+      <Pagination
+        v-else
+        embedded
+        :total="total"
+        :page="page"
+        :page-size="pageSize"
+        :disabled="loading"
+        @update:page="value => (page = value)"
+        @update:page-size="value => (pageSize = value)"
+      />
     </div>
   </section>
 </template>

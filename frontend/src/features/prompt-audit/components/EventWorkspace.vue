@@ -38,11 +38,11 @@
       <FilterInput v-model="localFilters.request_id" :label="t('admin.promptAudit.events.requestId')" @change="filtersChanged" />
       <FilterInput v-model="localFilters.prompt_hash" :label="t('admin.promptAudit.events.promptHash')" @change="filtersChanged" />
       <FilterInput v-model="localFilters.keyword" :label="t('admin.promptAudit.events.keyword')" @change="filtersChanged" />
-      <label class="filter-field text-xs surface-muted">
+      <label class="filter-field filter-field--date text-xs surface-muted">
         <span>{{ t('admin.promptAudit.events.startAt') }}</span>
         <DateTimePicker v-model="localFilters.start_at" type="datetime-local" class="input mt-1 w-full" :aria-label="t('admin.promptAudit.events.startAt')" @change="filtersChanged" />
       </label>
-      <label class="filter-field text-xs surface-muted">
+      <label class="filter-field filter-field--date text-xs surface-muted">
         <span>{{ t('admin.promptAudit.events.endAt') }}</span>
         <DateTimePicker v-model="localFilters.end_at" type="datetime-local" class="input mt-1 w-full" :aria-label="t('admin.promptAudit.events.endAt')" @change="filtersChanged" />
       </label>
@@ -104,7 +104,7 @@
               <p class="mt-1 text-xs surface-muted">{{ event.snapshot.model }} · {{ event.snapshot.protocol }} · {{ event.snapshot.stage || 'http' }}</p>
             </td>
             <td class="px-3 py-3">
-              <span class="rounded-full px-2 py-0.5 text-xs font-medium" :class="decisionClass(event.decision)">{{ formatDecisionRisk(event.decision, event.risk_level) }}</span>
+              <span class="rounded-md px-2 py-0.5 text-xs font-medium" :class="decisionClass(event.decision)">{{ formatDecisionRisk(event.decision, event.risk_level) }}</span>
               <p class="mt-2 max-w-48 truncate text-xs surface-muted" :title="formatCategories(event.categories)">{{ formatCategories(event.categories) }}</p>
             </td>
             <td class="whitespace-nowrap px-3 py-3 text-xs surface-muted">

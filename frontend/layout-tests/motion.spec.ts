@@ -77,6 +77,8 @@ test('header user, subscription and announcement surfaces use the shared transit
   for (const [trigger, panel] of [
     ['.app-header button[aria-label="User menu"]', '.header-user-dropdown'],
     ['.app-header button[title="View subscription details"]', '.app-header button[title="View subscription details"] + .glass-surface'],
+    // The announcement list is anchored under the bell like the user menu.
+    ['.app-header button[aria-label="Announcements"]', '.announcement-dropdown'],
   ]) {
     await expect(page.locator(trigger)).toBeVisible()
     const enter = await frames(page, trigger, panel, 260)
@@ -86,12 +88,6 @@ test('header user, subscription and announcement surfaces use the shared transit
     expect(leave.some(frame => frame.active && frame.duration === .1)).toBe(true)
     expect(leave.at(-1)!.connected).toBe(false)
   }
-  // The announcement bell now opens the same shared dialog treatment.
-  const enter = await frames(page, '.app-header button[aria-label="Announcements"]', '.modal-overlay', 320)
-  expect(enter.some(frame => frame.active && frame.duration === .2 && frame.y > 0 && frame.opacity > 0 && frame.opacity < 1)).toBe(true)
-  const leave = await frames(page, '.modal-overlay button[aria-label="Close modal"]', '.modal-overlay', 260)
-  expect(leave.some(frame => frame.active && frame.duration === .14)).toBe(true)
-  expect(leave.at(-1)!.connected).toBe(false)
 })
 
 test('the real administrator version menu retains 150/100ms timing without legacy utility overrides', async ({ page }) => {

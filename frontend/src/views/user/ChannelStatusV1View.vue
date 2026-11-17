@@ -178,5 +178,5 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .legacy-status-heading { padding: 16px 20px; }
-.legacy-status-cards { border-radius: 16px; }
+.legacy-status-cards { border-radius: var(--surface-radius); }
 </style>

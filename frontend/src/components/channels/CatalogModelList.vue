@@ -105,7 +105,7 @@ const sections = computed(() => {
   top: 0;
   left: 0;
   pointer-events: none;
-  border-radius: 12px;
+  border-radius: var(--surface-radius-card);
   background: var(--surface-hover);
   box-shadow: 0 0 0 1px var(--surface-edge), var(--surface-shadow);
   opacity: 0;

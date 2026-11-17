@@ -37,12 +37,18 @@ function openView() {
     DataTable: { props: ['data'], template: '<div v-for="row in data" :key="row.id" :data-row="row.id"><span data-result>{{ row.country }} {{ row.quality_summary }}</span><slot name="cell-actions" :row="row" /></div>' },
     BaseDialog: { props: ['show', 'title'], template: '<section v-if="show" :data-dialog="title"><slot /><slot name="footer" /></section>' },
     Icon: true,
+    ActionMenu: false,
+    Teleport: true,
   } } })
 }
 type View = ReturnType<typeof openView>
-function single(view: View, kind: string) {
-  const key = kind === 'connectivity' ? 'admin.proxies.testConnection' : 'admin.proxies.qualityCheck'
-  return view.get('[data-row="31"]').findAll('button').find(button => button.text() === key)!
+// Connectivity test is a visible row action; quality check lives in the row's more menu.
+async function single(view: View, kind: string) {
+  const row = view.get('[data-row="31"]')
+  if (kind === 'connectivity') return row.findAll('button').find(button => button.text() === 'admin.proxies.testConnection')!
+  const find = () => row.findAll('[role="menuitem"]').find(item => item.text() === 'admin.proxies.qualityCheck')
+  if (!find()) await row.get('[aria-haspopup="menu"]').trigger('click')
+  return find()!
 }
 function batch(view: View, kind: string) {
   const key = kind === 'connectivity' ? 'admin.proxies.testConnection' : 'admin.proxies.batchQualityCheck'
@@ -59,18 +65,18 @@ describe('proxy management single and batch probe ownership', () => {
     send.mockImplementation(() => pending.promise)
     const view = openView()
     await flushPromises()
-    await single(view, kind).trigger('click')
+    await (await single(view, kind)).trigger('click')
     await batch(view, kind).trigger('click')
     await flushPromises()
     try {
       expect(send).toHaveBeenCalledTimes(1)
-      expect(single(view, kind).attributes('disabled')).toBeDefined()
+      expect((await single(view, kind)).attributes('disabled')).toBeDefined()
       expect(batch(view, kind).attributes('disabled')).toBeDefined()
     } finally {
       pending.resolve(result('NL'))
       await flushPromises()
     }
-    expect(single(view, kind).attributes('disabled')).toBeUndefined()
+    expect((await single(view, kind)).attributes('disabled')).toBeUndefined()
     expect(batch(view, kind).attributes('disabled')).toBeUndefined()
   })
 
@@ -81,7 +87,7 @@ describe('proxy management single and batch probe ownership', () => {
     send.mockImplementationOnce(() => old.promise).mockImplementationOnce(() => current.promise)
     const view = openView()
     await flushPromises()
-    await single(view, kind).trigger('click')
+    await (await single(view, kind)).trigger('click')
     await view.get('[data-row="31"]').findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
     const host = view.findAll<HTMLInputElement>('#edit-proxy-form input').find(input => input.element.value === 'original.example')!
     await host.setValue('repaired.example')
@@ -94,7 +100,7 @@ describe('proxy management single and batch probe ownership', () => {
     try {
       old.resolve(result('STALE'))
       await flushPromises()
-      expect(single(view, kind).attributes('disabled')).toBeDefined()
+      expect((await single(view, kind)).attributes('disabled')).toBeDefined()
       expect(view.get('[data-result]').text()).not.toContain('STALE')
       expect(view.find('[data-dialog="admin.proxies.qualityReportTitle"]').exists()).toBe(false)
       expect(notify.success).not.toHaveBeenCalled()
@@ -103,7 +109,7 @@ describe('proxy management single and batch probe ownership', () => {
       current.resolve(result('NL'))
       await flushPromises()
     }
-    expect(single(view, kind).attributes('disabled')).toBeUndefined()
+    expect((await single(view, kind)).attributes('disabled')).toBeUndefined()
     expect(batch(view, kind).attributes('disabled')).toBeUndefined()
   })
 
@@ -113,7 +119,7 @@ describe('proxy management single and batch probe ownership', () => {
     send.mockImplementation(() => pending.promise)
     const view = openView()
     await flushPromises()
-    await (mode === 'single' ? single(view, kind) : batch(view, kind)).trigger('click')
+    await (mode === 'single' ? await single(view, kind) : batch(view, kind)).trigger('click')
     await flushPromises()
     expect(send).toHaveBeenCalledTimes(1)
     const listCalls = api.list.mock.calls.length

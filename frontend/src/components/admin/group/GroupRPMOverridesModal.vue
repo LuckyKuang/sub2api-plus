@@ -128,7 +128,7 @@
                     <td class="whitespace-nowrap px-3 py-2">
                       <span
                         :class="[
-                          'inline-flex rounded-full px-2 py-0.5 text-xs font-medium',
+                          'inline-flex rounded-md px-2 py-0.5 text-xs font-medium',
                           entry.user_status === 'active'
                             ? 'bg-green-100/[0.15] text-green-700 dark:bg-green-900/30 dark:text-green-400'
                             : 'surface-inset text-gray-600 dark:surface-inset dark:text-gray-400'

@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-2xl border border-gray-200 surface-inset p-4 dark:border-dark-700">
+  <div class="rounded-xl border border-gray-200 surface-inset p-4 dark:border-dark-700">
     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <div class="text-sm font-medium text-gray-900 dark:text-white">

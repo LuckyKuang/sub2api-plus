@@ -25,6 +25,7 @@ export default {
     units: { all: 'All units', token: 'Tokens', image: 'Image', video: 'Video', request: 'Request', second: 'Second', minute: 'Minute', hour: 'Hour', million_characters: 'Million characters' },
     currentRate: 'Current rate', unknown: 'Rate unavailable', models: 'Models and rates',
     noModels: 'No configured sale models.',
+    catalogDialogHint: 'This is a summary of the models and rates in this plan. See Available Channels for the full list.', viewAvailableChannels: 'View full list (Available Channels)',
     saleNote: 'Rates describe current usage charges, separate from the subscription purchase price. Future usage follows the rules in effect when each request starts. Model listings do not guarantee live account availability.',
     asOf: 'Quoted at {time}', factorBreakdown: 'Base {base} × platform {platform} × model {model} × peak {peak}',
     legacyFactorBreakdown: 'Base {base} × policy {policy} × peak {peak} (historical rule)',

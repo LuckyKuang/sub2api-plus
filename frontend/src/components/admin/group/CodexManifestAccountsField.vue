@@ -38,7 +38,7 @@
         <span
           v-for="id in config.account_ids"
           :key="id"
-          class="inline-flex items-center gap-1 rounded-full bg-primary-100/[0.15] px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
+          class="inline-flex items-center gap-1 rounded-md bg-primary-100/[0.15] px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
         >
           {{ accountLabel(id) }}
           <button

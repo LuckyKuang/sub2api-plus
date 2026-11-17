@@ -1,7 +1,7 @@
 <template>
   <div
     :class="[
-      'subscription-plan-card group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border transition-all',
+      'subscription-plan-card group relative flex min-w-0 flex-col overflow-hidden rounded-xl border transition-all',
       { 'subscription-plan-catalog': catalog },
       'hover:shadow-xl hover:-translate-y-0.5',
       borderClass,
@@ -29,7 +29,7 @@
             <span v-if="plan.currency" class="text-xs font-medium surface-muted">{{ plan.currency }}</span>
           </div>
           <div class="flex items-center justify-end gap-1">
-            <span :class="['inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium', badgeLightClass]">
+            <span :class="['inline-flex shrink-0 rounded-md px-2 py-0.5 text-[11px] font-medium', badgeLightClass]">
               {{ pLabel }}
             </span>
             <span class="text-[11px] surface-muted">/ {{ validitySuffix }}</span>
@@ -41,37 +41,38 @@
         </div>
       </div>
 
-      <!-- Group quota info (compact) -->
-      <div class="mb-3 grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg surface-inset px-3 py-2 text-xs">
-        <div class="flex items-center justify-between">
+      <!-- Group quota info: rate tag top-left, then one labelled bar per limit -->
+      <div class="plan-quota mb-3 space-y-2 rounded-lg surface-inset px-3 py-2.5 text-xs">
+        <div class="flex items-center gap-2">
           <span class="surface-muted">{{ t('payment.planCard.rate') }}</span>
-          <span class="font-medium surface-muted">{{ rateDisplay }}</span>
+          <span
+            v-if="rateValue"
+            class="rounded-md bg-primary-100 px-1.5 py-0.5 text-xs font-bold tabular-nums text-primary-700 dark:bg-primary-900/40 dark:text-primary-300"
+          >{{ rateValue }}</span>
+          <span v-else class="font-medium surface-muted">{{ t('billingRates.unknown') }}</span>
         </div>
-        <div v-if="hasPeakRate" class="col-span-2 flex items-center justify-between gap-2">
+        <div v-if="hasPeakRate" class="flex items-center justify-between gap-2">
           <span class="surface-muted">{{ t('payment.planCard.peakRate') }}</span>
           <span class="text-right font-medium text-amber-700 dark:text-amber-300">{{ peakRateDisplay }}</span>
         </div>
-        <div v-if="plan.daily_limit_usd != null" class="flex items-center justify-between">
-          <span class="surface-muted">{{ t('payment.planCard.dailyLimit') }}</span>
-          <span class="font-medium surface-muted">${{ plan.daily_limit_usd }}</span>
+        <div v-for="bar in limitBars" :key="bar.key" class="space-y-1" :data-limit="bar.key">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-medium surface-muted">{{ bar.label }}</span>
+            <span class="tabular-nums surface-muted">{{ bar.amount }}</span>
+          </div>
+          <div class="relative h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
+            <div
+              class="console-data-mark absolute inset-y-0 left-0 rounded-full transition-all duration-300"
+              :class="bar.barClass"
+              :style="{ width: bar.width }"
+            ></div>
+          </div>
         </div>
-        <div v-if="plan.weekly_limit_usd != null" class="flex items-center justify-between">
-          <span class="surface-muted">{{ t('payment.planCard.weeklyLimit') }}</span>
-          <span class="font-medium surface-muted">${{ plan.weekly_limit_usd }}</span>
+        <div v-if="limitBars.length === 0" class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-50 to-teal-50 px-2.5 py-1.5 dark:from-emerald-900/20 dark:to-teal-900/20">
+          <span class="text-base text-emerald-600 dark:text-emerald-400">∞</span>
+          <span class="font-medium text-emerald-700 dark:text-emerald-300">{{ t('payment.planCard.unlimited') }}</span>
         </div>
-        <div v-if="plan.monthly_limit_usd != null" class="flex items-center justify-between">
-          <span class="surface-muted">{{ t('payment.planCard.monthlyLimit') }}</span>
-          <span class="font-medium surface-muted">${{ plan.monthly_limit_usd }}</span>
-        </div>
-        <div v-if="plan.five_hour_limit_usd != null" class="flex items-center justify-between">
-          <span class="surface-muted">{{ t('payment.planCard.fiveHourLimit') }}</span>
-          <span class="font-medium surface-muted">&#36;{{ plan.five_hour_limit_usd }}</span>
-        </div>
-        <div v-if="plan.daily_limit_usd == null && plan.weekly_limit_usd == null && plan.monthly_limit_usd == null && plan.five_hour_limit_usd == null" class="flex items-center justify-between">
-          <span class="surface-muted">{{ t('payment.planCard.quota') }}</span>
-          <span class="font-medium surface-muted">{{ t('payment.planCard.unlimited') }}</span>
-        </div>
-        <div v-if="modelScopeLabels.length > 0" class="col-span-2 flex items-center justify-between">
+        <div v-if="modelScopeLabels.length > 0" class="flex items-center justify-between gap-2">
           <span class="surface-muted">{{ t('payment.planCard.models') }}</span>
           <div class="flex flex-wrap justify-end gap-1">
             <span v-for="scope in modelScopeLabels" :key="scope"
@@ -82,7 +83,7 @@
         </div>
       </div>
 
-      <PlanModelCatalog class="mb-3" :catalog="plan.model_catalog" />
+      <PlanModelCatalog class="mb-3" dialog :catalog="plan.model_catalog" />
 
       <!-- Features list (compact) -->
       <div v-if="plan.features.length > 0" class="mb-3 space-y-1">
@@ -97,7 +98,7 @@
       <!-- Subscribe Button -->
       <button
         type="button"
-        class="btn btn-primary plan-purchase-action mt-auto min-h-11 w-full rounded-xl py-2.5 text-sm font-semibold shadow-sm transition-all active:scale-[0.98]"
+        class="btn btn-primary btn-lg plan-purchase-action mt-auto w-full text-sm font-semibold active:scale-[0.98]"
         @click="emit('select', plan)"
       >
         {{ isRenewal ? t('payment.renewNow') : t('payment.subscribeNow') }}
@@ -116,7 +117,6 @@ import { hasPeakRate as groupHasPeakRate, formatPeakRateWindow, serverTimezoneLa
 import { planValiditySuffix } from './validity'
 import { currencySymbol } from '@/components/payment/currency'
 import PlanModelCatalog from './PlanModelCatalog.vue'
-import { planRateLabel } from '@/utils/billingRate'
 import {
   platformBadgeLightClass,
   platformBorderClass,
@@ -153,8 +153,53 @@ const discountText = computed(() => {
   return pct > 0 ? `-${pct}%` : ''
 })
 
-const rateDisplay = computed(() => {
-  return planRateLabel(props.plan) ?? t('billingRates.unknown')
+// Prefer the model-catalog quote; when the catalog has no priced model, fall
+// back to the group/personal multiplier the API sends. null means truly unknown.
+const rateValue = computed(() => {
+  const catalog = props.plan.model_catalog
+  const min = catalog?.models.length ? catalog.rate_min : null
+  const max = catalog?.models.length ? catalog.rate_max : null
+  if (min != null && max != null && Number.isFinite(min) && Number.isFinite(max)) {
+    return min === max ? formatRateX(min) : `${formatRateX(min)}–${formatRateX(max)}`
+  }
+  // Composite groups price per model, so a bare group multiplier would mislead.
+  if (platform.value === 'composite') return null
+  const base = props.plan.rate_multiplier
+  return typeof base === 'number' && Number.isFinite(base) && base > 0 ? formatRateX(base) : null
+})
+
+function formatRateX(rate: number): string {
+  return `${Number(rate.toPrecision(10))}x`
+}
+
+// Monthly is the most saturated; weekly, daily, 5h progressively fainter.
+const LIMIT_DEFS = [
+  { key: 'monthly', field: 'monthly_limit_usd', label: 'monthlyLimit', barClass: 'bg-violet-600 dark:bg-violet-500' },
+  { key: 'weekly', field: 'weekly_limit_usd', label: 'weeklyLimit', barClass: 'bg-blue-500 dark:bg-blue-500/90' },
+  { key: 'daily', field: 'daily_limit_usd', label: 'dailyLimit', barClass: 'bg-sky-400 dark:bg-sky-500/80' },
+  { key: 'fiveHour', field: 'five_hour_limit_usd', label: 'fiveHourLimit', barClass: 'bg-slate-400 dark:bg-slate-500' },
+] as const
+
+function formatUsd(value: number): string {
+  return `$${Number(value.toFixed(2))}`
+}
+
+// A plan card describes the plan, not the buyer's current usage (that lives on
+// the subscriptions page), so each bar shows its limit relative to the largest
+// limit on the card: monthly is full and every colour stays visible.
+const MIN_BAR_RATIO = 0.03
+const limitBars = computed(() => {
+  const rows = LIMIT_DEFS
+    .map(def => ({ def, limit: props.plan[def.field] }))
+    .filter((row): row is { def: (typeof LIMIT_DEFS)[number]; limit: number } => typeof row.limit === 'number' && row.limit > 0)
+  const largest = Math.max(0, ...rows.map(row => row.limit))
+  return rows.map(({ def, limit }) => ({
+    key: def.key,
+    label: t(`payment.planCard.${def.label}`),
+    amount: formatUsd(limit),
+    barClass: def.barClass,
+    width: `${Math.round(Math.min(Math.max(limit / largest, MIN_BAR_RATIO), 1) * 100)}%`,
+  }))
 })
 
 const appStore = useAppStore()
@@ -207,13 +252,8 @@ const validitySuffix = computed(() => planValiditySuffix(props.plan, t))
     padding: 14px;
   }
 
-  .subscription-plan-catalog .plan-content > .grid {
-    grid-template-columns: minmax(0, 1fr);
+  .subscription-plan-catalog .plan-quota {
     padding-inline: 10px;
-  }
-
-  .subscription-plan-catalog .plan-content > .grid > .col-span-2 {
-    grid-column: 1 / -1;
   }
 }
 </style>

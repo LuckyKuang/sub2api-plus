@@ -4,9 +4,29 @@ import PlanModelCatalog from '../PlanModelCatalog.vue'
 import { offer, pricing, rateQuote } from '@/components/channels/__tests__/catalogFixtures'
 import type { SaleModelCatalog } from '@/types/billingRate'
 
+const push = vi.hoisted(() => vi.fn())
+vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
+vi.mock('@/utils/format', () => ({ formatDateTime: (v: string) => `fmt(${v})` }))
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string, params?: object) => key + (params ? JSON.stringify(params) : '') }) }))
 
 describe('subscription sale model catalog', () => {
+  // User audit (/purchase): plan cards open the summary in a dialog with a hint
+  // and a jump to 可用渠道 instead of expanding inline.
+  it('opens a dialog from a counted trigger on plan cards and routes to available channels', async () => {
+    const catalog: SaleModelCatalog = { policy_version: 1, as_of: '2026-11-16T16:13:02.287950543Z', platforms: ['openai'], rate_min: 1, rate_max: 1, models: [offer('m', { rate_quote: rateQuote(1) })] }
+    const wrapper = mount(PlanModelCatalog, { props: { catalog, dialog: true }, global: { stubs: { teleport: true } } })
+    expect(wrapper.find('details').exists()).toBe(false)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.get('button').text()).toContain('· 1')
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('billingRates.catalogDialogHint')
+    expect(wrapper.text()).toContain('fmt(2026-11-16T16:13:02.287950543Z)')
+    await wrapper.get('.modal-footer .btn-primary').trigger('click')
+    expect(push).toHaveBeenCalledWith('/available-channels')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it.each([
     { name: 'standard', asOf: '2026-10-26T08:00:00Z', peak: 1, effective: 6, calculation: 'product_v2' as const, scope: 'all_meters' as const, policy: 6, charge: '$12' },
     { name: 'peak', asOf: '2026-10-26T10:00:00Z', peak: 1.5, effective: 9, calculation: 'product_v2' as const, scope: 'all_meters' as const, policy: 6, charge: '$18' },
@@ -22,7 +42,7 @@ describe('subscription sale model catalog', () => {
     await wrapper.get('details > summary').trigger('click')
     await wrapper.get('details > details > summary').trigger('click')
     expect(wrapper.get('table').findAll('tbody td').map(cell => cell.text())).toEqual([charge])
-    expect(wrapper.text()).toContain(asOf)
+    expect(wrapper.text()).toContain(`fmt(${asOf})`)
     if (calculation === 'override_v1') {
       expect(wrapper.text()).toContain('legacyFactorBreakdown{"base":1,"policy":3,"peak":1}')
       expect(wrapper.text()).not.toContain('factorBreakdown{"base":1,"platform":2,"model":3')
@@ -50,7 +70,7 @@ describe('subscription sale model catalog', () => {
     expect(wrapper.find('table').text()).toContain('$10')
     expect(wrapper.text()).toContain('factorBreakdown{"base":1,"platform":1,"model":2,"peak":1}')
     expect(wrapper.text()).toContain('source.model')
-    expect(wrapper.text()).toContain('2026-10-26T12:00:00Z')
+    expect(wrapper.text()).toContain('fmt(2026-10-26T12:00:00Z)')
     expect(wrapper.text()).toContain('priceTimeFactor{"factor":0.5}')
     expect(wrapper.text()).not.toContain('availableChannels.public')
   })

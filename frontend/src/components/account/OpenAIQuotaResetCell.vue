@@ -101,7 +101,7 @@
           v-if="hiddenResetCreditCount > 0"
           type="button"
           data-testid="reset-credit-expiry-toggle"
-          class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-4 transition-colors hover:surface-hover surface-control surface-muted"
+          class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-4 transition-colors hover:surface-hover surface-control surface-muted"
           :aria-expanded="showResetCreditDetails"
           :aria-label="resetCreditDetailsToggleLabel"
           :title="resetCreditDetailsTitle"

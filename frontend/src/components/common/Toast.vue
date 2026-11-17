@@ -117,7 +117,7 @@ const removeToast = (id: string) => {
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--surface-edge);
-  border-radius: 20px;
+  border-radius: var(--surface-radius);
   background-color: var(--surface-panel);
   background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
   color: var(--surface-text);
@@ -140,7 +140,7 @@ const removeToast = (id: string) => {
   width: 36px;
   height: 36px;
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--surface-radius-control);
   background-color: rgb(var(--toast-accent) / 14%);
   color: rgb(var(--toast-accent));
 }
@@ -163,7 +163,7 @@ const removeToast = (id: string) => {
   margin: -4px -4px 0 0;
   place-items: center;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--surface-radius-control);
   background-color: transparent;
   color: var(--surface-muted);
   transition: background-color 150ms ease, color 150ms ease;

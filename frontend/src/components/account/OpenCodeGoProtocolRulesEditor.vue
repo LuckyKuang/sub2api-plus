@@ -48,7 +48,7 @@
             v-for="option in protocolOptions.filter(item => item.value !== row.protocol)"
             :key="option.value"
             type="button"
-            class="rounded-full border px-2 py-0.5 transition-colors surface-control"
+            class="rounded-md border px-2 py-0.5 transition-colors surface-control"
             :class="hasExtraProtocol(row, option.value)
               ? 'border-primary-300 bg-primary-50/[0.15] text-primary-700 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
               : 'border-gray-200 text-gray-500 hover:border-gray-300 dark:border-dark-600 dark:text-gray-400 dark:hover:border-dark-500'"

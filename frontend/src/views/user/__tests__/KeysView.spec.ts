@@ -377,6 +377,9 @@ describe('user KeysView column settings', () => {
     setAdminSupportContext({ actorId: 1, userId: 42 })
     const wrapper = await mountView()
     expect(wrapper.get('[data-tour="keys-create-btn"]').attributes()).toHaveProperty('disabled')
+    // Disable and delete live in the row's "more" menu; opening it stays allowed.
+    await getButtonByText(wrapper, 'common.more').trigger('click')
+    await flushPromises()
     expect(getButtonByText(wrapper, 'keys.disable').attributes()).toHaveProperty('disabled')
     expect(getButtonByText(wrapper, 'common.delete').attributes()).toHaveProperty('disabled')
     await wrapper.get('button[title="keys.copyToClipboard"]').trigger('click')

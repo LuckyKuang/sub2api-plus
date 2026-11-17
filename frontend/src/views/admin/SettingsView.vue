@@ -2078,7 +2078,7 @@
                     <button
                       type="button"
                       data-testid="captcha-provider-turnstile"
-                      class="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition surface-control"
+                      class="inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition surface-control"
                       :class="
                         captchaProviderSelection === 'turnstile'
                           ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
@@ -2091,7 +2091,7 @@
                     <button
                       type="button"
                       data-testid="captcha-provider-tencent"
-                      class="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition surface-control"
+                      class="inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition surface-control"
                       :class="
                         captchaProviderSelection === 'tencent'
                           ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
@@ -2104,7 +2104,7 @@
                     <button
                       type="button"
                       data-testid="captcha-provider-aliyun"
-                      class="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition surface-control"
+                      class="inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition surface-control"
                       :class="
                         captchaProviderSelection === 'aliyun'
                           ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
@@ -6641,7 +6641,7 @@
 	                  <div class="grid grid-cols-2 gap-2 rounded-lg surface-inset p-1">
                     <button
                       type="button"
-                      class="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition surface-control"
+                      class="inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition surface-control"
                       :class="
                         form.login_agreement_mode === 'modal'
                           ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
@@ -6654,7 +6654,7 @@
                     </button>
                     <button
                       type="button"
-                      class="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition surface-control"
+                      class="inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition surface-control"
                       :class="
                         form.login_agreement_mode === 'checkbox'
                           ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
@@ -7020,7 +7020,7 @@
 
             <p
               v-if="form.model_plaza_enabled && !form.model_plaza_require_auth"
-              class="rounded-xl border border-amber-500 bg-amber-50/[0.15] px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
+              class="rounded-lg border border-amber-500 bg-amber-50/[0.15] px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
               role="alert"
             >
               {{ t('admin.settings.features.modelPlaza.publicExposureWarning') }}
@@ -7413,30 +7413,21 @@
                   </table>
                 </div>
 
-                <div v-if="affiliateState.total > affiliateState.pageSize" class="pagination-card card mt-3 flex items-center justify-between px-4 py-3 text-sm">
-                  <span class="surface-muted">
+                <Pagination
+                  v-if="affiliateState.total > affiliateState.pageSize"
+                  embedded
+                  class="mt-3"
+                  :total="affiliateState.total"
+                  :page="affiliateState.page"
+                  :page-size="affiliateState.pageSize"
+                  :show-page-size-selector="false"
+                  :disabled="affiliateState.loading"
+                  @update:page="changeAffiliatePage"
+                >
+                  <template #info>
                     {{ t('admin.settings.features.affiliate.customUsers.totalLabel', { total: affiliateState.total }) }}
-                  </span>
-                  <div class="flex items-center gap-2">
-                    <button
-                      type="button"
-                      class="btn btn-secondary btn-sm"
-                      :disabled="affiliateState.page <= 1"
-                      @click="changeAffiliatePage(affiliateState.page - 1)"
-                    >
-                      {{ t('pagination.previous') }}
-                    </button>
-                    <span class="surface-muted">{{ affiliateState.page }} / {{ Math.max(1, Math.ceil(affiliateState.total / affiliateState.pageSize)) }}</span>
-                    <button
-                      type="button"
-                      class="btn btn-secondary btn-sm"
-                      :disabled="affiliateState.page >= Math.ceil(affiliateState.total / affiliateState.pageSize)"
-                      @click="changeAffiliatePage(affiliateState.page + 1)"
-                    >
-                      {{ t('pagination.next') }}
-                    </button>
-                  </div>
-                </div>
+                  </template>
+                </Pagination>
               </div>
             </div>
           </div>
@@ -7458,7 +7449,7 @@
                 <!-- Chip showing the picked user; clicking it re-opens the search -->
                 <div
                   v-if="affiliateModal.selectedUser"
-                  class="flex items-center justify-between rounded-md border border-primary-200 bg-primary-50/[0.15] px-3 py-2 dark:border-primary-700/50 dark:bg-primary-900/20"
+                  class="flex items-center justify-between rounded-lg border border-primary-200 bg-primary-50/[0.15] px-3 py-2 dark:border-primary-700/50 dark:bg-primary-900/20"
                 >
                   <div class="text-sm">
                     <span class="font-medium text-gray-900 dark:text-white">{{ affiliateModal.selectedUser.email }}</span>
@@ -8850,6 +8841,7 @@ import {
   type SiteBillingMode,
 } from "@/utils/siteBillingMode";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
+import Pagination from "@/components/common/Pagination.vue";
 import PaymentProviderList from "@/components/payment/PaymentProviderList.vue";
 import PaymentProviderDialog from "@/components/payment/PaymentProviderDialog.vue";
 import GroupBadge from "@/components/common/GroupBadge.vue";
@@ -13166,7 +13158,7 @@ watch(
 }
 
 .settings-tab {
-  @apply relative isolate flex h-11 min-h-11 min-w-[6.75rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-transparent px-3 text-sm font-medium outline-none transition-colors duration-200 ease-out;
+  @apply relative isolate flex h-11 min-h-11 min-w-[6.75rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-transparent px-3 text-sm font-medium outline-none transition-colors duration-200 ease-out;
   color: var(--surface-muted);
 }
 
@@ -13189,7 +13181,7 @@ watch(
 }
 
 .settings-tab::before {
-  @apply absolute inset-0 -z-10 rounded-xl opacity-0 transition-opacity duration-200;
+  @apply absolute inset-0 -z-10 rounded-lg opacity-0 transition-opacity duration-200;
   content: "";
   background: var(--surface-hover);
 }
@@ -13240,7 +13232,7 @@ watch(
 
 /* ============ 系统设置 保存浮标 ============ */
 .settings-save-dock {
-  @apply sticky bottom-3 z-20 ml-auto flex w-fit items-center rounded-full border border-gray-200/80 bg-white/90 p-1.5 backdrop-blur-xl dark:border-dark-600/80 dark:bg-dark-800/90;
+  @apply sticky bottom-3 z-20 ml-auto flex w-fit items-center rounded-xl border border-gray-200/80 bg-white/90 p-1.5 backdrop-blur-xl dark:border-dark-600/80 dark:bg-dark-800/90;
   box-shadow:
     0 10px 26px rgb(15 23 42 / 0.12),
     0 1px 0 rgb(255 255 255 / 0.9) inset;

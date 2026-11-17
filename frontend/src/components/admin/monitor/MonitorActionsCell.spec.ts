@@ -40,6 +40,18 @@ function makeMonitor(overrides: Partial<ChannelMonitor> = {}): ChannelMonitor {
   }
 }
 
+const mountOptions = { global: { stubs: { Teleport: true } } }
+
+async function openMenu(wrapper: ReturnType<typeof mount>) {
+  await wrapper.get('[aria-haspopup="menu"]').trigger('click')
+}
+
+function menuItem(wrapper: ReturnType<typeof mount>, label: string) {
+  const item = wrapper.findAll('[role="menuitem"]').find(candidate => candidate.text() === label)
+  if (!item) throw new Error(`menu item not found: ${label}`)
+  return item
+}
+
 // docs/CHANNEL_MONITOR.md: manual probes require the runtime probe gate,
 // while a monitor's enabled flag governs scheduled checks, not manual checks.
 describe('MonitorActionsCell run action', () => {
@@ -88,35 +100,44 @@ describe('MonitorActionsCell duplicate action', () => {
     const row = makeMonitor()
     const wrapper = mount(MonitorActionsCell, {
       props: { row, running: false, duplicating: false },
+      ...mountOptions,
     })
 
-    await wrapper.get('[data-testid="monitor-duplicate"]').trigger('click')
+    await openMenu(wrapper)
+    await menuItem(wrapper, 'admin.channelMonitor.duplicate').trigger('click')
 
     expect(wrapper.emitted('duplicate')).toEqual([[row]])
   })
 
-  it('disables the action while the same monitor is being duplicated', () => {
+  it('disables the action while the same monitor is being duplicated', async () => {
     const wrapper = mount(MonitorActionsCell, {
       props: { row: makeMonitor(), running: false, duplicating: true },
+      ...mountOptions,
     })
-    const button = wrapper.get('[data-testid="monitor-duplicate"]')
+    await openMenu(wrapper)
+    const button = menuItem(wrapper, 'admin.channelMonitor.duplicating')
 
     expect(button.attributes('disabled')).toBeDefined()
     expect(button.attributes('title')).toBe('admin.channelMonitor.duplicating')
-    expect(button.text()).toContain('admin.channelMonitor.duplicating')
+    await button.trigger('click')
+    expect(wrapper.emitted('duplicate')).toBeUndefined()
   })
 
-  it('disables the action when the stored API key cannot be decrypted', () => {
+  it('disables the action when the stored API key cannot be decrypted', async () => {
     const wrapper = mount(MonitorActionsCell, {
       props: {
         row: makeMonitor({ api_key_decrypt_failed: true }),
         running: false,
         duplicating: false,
       },
+      ...mountOptions,
     })
-    const button = wrapper.get('[data-testid="monitor-duplicate"]')
+    await openMenu(wrapper)
+    const button = menuItem(wrapper, 'admin.channelMonitor.duplicate')
 
     expect(button.attributes('disabled')).toBeDefined()
     expect(button.attributes('title')).toBe('admin.channelMonitor.duplicateKeyUnavailable')
+    await button.trigger('click')
+    expect(wrapper.emitted('duplicate')).toBeUndefined()
   })
 })

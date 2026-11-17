@@ -137,11 +137,11 @@ describe('shared transparent surface rendering', () => {
     }
   })
 
-  // Audited global appearance contract: fill alpha reaches zero at 100%
-  // transparency, while the 1px frame remains visible in both themes.
-  it('shares fill transparency across surface roles without fading their outlines', () => {
+  // Audited global appearance contract: in-page fill alpha reaches zero at 100%
+  // transparency, while the 1px frame and floating layers remain readable.
+  it('shares fill transparency across in-page surface roles without fading outlines or floating layers', () => {
     const root = declarationsFor(document.documentElement)
-    const fills = ['--surface-fill', '--surface-shell', '--surface-field', '--surface-panel', '--surface-sticky']
+    const fills = ['--surface-fill', '--surface-shell', '--surface-field', '--surface-sticky']
     for (const property of fills) {
       expect(lastValue(root, property), property).toBe('var(--surface-solid)')
     }
@@ -152,6 +152,12 @@ describe('shared transparent surface rendering', () => {
     expect(lastValue(dark, '--surface-solid')).toBe('rgb(41 38 36 / var(--console-card-alpha, 1))')
     expect(lastValue(dark, '--surface-soft')).toBe('rgb(34 31 29 / var(--console-card-alpha, 1))')
     expect(lastValue(dark, '--surface-edge')).toBe('rgb(170 162 152 / 30%)')
+    // Floating layers and the dialog scrim sit over content: they stay readable
+    // and dim by a fixed amount whatever card transparency the user picks.
+    expect(lastValue(root, '--surface-panel')).toBe('rgb(253 251 248 / 97%)')
+    expect(lastValue(dark, '--surface-panel')).toBe('rgb(41 38 36 / 97%)')
+    expect(lastValue(root, '--surface-overlay')).toBe('rgb(24 20 18 / 32%)')
+    expect(lastValue(dark, '--surface-overlay')).toBe('rgb(4 3 2 / 55%)')
 
     // Check every override, including media queries and custom appearance rules,
     // so a page-specific preference cannot restore an opaque surface or fade
@@ -162,7 +168,9 @@ describe('shared transparent surface rendering', () => {
       if (['--surface-solid', '--surface-soft', '--surface-glint', '--surface-hover', '--surface-selected'].includes(declaration.prop)) {
         expect(declaration.value).toContain('--console-card-alpha')
       }
-      if (declaration.prop === '--surface-edge') expect(declaration.value).not.toContain('--console-card-alpha')
+      if (['--surface-edge', '--surface-panel', '--surface-overlay'].includes(declaration.prop)) {
+        expect(declaration.value).not.toContain('--console-card-alpha')
+      }
     })
   })
 
@@ -240,11 +248,16 @@ describe('rounded card surfaces', () => {
     expect(lastValue(declarationsFor(panel), 'border-radius')).toBe('var(--surface-radius-panel)')
     card.remove()
     panel.remove()
-    expect(lastValue(declarationsFor(document.documentElement), '--surface-radius-card')).toBe('14px')
-    expect(lastValue(declarationsFor(document.documentElement), '--surface-radius-control')).toBe('9px')
+    // The approved ladder: container 16 > card/panel 12 > control/item 8 > tag 6 > xs 4.
+    const root = declarationsFor(document.documentElement)
+    expect(lastValue(root, '--surface-radius')).toBe('16px')
+    expect(lastValue(root, '--surface-radius-card')).toBe('12px')
+    expect(lastValue(root, '--surface-radius-panel')).toBe('12px')
+    expect(lastValue(root, '--surface-radius-control')).toBe('8px')
+    expect(lastValue(root, '--surface-radius-item')).toBe('8px')
+    expect(lastValue(root, '--surface-radius-tag')).toBe('6px')
+    expect(lastValue(root, '--surface-radius-xs')).toBe('4px')
     expect(lastValue(declarationsFor(fixture('<header class="shell-surface"></header>')), 'border-radius')).toBe('var(--surface-radius)')
-    expect(lastValue(declarationsFor(document.documentElement), '--surface-radius-panel')).toBe('16px')
-    expect(lastValue(declarationsFor(document.documentElement), '--surface-radius-item')).toBe('10px')
   })
 
   it.each(['modal', 'dialog', 'card'])('%s header and footer paints follow their parent corners', type => {

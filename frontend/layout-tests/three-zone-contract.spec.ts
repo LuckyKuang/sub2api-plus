@@ -60,7 +60,7 @@ test.describe('three-zone console shell', () => {
         radius: parseFloat(getComputedStyle(element).borderRadius),
         cards: [...element.querySelectorAll('.card')].map(card => parseFloat(getComputedStyle(card).borderRadius)),
       }))
-      expect(measured.radius).toBe(24)
+      expect(measured.radius).toBe(16)
       for (const card of measured.cards) expect(card).toBeLessThanOrEqual(measured.radius)
     }
 
@@ -111,14 +111,14 @@ test.describe('three-zone console shell', () => {
     const atMiddle = await measure()
     // The outermost clipping ancestor owns the whole curve, so every corner
     // agrees; the scrollport owns none of it.
-    expect(atMiddle.geometry.radius).toBe(24)
-    expect(atMiddle.geometry.corners.every(corner => corner === 24)).toBe(true)
+    expect(atMiddle.geometry.radius).toBe(16)
+    expect(atMiddle.geometry.corners.every(corner => corner === 16)).toBe(true)
     expect(atMiddle.scrollport).toBe(0)
 
     await wheelScroll(page, viewport, 5000)
     const atBottom = await measure()
-    expect(atBottom.geometry.radius).toBe(24)
-    expect(atBottom.geometry.corners.every(corner => corner === 24)).toBe(true)
+    expect(atBottom.geometry.radius).toBe(16)
+    expect(atBottom.geometry.corners.every(corner => corner === 16)).toBe(true)
     expect(atBottom.scrollport).toBe(0)
     // The header rail is a separate box and must not move with the body.
     if (atMiddle.railBefore && atBottom.railBefore) expect(atBottom.railBefore).toEqual(atMiddle.railBefore)
@@ -139,7 +139,7 @@ test.describe('three-zone console shell', () => {
     // Only the user console opts into a cap; the ratio and ceiling are its own.
     expect(Math.abs(pageWidth - Math.min(mainWidth * 0.94, 1600))).toBeLessThanOrEqual(1)
     for (const zone of [top, middle, bottom]) {
-      expect(await zone.evaluate(element => parseFloat(getComputedStyle(element).borderRadius))).toBe(24)
+      expect(await zone.evaluate(element => parseFloat(getComputedStyle(element).borderRadius))).toBe(16)
     }
   })
 
@@ -168,7 +168,7 @@ test.describe('three-zone console shell', () => {
       [...new Set(elements.map(element => parseFloat(getComputedStyle(element).borderRadius)))])
     expect(cardRadii.length).toBeGreaterThan(0)
     expect(cardRadii.every(radius => radius <= zoneRadius)).toBe(true)
-    expect(cardRadii.every(radius => [14, 20].includes(radius))).toBe(true)
+    expect(cardRadii.every(radius => [12, 16].includes(radius))).toBe(true)
     const inset = await (await visible(page, zoneTop)).evaluate(element => Math.round(element.getBoundingClientRect().left))
     expect(inset).toBe(12)
 

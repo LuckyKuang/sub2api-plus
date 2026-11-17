@@ -66,8 +66,9 @@ describe('lightweight shared navigation', () => {
   })
 
   it.each(['.workspace-tab', '.card-tab'])('%s uses the reference compact shape with transparent inactive paint', selector => {
-    expect(value(selector, 'border-radius')).toBe('9px')
-    expect(value(selector, 'min-height')).toBe('38px')
+    // Tabs are controls: control radius and the shared control height.
+    expect(value(selector, 'border-radius')).toBe('var(--surface-radius-control)')
+    expect(value(selector, 'min-height')).toBe('var(--control-height)')
     expect(value(selector, 'font-size')).toBe('13.5px')
     expect(value(selector, 'font-weight')).toBe('600')
     expect(value(selector, 'border')).toBe('1px solid transparent')
@@ -119,14 +120,16 @@ describe('lightweight shared navigation', () => {
 
   it('removes card paint from sidebar links and footer controls without removing active or keyboard feedback', () => {
     const selector = '.sidebar .sidebar-link'
-    expect(value(selector, 'border-radius')).toBe('8px')
+    expect(value(selector, 'border-radius')).toBe('var(--surface-radius-control)')
     expect(value(selector, 'border')).toBe('0')
     expect(value(selector, 'background-color')).toBe('transparent')
     expect(value(selector, 'background-image')).toBe('none')
     expect(value(selector, 'box-shadow')).toBe('none')
     expect(value(selector, 'color')).toBe('var(--surface-muted)')
     expect(value('.sidebar-link', 'min-height')).toBe('44px')
-    expect(value('.sidebar-nav .sidebar-link-active', 'background-color')).toBe('rgb(var(--console-accent-500, 20 184 166) / calc(.12 * var(--console-card-alpha, 1)))')
+    // The current page reads as the hover card, without an edge bar.
+    expect(value('.sidebar-nav .sidebar-link-active', 'background-color')).toBe('var(--surface-hover)')
+    expect(value('.sidebar-nav .sidebar-link-active', 'box-shadow')).toBe('none')
     expect(value('.sidebar-nav .sidebar-link-active', 'font-weight')).toBe('600')
     expect(value('.sidebar .sidebar-link:focus-visible', 'outline')).toContain('--console-accent-500')
     const container = document.createElement('aside')

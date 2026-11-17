@@ -16,7 +16,9 @@
               <input
                 v-model="searchQuery"
                 type="text"
-                :placeholder="t('admin.users.searchUsers')"
+                :placeholder="t('admin.users.searchUsersShort')"
+                :title="t('admin.users.searchUsers')"
+                :aria-label="t('admin.users.searchUsers')"
                 class="input pl-10"
                 @input="handleSearch"
               />

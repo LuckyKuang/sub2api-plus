@@ -135,7 +135,7 @@ describe('OpsOpenAITokenStatsCard', () => {
     await flushPromises()
     await wrapper.findAllComponents(SelectStub)[1].vm.$emit('update:modelValue', 'pagination')
     await flushPromises()
-    await wrapper.findAll('button')[1].trigger('click')
+    await wrapper.get('button[aria-label="pagination.next"]').trigger('click')
     await flushPromises()
     expect(mockGetOpenAITokenStats).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
 
@@ -229,9 +229,9 @@ describe('OpsOpenAITokenStatsCard', () => {
       })
     )
 
-    const buttons = wrapper.findAll('button')
-    expect(buttons.length).toBeGreaterThanOrEqual(2)
-    await buttons[1].trigger('click')
+    // Paging uses the shared numbered pager below the table.
+    expect(wrapper.find('.pagination-container').exists()).toBe(true)
+    await wrapper.get('button[aria-label="pagination.next"]').trigger('click')
     await flushPromises()
 
     expect(mockGetOpenAITokenStats).toHaveBeenCalledWith(

@@ -31,7 +31,7 @@
     <div class="card-body min-h-0 flex-1 !p-0">
       <div
         v-if="rows.length"
-        class="matrix-frame max-h-[min(42vh,420px)] max-w-full rounded-2xl surface-inset p-2"
+        class="matrix-frame max-h-[min(42vh,420px)] max-w-full rounded-xl surface-inset p-2"
         @wheel="onMatrixWheel"
       >
         <div ref="headerRailRef" class="matrix-header-rail" :style="headerRailStyle" @scroll="onHeaderScroll">

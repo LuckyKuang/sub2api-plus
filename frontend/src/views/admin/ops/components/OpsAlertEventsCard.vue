@@ -407,7 +407,7 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
       {{ t('admin.ops.alertEvents.empty') }}
     </div>
 
-    <div v-else class="overflow-hidden rounded-2xl border border-gray-200 dark:border-dark-700" :class="{ 'workspace-body': props.workspace, 'workspace-shell': props.workspace }">
+    <div v-else class="overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700" :class="{ 'workspace-body': props.workspace, 'workspace-shell': props.workspace }">
       <div class="record-table-scroll max-h-[600px] overflow-y-auto" :class="{ 'workspace-table-viewport': props.workspace }" @scroll="onScroll">
         <div v-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
           <div
@@ -417,10 +417,10 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
             @click="openDetail(row)"
           >
             <div class="flex flex-wrap items-center gap-2">
-              <span class="rounded-full px-2 py-1 text-[10px] font-bold" :class="severityBadgeClass(String(row.severity || ''))">
+              <span class="rounded-md px-2 py-1 text-[10px] font-bold" :class="severityBadgeClass(String(row.severity || ''))">
                 {{ row.severity || '-' }}
               </span>
-              <span class="inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold ring-1 ring-inset" :class="statusBadgeClass(row.status)">
+              <span class="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold ring-1 ring-inset" :class="statusBadgeClass(row.status)">
                 {{ formatStatusLabel(row.status) }}
               </span>
               <span class="ml-auto text-[11px] surface-muted">
@@ -494,10 +494,10 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
               </td>
               <td class="whitespace-nowrap px-4 py-3">
                 <div class="flex items-center gap-2">
-                  <span class="rounded-full px-2 py-1 text-[10px] font-bold" :class="severityBadgeClass(String(row.severity || ''))">
+                  <span class="rounded-md px-2 py-1 text-[10px] font-bold" :class="severityBadgeClass(String(row.severity || ''))">
                     {{ row.severity || '-' }}
                   </span>
-                  <span class="inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold ring-1 ring-inset" :class="statusBadgeClass(row.status)">
+                  <span class="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold ring-1 ring-inset" :class="statusBadgeClass(row.status)">
                     {{ formatStatusLabel(row.status) }}
                   </span>
                 </div>
@@ -578,10 +578,10 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
           <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div class="flex flex-wrap items-center gap-2">
-                <span class="inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold" :class="severityBadgeClass(String(selected.severity || ''))">
+                <span class="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold" :class="severityBadgeClass(String(selected.severity || ''))">
                   {{ selected.severity || '-' }}
                 </span>
-                <span class="inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold ring-1 ring-inset" :class="statusBadgeClass(selected.status)">
+                <span class="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold ring-1 ring-inset" :class="statusBadgeClass(selected.status)">
                   {{ formatStatusLabel(selected.status) }}
                 </span>
               </div>
@@ -684,7 +684,7 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
                 <tr v-for="it in history" :key="it.id" class="hover:surface-hover">
                   <td class="px-3 py-2 text-xs surface-muted">{{ formatDateTime(it.fired_at || it.created_at) }}</td>
                   <td class="px-3 py-2 text-xs">
-                    <span class="inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold ring-1 ring-inset" :class="statusBadgeClass(it.status)">
+                    <span class="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold ring-1 ring-inset" :class="statusBadgeClass(it.status)">
                       {{ formatStatusLabel(it.status) }}
                     </span>
                   </td>

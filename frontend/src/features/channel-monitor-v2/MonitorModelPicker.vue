@@ -118,6 +118,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.monitor-model-picker { position: fixed; z-index: 1100; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 18px; border-radius: 16px; box-shadow: 0 20px 60px rgb(0 0 0 / 18%); }
+.monitor-model-picker { position: fixed; z-index: 1100; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 18px; border-radius: var(--surface-radius); box-shadow: 0 20px 60px rgb(0 0 0 / 18%); }
 .monitor-picker-options { max-height: min(280px, 35dvh); overflow-y: auto; }
 </style>

@@ -3,7 +3,7 @@
     <div :class="[isFullscreen ? 'space-y-6 p-4 md:p-6' : 'workspace-page']">
       <div
         v-if="errorMessage"
-        class="workspace-fixed rounded-2xl bg-red-50/[0.15] p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400"
+        class="workspace-fixed rounded-xl bg-red-50/[0.15] p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400"
       >
         {{ errorMessage }}
       </div>

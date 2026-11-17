@@ -180,7 +180,7 @@
               <!-- Auto Recover Badge -->
               <span
                 v-if="plan.auto_recover"
-                class="inline-flex items-center rounded-full bg-emerald-100/[0.15] px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"
+                class="inline-flex items-center rounded-md bg-emerald-100/[0.15] px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"
               >
                 {{ t('admin.scheduledTests.autoRecover') }}
               </span>
@@ -371,7 +371,7 @@
                     <!-- Status Badge -->
                     <span
                       :class="[
-                        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                        'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
                         result.status === 'success'
                           ? 'bg-green-100/[0.15] text-green-700 dark:bg-green-500/20 dark:text-green-400'
                           : result.status === 'running'

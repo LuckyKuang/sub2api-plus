@@ -4,6 +4,8 @@ import GroupRateSummary from '../GroupRateSummary.vue'
 import { group, offer, rateQuote } from '@/components/channels/__tests__/catalogFixtures'
 
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string, params?: object) => key + (params ? JSON.stringify(params) : '') }) }))
+// The shared catalog list formats its quote time; keep the i18n runtime out.
+vi.mock('@/utils/format', () => ({ formatDateTime: (value: string) => value }))
 
 describe('API key group rates', () => {
   it('displays backend quotes by supplier and unit without multiplying them again', () => {

@@ -219,7 +219,7 @@
                is the only cue that the visible row is not the whole query. -->
           <span
             v-if="!showAdvanced && activeAdvancedCount > 0"
-            class="usage-filter-more-badge rounded-full bg-primary-500/15 px-1.5 py-0.5 text-xs font-semibold text-primary-700 dark:text-primary-300"
+            class="usage-filter-more-badge rounded-md bg-primary-500/15 px-1.5 py-0.5 text-xs font-semibold text-primary-700 dark:text-primary-300"
             data-testid="usage-advanced-filter-count"
           >{{ activeAdvancedCount }}</span>
           <Icon name="chevronDown" size="sm" :class="{ 'rotate-180': showAdvanced }" />

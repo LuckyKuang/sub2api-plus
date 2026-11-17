@@ -190,7 +190,7 @@ onUnmounted(() => { ++requestId; controller?.abort() })
 .catalog-platforms > span { flex: none; padding-top: 10px; }
 .catalog-platforms .segmented-control { flex: 1 1 0%; justify-content: flex-start; gap: 5px; }
 .catalog-platforms .segmented-option { flex: none; min-height: 30px; padding: 5px 12px; white-space: nowrap; }
-.catalog-grid :deep(.catalog-model-card) { min-height: 300px; padding: 22px; border-radius: 16px; }
+.catalog-grid :deep(.catalog-model-card) { min-height: 300px; padding: 22px; border-radius: var(--surface-radius); }
 .catalog-grid :deep(.catalog-model-card h3) { font-size: 16px; }
 .catalog-grid :deep(.catalog-model-card .font-mono.text-base) { font-size: 20px; }
 @container (min-width: 460px) { .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

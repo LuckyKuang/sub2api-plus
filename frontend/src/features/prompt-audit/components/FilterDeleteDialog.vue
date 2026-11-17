@@ -12,7 +12,7 @@
             class="cursor-pointer"
           >
             <input v-model="preset" type="radio" name="prompt-delete-range" :value="option.id" class="peer sr-only" :data-test="`range-preset-${option.id}`" @change="criteriaChanged" />
-            <span class="inline-flex items-center rounded-full border border-gray-200 px-3 py-1.5 text-xs font-medium transition-colors peer-checked:border-red-500 peer-checked:bg-red-50 peer-checked:text-red-700 peer-focus-visible:ring-2 peer-focus-visible:ring-red-500/30 dark:border-dark-600 dark:peer-checked:bg-red-950/40 dark:peer-checked:text-red-300 surface-muted">
+            <span class="inline-flex items-center rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium transition-colors peer-checked:border-red-500 peer-checked:bg-red-50 peer-checked:text-red-700 peer-focus-visible:ring-2 peer-focus-visible:ring-red-500/30 dark:border-dark-600 dark:peer-checked:bg-red-950/40 dark:peer-checked:text-red-300 surface-muted">
               {{ t(`admin.promptAudit.events.timePresets.${option.id}`) }}
             </span>
           </label>
@@ -58,7 +58,7 @@
         </label>
       </div>
 
-      <details class="rounded-xl border border-gray-200 px-4 py-3 dark:border-dark-700/60" data-test="more-conditions">
+      <details class="rounded-lg border border-gray-200 px-4 py-3 dark:border-dark-700/60" data-test="more-conditions">
         <summary class="cursor-pointer select-none text-xs font-medium surface-muted">{{ t('admin.promptAudit.events.moreConditions') }}</summary>
         <div class="mt-3 grid gap-3 sm:grid-cols-2">
           <label class="text-xs surface-muted">
@@ -80,7 +80,7 @@
         </div>
       </details>
 
-      <div v-if="preview" class="rounded-xl border border-red-200 bg-red-50/60 px-4 py-3 dark:border-red-900/60 dark:bg-red-950/20" data-test="delete-preview-result">
+      <div v-if="preview" class="rounded-lg border border-red-200 bg-red-50/60 px-4 py-3 dark:border-red-900/60 dark:bg-red-950/20" data-test="delete-preview-result">
         <p class="text-sm font-semibold text-red-700 dark:text-red-300">{{ t('admin.promptAudit.events.filterDeleteCount', { count: preview.matched_count }) }}</p>
         <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs surface-muted">
           <dt>{{ t('admin.promptAudit.events.snapshotMax') }}</dt>
@@ -92,7 +92,7 @@
         </dl>
         <p class="mt-2 rounded-lg bg-amber-50/[0.15] px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">{{ t('admin.promptAudit.events.filterDeleteWarning') }}</p>
       </div>
-      <p v-else class="rounded-xl border border-dashed border-gray-300 px-4 py-3 text-xs dark:border-dark-600 surface-muted" data-test="delete-preview-empty">
+      <p v-else class="rounded-lg border border-dashed border-gray-300 px-4 py-3 text-xs dark:border-dark-600 surface-muted" data-test="delete-preview-empty">
         {{ t('admin.promptAudit.events.filterDeleteNeedPreview') }}
       </p>
     </div>
