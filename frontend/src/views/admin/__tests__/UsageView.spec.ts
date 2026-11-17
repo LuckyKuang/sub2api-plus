@@ -67,13 +67,6 @@ const messages: Record<string, string> = {
   'common.no': 'No',
 }
 
-const formatLocalDate = (date: Date): string => {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
 vi.mock('@/api/admin', () => ({
   adminAPI: {
     usage: {
@@ -242,10 +235,10 @@ describe('admin UsageView route filters', () => {
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ user_id: 42 }), expect.anything())
     expect(wrapper.find('[data-test="user-filter-label"]').text()).toBe('route-user@test.com')
     expect(wrapper.get('[data-testid="usage-records-panel"]').isVisible()).toBe(true)
-    expect(wrapper.get('[data-testid="usage-charts-panel"]').isVisible()).toBe(false)
+    expect(wrapper.get('[data-testid="usage-range-conditions"]').isVisible()).toBe(true)
   })
 
-  it('retains historical filters, dates and pagination when changing the workspace tab', async () => {
+  it('retains filters, dates and pagination when changing the detail tab', async () => {
     const wrapper = mountRouteFilteredUsageView()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -256,39 +249,26 @@ describe('admin UsageView route filters', () => {
     const dates = wrapper.findComponent({ name: 'DateRangePicker' }).vm
     list.mockClear()
 
-    await wrapper.get('[role="tablist"] button:nth-child(2)').trigger('click')
-    expect(wrapper.get('[data-testid="usage-records-panel"]').isVisible()).toBe(true)
-    await wrapper.get('[role="tablist"] button:first-child').trigger('click')
-    expect(wrapper.get('[data-testid="usage-charts-panel"]').isVisible()).toBe(true)
+    await wrapper.get('[data-tab="ranking"]').trigger('click')
     expect(vm.filters.model).toBe('selected-model')
     expect(vm.pagination.page).toBe(3)
     expect(vm.startDate).toBe('2026-10-01')
     expect(vm.endDate).toBe('2026-10-10')
     expect(wrapper.findComponent({ name: 'DateRangePicker' }).vm).toBe(dates)
+    await wrapper.get('[data-tab="usage"]').trigger('click')
+    expect(vm.filters.model).toBe('selected-model')
     expect(list).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('unmounts real-time requests and restores the previous historical tab on returning to charts', async () => {
-    const live = { template: '<div data-testid="live-panel" />' }
-    const wrapper = mountRouteFilteredUsageView({ LiveRequestsPanel: live })
+  it('starts on the usage detail tab and no longer offers a live-requests tab', async () => {
+    const wrapper = mountRouteFilteredUsageView()
     await flushPromises()
-    await wrapper.get('[data-tab="ranking"]').trigger('click')
-    await flushPromises()
-    await wrapper.get('[data-tab="live"]').trigger('click')
-    expect(wrapper.find('[data-testid="live-panel"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="usage-chart-conditions"]').isVisible()).toBe(false)
 
-    await wrapper.get('[role="tablist"] button:first-child').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="live-panel"]').exists()).toBe(false)
-    expect((wrapper.vm as any).activeTab).toBe('ranking')
-    expect(wrapper.get('[data-testid="usage-chart-conditions"]').element.isConnected).toBe(true)
-    expect((wrapper.get('[data-testid="usage-chart-conditions"]').element as HTMLElement).style.display).not.toBe('none')
-    expect(wrapper.get('[data-testid="usage-chart-conditions"]').isVisible()).toBe(true)
-    expect(wrapper.get('[data-testid="usage-charts-panel"]').isVisible()).toBe(true)
-    await wrapper.get('[role="tablist"] button:nth-child(2)').trigger('click')
-    expect(wrapper.findAllComponents({ name: 'UserTokenRanking' })).toHaveLength(1)
+    expect((wrapper.vm as any).activeTab).toBe('usage')
+    expect(wrapper.find('[data-tab="live"]').exists()).toBe(false)
+    const tabs = wrapper.findAll('[data-testid="usage-detail-tab"]').map(tab => tab.attributes('data-tab'))
+    expect(tabs).toEqual(['usage', 'errors', 'ranking', 'disconnects'])
     wrapper.unmount()
   })
 
@@ -399,7 +379,7 @@ describe('admin UsageView native compaction filter', () => {
     vi.useRealTimers()
   })
 
-  it('propagates the filter to list/stats/model/snapshot requests and clears it on reset', async () => {
+  it('propagates the filter to list/stats/model requests and clears it on reset', async () => {
     const wrapper = mountRouteFilteredUsageView()
     vi.advanceTimersByTime(120)
     await flushPromises()
@@ -407,7 +387,6 @@ describe('admin UsageView native compaction filter', () => {
     list.mockClear()
     getStats.mockClear()
     getModelStats.mockClear()
-    getSnapshotV2.mockClear()
 
     ;(wrapper.vm as any).filters.native_compaction_v2 = true
     ;(wrapper.vm as any).applyFilters()
@@ -420,12 +399,10 @@ describe('admin UsageView native compaction filter', () => {
     )
     expect(getStats).toHaveBeenCalledWith(expect.objectContaining({ native_compaction_v2: true }))
     expect(getModelStats).toHaveBeenCalledWith(expect.objectContaining({ native_compaction_v2: true }))
-    expect(getSnapshotV2).toHaveBeenCalledWith(expect.objectContaining({ native_compaction_v2: true }))
 
     list.mockClear()
     getStats.mockClear()
     getModelStats.mockClear()
-    getSnapshotV2.mockClear()
 
     ;(wrapper.vm as any).resetFilters()
     await flushPromises()
@@ -438,7 +415,6 @@ describe('admin UsageView native compaction filter', () => {
     )
     expect(getStats).toHaveBeenCalledWith(expect.objectContaining({ native_compaction_v2: null }))
     expect(getModelStats).toHaveBeenCalledWith(expect.objectContaining({ native_compaction_v2: null }))
-    expect(getSnapshotV2).toHaveBeenCalledWith(expect.objectContaining({ native_compaction_v2: null }))
   })
 })
 
@@ -508,63 +484,6 @@ describe('admin UsageView distribution metric toggles', () => {
     await flushPromises()
     expect((wrapper.vm as any).requestedModelStats).toEqual([{ model: 'B', total_tokens: 20 }])
   })
-
-  it('keeps model and group metric toggles independent without refetching chart data', async () => {
-    const wrapper = mount(UsageView, {
-      global: {
-        stubs: {
-          AppLayout: AppLayoutStub,
-          UsageStatsCards: true,
-          UsageFilters: UsageFiltersStub,
-          UsageTable: true,
-          UsageExportProgress: true,
-          UsageCleanupDialog: true,
-          UserBalanceHistoryModal: true,
-          Pagination: true,
-          Select: true,
-          DateRangePicker: true,
-          Icon: true,
-          TokenUsageTrend: true,
-          ModelDistributionChart: ModelDistributionChartStub,
-          GroupDistributionChart: GroupDistributionChartStub,
-          UserTokenRanking: true,
-        },
-      },
-    })
-
-    vi.advanceTimersByTime(120)
-    await flushPromises()
-
-    expect(getSnapshotV2).toHaveBeenCalledTimes(1)
-    const now = new Date()
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-    expect(getSnapshotV2).toHaveBeenCalledWith(expect.objectContaining({
-      start_date: formatLocalDate(yesterday),
-      end_date: formatLocalDate(now),
-      granularity: 'hour'
-    }))
-
-    const modelChart = wrapper.find('[data-test="model-chart"]')
-    const groupChart = wrapper.find('[data-test="group-chart"]')
-
-    expect(modelChart.find('.metric').text()).toBe('tokens')
-    expect(groupChart.find('.metric').text()).toBe('tokens')
-
-    await modelChart.find('.switch-metric').trigger('click')
-    await flushPromises()
-
-    expect(modelChart.find('.metric').text()).toBe('actual_cost')
-    expect(groupChart.find('.metric').text()).toBe('tokens')
-    expect(getSnapshotV2).toHaveBeenCalledTimes(1)
-
-    await groupChart.find('.switch-metric').trigger('click')
-    await flushPromises()
-
-    expect(modelChart.find('.metric').text()).toBe('actual_cost')
-    expect(groupChart.find('.metric').text()).toBe('actual_cost')
-    expect(getSnapshotV2).toHaveBeenCalledTimes(1)
-  })
-})
 
 describe('admin UsageView column preferences', () => {
   // Approved requirement: service tier starts hidden; reasoning is model metadata,

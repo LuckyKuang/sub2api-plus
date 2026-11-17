@@ -129,11 +129,46 @@ export interface CatalogGroup extends Omit<ModelPlazaGroup, 'models'> {
 export interface ChannelCatalog {
   groups: CatalogGroup[]
   user_rate_status: 'loaded' | 'unavailable' | 'not_requested'
+  /** Paged responses only: totals and facets of the whole filtered catalog. */
+  models_total?: number
+  categories?: Record<string, number>
+  platforms?: Record<string, number>
+  page?: number
+  page_size?: number
 }
 
-export async function getCatalog(options?: { signal?: AbortSignal }): Promise<ChannelCatalog> {
+export interface CatalogPageParams {
+  page?: number
+  pageSize?: number
+  category?: 'group' | 'composite'
+  platform?: string
+  search?: string
+}
+
+// One page of display cards: the server picks the page before resolving prices,
+// so the response only carries the offers it renders.
+export async function getCatalog(options?: CatalogPageParams & { signal?: AbortSignal }): Promise<ChannelCatalog> {
+  const params: Record<string, string | number> = { view: 'catalog' }
+  if (options?.page) params.page = options.page
+  if (options?.pageSize) params.page_size = options.pageSize
+  if (options?.category) params.category = options.category
+  if (options?.platform) params.platform = options.platform
+  if (options?.search) params.search = options.search
   const { data } = await apiClient.get<ChannelCatalog>('/channels/available', {
-    params: { view: 'catalog' },
+    params,
+    signal: options?.signal
+  })
+  return data
+}
+
+// Card details are a separate, single-model query: every group quote for that
+// model, resolved when the dialog opens rather than with the list.
+export async function getCatalogDetail(
+  model: { category: string; platform: string; name: string },
+  options?: { signal?: AbortSignal }
+): Promise<ChannelCatalog> {
+  const { data } = await apiClient.get<ChannelCatalog>('/channels/available', {
+    params: { view: 'catalog', category: model.category, platform: model.platform, model: model.name },
     signal: options?.signal
   })
   return data
@@ -148,6 +183,6 @@ export async function getKeyQuotes(options?: { signal?: AbortSignal }): Promise<
   return data
 }
 
-export const userChannelsAPI = { getAvailable, getCatalog, getKeyQuotes }
+export const userChannelsAPI = { getAvailable, getCatalog, getCatalogDetail, getKeyQuotes }
 
 export default userChannelsAPI

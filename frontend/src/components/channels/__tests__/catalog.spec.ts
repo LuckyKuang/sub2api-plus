@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { catalogModels, catalogRange, catalogMoney, defaultCatalogFilters, effectiveRate, normalizeCatalogFilters, rateSource, visibleModels } from '../catalog'
+import { catalogModels, catalogRange, catalogMoney, effectiveRate, rateSource } from '../catalog'
 import { group, offer, pricing, rateQuote } from './catalogFixtures'
 
 describe('model-centric available catalog', () => {
@@ -76,23 +76,6 @@ describe('model-centric available catalog', () => {
     expect(catalogModels(groups)[0]).toMatchObject({ tiered: 'some', dynamic: 'some' })
     expect(catalogModels(groups.slice(0, 1))[0]).toMatchObject({ tiered: 'all', dynamic: 'all' })
     expect(catalogModels(groups.slice(1))[0]).toMatchObject({ tiered: 'none', dynamic: 'none' })
-  })
-  it('filters only models and platforms without trimming the quote set', () => {
-    const models = catalogModels([group(1, [offer('Keep')]), group(2, [offer('keep'), offer('Other', { platform: 'anthropic' })])])
-    const filters = { ...defaultCatalogFilters(), search: '  kEEp  ' }
-    const result = visibleModels(models, filters)
-    expect(result).toHaveLength(1)
-    expect(result[0]!.quotes).toHaveLength(2)
-    filters.search = 'Source channel'
-    expect(visibleModels(models, filters)).toEqual([])
-    filters.platform = 'removed'
-    normalizeCatalogFilters(models, filters)
-    expect(filters.platform).toBe('')
-    expect(filters.search).toBe('Source channel')
-  })
-  it('sorts single-unit cards by minimum effective price and leaves mixed units separate', () => {
-    const models = catalogModels([group(1, [offer('paid'), offer('unknown', { pricing: null, price_status: 'unknown' }), offer('zero', { pricing: pricing(0) }), offer('mixed')]), group(2, [offer('mixed', { billing_unit: 'image', billing_mode: 'image', pricing: { ...pricing(), per_request_price: 0 } })])])
-    expect(visibleModels(models, { ...defaultCatalogFilters(), sort: 'price' }).map(m => m.name)).toEqual(['zero', 'paid', 'unknown', 'mixed'])
   })
 })
 

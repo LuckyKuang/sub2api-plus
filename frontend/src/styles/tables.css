@@ -17,6 +17,12 @@
   border-radius: var(--surface-radius-card);
 }
 
+/* Column labels never wrap: a wrapped header grows one header cell taller than
+   the rest and makes the field it names harder to read. */
+:root table > :is(thead, tfoot) > tr > :is(th, td) {
+  white-space: nowrap;
+}
+
 table.record-table {
   /* Card fills and state tints keep a fixed strength so records stay
      distinct even when the user makes the enclosing cards fully transparent. */

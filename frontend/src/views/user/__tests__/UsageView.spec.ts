@@ -10,7 +10,6 @@ import Select, { type SelectOption } from '@/components/common/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import RefreshControl from '@/components/common/RefreshControl.vue'
-import LiveRequestsPanel from '@/components/usage/LiveRequestsPanel.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
 import UserErrorRequestsTable from '@/components/user/UserErrorRequestsTable.vue'
 
@@ -179,7 +178,6 @@ function mountUsageView() {
         Icon: true,
         UsageTable: { ...chartStub, props: { columns: Array, showServiceTier: Boolean, modelMetadata: Boolean } },
         UserErrorRequestsTable: { ...chartStub, props: { workspace: Boolean } },
-        LiveRequestsPanel: { template: '<div data-testid="live-panel" />', props: { mode: String, workspace: Boolean } },
       },
     },
   })
@@ -241,7 +239,7 @@ describe('user UsageView', () => {
     vm.toggleColumn('model')
     const dates = wrapper.findComponent(DateRangePicker).vm
 
-    for (const tab of ['inspection.live', 'Error records', 'Usage records']) {
+    for (const tab of ['Error records', 'Usage records']) {
       await wrapper.findAll('.usage-detail-tabs button').find(button => button.text() === tab)!.trigger('click')
       await flushPromises()
       expect(wrapper.get('[data-testid="usage-records-panel"]').isVisible()).toBe(true)
@@ -255,31 +253,31 @@ describe('user UsageView', () => {
     expectNoStatisticsRequests()
   })
 
-  it('shows only the selected live, historical or error list with appropriate date controls', async () => {
+  it('shows only the selected historical or error list with appropriate date controls', async () => {
     const wrapper = mountUsageView()
     await flushPromises()
     expect(wrapper.get('.usage-detail-tabs').classes()).not.toContain('border-b')
     expect(wrapper.findAll('[role="tablist"]')).toHaveLength(1)
-    expect(wrapper.findAll('.usage-detail-tabs [role="tab"]')).toHaveLength(3)
+    expect(wrapper.findAll('.usage-detail-tabs [role="tab"]')).toHaveLength(2)
+    expect(wrapper.find('[data-tab="live"], [data-testid="live-panel"]').exists()).toBe(false)
     for (let cycle = 0; cycle < 2; cycle++) {
-      for (const tab of ['Error records', 'inspection.live', 'Usage records']) {
+      for (const tab of ['Error records', 'Usage records']) {
         await wrapper.findAll('.usage-detail-tabs button').find(button => button.text() === tab)!.trigger('click')
         await flushPromises()
         expect(wrapper.findAll('.usage-detail-tabs [aria-selected="true"]').map(button => button.text())).toEqual([tab])
         expect(wrapper.findComponent(UsageTable).exists()).toBe(tab === 'Usage records')
         expect(wrapper.findComponent(UserErrorRequestsTable).exists()).toBe(tab === 'Error records')
-        expect(wrapper.find('[data-testid="live-panel"]').exists()).toBe(tab === 'inspection.live')
-        expect(wrapper.get('.usage-date').isVisible()).toBe(tab !== 'inspection.live')
-        expect(wrapper.findAll('[data-testid="usage-column-settings"]')).toHaveLength(tab === 'inspection.live' ? 0 : 1)
+        expect(wrapper.get('.usage-date').isVisible()).toBe(true)
+        expect(wrapper.findAll('[data-testid="usage-column-settings"]')).toHaveLength(1)
       }
     }
     expect(wrapper.find('[data-testid="usage-charts-panel"]').exists()).toBe(false)
     expectNoStatisticsRequests()
   })
 
-  // UI audit requirement: history uses its existing Refresh/Reset actions;
-  // remove the extra auto-refresh row and polling, while live mode keeps its own controls.
-  it('refreshes history only on demand and leaves live mode to its existing panel', async () => {
+  // UI audit requirement: history uses its existing Refresh/Reset actions and
+  // never adds an extra auto-refresh row or polling timer.
+  it('refreshes history only on demand', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] })
     const wrapper = mountUsageView()
     try {
@@ -302,10 +300,6 @@ describe('user UsageView', () => {
       expect(query).toHaveBeenCalledTimes(1)
       expect(query).toHaveBeenCalledWith(expect.objectContaining({ snapshot_max_id: 'new' }), expect.anything())
       expect((wrapper.vm as any).usageLogs.map((row: { id: number }) => row.id)).toEqual([2, 1])
-
-      await wrapper.findAll('.usage-detail-tabs button').find(button => button.text() === 'inspection.live')!.trigger('click')
-      expect(wrapper.findComponent(LiveRequestsPanel).props()).toMatchObject({ mode: 'user', workspace: true })
-      expect(wrapper.findComponent(UsageTable).exists()).toBe(false)
     } finally {
       wrapper.unmount()
       vi.useRealTimers()

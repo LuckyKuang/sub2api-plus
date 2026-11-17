@@ -113,8 +113,6 @@ async function mockPages(page: Page) {
     let data: unknown = { items: [], total: 0, enabled: false }
     if (p === '/api/v1/admin/usage') data = { items: rows, total: rows.length, pages: 1, page: 1, page_size: 20 }
     else if (p === '/api/v1/admin/usage/stats') data = { total_requests: 4, total_input_tokens: 4800, total_output_tokens: 1200, total_tokens: 6000, total_actual_cost: .12 }
-    else if (p === '/api/v1/admin/usage/live') data = { server_now: '2026-10-29T10:00:05Z', window_seconds: 300, limit: 200, truncated: false, poll_after_seconds: 30,
-      items: rows.map(r => ({ ...r, id: `live-${r.id}`, version: 1, key_name: 'Hover key', group_name: 'Hover group', status: 'completed', started_at: '2026-10-29T10:00:00Z', updated_at: '2026-10-29T10:00:01Z', finished_at: '2026-10-29T10:00:01Z' })) }
     else if (p === '/api/v1/admin/dashboard/models') data = { models: [] }
     else if (p === '/api/v1/admin/dashboard/snapshot-v2') data = { trend: [], models: [], groups: [] }
     else if (p === '/api/v1/admin/ip-access-control/failure-states') data = { total: 4, page: 1, page_size: 20, items: rows.map(r => ({ normalized_ip: `203.0.113.${r.id}`, failure_count: 2, failure_threshold: 8, window_started_at: '2026-10-29T10:00:00Z', last_failed_at: '2026-10-29T10:00:02Z', window_expires_at: '2026-10-29T10:15:00Z', active_block_rule: false, runtime_enforcement_enabled: false, suppressed_by_allow_rule: false, emergency_allowlisted: false, effectively_blocked: false, as_of: '2026-10-29T10:00:05Z' })) }
@@ -130,16 +128,15 @@ test('reported IP and usage rows share frozen-column card paint', async ({ page 
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto(`/layout-tests/index.html?view=admin-layout&ipAccessControl=1&theme=${theme}&locale=${locale}`)
   await page.locator('[aria-controls=ip-panel-failures]').click()
-  for (const target of ['ip', 'usage', 'live']) {
+  for (const target of ['ip', 'usage']) {
     if (target === 'usage') {
       await page.goto(`/layout-tests/index.html?view=admin-layout&usage=1&theme=${theme}&locale=${locale}`)
       await page.locator('[data-tab=usage]').click()
     }
-    if (target === 'live') await page.locator('[data-tab=live]').click()
     const row = page.locator('table.record-table tbody tr[data-row-id]').filter({ visible: true }).first()
     await expect(row).toBeVisible()
     await page.mouse.move(0, 0)
-    const frozen = target === 'ip' ? ['normalized_ip', 'actions'] : target === 'usage' ? ['user', 'account'] : ['started_at']
+    const frozen = target === 'ip' ? ['normalized_ip', 'actions'] : ['user', 'account']
     await assertSharedPaint(page, row, frozen, 'rest')
     await row.locator('td').first().hover()
     await assertSharedPaint(page, row, frozen, 'tinted')

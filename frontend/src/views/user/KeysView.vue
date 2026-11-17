@@ -112,8 +112,8 @@
           :selection-label="(key: ApiKey) => t('keys.bulkEdit.selectKey', { name: key.name })"
           @update:selected-keys="handleSelectionChange"
           :server-side-sort="true"
-          default-sort-key="created_at"
-          default-sort-order="desc"
+          default-sort-key="name"
+          default-sort-order="asc"
           @sort="handleSort"
         >
           <template #cell-id="{ value }">
@@ -1388,8 +1388,8 @@ const pagination = ref({
   pages: 0
 })
 const sortState = ref({
-  sort_by: 'created_at',
-  sort_order: 'desc' as 'asc' | 'desc'
+  sort_by: 'name',
+  sort_order: 'asc' as 'asc' | 'desc'
 })
 
 // Filter state

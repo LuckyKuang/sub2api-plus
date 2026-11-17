@@ -195,6 +195,9 @@
 .announcement-dropdown-list {
   display: flex;
   min-height: 0;
+  /* Keep the panel to roughly a third of its former height: a few rows stay
+     visible and the rest scrolls inside the list. */
+  max-height: min(32dvh, 260px);
   flex-direction: column;
   gap: 2px;
   padding: 6px;

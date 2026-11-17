@@ -26,7 +26,6 @@ func registerAdminSupportRoutes(admin *gin.RouterGroup, h *handler.Handlers, set
 	support.GET("/groups/:id/native-access", h.APIKey.GetNativeAccess)
 	support.GET("/channels/available", h.AvailableChannel.List)
 	support.GET("/usage", h.Usage.List)
-	support.GET("/usage/live", h.Usage.LiveRequests)
 	support.GET("/usage/errors", h.Usage.ListErrors)
 	support.GET("/usage/errors/:id", h.Usage.GetErrorDetail)
 	support.GET("/usage/:id", h.Usage.GetByID)

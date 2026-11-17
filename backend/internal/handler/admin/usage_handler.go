@@ -21,55 +21,11 @@ import (
 
 // UsageHandler handles admin usage-related requests
 type UsageHandler struct {
-	liveRequests   *service.LiveRequestService
 	usageService   *service.UsageService
 	apiKeyService  *service.APIKeyService
 	adminService   service.AdminService
 	cleanupService *service.UsageCleanupService
 	disconnectRisk *service.ClientDisconnectRiskService
-}
-
-func (h *UsageHandler) SetLiveRequests(s *service.LiveRequestService) {
-	h.liveRequests = s
-	if h.usageService != nil {
-		s.SetUsageReader(h.usageService)
-	}
-}
-
-func (h *UsageHandler) LiveRequests(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Second)
-	defer cancel()
-	data, err := h.liveRequests.List(ctx, 0)
-	if err != nil {
-		response.Error(c, http.StatusServiceUnavailable, "Live requests unavailable")
-		return
-	}
-	if h.adminService != nil && len(data.Items) > 0 {
-		seen := map[int64]bool{}
-		var ids []int64
-		for _, item := range data.Items {
-			if !seen[item.UserID] {
-				seen[item.UserID] = true
-				ids = append(ids, item.UserID)
-			}
-		}
-		includeSubscriptions := false
-		users, _, lookupErr := h.adminService.ListUsers(ctx, 1, len(ids), service.UserListFilters{IDs: ids, IdentityOnly: true, IncludeDeleted: true, IncludeSubscriptions: &includeSubscriptions}, "id", "asc")
-		if lookupErr != nil {
-			logger.LegacyPrintf("handler.admin.usage", "live request user identities unavailable: %v", lookupErr)
-		}
-		if lookupErr == nil {
-			emails := map[int64]string{}
-			for _, user := range users {
-				emails[user.ID] = user.Email
-			}
-			for index := range data.Items {
-				data.Items[index].UserEmail = emails[data.Items[index].UserID]
-			}
-		}
-	}
-	c.Header("Cache-Control", "no-store")
-	response.Success(c, data)
 }
 
 // GetByID uses the admin route's authentication and the admin-only DTO projection.

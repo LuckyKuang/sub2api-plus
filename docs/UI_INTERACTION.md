@@ -69,25 +69,18 @@ layouts keep their natural vertical flow.
 Operations separates monitoring, alert events and system logs; risk control
 separates configuration and audit records; IP access control separates automatic
 protection, trusted proxies, login failures and rules. Existing rule links activate
-the rules tab. Admin usage separates chart statistics and usage lists, retaining
-its live/history/error/ranking subviews. Administrator live, history and error
-lists use separate rounded control and table surfaces, with independent fixed
-bottom pagination cards for live, history and errors even when empty. The shared
-16px desktop card gaps do not change administrator shell insets, pinned columns
-or horizontal scrolling. Administrator live requests paginate the bounded
-observation window using the shared page-size preference (20 by default);
-filters and exports continue to cover the complete window. Browsing later pages
-holds insertions behind the existing new-record notice. Short desktop windows
-keep the administrator live empty-state icon and complete message readable above
-the fixed footer, using a compact horizontal layout. User usage opens directly to historical
-records and provides live/history/error lists only; statistics remain on the
-dashboard. User usage does not fetch aggregate statistics or show chart granularity.
-Its history view has only the existing manual Refresh and Reset actions, without
-an automatic-refresh row, pending-record row or background history polling.
-Live requests retain their existing automatic-refresh controls and lifecycle.
-The user view paginates its real recent observation window (at most 200 rows),
-20 per page, with a separate fixed bottom pagination card. Filters and exports
-still cover the complete observation window. History and errors also retain
+the rules tab. Admin usage is the usage-list workspace, retaining its
+history/error/ranking/client-disconnect subviews; the chart statistics that used
+to share the page now live on the dashboard, whose cards scroll vertically in one
+column. Administrator history and error lists use separate rounded control and
+table surfaces, with independent fixed bottom pagination cards for history and
+errors even when empty. The shared 16px desktop card gaps do not change
+administrator shell insets, pinned columns or horizontal scrolling. User usage
+opens directly to historical records and provides history/error lists only;
+statistics remain on the dashboard. User usage does not fetch aggregate
+statistics or show chart granularity. Its history view has only the existing
+manual Refresh and Reset actions, without an automatic-refresh row,
+pending-record row or background history polling. History and errors retain
 their bottom pagination card for empty results. Controls, scrolling content and
 footer cards have 16px gaps. User history places reasoning and the three-state
 request Fast indicator below the model name, removing the separate reasoning
@@ -538,26 +531,6 @@ script always agrees with the response policy. Fingerprinted asset caching is un
 Refresh icons spin only during I/O. Right overlays use a 200ms transform; figures
 use tabular digits. Overview charts disable replay animation.
 `prefers-reduced-motion` disables console transitions and animations.
-
-## Live observation API and limitations
-
-`GET /usage/live`, `/admin/usage/live` and the support read route return `items`,
-`server_now`, `window_seconds` (300), `limit` (200), `truncated` and
-`poll_after_seconds`, with `Cache-Control: no-store`. Unavailable Redis returns
-503 instead of an invented empty success.
-
-The gateway attaches local metadata first and publishes externally only after
-the existing security audit returns. Observation does not change audit, identity,
-admission, scheduling, retry or billing decisions. Writes are best effort, bounded
-to 32 concurrent writes and 200ms each. Failures emit sampled structured diagnostics.
-Values are snapshotted before asynchronous publication; monotonically increasing
-versions stop older heartbeats from replacing terminal states. Bodies and
-credentials are never stored.
-
-Records expire after 360s without renewal. Indexes retain at most 2000 global / 200
-per user; global eviction also removes payloads. Reads return at most 200 recent
-observations. `truncated` conservatively reports reaching the limit. Capacity loss
-can occur. Unrenewed processing observations become unknown after 45s, never failed.
 
 Each HTTP request and audited Responses WS turn receives a server UUID. Failover
 attempts keep the logical turn ID even if the proxy restarts turn numbering. Live

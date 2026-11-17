@@ -46,7 +46,6 @@ type userGroupStat struct {
 
 // UsageHandler handles usage-related requests
 type UsageHandler struct {
-	liveRequests   *service.LiveRequestService
 	usageService   *service.UsageService
 	apiKeyService  *service.APIKeyService
 	opsService     *service.OpsService

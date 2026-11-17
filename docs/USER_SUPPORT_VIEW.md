@@ -46,9 +46,9 @@ API 密钥沿用用户 DTO，返回完整密钥、完整 IP 白名单/黑名单�
 
 ## Request inspection reads
 
-The allowlisted read-only routes include `/usage/live` and existing `/usage/:id`,
-rewritten to `/admin/support/users/:user_id/usage/...`. Live reads use the support
-read subject, user field projection and user-error visibility setting. No gateway
-request is created by inspecting a record. Target changes invalidate pending
+The allowlisted read-only routes include `/usage/:id`, rewritten to
+`/admin/support/users/:user_id/usage/...`. Reads use the support read subject,
+user field projection and user-error visibility setting. No gateway request is
+created by inspecting a record. Target changes invalidate pending
 responses and remount pages; column preferences include the target ID. Layout
 classification resolves support resource aliases through the personal-route map.

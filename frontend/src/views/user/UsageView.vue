@@ -1,7 +1,7 @@
 <template>
   <AppLayout appearance="user" workspace>
     <div class="workspace-page usage-workspace">
-      <div v-show="activeTab !== 'live'" class="card workspace-fixed usage-date p-4">
+      <div class="card workspace-fixed usage-date p-4">
         <div class="filter-bar">
           <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
           <div class="filter-field filter-field--date">
@@ -17,7 +17,6 @@
       <section class="workspace-body usage-records-workspace" data-testid="usage-records-panel">
       <div class="card workspace-fixed overflow-hidden">
       <div class="usage-detail-tabs card-tabs workspace-fixed" role="tablist" :aria-label="t('usage.tabs.usage')">
-        <button type="button" role="tab" class="card-tab" :aria-selected="activeTab === 'live'" @click="selectRecordTab('live')">{{ t('inspection.live') }}</button>
         <button type="button" role="tab" class="card-tab" :aria-selected="activeTab === 'usage'" @click="selectRecordTab('usage')">
           {{ t('usage.tabs.usage') }}
         </button>
@@ -26,7 +25,7 @@
         </button>
       </div>
 
-      <div v-if="activeTab !== 'live'" class="usage-workspace-filters workspace-fixed border-b border-gray-100 p-4 dark:border-dark-700/50">
+      <div class="usage-workspace-filters workspace-fixed border-b border-gray-100 p-4 dark:border-dark-700/50">
         <div class="usage-filter-layout flex flex-wrap items-end justify-between gap-4">
           <div v-if="activeTab === 'errors'" class="usage-filter-fields filter-bar flex-1">
             <div class="filter-field">
@@ -165,7 +164,6 @@
 
       </div>
 
-      <LiveRequestsPanel workspace v-else-if="activeTab === 'live'" mode="user" />
       <UserErrorRequestsTable
         workspace
         v-else-if="errorViewEnabled"
@@ -217,7 +215,6 @@ import type { Column } from '@/components/common/types'
 import { useColumnPreferenceKey } from '@/composables/useColumnPreferenceKey'
 import { useAnchoredDropdown } from '@/composables/useAnchoredDropdown'
 import { useUsageSnapshot } from '@/composables/useUsageSnapshot'
-import LiveRequestsPanel from '@/components/usage/LiveRequestsPanel.vue'
 import { COMMON_ERROR_STATUS_CODES } from '@/utils/errorBadges'
 
 const { t } = useI18n()
@@ -292,8 +289,8 @@ const getLast24HoursRangeDates = () => {
 const defaultRange = getLast24HoursRangeDates()
 const startDate = ref(defaultRange.start)
 const endDate = ref(defaultRange.end)
-const activeTab = ref<'usage' | 'errors' | 'live'>('usage')
-function selectRecordTab(tab: 'usage' | 'live') {
+const activeTab = ref<'usage' | 'errors'>('usage')
+function selectRecordTab(tab: 'usage') {
   activeTab.value = tab
 }
 const errorViewEnabled = computed(() => appStore.cachedPublicSettings?.allow_user_view_error_requests ?? false)

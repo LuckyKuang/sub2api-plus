@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick, reactive } from 'vue'
 import AvailableChannelsView from '../AvailableChannelsView.vue'
 import CatalogPriceDetails from '@/components/channels/CatalogPriceDetails.vue'
@@ -10,13 +10,13 @@ import { setAdminSupportContext } from '@/utils/adminSupportContext'
 import { clearAvailableChannelCatalogCache } from '@/utils/availableChannelCatalogCache'
 
 const mocks = vi.hoisted(() => ({
-  getCatalog: vi.fn(), copy: vi.fn(), put: vi.fn(),
+  getCatalog: vi.fn(), getCatalogDetail: vi.fn(), copy: vi.fn(), put: vi.fn(),
   app: { availableChannelsLayout: 'card' },
   auth: { user: { id: 1 }, isAuthenticated: true } as { user: { id: number } | null; isAuthenticated: boolean },
   support: { target: null } as { target: { id: number } | null },
   locale: { value: 'en' }
 }))
-vi.mock('@/api/channels', () => ({ default: { getCatalog: mocks.getCatalog } }))
+vi.mock('@/api/channels', () => ({ default: { getCatalog: mocks.getCatalog, getCatalogDetail: mocks.getCatalogDetail } }))
 vi.mock('@/api/client', () => ({ apiClient: { put: mocks.put } }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => mocks.auth }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => mocks.app }))
@@ -38,6 +38,16 @@ beforeEach(() => {
   mocks.locale = reactive({ value: 'en' })
   mocks.app = reactive({ availableChannelsLayout: 'card' })
   mocks.getCatalog.mockResolvedValue(data())
+  // The detail dialog asks for one model on its own; answer it with the same
+  // fixture the list just returned so quote assertions stay about that model.
+  mocks.getCatalogDetail.mockImplementation(async (query: { name: string }) => {
+    const result = await (mocks.getCatalog.mock.results.at(-1)?.value ?? Promise.resolve(data()))
+    const catalog = (result ?? data()) as ChannelCatalog
+    const groups = catalog.groups
+      .map(group => ({ ...group, models: group.models.filter(model => model.name.toLowerCase() === query.name.toLowerCase()) }))
+      .filter(group => group.models.length)
+    return { ...catalog, groups }
+  })
 })
 afterEach(() => {
   wrappers.splice(0).forEach(w => w.unmount())
@@ -64,35 +74,53 @@ describe('available channels user page', () => {
     expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
   })
 
-  it('defaults to cards and changes to the site list without another catalog read or losing search', async () => {
+  it('defaults to cards, changes to the site list without another read and keeps the search term', async () => {
     const w = page(); await flushPromises()
     expect(w.findAll('.catalog-model-card')).toHaveLength(3)
-    await w.get('input[type="search"]').setValue('second')
     mocks.app.availableChannelsLayout = 'list'
     await nextTick()
     expect(w.find('.catalog-model-card').exists()).toBe(false)
-    expect(w.get('[data-testid="catalog-model-list"]').findAll('h3').map(title => title.text())).toEqual(['second'])
+    expect(w.get('[data-testid="catalog-model-list"]').findAll('h3').map(title => title.text())).toEqual(['claude', 'first', 'second'])
     await w.get('[data-testid="catalog-model-list"] .catalog-list-open').trigger('click')
-    expect(w.getComponent(CatalogPriceDetails).props('model').name).toBe('second')
+    await flushPromises()
+    expect(w.getComponent(CatalogPriceDetails).props('model').name).toBe('claude')
     expect(mocks.getCatalog).toHaveBeenCalledTimes(1)
+    expect(mocks.getCatalogDetail).toHaveBeenCalledTimes(1)
     mocks.app.availableChannelsLayout = 'card'
     await nextTick()
-    expect(w.findAll('.catalog-model-card')).toHaveLength(1)
-    expect((w.get('input[type="search"]').element as HTMLInputElement).value).toBe('second')
-    expect(w.getComponent(CatalogPriceDetails).props('model').name).toBe('second')
+    expect(w.findAll('.catalog-model-card')).toHaveLength(3)
+    expect(w.getComponent(CatalogPriceDetails).props('model').name).toBe('claude')
   })
 
-  it('uses the existing sorting and platform filters in list mode', async () => {
+  it('queries one page of nine cards and sends the platform and paging filters to the server', async () => {
     mocks.app.availableChannelsLayout = 'list'
-    mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('z-cheap', { pricing: pricing(0) }), offer('a-costly')]), group(2, [offer('other-platform', { platform: 'anthropic' })])], user_rate_status: 'loaded' })
+    mocks.getCatalog.mockResolvedValueOnce({
+      groups: [group(1, [offer('a-model')])],
+      user_rate_status: 'loaded',
+      models_total: 12,
+      categories: { group: 12 },
+      platforms: { openai: 10, anthropic: 2 },
+      page: 1,
+      page_size: 9,
+    })
     const w = page(); await flushPromises()
-    const platform = w.findAll('button').find(button => button.text().includes('openai'))!
+    expect(mocks.getCatalog.mock.calls[0]![0]).toMatchObject({ page: 1, pageSize: 9, category: 'group' })
+    expect(w.get('[data-testid="catalog-model-list"]').findAll('h3').map(title => title.text())).toEqual(['a-model'])
+
+    mocks.getCatalog.mockResolvedValueOnce({
+      groups: [group(2, [offer('anthropic-model', { platform: 'anthropic' })])],
+      user_rate_status: 'loaded',
+      models_total: 2,
+      categories: { group: 12 },
+      platforms: { openai: 10, anthropic: 2 },
+      page: 1,
+      page_size: 9,
+    })
+    const platform = w.findAll('button').find(button => button.text().includes('anthropic'))!
     await platform.trigger('click')
-    const select = w.findComponent({ name: 'Select' })
-    select.vm.$emit('update:modelValue', 'price')
-    await nextTick()
-    expect(w.get('[data-testid="catalog-model-list"]').findAll('h3').map(title => title.text())).toEqual(['z-cheap', 'a-costly'])
-    expect(mocks.getCatalog).toHaveBeenCalledTimes(1)
+    await flushPromises()
+    expect(mocks.getCatalog.mock.calls[1]![0]).toMatchObject({ page: 1, pageSize: 9, platform: 'anthropic' })
+    expect(w.get('[data-testid="catalog-model-list"]').findAll('h3').map(title => title.text())).toEqual(['anthropic-model'])
   })
 
   it('fetches the revised model list after saving channel pricing within the cache lifetime', async () => {
@@ -198,13 +226,12 @@ describe('available channels user page', () => {
   it('keeps localized catalogs separate while preserving filters and current model details', async () => {
     mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('first')], { name: 'English group' })], user_rate_status: 'loaded' })
     const w = page(); await flushPromises()
-    await w.get('input[type="search"]').setValue('first')
     await w.findAll('.catalog-model-card button')[1]!.trigger('click')
+    await flushPromises()
 
     mocks.getCatalog.mockResolvedValueOnce({ groups: [group(1, [offer('first')], { name: '中文分组' })], user_rate_status: 'loaded' })
     mocks.locale.value = 'zh'; await flushPromises()
     expect(w.findComponent(CatalogPriceDetails).props('model').quotes[0].group.name).toBe('中文分组')
-    expect((w.get('input[type="search"]').element as HTMLInputElement).value).toBe('first')
 
     mocks.locale.value = 'en'; await flushPromises()
     expect(w.findComponent(CatalogPriceDetails).props('model').quotes[0].group.name).toBe('English group')
@@ -337,40 +364,35 @@ describe('available channels user page', () => {
     expect(filters.find('input[type="search"]').exists()).toBe(true)
   })
 
-  it('preserves platform, search and dropdown sorting through refresh in the pinned filter card', async () => {
+  it('preserves the platform and search through refresh in the pinned filter card', async () => {
     mocks.getCatalog.mockResolvedValue({ groups: [
-      group(1, [offer('model-a', { pricing: pricing(6e-6) }), offer('model-z', { pricing: pricing(1e-6) })]),
+      group(1, [offer('model-a'), offer('model-z')]),
       group(2, [offer('model-other', { platform: 'anthropic' })])
-    ], user_rate_status: 'loaded' })
+    ], user_rate_status: 'loaded', models_total: 3, categories: { group: 3 }, platforms: { openai: 2, anthropic: 1 } })
     const w = page(); await flushPromises()
     const filters = w.get('[data-testid="catalog-filters"]')
     const results = w.get('[data-testid="catalog-results"]')
     await filters.findAll('[role="group"] button[aria-pressed]').find(button => button.text().startsWith('openai'))!.trigger('click')
+    await flushPromises()
+    expect(mocks.getCatalog.mock.calls.at(-1)![0]).toMatchObject({ platform: 'openai', category: 'group' })
     await filters.get('input[type="search"]').setValue('model-')
-    await filters.get('[role="combobox"]').trigger('click'); await flushPromises()
-    const dropdown = document.querySelector('[role="listbox"]')!
-    expect(results.element.contains(dropdown)).toBe(false)
-    expect(dropdown.querySelector('input')).toBeNull()
-    const priceOption = Array.from(dropdown.querySelectorAll('[role="option"]')).find(option => option.textContent?.includes('sortPrice'))!
-    await new DOMWrapper(priceOption).trigger('click')
-    expect(results.findAll('h3').map(title => title.text())).toEqual(['model-z', 'model-a'])
     await w.get('button[aria-label="common.refresh"]').trigger('click'); await flushPromises()
     expect(w.get('[data-testid="catalog-results"]').element).toBe(results.element)
     expect((filters.get('input[type="search"]').element as HTMLInputElement).value).toBe('model-')
     expect(filters.get('[aria-pressed="true"]').text()).toContain('openai')
-    expect(filters.get('[role="combobox"]').text()).toContain('sortPrice')
-    expect(results.findAll('h3').map(title => title.text())).toEqual(['model-z', 'model-a'])
-    expect(mocks.getCatalog).toHaveBeenCalledTimes(2)
+    expect(mocks.getCatalog.mock.calls.at(-1)![0]).toMatchObject({ search: 'model-', platform: 'openai' })
+    expect(results.findAll('h3').map(title => title.text())).toEqual(['model-a', 'model-other', 'model-z'])
   })
 
-  it('loads catalog once, filters individual cards and copies the complete ID', async () => {
+  it('loads one page, opens a card through a separate detail query and copies the complete ID', async () => {
     const w = page(); await flushPromises()
     expect(mocks.getCatalog).toHaveBeenCalledOnce()
     expect(w.findAll('.catalog-model-card')).toHaveLength(3)
-    await w.get('input[type="search"]').setValue('first')
-    expect(w.findAll('.catalog-model-card')).toHaveLength(1)
-    await w.get('.catalog-model-card button').trigger('click')
-    expect(mocks.copy).toHaveBeenCalledWith('first')
+    await w.findAll('.catalog-model-card button')[1]!.trigger('click')
+    await flushPromises()
+    expect(mocks.getCatalogDetail).toHaveBeenCalledWith({ category: 'group', platform: 'openai', name: 'claude' }, expect.anything())
+    await w.get('.catalog-copy-model').trigger('click')
+    expect(mocks.copy).toHaveBeenCalledWith('claude')
     expect(w.findAll('[role="group"] button[aria-pressed]')).toHaveLength(3)
   })
   it('shows rate degradation and keeps zero prices visible', async () => {
