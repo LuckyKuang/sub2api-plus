@@ -756,25 +756,23 @@ const loadChartData = async () => {
   ])
 }
 
-let chartUpdatedAt = 0
-let forceCharts = false
+// Every refresh cycle (manual or automatic) renews the whole block: overview
+// KPIs, both chart groups, the spending ranking and the usage overview panel.
 const overviewRefresh = useAutoRefresh({
   storageKey: useColumnPreferenceKey('admin-overview-refresh'), intervals: [30, 60, 120], defaultInterval: 30, defaultEnabled: true,
   shouldPause: () => chartsLoading.value,
   onRefresh: async () => {
-    const includeCharts = forceCharts || Date.now() - chartUpdatedAt >= 60000
-    forceCharts = false
     const results = await Promise.allSettled([
-      loadDashboardSnapshot(true, includeCharts, true),
-      ...(includeCharts ? [loadUsersTrend(true), loadUserSpendingRanking(true)] : []),
+      loadDashboardSnapshot(true, true, true),
+      loadUsersTrend(true),
+      loadUserSpendingRanking(true),
     ])
+    await usageOverviewRef.value?.reload()
     const failure = results.find(result => result.status === 'rejected')
-    if (includeCharts) await usageOverviewRef.value?.reload()
     if (failure?.status === 'rejected') throw failure.reason
-    if (includeCharts) chartUpdatedAt = Date.now()
   },
 })
-const refreshAll = () => { forceCharts = true; return overviewRefresh.refresh() }
+const refreshAll = () => overviewRefresh.refresh()
 onBeforeUnmount(() => { chartLoadSeq++; usersTrendLoadSeq++; rankingLoadSeq++ })
 onMounted(() => {
   void refreshAll()

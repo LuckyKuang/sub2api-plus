@@ -3,13 +3,17 @@
     <div class="workspace-page usage-workspace">
       <div class="card workspace-fixed usage-date p-4">
         <div class="filter-bar">
-          <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
-          <div class="filter-field filter-field--date">
-            <DateRangePicker
-              v-model:start-date="startDate"
-              v-model:end-date="endDate"
-              @change="onDateRangeChange"
-            />
+          <!-- A labelled control is one pair, so the label centres on the
+               trigger instead of bottom-aligning with the filter row. -->
+          <div class="filter-pair">
+            <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
+            <div class="filter-field filter-field--date">
+              <DateRangePicker
+                v-model:start-date="startDate"
+                v-model:end-date="endDate"
+                @change="onDateRangeChange"
+              />
+            </div>
           </div>
         </div>
       </div>

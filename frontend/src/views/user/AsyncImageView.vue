@@ -138,15 +138,16 @@
       </template>
 
       <template #pagination>
-        <div v-if="tasks.length || offset > 0" class="card flex flex-wrap items-center justify-end gap-3 px-4 py-3">
-          <span class="mr-auto text-sm surface-muted">{{ t('asyncImage.list.page', { page: currentPage }) }}</span>
-          <button type="button" class="btn btn-secondary btn-sm" :disabled="offset === 0 || loadingTasks" @click="previousPage">
-            {{ t('asyncImage.list.previous') }}
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm" :disabled="!hasMore || loadingTasks" @click="nextPage">
-            {{ t('asyncImage.list.next') }}
-          </button>
-        </div>
+        <Pagination
+          v-if="tasks.length || offset > 0"
+          :total="null"
+          :has-more="hasMore"
+          :page="currentPage"
+          :page-size="PAGE_SIZE"
+          :show-page-size-selector="false"
+          :disabled="loadingTasks"
+          @update:page="handlePageChange"
+        />
       </template>
     </TablePageLayout>
 
@@ -405,6 +406,7 @@ import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
@@ -851,14 +853,13 @@ async function confirmDeleteTask() {
   }
 }
 
-function previousPage() {
-  offset.value = Math.max(0, offset.value - PAGE_SIZE)
-  void loadTasks()
-}
-
-function nextPage() {
-  if (!hasMore.value) return
-  offset.value += PAGE_SIZE
+// The list is cursor-paged by offset, so the shared pager translates its page
+// number into the offset and keeps the forward limit honest.
+function handlePageChange(page: number) {
+  const next = Math.max(0, (page - 1) * PAGE_SIZE)
+  if (next === offset.value) return
+  if (next > offset.value && !hasMore.value) return
+  offset.value = next
   void loadTasks()
 }
 

@@ -327,7 +327,7 @@ describe('AsyncImageView task management', () => {
     listUserImageTasks.mockResolvedValue({ object: 'list', data: [completedTask], has_more: true })
     const wrapper = mountView()
     await flushPromises()
-    await clickButtonByText(wrapper, 'asyncImage.list.next')
+    await wrapper.get('.pagination-desktop [aria-label="pagination.next"]').trigger('click')
     await flushPromises()
     expect(listUserImageTasks).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 20 }))
     const [start, end] = wrapper.findAllComponents(DateTimePicker)
@@ -548,7 +548,7 @@ describe('AsyncImageView task management', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    await clickButtonByText(wrapper, 'asyncImage.list.next')
+    await wrapper.get('.pagination-desktop [aria-label="pagination.next"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="delete-task-imgtask_failed"]').exists()).toBe(true)
 
@@ -558,6 +558,6 @@ describe('AsyncImageView task management', () => {
 
     expect(listUserImageTasks).toHaveBeenCalledTimes(4)
     expect(listUserImageTasks.mock.calls.map(call => call[0]?.offset)).toEqual([0, 20, 20, 0])
-    expect(wrapper.text()).toContain('asyncImage.list.page:1')
+    expect(wrapper.findAll('[aria-current="page"]')[0]!.text()).toBe('1')
   })
 })
