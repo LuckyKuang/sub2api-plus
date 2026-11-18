@@ -2203,6 +2203,9 @@ func (p *openAIWSConnPool) dialConn(ctx context.Context, req openAIWSAcquireRequ
 		}
 	}
 	id := p.nextConnID(req.Account.ID)
+	// Upstream may cap a single websocket message on this connection. Record the
+	// declaration for the account so every later transport decision can use it.
+	rememberOpenAIWSDeclaredMaxMessageBytes(req.Account.ID, handshakeHeaders)
 	pooledConn := newOpenAIWSConn(id, req.Account.ID, conn, handshakeHeaders)
 	accountID := req.Account.ID
 	evict := func() { p.evictConn(accountID, id) }

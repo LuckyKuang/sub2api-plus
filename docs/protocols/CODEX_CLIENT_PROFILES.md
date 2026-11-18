@@ -896,3 +896,64 @@ use `image/gif`. OAuth animation requires a supported native Codex Images model;
 an unavailable endpoint returns its error instead of falling back to a Responses
 image tool that has no reviewed animation contract. Existing still-image fallback
 behavior is unchanged. See `openai_images_official_gif_test.go`.
+
+### WebSocket message-size declaration
+
+`codex-api` reads `x-codex-websocket-max-message-bytes` from the upstream 101
+response and refuses to upload a `response.create` whose serialized size exceeds
+it (`ApiError::WebsocketMessageTooLarge`); the turn then continues over HTTP. The
+gateway mirrors that contract without inventing a value:
+
+- The declaration is accepted only as a positive decimal handshake header. A
+  missing, empty, non-numeric, zero or above-64 MiB value means "no declaration"
+  and never becomes a synthesized default.
+- Every dial records the declaration for that upstream account (process-local,
+  bounded, 10-minute TTL), so pooled connections, internal HTTP-bridged turns and
+  the passthrough adapter decide from the same value.
+- Before writing a turn upstream the gateway compares the exact serialized
+  payload with the declaration. An oversized turn is neither written nor retried
+  on WebSocket: the ingress closes the client with 1009
+  (`StatusMessageTooBig`) before any output, and the official client answers that
+  size close by replaying the turn over HTTP. On the HTTP-entry transport the
+  attempt falls back to HTTP silently and increments
+  `declared_limit_fallback_total` without entering fallback cooling, because the
+  payload — not the transport — is at fault.
+- A known declaration also short-circuits the next attempt: when the first frame
+  already exceeds it, the attempt starts on the HTTP bridge instead of dialing a
+  socket it must abandon.
+
+The gateway cannot relay the header on its own 101. It accepts the downstream
+upgrade before any account is selected, while the declaration arrives with the
+upstream handshake that follows the client's first frame. The turn-level outcome
+is preserved (the oversized turn is served over HTTP exactly once), but the
+client does not learn the announced byte cap up front, so it discovers the limit
+through the size close rather than skipping the WebSocket upload. See
+`openai_ws_declared_message_limit.go`.
+
+### Allocated response item IDs
+
+Codex 0.170 allocates every response item ID from a per-kind prefix
+(`protocol::ResponseItem::id_prefix`), keeps the allocation provenance internally
+and still renders a plain string on the wire. Replayed IDs therefore arrive as
+`msg_item042`, `fc_item007`, `rs_item003`, `ctc_item004`, `tsc_item005`,
+`ws_item006`, `lsh_item008`, `fco_item009`, `tso_item010`, `ctco_item004` or
+`amsg_item011` rather than server UUIDs.
+
+The gateway preserves an assigned ID byte for byte when its prefix belongs to the
+item kind. The accepted prefixes follow the official table and keep the legacy
+spellings (`fc` for call kinds, `lsh` alongside `fc` for `local_shell_call`), so
+an `item_reference` to a retained item never dangles. `custom_tool_call_output`
+remains the one documented exception: upstream validates replayed output IDs
+against the `fc` namespace, so only the official model-facing
+`ctco_<salt><digits>` shape is kept and every other `ctco_` value is still
+stripped. See `openai_responses_item_id.go`.
+
+### Context window identity
+
+`context_window_id` is a UUIDv7 string when the window was restored from a
+rollout and the display form of an allocated `ModelFacingId` (`window003`) when it
+was not. Turn metadata always carries a string. Tenant isolation keeps that shape:
+the gateway permutes the decimal value inside the same three-digit group width and
+keeps the salt instead of replacing the value with a UUID. A value outside the
+allocation grammar, including a restored UUIDv7 window, keeps its previous
+durable mapping. See `openai_codex_account_identity.go`.

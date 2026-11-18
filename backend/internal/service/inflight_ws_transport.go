@@ -19,6 +19,12 @@ func (s *OpenAIGatewayService) WithResponsesWebSocketInflightTransport(ctx conte
 		ctx = context.Background()
 	}
 	decision := responsesWSInflightTransport{forceHTTP: s.responsesWSUncachedForceHTTPBridge(ctx, account)}
+	// A previously observed upstream message cap already rules out the socket for
+	// this payload, so the attempt starts on the HTTP bridge instead of paying for
+	// a dial that must end in a size close.
+	if !decision.forceHTTP && s.openAIWSDeclaredLimitBlocksPayload(account, len(firstPayload)) {
+		decision.forceHTTP = true
+	}
 	if account != nil {
 		decision.ownerID = account.ID
 		if s != nil && s.cfg != nil && s.cfg.Gateway.OpenAIWS.ModeRouterV2Enabled && !decision.forceHTTP {

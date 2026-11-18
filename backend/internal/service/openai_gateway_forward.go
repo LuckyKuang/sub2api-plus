@@ -1163,6 +1163,16 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				account.ID,
 				normalizeOpenAIWSLogValue(wsLastFailureReason),
 			)
+		} else if !clientBytesWritten && isOpenAIWSDeclaredLimitFallbackReason(wsLastFailureReason) {
+			// 上游声明的单帧上限只针对本次 payload，不是传输级故障：当前请求
+			// 静默改走 HTTP，且不进入 fallback cooling，避免把整个账号的 WS
+			// 传输降级 30s。缓存已在建连时记录，后续超限轮次不会再试 WS。
+			s.recordOpenAIWSDeclaredLimitFallback()
+			logOpenAIWSModeInfo(
+				"fallback_to_http account_id=%d reason=%s cooling=false",
+				account.ID,
+				normalizeOpenAIWSLogValue(wsLastFailureReason),
+			)
 		} else {
 			s.writeOpenAIWSFallbackErrorResponse(c, account, wsErr)
 			return nil, wsErr

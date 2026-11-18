@@ -1120,6 +1120,25 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}
 		turnStart := time.Now()
 		wroteDownstream := false
+		// Upstream may cap a single websocket message. Sending an oversized
+		// payload wastes the socket and ends in a retry that cannot succeed, so
+		// the gateway closes with 1009 before any byte is written: the official
+		// client answers a size close by replaying the turn over HTTP.
+		if limitErr := s.checkOpenAIWSDeclaredMessageLimit(account, lease, payloadBytes); limitErr != nil {
+			logOpenAIWSModeInfo(
+				"ingress_ws_declared_limit_exceeded account_id=%d turn=%d conn_id=%s payload_bytes=%d limit_bytes=%d action=close_retry_http",
+				account.ID,
+				turn,
+				truncateOpenAIWSLogValue(lease.ConnID(), openAIWSIDValueMaxLen),
+				payloadBytes,
+				openAIWSDeclaredLimitFromError(limitErr),
+			)
+			return nil, NewOpenAIWSClientCloseError(
+				coderws.StatusMessageTooBig,
+				"request exceeds the upstream websocket message limit; retry over HTTP",
+				limitErr,
+			)
+		}
 		if err := lease.WriteJSONWithContextTimeout(ctx, json.RawMessage(payload), s.openAIWSWriteTimeout()); err != nil {
 			return nil, wrapOpenAIWSIngressTurnError(
 				"write_upstream",

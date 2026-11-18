@@ -491,6 +491,7 @@ type OpenAIWSRetryMetricsSnapshot struct {
 	RetryBackoffMsTotal           int64 `json:"retry_backoff_ms_total"`
 	RetryExhaustedTotal           int64 `json:"retry_exhausted_total"`
 	NonRetryableFastFallbackTotal int64 `json:"non_retryable_fast_fallback_total"`
+	DeclaredLimitFallbackTotal    int64 `json:"declared_limit_fallback_total"`
 }
 
 type OpenAICompatibilityFallbackMetricsSnapshot struct {
@@ -513,6 +514,7 @@ type openAIWSRetryMetrics struct {
 	retryBackoffMs           atomic.Int64
 	retryExhausted           atomic.Int64
 	nonRetryableFastFallback atomic.Int64
+	declaredLimitFallbacks   atomic.Int64
 }
 
 type accountWriteThrottle struct {
@@ -1204,6 +1206,16 @@ func (s *OpenAIGatewayService) recordOpenAIWSNonRetryableFastFallback() {
 	s.openaiWSRetryMetrics.nonRetryableFastFallback.Add(1)
 }
 
+// recordOpenAIWSDeclaredLimitFallback counts turns a size declaration moved from
+// WebSocket to HTTP. It stays separate from the fast-fallback counter so an
+// oversized payload is not mistaken for a transport failure.
+func (s *OpenAIGatewayService) recordOpenAIWSDeclaredLimitFallback() {
+	if s == nil {
+		return
+	}
+	s.openaiWSRetryMetrics.declaredLimitFallbacks.Add(1)
+}
+
 func (s *OpenAIGatewayService) SnapshotOpenAIWSRetryMetrics() OpenAIWSRetryMetricsSnapshot {
 	if s == nil {
 		return OpenAIWSRetryMetricsSnapshot{}
@@ -1213,6 +1225,7 @@ func (s *OpenAIGatewayService) SnapshotOpenAIWSRetryMetrics() OpenAIWSRetryMetri
 		RetryBackoffMsTotal:           s.openaiWSRetryMetrics.retryBackoffMs.Load(),
 		RetryExhaustedTotal:           s.openaiWSRetryMetrics.retryExhausted.Load(),
 		NonRetryableFastFallbackTotal: s.openaiWSRetryMetrics.nonRetryableFastFallback.Load(),
+		DeclaredLimitFallbackTotal:    s.openaiWSRetryMetrics.declaredLimitFallbacks.Load(),
 	}
 }
 

@@ -171,6 +171,15 @@ func resolveCodexAccountIdentityValueForOwner(ctx context.Context, account *Acco
 	if kind == "installation" {
 		version = 4
 	}
+	if kind == "context-window" {
+		// Codex 0.170 sends context_window_id in its model-facing display form
+		// (`window003`) whenever the window was allocated instead of restored
+		// from a UUIDv7 rollout. Turn metadata carries a string, so the tenant
+		// mapping keeps the salt and digit width and only permutes the number.
+		if mapped, ok := resolveCodexModelFacingIdentityValue(scope, raw); ok {
+			return mapped, nil
+		}
+	}
 	if id, err := uuid.Parse(raw); err == nil && id.Version() == 7 && version == 7 {
 		digest := sha256.Sum256([]byte("codex-id-v2:" + scope))
 		copy(id[6:], digest[:10])
@@ -179,6 +188,39 @@ func resolveCodexAccountIdentityValueForOwner(ctx context.Context, account *Acco
 		return id.String(), nil
 	}
 	return resolveOutboundMappedID(ctx, "codex-identity-v2", scope, version)
+}
+
+// resolveCodexModelFacingIdentityValue maps a model-facing ID (`window003`) to a
+// tenant-specific value of the same shape. Codex allocates these IDs from a salt
+// plus zero-padded decimal digits, and turn metadata must carry the display form
+// as a string, so an opaque UUID would both change the wire shape and lose the
+// token economy the format exists for.
+func resolveCodexModelFacingIdentityValue(scope, raw string) (string, bool) {
+	digits := 0
+	for digits < len(raw) && raw[len(raw)-1-digits] >= '0' && raw[len(raw)-1-digits] <= '9' {
+		digits++
+	}
+	// ModelFacingId pads its decimal value to whole groups of three digits, so a
+	// width outside that ladder is not an allocated ID and keeps the generic map.
+	if digits < 3 || digits > 18 || digits%3 != 0 || digits == len(raw) {
+		return "", false
+	}
+	salt := raw[:len(raw)-digits]
+	for i := 0; i < len(salt); i++ {
+		if salt[i] < 'a' || salt[i] > 'z' {
+			return "", false
+		}
+	}
+	digest := sha256.Sum256([]byte("codex-model-id-v2:" + scope))
+	var value uint64
+	for _, b := range digest[:8] {
+		value = value<<8 | uint64(b)
+	}
+	modulus := uint64(1)
+	for i := 0; i < digits; i++ {
+		modulus *= 10
+	}
+	return fmt.Sprintf("%s%0*d", salt, digits, value%modulus), true
 }
 
 var codexAccountIdentityFields = []struct{ name, kind string }{

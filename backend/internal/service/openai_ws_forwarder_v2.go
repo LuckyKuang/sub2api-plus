@@ -355,6 +355,19 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	if err := s.requireCodexUpstreamWS(ctx, account); err != nil {
 		return nil, wrapOpenAIWSFallback("outbound_ws_disabled", err)
 	}
+	// Same declared-limit gate as the ingress path. The payload size is measured
+	// on the exact bytes handed to the socket, after every transform, and before
+	// the request is considered submitted upstream.
+	if limitErr := s.checkOpenAIWSDeclaredMessageLimit(account, lease, resolvePayloadBytes()); limitErr != nil {
+		logOpenAIWSModeInfo(
+			"write_request_declared_limit account_id=%d conn_id=%s payload_bytes=%d limit_bytes=%d action=fallback_http",
+			account.ID,
+			connID,
+			resolvePayloadBytes(),
+			openAIWSDeclaredLimitFromError(limitErr),
+		)
+		return nil, limitErr
+	}
 	requestSubmitted = true
 	if err := lease.WriteJSONWithContextTimeout(ctx, payload, s.openAIWSWriteTimeout()); err != nil {
 		lease.MarkBroken()

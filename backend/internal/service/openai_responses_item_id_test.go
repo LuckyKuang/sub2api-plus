@@ -79,6 +79,63 @@ func TestSanitizeOpenAIResponsesInputItemIDsDoesNotCascadeAcrossIDNamespaces(t *
 	require.Equal(t, "ctco_bad_output", items[6].Get("call_id").String())
 }
 
+func TestShouldStripOpenAIResponsesInputItemIDKeepsCodexAllocatedIDs(t *testing.T) {
+	// Codex 0.170 allocates every item ID from a per-kind prefix
+	// (protocol::ResponseItem::id_prefix). Those IDs must survive replay
+	// verbatim, or the client's later item_reference lookups dangle.
+	tests := []struct {
+		itemType string
+		id       string
+		strip    bool
+	}{
+		{itemType: "message", id: "msg_item042", strip: false},
+		{itemType: "message", id: "msg002", strip: false},
+		{itemType: "agent_message", id: "amsg_item011", strip: false},
+		{itemType: "reasoning", id: "rs_item003", strip: false},
+		{itemType: "function_call", id: "fc_item007", strip: false},
+		{itemType: "function_call_output", id: "fco_item009", strip: false},
+		{itemType: "local_shell_call", id: "lsh_item008", strip: false},
+		{itemType: "custom_tool_call", id: "ctc_item004", strip: false},
+		{itemType: "tool_search_call", id: "tsc_item005", strip: false},
+		{itemType: "tool_search_output", id: "tso_item010", strip: false},
+		{itemType: "web_search_call", id: "ws_item006", strip: false},
+		{itemType: "image_generation_call", id: "ig_item012", strip: false},
+		{itemType: "compaction", id: "cmp_item013", strip: false},
+		// The official custom-call-output shape is accepted; an opaque ctco ID is
+		// still stripped because upstream validates those against fc.
+		{itemType: "custom_tool_call_output", id: "ctco_item004", strip: false},
+		{itemType: "custom_tool_call_output", id: "ctco_item004_2", strip: false},
+		{itemType: "custom_tool_call_output", id: "ctco_bad_output", strip: true},
+		{itemType: "custom_tool_call_output", id: "ctc_item004", strip: true},
+		// A model-facing suffix does not rescue a kind that must carry another
+		// namespace.
+		{itemType: "message", id: "rs_item003", strip: true},
+		{itemType: "tool_search_call", id: "fc_item007", strip: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.itemType+"/"+tt.id, func(t *testing.T) {
+			require.Equal(t, tt.strip, shouldStripOpenAIResponsesInputItemID(tt.itemType, tt.id))
+		})
+	}
+}
+
+func TestIsOpenAIResponsesModelFacingItemID(t *testing.T) {
+	cases := map[string]bool{
+		"ctco_item004":   true,
+		"ctco_item004_2": true,
+		"msg_item042":    true,
+		"ctco":           false,
+		"ctco_123":       false,
+		"ctco_bad_out":   false,
+		"ctco_item00":    false,
+		"ctco_Item004":   false,
+		"":               false,
+	}
+	for id, want := range cases {
+		require.Equal(t, want, isOpenAIResponsesModelFacingItemID(id), id)
+	}
+}
+
 func TestSanitizeOpenAIResponsesInputItemIDsLeavesUnrelatedReferencesUntouched(t *testing.T) {
 	body := []byte(`{"previous_response_id":"resp_1","input":[{"type":"item_reference","id":"remote_item"}]}`)
 
