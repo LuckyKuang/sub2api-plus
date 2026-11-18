@@ -170,12 +170,24 @@ type AnthropicPromptTokensDetails struct {
 	CachedTokens int `json:"cached_tokens,omitempty"`
 }
 
+// AnthropicCacheCreation is Anthropic's cache-write breakdown. The 5-minute and
+// 1-hour classes are priced differently, so the split must never be flattened
+// into cache_creation_input_tokens before billing sees it. A pointer field is
+// authoritative even when it is zero: `{"ephemeral_1h_input_tokens":0}` means
+// "no 1h write", not "field omitted".
+type AnthropicCacheCreation struct {
+	Ephemeral5mInputTokens *int `json:"ephemeral_5m_input_tokens,omitempty"`
+	Ephemeral1hInputTokens *int `json:"ephemeral_1h_input_tokens,omitempty"`
+}
+
 // AnthropicUsage holds token counts in Anthropic format.
 type AnthropicUsage struct {
 	InputTokens              int `json:"input_tokens"`
 	OutputTokens             int `json:"output_tokens"`
 	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+	// CacheCreation carries the TTL breakdown when the provider reports it.
+	CacheCreation *AnthropicCacheCreation `json:"cache_creation,omitempty"`
 	// Anthropic-compatible providers can also expose their native OpenAI-style
 	// total/cache fields. Preserve them so callers can normalize provider totals
 	// into Anthropic's mutually-exclusive billing buckets.
@@ -920,6 +932,57 @@ type ChatTokenDetails struct {
 	ReasoningTokens          int             `json:"reasoning_tokens,omitempty"`
 	AcceptedPredictionTokens int             `json:"accepted_prediction_tokens,omitempty"`
 	RejectedPredictionTokens int             `json:"rejected_prediction_tokens,omitempty"`
+	// cacheWriteTokensPresent records that cache_write_tokens was present on the
+	// wire, even when its value is zero or negative. Presence is part of the
+	// contract: it overrides the older cache_creation_tokens spelling.
+	cacheWriteTokensPresent bool
+}
+
+func (details *ChatTokenDetails) UnmarshalJSON(data []byte) error {
+	type detailsAlias ChatTokenDetails
+	var decoded struct {
+		detailsAlias
+		CacheWriteTokens json.RawMessage `json:"cache_write_tokens"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*details = ChatTokenDetails(decoded.detailsAlias)
+	if len(decoded.CacheWriteTokens) != 0 {
+		if err := json.Unmarshal(decoded.CacheWriteTokens, &details.CacheWriteTokens); err != nil {
+			return err
+		}
+		details.cacheWriteTokensPresent = true
+	}
+	return nil
+}
+
+func (details ChatTokenDetails) MarshalJSON() ([]byte, error) {
+	type detailsAlias ChatTokenDetails
+	var cacheWriteTokens *int
+	if details.cacheWriteTokensPresent || details.CacheWriteTokens != 0 {
+		cacheWriteTokens = &details.CacheWriteTokens
+	}
+	// The explicit field shadows the embedded alias value for this key, so a
+	// present zero survives a round trip while an absent one stays absent.
+	return json.Marshal(struct {
+		detailsAlias
+		CacheWriteTokens *int `json:"cache_write_tokens,omitempty"`
+	}{detailsAlias: detailsAlias(details), CacheWriteTokens: cacheWriteTokens})
+}
+
+// cacheCreationInputTokens resolves the single cache-write quantity from its two
+// spellings. cache_write_tokens wins whenever it was declared, including when it
+// is zero or negative: a provider that reports an explicit zero means "no write",
+// and falling back to cache_creation_tokens would double count the same tokens.
+func (details *ChatTokenDetails) cacheCreationInputTokens() int {
+	if details == nil {
+		return 0
+	}
+	if details.cacheWriteTokensPresent || details.CacheWriteTokens > 0 {
+		return max(details.CacheWriteTokens, 0)
+	}
+	return max(details.CacheCreationTokens, 0)
 }
 
 // ChatCompletionsChunk is a single streaming chunk from POST /v1/chat/completions.

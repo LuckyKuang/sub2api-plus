@@ -1289,3 +1289,22 @@ If a concurrency keepalive already committed SSE response headers, a later
 upstream error uses an SSE error event. Before streaming begins the endpoint
 retains the applicable HTTP error response. The concurrency ping setting is
 documented in [Docker configuration](../../deploy/DOCKER.md#startup-and-database-recovery).
+
+## v0.2.23 cache-creation accounting
+
+Anthropic's `cache_creation` breakdown is authoritative for the TTL classes a
+write is billed at. `ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens`
+are read as pointers, so an explicit zero means "no write in this class" rather
+than "field omitted", and the flat `cache_creation_input_tokens` follows the
+breakdown sum when both are present. The buffered converter, the streaming state
+machine and the service usage merge all resolve the same total, so the uncached
+input bucket (`prompt_tokens - cache_read - cache_creation`) cannot drift.
+
+`cache_write_tokens` and `cache_creation_tokens` remain two spellings of one
+quantity. A declared `cache_write_tokens` now wins even when its value is zero or
+negative: presence is preserved through JSON round trips, a negative value clamps
+to zero, and the older alias is not counted on top. Clients that omit the field
+keep the previous fallback to `cache_creation_tokens`. The resolved total is also
+what `input_tokens_details` advertises, so a zero write leaves no uncounted
+alias in the detail block. See [channel pricing](../CHANNEL_PRICING.md) for the
+price side of the TTL classes.
