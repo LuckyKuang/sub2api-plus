@@ -1571,12 +1571,16 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
 	}
 
 	// 解析嵌套的 cache_creation 对象中的 5m/1h 明细
-	cc5m := gjson.GetBytes(body, "usage.cache_creation.ephemeral_5m_input_tokens")
-	cc1h := gjson.GetBytes(body, "usage.cache_creation.ephemeral_1h_input_tokens")
+	usageNode := gjson.GetBytes(body, "usage")
+	cc5m := usageNode.Get("cache_creation.ephemeral_5m_input_tokens")
+	cc1h := usageNode.Get("cache_creation.ephemeral_1h_input_tokens")
 	if cc5m.Exists() || cc1h.Exists() {
 		response.Usage.CacheCreation5mTokens = int(cc5m.Int())
 		response.Usage.CacheCreation1hTokens = int(cc1h.Int())
 	}
+	// 非流式响应同样要对账：兼容供应商的 prompt_tokens 是含缓存桶的总量，
+	// 直接采信 input_tokens 会把缓存读取/写入重复计入。
+	normalizeAnthropicCompatiblePromptUsage(usageNode, &response.Usage)
 
 	// 兼容 Kimi cached_tokens → cache_read_input_tokens
 	if response.Usage.CacheReadInputTokens == 0 {

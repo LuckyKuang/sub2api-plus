@@ -694,6 +694,13 @@ type ClaudeUsage struct {
 	promptTotalPresent bool
 }
 
+// hasReportedTokens 报告上游是否声明过任何 token 计数。缓冲路径用它判断
+// 是否该用累积 usage 覆盖已组装的响应，避免把"什么都没报"当成"报了 0"。
+func (usage ClaudeUsage) hasReportedTokens() bool {
+	return usage.InputTokens > 0 || usage.OutputTokens > 0 ||
+		usage.CacheReadInputTokens > 0 || usage.cacheCreationTotal() > 0
+}
+
 // cacheCreationTotal 返回唯一的缓存写入量：上游显式声明过的正数聚合量优先，
 // 其次是 5m/1h 明细之和，最后才回落到可能为 0 的聚合字段。
 // 只报明细的兼容供应商不会被计成 0 写入，也不会让过期的 0 明细盖掉真实聚合量。

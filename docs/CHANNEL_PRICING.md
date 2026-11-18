@@ -338,6 +338,12 @@ at the aggregate first, keeping their reported ratio, so the two meters never su
 past the declared total. Account statistics and the generated price-evidence
 check use the same allocation, which keeps a card with `cache_write_1h_price`
 from silently under-billing a flat aggregate.
+
+Routing an Anthropic-native upstream through the OpenAI gateway keeps that split
+too: the OpenAI usage object carries `cache_creation_5m_tokens` and
+`cache_creation_1h_tokens` next to the aggregate, and settlement prices each class
+with its own rate. Without it every write on that route collapsed into the
+aggregate and was priced as the cheaper 5m class.
 Reference fill, user/model-plaza display,
 context tiers and frozen settlement carry the same 12h price. The release pricing resource records
 the API's 1050000 context window, 922000 maximum input and 128000 maximum output.

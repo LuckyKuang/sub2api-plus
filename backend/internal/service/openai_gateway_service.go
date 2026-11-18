@@ -302,9 +302,14 @@ type OpenAIUsage struct {
 	CacheCreationInputTokens    int `json:"cache_creation_input_tokens,omitempty"`
 	CacheCreation30mInputTokens int `json:"cache_creation_30m_input_tokens,omitempty"`
 	CacheCreation12hInputTokens int `json:"cache_creation_12h_input_tokens,omitempty"`
-	CacheReadInputTokens        int `json:"cache_read_input_tokens,omitempty"`
-	ImageOutputTokens           int `json:"image_output_tokens,omitempty"`
-	AudioOutputTokens           int `json:"audio_output_tokens,omitempty"`
+	// Anthropic-native upstreams reached through the OpenAI gateway keep their
+	// own 5m/1h write split; without these the split would flatten into the
+	// aggregate and every write would be priced as the cheaper 5m class.
+	CacheCreation5mInputTokens int `json:"cache_creation_5m_input_tokens,omitempty"`
+	CacheCreation1hInputTokens int `json:"cache_creation_1h_input_tokens,omitempty"`
+	CacheReadInputTokens       int `json:"cache_read_input_tokens,omitempty"`
+	ImageOutputTokens          int `json:"image_output_tokens,omitempty"`
+	AudioOutputTokens          int `json:"audio_output_tokens,omitempty"`
 	// CodexRolloutBudgetUnits carries the official `codex_rollout_budget_units`
 	// declaration from the response.completed usage payload (JSON number,
 	// fractional allowed). Parsed and recorded as a reserved billing dimension;
@@ -312,15 +317,19 @@ type OpenAIUsage struct {
 	CodexRolloutBudgetUnits *float64 `json:"codex_rollout_budget_units,omitempty"`
 }
 
-// cacheCreationTotal 返回唯一的缓存写入量：正数聚合量优先，其次才是
-// 30m/12h 分档之和。只报分档的兼容上游不会被计成 0 写入，
-// 也不会因为分档过期而丢掉聚合量。
+// cacheCreationTotal 返回唯一的缓存写入量：正数聚合量优先，其次才是分档之和
+// （OpenAI 的 30m/12h 与 Anthropic 原生的 5m/1h，二者互斥）。
+// 只报分档的兼容上游不会被计成 0 写入，也不会因为分档过期而丢掉聚合量。
 func (usage OpenAIUsage) cacheCreationTotal() int {
 	if usage.CacheCreationInputTokens > 0 {
 		return usage.CacheCreationInputTokens
 	}
-	if details := max(usage.CacheCreation30mInputTokens, 0) + max(usage.CacheCreation12hInputTokens, 0); details > 0 {
+	details := max(usage.CacheCreation30mInputTokens, 0) + max(usage.CacheCreation12hInputTokens, 0)
+	if details > 0 {
 		return details
+	}
+	if anthropicDetails := max(usage.CacheCreation5mInputTokens, 0) + max(usage.CacheCreation1hInputTokens, 0); anthropicDetails > 0 {
+		return anthropicDetails
 	}
 	return max(usage.CacheCreationInputTokens, 0)
 }

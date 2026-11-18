@@ -1350,3 +1350,11 @@ SSE patch merge, the Anthropic usage merge and the compat prompt normalization, 
 `message_start` and `message_delta` both feed it. See
 `anthropic_prompt_total_reconcile_test.go`.
 
+Buffered conversions (Responses, Chat Completions, and both native-Anthropic
+bridges) now rebuild the client response from the merged usage instead of a
+stripped structure. Previously those paths copied only input, output, cache-read
+and the flat cache-write fields, so a response whose writes arrived as a 5m/1h
+breakdown reported `cache_creation_input_tokens: 0` to the client while the
+request was billed for the writes. A stream that reported only cache buckets also
+counts as reported usage, so the guard no longer discards it as "nothing to say".
+
