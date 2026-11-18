@@ -17,7 +17,21 @@ import (
 // Completions response. Text output items are concatenated into
 // choices[0].message.content, refusal parts into choices[0].message.refusal;
 // function_call items become tool_calls.
+// ResponsesToChatCompletions converts without platform knowledge and therefore
+// treats any xs_/as_ custom tool call as a server-run search.
 func ResponsesToChatCompletions(resp *ResponsesResponse, model string) *ChatCompletionsResponse {
+	return responsesToChatCompletions(resp, model, true)
+}
+
+// ResponsesToChatCompletionsForUpstream converts a buffered Responses payload
+// for a caller that knows the upstream platform: only on xAI is a custom tool
+// call with an xs_/as_ call_id a search the server already ran instead of a
+// client tool call (see IsServerSideSearchCall).
+func ResponsesToChatCompletionsForUpstream(resp *ResponsesResponse, model string, xaiServerSideSearch bool) *ChatCompletionsResponse {
+	return responsesToChatCompletions(resp, model, xaiServerSideSearch)
+}
+
+func responsesToChatCompletions(resp *ResponsesResponse, model string, suppressServerSideSearch bool) *ChatCompletionsResponse {
 	id := resp.ID
 	if id == "" {
 		id = generateChatCmplID()
@@ -48,6 +62,12 @@ func ResponsesToChatCompletions(resp *ResponsesResponse, model string) *ChatComp
 				}
 			}
 		case "function_call", "custom_tool_call", "tool_search_call":
+			// xAI 服务端搜索调用由 xAI 自行执行，用户从未声明该工具；
+			// 转成 Chat Completions 的工具调用会让下游误以为需要回传结果。
+			// 其它上游的同一 call_id 只是普通客户端工具调用，必须保留。
+			if suppressServerSideSearch && IsServerSideSearchCall(item.Type, item.CallID) {
+				continue
+			}
 			toolCalls = append(toolCalls, ChatToolCall{
 				ID:   item.CallID,
 				Type: "function",
@@ -138,6 +158,11 @@ type ResponsesEventToChatState struct {
 	argumentBuffers        map[int]*strings.Builder
 	IncludeUsage           bool
 	Usage                  *ChatUsage
+
+	// XAIServerSideSearch is set by callers whose upstream is xAI. A
+	// custom_tool_call that IsServerSideSearchCall then never becomes a tool
+	// call, because xAI runs it itself.
+	XAIServerSideSearch bool
 }
 
 type responsesOutputPartKey struct {
@@ -308,6 +333,9 @@ func resToChatHandleOutputItemAdded(evt *ResponsesStreamEvent, state *ResponsesE
 	if evt.Item == nil || !isResponsesToolCall(evt.Item.Type) {
 		return nil
 	}
+	if state.XAIServerSideSearch && IsServerSideSearchCall(evt.Item.Type, evt.Item.CallID) {
+		return nil
+	}
 
 	state.SawToolCall = true
 	idx := state.NextToolCallIndex
@@ -384,6 +412,9 @@ func resToChatSupplementOutputItem(item *ResponsesOutput, outputIndex int, state
 		_, _ = state.ReasoningOutput.WriteString(value)
 		return []ChatCompletionsChunk{makeChatAggregateDeltaChunk(state, ChatDelta{ReasoningContent: &value})}
 	case "function_call", "custom_tool_call", "tool_search_call":
+		if state.XAIServerSideSearch && IsServerSideSearchCall(item.Type, item.CallID) {
+			return nil
+		}
 		return resToChatSupplementToolCall(outputIndex, item, state)
 	default:
 		return nil
@@ -443,6 +474,11 @@ func resToChatHandleFuncArgsDone(evt *ResponsesStreamEvent, state *ResponsesEven
 	idx, ok := state.OutputIndexToToolIndex[evt.OutputIndex]
 	if !ok {
 		if evt.Name == "" && evt.CallID == "" {
+			return nil
+		}
+		// xAI 服务端搜索调用由 xAI 自己执行，用户从未声明该工具；
+		// 即使上游只下发了 done 事件，也不能补注册成客户端工具调用。
+		if state.XAIServerSideSearch && IsServerSideSearchCall(responsesToolCallTypeForEvent(evt.Type), evt.CallID) {
 			return nil
 		}
 		idx = state.NextToolCallIndex
@@ -594,6 +630,9 @@ func resToChatSupplementOutputItems(items []ResponsesOutput, firstOutputIndex in
 				}
 			}
 		case "function_call", "custom_tool_call", "tool_search_call":
+			if state.XAIServerSideSearch && IsServerSideSearchCall(item.Type, item.CallID) {
+				continue
+			}
 			chunks = append(chunks, resToChatSupplementToolCall(firstOutputIndex+i, item, state)...)
 		}
 	}
@@ -826,7 +865,11 @@ type bufferedFuncCall struct {
 	Name                  string
 	Namespace             string
 	EncryptedFunctionArgs json.RawMessage
+	EncryptedContent      string
 	Args                  strings.Builder
+	// ServerSideSearch marks a custom_tool_call the xAI server ran itself; it
+	// is rebuilt as that item, never as a client function_call.
+	ServerSideSearch bool
 }
 
 // BufferedResponseAccumulator collects content from Responses SSE delta events
@@ -840,6 +883,11 @@ type BufferedResponseAccumulator struct {
 	outputIndexToFuncIdx map[int]int
 	textParts            map[responsesOutputPartKey]string
 	reasoningParts       map[responsesOutputPartKey]string
+
+	// XAIServerSideSearch is set by callers whose upstream is xAI. A
+	// custom_tool_call that IsServerSideSearchCall is then rebuilt as that item
+	// instead of as a client function_call.
+	XAIServerSideSearch bool
 }
 
 // NewBufferedResponseAccumulator returns an initialised accumulator.
@@ -1011,6 +1059,7 @@ func (a *BufferedResponseAccumulator) processOutputItem(event *ResponsesStreamEv
 	case "function_call", "custom_tool_call", "tool_search_call":
 		idx := a.ensureFuncCall(event.OutputIndex, item.Type, item.CallID, item.Name, item.Namespace, item.EncryptedFunctionArgs)
 		if idx >= 0 {
+			a.applyFuncCallIdentity(idx, item.Type, item.CallID, item.EncryptedContent)
 			a.appendFuncCallAggregate(idx, responsesToolCallArguments(item))
 		}
 	}
@@ -1029,8 +1078,25 @@ func (a *BufferedResponseAccumulator) ensureFuncCall(outputIndex int, kind, call
 		Name:                  name,
 		Namespace:             namespace,
 		EncryptedFunctionArgs: encrypted,
+		ServerSideSearch:      a.XAIServerSideSearch && IsServerSideSearchCall(kind, callID),
 	})
 	return idx
+}
+
+// applyFuncCallIdentity records the fields that only the terminal item carries
+// and refreshes the xAI server-side search classification once the item type
+// and call ID are known.
+func (a *BufferedResponseAccumulator) applyFuncCallIdentity(idx int, kind, callID, encryptedContent string) {
+	if idx < 0 || idx >= len(a.funcCalls) {
+		return
+	}
+	call := &a.funcCalls[idx]
+	if encryptedContent != "" {
+		call.EncryptedContent = encryptedContent
+	}
+	if a.XAIServerSideSearch {
+		call.ServerSideSearch = IsServerSideSearchCall(kind, callID)
+	}
 }
 
 func (a *BufferedResponseAccumulator) mergeFuncCallMetadata(idx int, kind, callID, name, namespace string, encrypted json.RawMessage) {
@@ -1118,12 +1184,24 @@ func (a *BufferedResponseAccumulator) BuildOutput() []ResponsesOutput {
 		if !isResponsesToolCall(kind) {
 			kind = "function_call"
 		}
+		if a.funcCalls[i].ServerSideSearch {
+			// The xAI server ran this search itself; rebuilding it as a client
+			// function_call would hand the caller a tool call it never issued.
+			out = append(out, ResponsesOutput{
+				Type:   "custom_tool_call",
+				CallID: a.funcCalls[i].CallID,
+				Name:   a.funcCalls[i].Name,
+				Input:  a.funcCalls[i].Args.String(),
+			})
+			continue
+		}
 		item := ResponsesOutput{
 			Type:                  kind,
 			CallID:                a.funcCalls[i].CallID,
 			Name:                  a.funcCalls[i].Name,
 			Namespace:             a.funcCalls[i].Namespace,
 			EncryptedFunctionArgs: a.funcCalls[i].EncryptedFunctionArgs,
+			EncryptedContent:      a.funcCalls[i].EncryptedContent,
 		}
 		if kind == "custom_tool_call" {
 			item.Input = a.funcCalls[i].Args.String()

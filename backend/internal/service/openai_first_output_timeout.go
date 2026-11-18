@@ -40,9 +40,13 @@ type openAIFirstOutputStage struct {
 	tempPath   string
 	createTemp func() (*os.File, error)
 	removeFile func(string) error
+	// memoryOnly 表示磁盘暂存不可用后回落到内存缓冲；只有有界阶段会这样降级。
 	memoryOnly bool
-	cleanupErr error
-	closed     bool
+	// spoolRequired 表示该阶段没有可信的内存上限（安全缓冲使用 MaxInt64），
+	// 因此磁盘暂存不可用时必须失败，不能退化为无界内存缓冲。
+	spoolRequired bool
+	cleanupErr    error
+	closed        bool
 }
 
 func newOpenAIFirstOutputStage(limit int64) *openAIFirstOutputStage {
@@ -145,7 +149,14 @@ func (s *openAIFirstOutputStage) prepareWrite(incoming int) error {
 	}
 	file, err := s.createTemp()
 	if err != nil {
-		return fmt.Errorf("create first-output spool: %w", err)
+		if s.spoolRequired {
+			// 无界阶段（安全缓冲）没有可退回的内存上限：失败必须上抛，
+			// 否则会把任意长度的明文滞留在内存里。
+			return fmt.Errorf("create first-output spool: %w", err)
+		}
+		// 有界阶段遇到不可用的临时存储时继续在内存中缓冲，仍受同一上限约束。
+		s.memoryOnly = true
+		return nil
 	}
 	path := file.Name()
 	// Unlink before writing any request data. Unix keeps the file descriptor

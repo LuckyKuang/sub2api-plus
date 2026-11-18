@@ -13,6 +13,15 @@ import (
 
 type compositeUnifiedEndpointKey struct{}
 
+// WithCompositeUnifiedEndpoint records the unified endpoint the router admitted
+// this request on. Tests and non-router callers use the same marker as ingress.
+func WithCompositeUnifiedEndpoint(ctx context.Context, endpoint string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, compositeUnifiedEndpointKey{}, endpoint)
+}
+
 func CompositeUnifiedEndpoint(ctx context.Context) string {
 	if ctx == nil {
 		return ""

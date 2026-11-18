@@ -42,6 +42,7 @@ func (s *OpenAIGatewayService) forwardResponsesViaNativeAnthropic(
 	defaultMappedModel string,
 ) (forwardResult *OpenAIForwardResult, firstByteResultErr error) {
 	startTime := time.Now()
+	SetActualOpenAIUpstreamEndpoint(c, "/v1/messages")
 	ctx, byteTiming := beginFirstByteTiming(ctx, startTime)
 	defer func() {
 		if forwardResult != nil && forwardResult.FirstByteMs == nil {

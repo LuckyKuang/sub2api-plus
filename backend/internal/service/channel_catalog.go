@@ -369,7 +369,9 @@ func (s *ModelPlazaService) catalogOffer(ctx context.Context, g *Group, ch *Chan
 			o.TimePricing = catalogDeepSeekTimePricing()
 		}
 		tiers := []string{"priority", "flex"}
-		if resolved.BasePricing != nil && resolved.BasePricing.UltrafastMultiplier > 0 {
+		// Ultrafast 是按模型门控的档位：价格存在且模型本身支持时才对外声明，
+		// 否则目录会把不支持该档位的模型也列成一档。
+		if resolved.BasePricing != nil && resolved.BasePricing.UltrafastMultiplier > 0 && openAIModelSupportsUltrafast(o.Name) {
 			tiers = append(tiers, "ultrafast")
 		}
 		for _, tier := range tiers {

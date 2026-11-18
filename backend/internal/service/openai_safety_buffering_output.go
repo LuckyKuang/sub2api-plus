@@ -198,6 +198,8 @@ func (w *codexSafetyBufferingHTTPWriter) project(payload []byte, protocol string
 func (w *codexSafetyBufferingHTTPWriter) appendPending(p []byte) error {
 	if w.pending == nil {
 		w.pending = newOpenAIFirstOutputStage(math.MaxInt64)
+		// 该阶段的长度上限是 MaxInt64：磁盘暂存不可用时没有可退回的内存边界。
+		w.pending.spoolRequired = true
 	}
 	if _, err := w.pending.Write(p); err != nil {
 		logCodexSafetyBufferingOutputFailure(w.ctx, w.c, "http", "codex_safety_buffering_stage_failed", len(p))

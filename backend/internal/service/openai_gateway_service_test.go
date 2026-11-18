@@ -850,6 +850,13 @@ func (c *stubGatewayCache) DeleteSessionAccountID(ctx context.Context, groupID i
 	return nil
 }
 
+func (c *stubGatewayCache) CompareAndDeleteSessionAccountID(ctx context.Context, groupID int64, sessionHash string, accountID int64) (bool, error) {
+	if c.sessionBindings[sessionHash] != accountID {
+		return false, nil
+	}
+	return true, c.DeleteSessionAccountID(ctx, groupID, sessionHash)
+}
+
 func (c *stubGatewayCache) SetGrokVideoPendingBilling(_ context.Context, _ string, _ []byte, _ time.Duration) error {
 	return nil
 }

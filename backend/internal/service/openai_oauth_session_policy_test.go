@@ -308,6 +308,15 @@ func (c *oauthSessionPolicyCache) DeleteSessionAccountID(_ context.Context, grou
 	return nil
 }
 
+func (c *oauthSessionPolicyCache) CompareAndDeleteSessionAccountID(_ context.Context, groupID int64, sessionHash string, accountID int64) (bool, error) {
+	key := c.key(groupID, sessionHash)
+	if c.values[key] != accountID {
+		return false, nil
+	}
+	delete(c.values, key)
+	return true, nil
+}
+
 func (c *oauthSessionPolicyCache) SetGrokVideoPendingBilling(_ context.Context, _ string, _ []byte, _ time.Duration) error {
 	return nil
 }

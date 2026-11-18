@@ -111,10 +111,12 @@ INSERT INTO settings (key,value) VALUES ('ops_runtime_log_config','{"level":"war
 		    'poll_scheduled', next_poll_at IS NOT NULL, 'owner', owner_generation, 'pending_owner', pending_generation)::text
 		FROM openai_oauth_weekly_reset_observations WHERE account_id=1`))
 	require.JSONEq(t, `{"sequence":0,"owner":""}`, snapshot(`SELECT jsonb_build_object('sequence',reset_sequence,'owner',owner_generation)::text FROM group_quota_follow_reset_events WHERE group_id=101`))
-	// Migrations 286, 299 and 303 add translation, selling-policy and image-count metadata.
+	// Migrations 286, 299, 303 and 314 add translation, selling-policy,
+	// image-count and Ultrafast metadata.
 	// Keep every pre-existing field in the preservation comparison and assert
 	// the new field's required default independently for all fixture groups.
-	require.JSONEq(t, groupsBefore, snapshot(`SELECT jsonb_agg(to_jsonb(t) - ARRAY['model_allowlist','i18n','billing_rate_policy','billing_policy_version','image_count_billing'] ORDER BY id)::text FROM groups t`))
+	require.JSONEq(t, groupsBefore, snapshot(`SELECT jsonb_agg(to_jsonb(t) - ARRAY['model_allowlist','i18n','billing_rate_policy','billing_policy_version','image_count_billing','force_openai_ultrafast'] ORDER BY id)::text FROM groups t`))
+	require.JSONEq(t, `{"1":false,"101":false,"102":false}`, snapshot(`SELECT jsonb_object_agg(id,force_openai_ultrafast)::text FROM groups`))
 	require.JSONEq(t, `{"1":false,"101":false,"102":false}`, snapshot(`SELECT jsonb_object_agg(id,image_count_billing)::text FROM groups`))
 	require.JSONEq(t, `{"1":{},"101":{},"102":{}}`, snapshot(`SELECT jsonb_object_agg(id,i18n)::text FROM groups`))
 	require.JSONEq(t, `{"1":{},"101":{},"102":{}}`, snapshot(`SELECT jsonb_object_agg(id,billing_rate_policy)::text FROM groups`))

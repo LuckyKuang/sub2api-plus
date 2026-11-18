@@ -68,6 +68,15 @@ than splitting their required sequence. Retry handling retains the captured
 credential owner, proxy binding, configured limits and canonical ingress audit.
 Forced quota refresh remains scoped to the authorized target account.
 
+For Chat/Responses compatibility streams, a keepalive may commit HTTP 200
+before the provider produces content. If that stream ends or reaches the
+pre-content timeout without content, the gateway cannot fail over within the
+committed response. It atomically removes this session's sticky binding only
+when it still names the failed account, so the client's retry can be scheduled
+again. A concurrent replacement binding remains intact; the account receives
+no cooldown or exclusion from this release, and other sessions are unaffected.
+Missing bindings and cache errors do not trigger an unconditional deletion.
+
 Manual quota refresh freezes the selected credential owner and its proxy before
 network access. A configured missing or invalid proxy fails before cache lookup
 or any direct request. Usage cache and concurrent refresh sharing are bound to

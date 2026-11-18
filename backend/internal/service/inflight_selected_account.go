@@ -83,6 +83,20 @@ func (d inflightEstimateDeps) forAccount(ctx context.Context, account *Account, 
 	return d
 }
 
+// The selected Vertex endpoint changes default token prices, independently of
+// the retail model name. Match forwarding after channel/account mapping, and
+// retain a bound cache's actual location without keeping its request body.
+func (d inflightEstimateDeps) selectedUpstreamPriceFactor(ctx context.Context, key *APIKey, req InflightEstimateRequest) float64 {
+	if d.selectedAccount == nil || d.selectedAccount.Platform != PlatformGemini || !d.selectedAccount.IsVertexServiceAccount() {
+		return 1
+	}
+	_, _, model := d.selectedBillingModelCandidates(ctx, key, req.Model)
+	if d.selectedUpstreamModel != nil {
+		model = d.selectedUpstreamModel(model)
+	}
+	return VertexUpstreamPriceMultiplier(d.selectedAccount, model, req.cachedContentLocation)
+}
+
 // EstimateInflightReservationForAccount reconciles the admission estimate with
 // the selected owner's actual mapping, without querying a scheduler account pool.
 func (s *GatewayService) EstimateInflightReservationForAccount(ctx context.Context, key *APIKey, req InflightEstimateRequest, account *Account) (float64, bool) {

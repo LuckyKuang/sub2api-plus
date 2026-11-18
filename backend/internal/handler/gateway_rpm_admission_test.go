@@ -93,9 +93,11 @@ func TestGatewayPromptFallbackRPMCountsRequestOnceAndChecksFallbackOverride(t *t
 				require.Len(t, f.wire.calls, 2, "a single external request cannot reject its own fallback at user RPM=1")
 				require.Len(t, f.ledger.commands, 1)
 			}
-			require.Equal(t, []int64{promptPricingFallbackGroup}, repo.groups, "the primary group's cached exemption must not apply to a different group")
-			require.Equal(t, 1, cache.userCalls)
-			require.Equal(t, 1, cache.groupCalls)
+			// 上游把 RPM override 限定在“它所属的分组”：主分组也会做一次查找，
+			// 但主分组缓存中的豁免不得作用到回退分组（回退分组单独查询）。
+			require.Equal(t, []int64{promptPricingPrimaryGroup, promptPricingFallbackGroup}, repo.groups, "each group resolves its own RPM override")
+			require.Equal(t, 1, cache.userCalls, "one external request consumes one user RPM slot")
+			require.Equal(t, 2, cache.groupCalls, "primary and fallback groups each count their own RPM")
 			require.Same(t, &zero, f.key.User.UserGroupRPMOverride, "fallback admission cannot mutate the authenticated user")
 			require.Zero(t, f.cache.count(), "the admitted balance reservation is released on either outcome")
 		})

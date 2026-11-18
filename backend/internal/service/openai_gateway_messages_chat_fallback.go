@@ -195,19 +195,21 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsAnthropic(
 		return &OpenAIForwardResult{RequestID: requestID, Usage: usage, UsageSource: usageSource, Model: originalModel, BillingModel: billingModel, UpstreamModel: upstreamModel, Duration: time.Since(startTime)}, err
 	}
 	result := &OpenAIForwardResult{
-		RequestID:                   requestID,
-		UpstreamHeaders:             resp.Header,
-		Usage:                       usage,
-		UsageSource:                 usageSource,
-		Model:                       originalModel,
-		BillingModel:                billingModel,
-		UpstreamModel:               upstreamModel,
-		ReasoningEffort:             reasoningEffort,
-		UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
-		ResponseServiceTier:         observedDeclaredServiceTier(c),
-		ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
-		Stream:                      false,
-		Duration:                    time.Since(startTime),
+		RequestID:                     requestID,
+		UpstreamHeaders:               resp.Header,
+		Usage:                         usage,
+		UsageSource:                   usageSource,
+		Model:                         originalModel,
+		BillingModel:                  billingModel,
+		UpstreamModel:                 upstreamModel,
+		ReasoningEffort:               reasoningEffort,
+		UpstreamResponseModel:         observedUpstreamResponseModel(c),
+		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+		UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
+		ResponseServiceTier:           observedDeclaredServiceTier(c),
+		ServiceTier:                   resolvedOpenAIUpstreamServiceTier(c, serviceTier),
+		Stream:                        false,
+		Duration:                      time.Since(startTime),
 	}
 	if err := apicompat.ValidateChatCompletionsAnthropicToolInputs(ccResp); err != nil {
 		result.UsageIncomplete = true
@@ -215,7 +217,7 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsAnthropic(
 		writeAnthropicError(c, http.StatusBadGateway, "api_error", "Upstream returned invalid tool input")
 		return result, err
 	}
-	anthropicResp := apicompat.ChatCompletionsResponseToAnthropic(ccResp, originalModel)
+	anthropicResp := apicompat.ChatCompletionsResponseToAnthropic(ccResp, compositeClientModel(c.Request.Context(), originalModel))
 
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
@@ -239,7 +241,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 	requestID := resp.Header.Get("x-request-id")
 	writeStreamHeaders := s.newStreamHeaderWriter(c, resp.Header, account)
 
-	anthropicState := apicompat.NewChatCompletionsToAnthropicStreamState(originalModel)
+	anthropicState := apicompat.NewChatCompletionsToAnthropicStreamState(compositeClientModel(c.Request.Context(), originalModel))
 	clientDisconnected := false
 	timing := requestStreamOutputTiming(c)
 
@@ -291,22 +293,24 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 		// masks the truncation, and surface the error to flag usage incomplete
 		// (mirrors forwardResponsesViaRawChatCompletions).
 		result := &OpenAIForwardResult{
-			RequestID:                   requestID,
-			UpstreamHeaders:             resp.Header,
-			Usage:                       usage,
-			UsageSource:                 scan.usageSource(clientDisconnected),
-			Model:                       originalModel,
-			BillingModel:                billingModel,
-			UpstreamModel:               upstreamModel,
-			ReasoningEffort:             reasoningEffort,
-			UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
-			ResponseServiceTier:         observedDeclaredServiceTier(c),
-			ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
-			Stream:                      true,
-			UsageIncomplete:             scan.usageIncomplete(),
-			Duration:                    time.Since(startTime),
-			FirstTokenMs:                scan.FirstTokenMs,
-			ClientDisconnect:            clientDisconnected,
+			RequestID:                     requestID,
+			UpstreamHeaders:               resp.Header,
+			Usage:                         usage,
+			UsageSource:                   scan.usageSource(clientDisconnected),
+			Model:                         originalModel,
+			BillingModel:                  billingModel,
+			UpstreamModel:                 upstreamModel,
+			ReasoningEffort:               reasoningEffort,
+			UpstreamResponseModel:         observedUpstreamResponseModel(c),
+			UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+			UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
+			ResponseServiceTier:           observedDeclaredServiceTier(c),
+			ServiceTier:                   resolvedOpenAIUpstreamServiceTier(c, serviceTier),
+			Stream:                        true,
+			UsageIncomplete:               scan.usageIncomplete(),
+			Duration:                      time.Since(startTime),
+			FirstTokenMs:                  scan.FirstTokenMs,
+			ClientDisconnect:              clientDisconnected,
 		}
 		timing.ApplyOpenAIResult(result)
 		// Once client output is committed this request cannot be replayed,
@@ -338,22 +342,24 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 	}
 
 	result := &OpenAIForwardResult{
-		RequestID:                   requestID,
-		UpstreamHeaders:             resp.Header,
-		Usage:                       usage,
-		UsageSource:                 scan.usageSource(clientDisconnected),
-		Model:                       originalModel,
-		BillingModel:                billingModel,
-		UpstreamModel:               upstreamModel,
-		ReasoningEffort:             reasoningEffort,
-		UpstreamResponseServiceTier: observedUpstreamResponseServiceTier(c),
-		ResponseServiceTier:         observedDeclaredServiceTier(c),
-		ServiceTier:                 resolvedOpenAIUpstreamServiceTier(c, serviceTier),
-		Stream:                      true,
-		UsageIncomplete:             scan.usageIncomplete(),
-		Duration:                    time.Since(startTime),
-		FirstTokenMs:                scan.FirstTokenMs,
-		ClientDisconnect:            clientDisconnected,
+		RequestID:                     requestID,
+		UpstreamHeaders:               resp.Header,
+		Usage:                         usage,
+		UsageSource:                   scan.usageSource(clientDisconnected),
+		Model:                         originalModel,
+		BillingModel:                  billingModel,
+		UpstreamModel:                 upstreamModel,
+		ReasoningEffort:               reasoningEffort,
+		UpstreamResponseModel:         observedUpstreamResponseModel(c),
+		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+		UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
+		ResponseServiceTier:           observedDeclaredServiceTier(c),
+		ServiceTier:                   resolvedOpenAIUpstreamServiceTier(c, serviceTier),
+		Stream:                        true,
+		UsageIncomplete:               scan.usageIncomplete(),
+		Duration:                      time.Since(startTime),
+		FirstTokenMs:                  scan.FirstTokenMs,
+		ClientDisconnect:              clientDisconnected,
 	}
 	timing.ApplyOpenAIResult(result)
 	return result, nil

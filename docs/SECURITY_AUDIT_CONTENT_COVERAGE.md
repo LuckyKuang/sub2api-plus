@@ -447,6 +447,16 @@ HTTP/WS, OAuth/API key, no-content pass-through and forbidden selection/slot/sen
 side effects. HTTP invalid UTF-8 is basic validation before audit; extraction
 failures retain the existing structured, content-free error logs.
 
+The v0.2.22 import extends that shared external-user projection to nonempty
+`agent.browser_info`, `agent.goal_objective` and `agent.untrusted_context`
+function-call outputs with absent or blank string `call_id`. Their text is
+wrapped as `<external_NAME>output</external_NAME>` and retains history references.
+Real call anchors, null/non-string IDs, duplicate JSON members and blank output
+keep their tool-output attribution. Both engines use the same normalizer as the
+post-audit HTTP/WS adapter. `upstream022_audit_contract_test.go` covers the literal
+projection, anchored-output exclusion, OAuth/API-key HTTP/WS blocking before
+side effects and unknown-item pass-through for all three names.
+
 Prompt-audit enqueue wakes local workers only after durable enqueue succeeds.
 Workers retain database claims, lease expiry, retry polling and cross-replica
 idempotency; wakeups never run selection or forwarding before the ingress gate.

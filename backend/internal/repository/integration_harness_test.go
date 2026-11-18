@@ -37,6 +37,7 @@ const (
 
 var (
 	integrationDB          *sql.DB
+	integrationDSN         string
 	integrationEntClient   *dbent.Client
 	integrationRedis       *redisclient.Client
 	integrationPostgresDSN string
@@ -101,6 +102,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	integrationDSN = dsn
 	integrationPostgresDSN = dsn
 	integrationDB, err = openSQLWithRetry(ctx, dsn, 30*time.Second)
 	if err != nil {
@@ -151,6 +153,7 @@ func TestMain(m *testing.M) {
 // integration tests apply migrations and create persistent fixture rows.
 func runIntegrationTestsWithExternalServices(ctx context.Context, m *testing.M, postgresDSN, redisAddr string) int {
 	var err error
+	integrationDSN = postgresDSN
 	integrationPostgresDSN = postgresDSN
 	integrationDB, err = openSQLWithRetry(ctx, postgresDSN, 30*time.Second)
 	if err != nil {

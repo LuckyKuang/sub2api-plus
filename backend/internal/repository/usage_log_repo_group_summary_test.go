@@ -4,12 +4,49 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/require"
 )
+
+func TestUsageLogRepositoryGroupSummaryReadFailuresReleaseSnapshot(t *testing.T) {
+	for _, stage := range []string{"begin", "watermark", "aggregate", "commit"} {
+		t.Run(stage, func(t *testing.T) {
+			db, mock := newSQLMock(t)
+			repo := newUsageLogRepositoryWithSQL(nil, db)
+			useGroupUsageRepositoryTestTimezone(t, "UTC")
+			failure := errors.New("snapshot read failed")
+			begin := mock.ExpectBegin()
+			if stage == "begin" {
+				begin.WillReturnError(failure)
+			} else {
+				watermark := mock.ExpectQuery(`(?s)COUNT\(\*\).*usage_group_rollup_state.*WHERE id = 1`)
+				if stage == "watermark" {
+					watermark.WillReturnError(failure)
+					mock.ExpectRollback()
+				} else {
+					watermark.WillReturnRows(sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
+						AddRow(1, "2026-03-09", time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC), "UTC", time.Unix(0, 0).UTC()))
+					aggregate := mock.ExpectQuery(`(?s)WITH historical AS`)
+					if stage == "aggregate" {
+						aggregate.WillReturnError(failure)
+						mock.ExpectRollback()
+					} else {
+						aggregate.WillReturnRows(sqlmock.NewRows([]string{"group_id", "total_cost", "today_cost", "yesterday_cost"}))
+						mock.ExpectCommit().WillReturnError(failure)
+					}
+				}
+			}
+			result, err := repo.GetAllGroupUsageSummary(context.Background(), time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC))
+			require.ErrorIs(t, err, failure)
+			require.Nil(t, result)
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
 
 func TestUsageLogRepositoryGetAllGroupUsageSummaryUsesRollupTail(t *testing.T) {
 	db, mock := newSQLMock(t)
@@ -19,9 +56,10 @@ func TestUsageLogRepositoryGetAllGroupUsageSummaryUsesRollupTail(t *testing.T) {
 	yesterdayStart := time.Date(2026, 3, 8, 5, 0, 0, 0, time.UTC)
 
 	// 水位有效：closed_before = 2026-03-07（≤ today），时区与配置一致。
+	mock.ExpectBegin()
 	mock.ExpectQuery(`(?s)COUNT\(\*\).*usage_group_rollup_state.*WHERE id = 1`).
-		WillReturnRows(sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name"}).
-			AddRow(1, "2026-03-07", time.Date(2026, 2, 1, 5, 0, 0, 0, time.UTC), "America/New_York"))
+		WillReturnRows(sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
+			AddRow(1, "2026-03-07", time.Date(2026, 2, 1, 5, 0, 0, 0, time.UTC), "America/New_York", time.Unix(0, 0).UTC()))
 
 	// 尾段起点必须以参数形式进 WHERE —— 这正是把 usage_logs 全表扫换回
 	// idx_usage_logs_created_at 索引扫的那一步。
@@ -37,6 +75,7 @@ func TestUsageLogRepositoryGetAllGroupUsageSummaryUsesRollupTail(t *testing.T) {
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"group_id", "total_cost", "today_cost", "yesterday_cost"}).
 			AddRow(int64(7), 12.5, 1.25, 2.5))
+	mock.ExpectCommit()
 
 	result, err := repo.GetAllGroupUsageSummary(context.Background(), todayStart)
 	require.NoError(t, err)
@@ -61,18 +100,18 @@ func TestUsageLogRepositoryGetAllGroupUsageSummaryFallsBackWhenWatermarkInvalid(
 	}{
 		{
 			name: "水位行缺失",
-			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name"}).
-				AddRow(0, nil, nil, nil),
+			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
+				AddRow(0, nil, nil, nil, nil),
 		},
 		{
 			name: "时区与当前配置不一致",
-			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name"}).
-				AddRow(1, "2026-03-07", time.Date(2026, 2, 1, 5, 0, 0, 0, time.UTC), "Asia/Shanghai"),
+			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
+				AddRow(1, "2026-03-07", time.Date(2026, 2, 1, 5, 0, 0, 0, time.UTC), "Asia/Shanghai", time.Unix(0, 0).UTC()),
 		},
 		{
 			name: "水位位于未来",
-			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name"}).
-				AddRow(1, "2026-03-10", time.Date(2026, 2, 1, 5, 0, 0, 0, time.UTC), "America/New_York"),
+			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
+				AddRow(1, "2026-03-10", time.Date(2026, 2, 1, 5, 0, 0, 0, time.UTC), "America/New_York", time.Unix(0, 0).UTC()),
 		},
 	}
 
@@ -82,11 +121,78 @@ func TestUsageLogRepositoryGetAllGroupUsageSummaryFallsBackWhenWatermarkInvalid(
 			repo := newUsageLogRepositoryWithSQL(nil, db)
 			useGroupUsageRepositoryTestTimezone(t, "America/New_York")
 
+			mock.ExpectBegin()
 			mock.ExpectQuery(`(?s)COUNT\(\*\).*usage_group_rollup_state.*WHERE id = 1`).
 				WillReturnRows(tc.rows)
 			mock.ExpectQuery(`(?s)usage_group_daily_rollups.*FROM usage_logs ul\s+WHERE ul\.created_at >= \$7`).
 				WithArgs(todayStart, yesterdayStart, "2026-03-08", false, "1970-01-01", "1970-01-01", epoch).
 				WillReturnRows(sqlmock.NewRows([]string{"group_id", "total_cost", "today_cost", "yesterday_cost"}))
+			mock.ExpectCommit()
+
+			_, err := repo.GetAllGroupUsageSummary(context.Background(), todayStart)
+			require.NoError(t, err)
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+// 尾段不早于保留下界：水位落后于保留下界时（例如清理已推进下界而重建尚未完成），
+// 尚未删除的过期记录也不计入。
+func TestUsageLogRepositoryGetAllGroupUsageSummaryTailStartsAtExpiredBefore(t *testing.T) {
+	todayStart := time.Date(2026, 3, 9, 4, 0, 0, 0, time.UTC)
+	yesterdayStart := time.Date(2026, 3, 8, 5, 0, 0, 0, time.UTC)
+	expiredBefore := time.Date(2026, 2, 10, 5, 0, 0, 0, time.UTC)
+
+	cases := []struct {
+		name      string
+		rows      *sqlmock.Rows
+		valid     bool
+		retained  string
+		closed    string
+		tailStart time.Time
+	}{
+		{
+			name: "水位有效但早于保留下界",
+			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
+				AddRow(1, "2026-02-01", expiredBefore, "America/New_York", expiredBefore),
+			valid:     true,
+			retained:  "2026-02-10",
+			closed:    "2026-02-01",
+			tailStart: expiredBefore,
+		},
+		{
+			name: "retained_from 早于保留下界",
+			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
+				AddRow(1, "2026-03-07", time.Date(2026, 1, 20, 5, 0, 0, 0, time.UTC), "America/New_York", expiredBefore),
+			valid:     true,
+			retained:  "2026-02-10",
+			closed:    "2026-03-07",
+			tailStart: time.Date(2026, 3, 7, 5, 0, 0, 0, time.UTC),
+		},
+		{
+			name: "水位无效",
+			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
+				AddRow(1, "2026-03-07", expiredBefore, "Asia/Shanghai", expiredBefore),
+			valid:     false,
+			retained:  "1970-01-01",
+			closed:    "1970-01-01",
+			tailStart: expiredBefore,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db, mock := newSQLMock(t)
+			repo := newUsageLogRepositoryWithSQL(nil, db)
+			useGroupUsageRepositoryTestTimezone(t, "America/New_York")
+
+			mock.ExpectBegin()
+			mock.ExpectQuery(`(?s)COUNT\(\*\).*MAX\(expired_before\).*usage_group_rollup_state.*WHERE id = 1`).
+				WillReturnRows(tc.rows)
+			mock.ExpectQuery(`(?s)usage_group_daily_rollups.*FROM usage_logs ul\s+WHERE ul\.created_at >= \$7`).
+				WithArgs(todayStart, yesterdayStart, "2026-03-08", tc.valid, tc.retained, tc.closed, tc.tailStart).
+				WillReturnRows(sqlmock.NewRows([]string{"group_id", "total_cost", "today_cost", "yesterday_cost"}))
+			mock.ExpectCommit()
 
 			_, err := repo.GetAllGroupUsageSummary(context.Background(), todayStart)
 			require.NoError(t, err)

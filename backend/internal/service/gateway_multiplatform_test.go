@@ -159,7 +159,10 @@ func (m *mockAccountRepoForPlatform) ListSchedulableUngroupedByPlatforms(ctx con
 func (m *mockAccountRepoForPlatform) ListCommercialModelMappings(context.Context, []int64) (map[int64][]CommercialModelMapping, error) {
 	panic("unexpected ListCommercialModelMappings call")
 }
-func (m *mockAccountRepoForPlatform) ListModelAvailabilityCandidates(_ context.Context, groupID *int64, platforms []string, includeGrouped bool) ([]Account, error) {
+func (m *mockAccountRepoForPlatform) ListModelAvailabilityCandidates(ctx context.Context, groupID *int64, platforms []string, includeGrouped bool) ([]Account, error) {
+	if m.listPlatformFunc != nil {
+		return m.listPlatformFunc(ctx, firstPlatform(platforms))
+	}
 	platformSet := make(map[string]struct{}, len(platforms))
 	for _, platform := range platforms {
 		platformSet[platform] = struct{}{}
@@ -211,6 +214,7 @@ func (m *mockAccountRepoForPlatform) ClearAntigravityQuotaScopes(ctx context.Con
 func (m *mockAccountRepoForPlatform) ClearModelRateLimits(ctx context.Context, id int64) error {
 	return nil
 }
+
 func (m *mockAccountRepoForPlatform) UpdateSessionWindow(ctx context.Context, id int64, start, end *time.Time, status string) error {
 	return nil
 }
@@ -278,6 +282,13 @@ func (m *mockGatewayCacheForPlatform) DeleteSessionAccountID(ctx context.Context
 	m.deletedSessions[sessionHash]++
 	delete(m.sessionBindings, sessionHash)
 	return nil
+}
+
+func (m *mockGatewayCacheForPlatform) CompareAndDeleteSessionAccountID(ctx context.Context, groupID int64, sessionHash string, accountID int64) (bool, error) {
+	if m.sessionBindings[sessionHash] != accountID {
+		return false, nil
+	}
+	return true, m.DeleteSessionAccountID(ctx, groupID, sessionHash)
 }
 
 func (m *mockGatewayCacheForPlatform) SetGrokVideoPendingBilling(_ context.Context, _ string, _ []byte, _ time.Duration) error {

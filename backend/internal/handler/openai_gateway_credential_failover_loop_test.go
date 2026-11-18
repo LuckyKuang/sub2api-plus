@@ -1000,3 +1000,16 @@ func newGrokCredentialFailoverHandler(t *testing.T, mode string) (*OpenAIGateway
 	}
 	return h, repo, upstream, router, cleanup
 }
+
+// ListByPlatform 供会话策略诊断回退使用：返回替身持有的账号快照。
+func (r *grokCredentialHandlerRepo) ListByPlatform(_ context.Context, platform string) ([]service.Account, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]service.Account, 0, len(r.accounts))
+	for _, account := range r.accounts {
+		if platform == "" || account.Platform == platform {
+			out = append(out, account)
+		}
+	}
+	return out, nil
+}

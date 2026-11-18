@@ -257,9 +257,14 @@ func applyCodexAccountIdentityClientMetadataMap(ctx context.Context, requestBody
 		changed = flatChanged || embeddedChanged
 	}
 	// Cache identity has its own tenant-only resolver and is independent of IDs.
+	// In particular the client's prompt_cache_key is never rewritten: it is the
+	// caller's logical cache key and must survive a credential-owner migration.
 	return changed, nil
 }
 
+// applyCodexAccountIdentityClientMetadataRaw scopes only the small identity
+// subobjects with gjson/sjson. The passthrough hot path never unmarshals the
+// potentially multi-megabyte request body.
 func applyCodexAccountIdentityClientMetadataRaw(body []byte, account *Account, apiKeyID int64, contexts ...context.Context) ([]byte, bool, error) {
 	if len(body) == 0 || codexAccountIdentityNamespace(account) == "" || !gjson.ParseBytes(body).IsObject() {
 		return body, false, nil

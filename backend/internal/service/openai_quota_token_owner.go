@@ -106,6 +106,10 @@ func openAIQuotaTokenIdentityFingerprint(account *Account) (string, error) {
 	for _, key := range []string{"access_token", "refresh_token", "id_token", "expires_at", "_token_version", "email", "chatgpt_user_id", "organization_id", "plan_type", "subscription_expires_at"} {
 		delete(owner.Credentials, key)
 	}
+	if owner.Credentials == nil {
+		// 没有凭据的账号（例如仅带工作区信息的父账号快照）同样需要指纹。
+		owner.Credentials = make(map[string]any, 1)
+	}
 	owner.Credentials["chatgpt_account_id"] = accountID
 	return cnControlOwnerFingerprint(owner)
 }

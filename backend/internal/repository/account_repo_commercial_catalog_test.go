@@ -43,6 +43,7 @@ func TestListCommercialModelMappingsUsesOneNarrowAuthorizedProjection(t *testing
 	require.Contains(t, selectClause, "a.credentials->'model_mapping'")
 	require.Contains(t, selectClause, "a.extra->'openai_passthrough'")
 	require.Contains(t, selectClause, "a.extra->'openai_oauth_passthrough'")
+	require.Contains(t, selectClause, "a.extra->'openai_passthrough_model_filter'")
 	require.NotContains(t, selectClause, "a.credentials,")
 	for _, unneeded := range []string{"a.*", "a.extra,", "proxy_id", "access_token", "proxies", "JOIN groups"} {
 		require.NotContains(t, normalized, unneeded)
@@ -89,8 +90,8 @@ func TestListCommercialModelMappingsEmptyAndReadFailures(t *testing.T) {
 	}
 }
 
-// Catalog coverage follows the same routing contract as AccountPublicModels:
-// passthrough ignores saved model mappings, including the historical flag.
+// docs/CHANNEL_PRICING.md requires catalog coverage to honor explicit passthrough
+// source-key filtering; absent, false and malformed opt-ins remain unrestricted.
 func TestCommercialModelProjectionIgnoresPassthroughMappings(t *testing.T) {
 	for _, tc := range []struct {
 		name, platform, flags string
@@ -98,6 +99,10 @@ func TestCommercialModelProjectionIgnoresPassthroughMappings(t *testing.T) {
 	}{
 		{"enabled", service.PlatformOpenAI, `{"openai_passthrough":true}`, true},
 		{"legacy", service.PlatformOpenAI, `{"openai_oauth_passthrough":true}`, true},
+		{"filter enabled", service.PlatformOpenAI, `{"openai_passthrough":true,"openai_passthrough_model_filter":true}`, false},
+		{"legacy filter enabled", service.PlatformOpenAI, `{"openai_oauth_passthrough":true,"openai_passthrough_model_filter":true}`, false},
+		{"filter disabled", service.PlatformOpenAI, `{"openai_passthrough":true,"openai_passthrough_model_filter":false}`, true},
+		{"invalid filter", service.PlatformOpenAI, `{"openai_passthrough":true,"openai_passthrough_model_filter":"true"}`, true},
 		{"explicit false wins", service.PlatformOpenAI, `{"openai_passthrough":false,"openai_oauth_passthrough":true}`, false},
 		{"invalid new falls through", service.PlatformOpenAI, `{"openai_passthrough":"true","openai_oauth_passthrough":true}`, true},
 		{"other provider", service.PlatformGrok, `{"openai_passthrough":true}`, false},

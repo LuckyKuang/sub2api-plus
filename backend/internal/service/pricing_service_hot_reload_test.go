@@ -165,7 +165,9 @@ func TestPricingHotReload_DeletedFileDropsItsLayer(t *testing.T) {
 	require.NotNil(t, svc.pricingData["custom-a"], "文件重新出现即恢复")
 }
 
-type stubPricingRemoteClient struct{ body string }
+type stubPricingRemoteClient struct {
+	body string
+}
 
 func (c stubPricingRemoteClient) FetchPricingJSON(context.Context, string, int64) ([]byte, error) {
 	return []byte(c.body), nil

@@ -41,7 +41,7 @@ func (s *GeminiMessagesCompatService) ForwardAsResponses(ctx context.Context, c 
 	if err != nil {
 		return nil, fmt.Errorf("marshal Gemini Responses request: %w", err)
 	}
-	return s.forwardClaudeBodyAsOpenAICompat(ctx, c, account, converted, request.Model, request.Stream, true, start, true)
+	return s.forwardClaudeBodyAsOpenAICompat(ctx, c, account, converted, nil, request.Model, request.Stream, true, start, true)
 }
 
 func writeGeminiOpenAICompatResponse(c *gin.Context, response *apicompat.ChatCompletionsResponse, model string, responses bool) {

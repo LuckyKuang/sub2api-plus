@@ -258,9 +258,16 @@ var (
 	}
 )
 
+// tokenPriceOverrides tracks explicit nonnegative rates from pricing.override_file.
+// Keep this provenance with the parsed card so billing never rereads the file.
+type tokenPriceOverrides struct {
+	input, output, cacheRead bool
+}
+
 // LiteLLMModelPricing LiteLLM价格数据结构
 // 只保留我们需要的字段，使用指针来处理可能缺失的值
 type LiteLLMModelPricing struct {
+	priceOverrides                      tokenPriceOverrides
 	InputCostPerToken                   float64 `json:"input_cost_per_token"`
 	InputCostPerTokenPriority           float64 `json:"input_cost_per_token_priority"`
 	OutputCostPerToken                  float64 `json:"output_cost_per_token"`
@@ -344,9 +351,12 @@ type PricingService struct {
 	// 需要从本地目录缓存重建叠加层。
 	customFilesHash string
 
-	// 停止信号
-	stopCh chan struct{}
-	wg     sync.WaitGroup
+	// 停止信号。lifecycleMu 让后台刷新的 wg.Add 与 Stop 的 close/Wait 互斥，
+	// stopOnce 保证 Stop 重复调用不会重复 close。
+	stopCh      chan struct{}
+	stopOnce    sync.Once
+	lifecycleMu sync.Mutex
+	wg          sync.WaitGroup
 }
 
 // NewPricingService 创建价格服务
@@ -378,13 +388,18 @@ func (s *PricingService) Initialize() error {
 	// 启动定时更新
 	s.startUpdateScheduler()
 
-	logger.LegacyPrintf("service.pricing", "[Pricing] Service initialized with %d models", len(s.pricingData))
+	s.mu.RLock()
+	modelCount := len(s.pricingData)
+	s.mu.RUnlock()
+	logger.LegacyPrintf("service.pricing", "[Pricing] Service initialized with %d models", modelCount)
 	return nil
 }
 
 // Stop 停止价格服务
 func (s *PricingService) Stop() {
-	close(s.stopCh)
+	s.lifecycleMu.Lock()
+	s.stopOnce.Do(func() { close(s.stopCh) })
+	s.lifecycleMu.Unlock()
 	s.wg.Wait()
 	logger.LegacyPrintf("service.pricing", "%s", "[Pricing] Service stopped")
 }
@@ -455,9 +470,9 @@ func (s *PricingService) checkAndUpdatePricing() error {
 	}
 
 	if validatedLocalCache {
-		if err := s.syncWithRemote(); err != nil {
-			logger.LegacyPrintf("service.pricing", "[Pricing] Release refresh failed; keeping validated local cache: %v", err)
-		}
+		// 验证过的缓存已可计费：刷新移出启动关键路径，远端慢或不可达
+		// 都不能拖慢监听（fetch 会一直等到客户端超时）。
+		s.refreshReleaseInBackground()
 		return nil
 	}
 
@@ -485,13 +500,40 @@ func (s *PricingService) checkAndUpdatePricing() error {
 	if !s.remoteSyncEnabled() {
 		return nil
 	}
+	if validatedLocalCache {
+		s.refreshReleaseInBackground()
+		return nil
+	}
+	// 未验证的本地价格文件可能来自任意写入：必须先由受信任的 Release
+	// 替换（或明确失败），不能像验证缓存那样降级到后台。
 	if err := s.syncWithRemote(); err != nil {
-		if !validatedLocalCache {
-			return fmt.Errorf("refresh release pricing for unvalidated local cache: %w", err)
-		}
-		logger.LegacyPrintf("service.pricing", "[Pricing] Release refresh failed; keeping validated local cache: %v", err)
+		return fmt.Errorf("refresh release pricing for unvalidated local cache: %w", err)
 	}
 	return nil
+}
+
+// refreshReleaseInBackground runs one Release refresh off the startup path. It
+// shares the service lifecycle so Stop still waits for the attempt to finish.
+func (s *PricingService) refreshReleaseInBackground() {
+	if s == nil {
+		return
+	}
+	// 与 Stop 互斥：已停止就不再 Add，避免 Wait 之后的 WaitGroup 误用。
+	s.lifecycleMu.Lock()
+	select {
+	case <-s.stopCh:
+		s.lifecycleMu.Unlock()
+		return
+	default:
+	}
+	s.wg.Add(1)
+	s.lifecycleMu.Unlock()
+	go func() {
+		defer s.wg.Done()
+		if err := s.syncWithRemote(); err != nil {
+			logger.LegacyPrintf("service.pricing", "[Pricing] Release refresh failed; keeping validated local cache: %v", err)
+		}
+	}()
 }
 
 // syncWithRemote accepts only a strictly newer Release manifest whose pricing
@@ -708,7 +750,7 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 	if err := json.Unmarshal(body, &rawData); err != nil {
 		return nil, fmt.Errorf("parse raw JSON: %w", err)
 	}
-	rawData = s.applyPricingOverrides(rawData)
+	rawData, priceOverrides := s.applyPricingOverrides(rawData)
 
 	result := make(map[string]*LiteLLMModelPricing)
 	skipped := 0
@@ -733,6 +775,7 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		}
 
 		pricing := &LiteLLMModelPricing{
+			priceOverrides:         priceOverrides[modelName],
 			LiteLLMProvider:        entry.LiteLLMProvider,
 			Mode:                   entry.Mode,
 			SupportsPromptCaching:  entry.SupportsPromptCaching,
@@ -975,11 +1018,12 @@ func warnOrphanCacheTierFields(entries []string) {
 // 文件的解析都经过 parsePricingData，因此 override 是最高优先级的数据源。这里只修补
 // 已存在的条目：目录/回退里都没有的模型由 mergeOverrideOnlyModels 在两层数据合并后
 // 统一并入——若在此处抢先建条目，纯 override 条目会挡住回退文件中同名完整条目的合并。
-func (s *PricingService) applyPricingOverrides(rawData map[string]json.RawMessage) map[string]json.RawMessage {
+func (s *PricingService) applyPricingOverrides(rawData map[string]json.RawMessage) (map[string]json.RawMessage, map[string]tokenPriceOverrides) {
 	overrides := s.loadPricingOverrideEntries()
 	if len(overrides) == 0 {
-		return rawData
+		return rawData, nil
 	}
+	priceOverrides := make(map[string]tokenPriceOverrides, len(overrides))
 	for name, patch := range overrides {
 		base, ok := rawData[name]
 		if !ok {
@@ -991,8 +1035,25 @@ func (s *PricingService) applyPricingOverrides(rawData map[string]json.RawMessag
 			continue
 		}
 		rawData[name] = merged
+		priceOverrides[name] = tokenPriceOverridesFromPatch(patch)
 	}
-	return rawData
+	return rawData, priceOverrides
+}
+
+func tokenPriceOverridesFromPatch(patch json.RawMessage) tokenPriceOverrides {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(patch, &fields) != nil {
+		return tokenPriceOverrides{}
+	}
+	explicitRate := func(field string) bool {
+		var rate *float64
+		return json.Unmarshal(fields[field], &rate) == nil && rate != nil && *rate >= 0
+	}
+	return tokenPriceOverrides{
+		input:     explicitRate("input_cost_per_token"),
+		output:    explicitRate("output_cost_per_token"),
+		cacheRead: explicitRate("cache_read_input_token_cost"),
+	}
 }
 
 // loadPricingOverrideEntries 读取 override 文件的原始条目。未配置返回 nil；
@@ -1666,7 +1727,7 @@ func normalizeAntigravityClaudeTierAlias(model string) string {
 // the published token rate, so this keeps -high/-low/-medium and -tiered
 // requests on the corresponding base model's price card.
 func normalizeGeminiThinkingTierAlias(model string) string {
-	for _, baseModel := range []string{"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-4-argon"} {
+	for _, baseModel := range []string{"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-4-argon", "gemini-4-carbon"} {
 		for _, tier := range []string{"-high", "-low", "-medium", "-tiered"} {
 			if model == baseModel+tier {
 				return baseModel

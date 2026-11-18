@@ -24,6 +24,16 @@ Sonnet 5.5 cache reads use $0.10/MTok at all supported context sizes, including
 the 1M window, in both catalog and fallback pricing. Sonnet 5 retains its own
 $0.20/MTok rate. See the [official Sonnet 5.5 pricing change](https://platform.claude.com/docs/en/models/sonnet-5-5/whats-new-sonnet-5-5).
 
+An explicit finite, nonnegative Fable `7d_oi` utilization below 95% can recover
+an exhausted-window model cooldown. Missing or invalid utilization, a rejected
+window, credits-required responses and administrator thresholds cannot authorize
+that recovery. Passive response headers and active usage refreshes use the same
+rule. Recovery compares the transmitted credential owner and the entire observed
+scope record, including its reason and reset time, in one database operation
+with the scheduler notification. A newer rejection, changed login or storage
+failure leaves both the stored cooldown and the request's local snapshot intact;
+other model cooldowns remain unchanged.
+
 ## Model mappings and protocol conversion
 
 Chat Completions and Responses bridges resolve the account's final upstream

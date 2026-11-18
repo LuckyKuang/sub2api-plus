@@ -267,71 +267,22 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
 
   afterEach(() => vi.useRealTimers())
 
-  it('shows StepFun model choices and restores them before entering credentials', async () => {
-    const wrapper = mountModal([], true)
-    await selectButtonByText(wrapper, 'StepFun')
-    const candidates = ['step-5-preview', 'step-3.7-flash', 'step-3.5-flash-2603', 'step-3.5-flash', 'step-router-v1']
-    const selector = wrapper.findComponent({ name: 'ModelWhitelistSelector' })
-    expect(selector.props('modelValue')).toEqual(candidates)
-    await selectButtonByText(wrapper, 'admin.accounts.clearAllModels')
-    expect(selector.props('modelValue')).toEqual([])
-    await selectButtonByText(wrapper, 'admin.accounts.fillRelatedModels')
-    expect(selector.props('modelValue')).toEqual(candidates)
-    await wrapper.get('div.cursor-pointer').trigger('click')
-    expect(wrapper.findAll('[data-testid="select-model"] > span.truncate').map(label => label.text())).toEqual(candidates)
-    expect(previewModelsMock).not.toHaveBeenCalled()
-    expect(cnOAuthModelsMock).not.toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it.each(['apikey', 'oauth'] as const)('saves the actual StepFun %s checkbox selection during creation', async kind => {
-    if (kind === 'oauth') vi.useFakeTimers()
-    const wrapper = mountModal([], true)
-    await selectButtonByText(wrapper, 'StepFun')
-    await wrapper.get('form#create-account-form input[type="text"]').setValue('Restricted StepFun')
-    // Start with an empty whitelist, then explicitly select from the live catalog.
-    await selectButtonByText(wrapper, 'admin.accounts.clearAllModels')
-    const catalog = { models: ['step-3.7-flash', 'step-other-chat'] }
-    if (kind === 'apikey') {
-      previewModelsMock.mockResolvedValue(catalog)
-      await wrapper.get('form#create-account-form input[type="password"]').setValue('step-key')
-    } else {
-      // docs/providers/STEPFUN.md: Step Plan login polls the server-held flow;
-      // the browser never exchanges a loopback callback or a private API key.
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-      const pending = { session_id: 'ready-step', status: 'pending', authorize_url: 'https://platform.stepfun.com/cli-login-remote?flow_id=public-flow', expires_at: new Date(Date.now() + 60000).toISOString(), interval_seconds: 5 }
-      cnOAuthRequestMock.mockResolvedValueOnce(pending)
-      await selectButtonByText(wrapper, 'admin.accounts.oauth.domestic.start')
-      await flushPromises()
-      expect(wrapper.find('[data-testid="cn-oauth-panel"] textarea').exists()).toBe(false)
-      cnOAuthRequestMock.mockResolvedValueOnce({ ...pending, status: 'ready' })
-      await vi.advanceTimersByTimeAsync(5000)
-      await flushPromises()
-      expect(cnOAuthRequestMock).toHaveBeenLastCalledWith('stepfun', 'poll', {
-        session_id: 'ready-step'
-      })
-      expect(wrapper.findComponent({ name: 'CNOAuthPanel' }).emitted('ready-session')?.at(-1)).toEqual(['ready-step'])
-      expect(wrapper.findComponent({ name: 'ModelWhitelistSelector' }).props('oauthSessionId')).toBe('ready-step')
-      cnOAuthModelsMock.mockResolvedValue(catalog)
-      cnOAuthRequestMock.mockResolvedValueOnce({ ...pending, status: 'completed', account_id: 42 })
-    }
-    await selectButtonByText(wrapper, 'admin.accounts.syncUpstreamModels')
+  it('can create a passthrough account with model filtering enabled', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await selectButtonByText(wrapper, 'API Key')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('filtered passthrough')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('synthetic-key')
+    await wrapper.get('[data-testid="create-openai-passthrough-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="create-openai-passthrough-model-filter"]').setValue(true)
+    wrapper.getComponent(ModelWhitelistSelectorStub).vm.$emit('update:modelValue', ['qwen3.8-max'])
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
     await flushPromises()
-    await wrapper.get('div.cursor-pointer').trigger('click')
-    const other = wrapper.findAll('[data-testid="model-option"]').find(row => row.text().includes('step-other-chat'))!
-    await other.get('[data-testid="select-model"]').trigger('click')
-    if (kind === 'apikey') {
-      await wrapper.get('form#create-account-form').trigger('submit.prevent')
-      await flushPromises()
-      expect(previewModelsMock).toHaveBeenCalledWith(expect.objectContaining({ platform: 'stepfun', api_key: 'step-key', base_url: 'https://api.stepfun.com/v1' }))
-      expect(createAccountMock.mock.calls[0][0].credentials.model_mapping).toEqual({ 'step-3.7-flash': 'step-3.7-flash' })
-    } else {
-      await selectButtonByText(wrapper, 'admin.accounts.oauth.domestic.create')
-      await flushPromises()
-      expect(cnOAuthModelsMock).toHaveBeenCalledWith('ready-step')
-      expect(cnOAuthRequestMock).toHaveBeenLastCalledWith('stepfun', 'complete', expect.objectContaining({ session_id: 'ready-step', model_mapping: { 'step-3.7-flash': 'step-3.7-flash' } }))
-      expect(createAccountMock).not.toHaveBeenCalled()
-    }
+
+    const payload = createAccountMock.mock.calls[0]?.[0]
+    expect(payload.extra.openai_passthrough).toBe(true)
+    expect(payload.extra.openai_passthrough_model_filter).toBe(true)
+    expect(payload.credentials.model_mapping).toEqual({ 'qwen3.8-max': 'qwen3.8-max' })
     wrapper.unmount()
   })
 

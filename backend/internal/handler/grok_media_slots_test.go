@@ -162,6 +162,15 @@ func (s *grokMediaSlotBindings) DeleteSessionAccountID(context.Context, int64, s
 	return nil
 }
 
+func (s *grokMediaSlotBindings) CompareAndDeleteSessionAccountID(_ context.Context, groupID int64, key string, accountID int64) (bool, error) {
+	if groupID != 24 || key != s.key || accountID != s.owner {
+		return false, nil
+	}
+	s.owner = 0
+	s.writes++
+	return true, nil
+}
+
 func (s *grokMediaSlotBindings) ClaimGrokVideoBilled(_ context.Context, key, owner string, _ time.Duration) (bool, error) {
 	if s.billed == nil {
 		s.billed = make(map[string]bool)

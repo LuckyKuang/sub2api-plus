@@ -107,6 +107,15 @@ readable; missing reasoning on those endpoints remains unspecified.
 
 ## Managed usage and account recovery
 
+Quota parsing accepts the legacy `limits[].detail` and top-level `usage`
+counters alongside the newer `usages` ratio buckets. Valid absolute counters
+take precedence for the five-hour window, and `usages.limit_7d` takes precedence
+for the weekly window. `limit_month_total` and `limit_month_code` remain
+independent monthly limits with separate reset times. Missing, malformed or
+non-finite readings stay unknown. Ratios between 0 and 10 remain observable,
+including genuine overuse above 100 percent. A failed refresh preserves the
+last observed quota and reports the failure in the account cell.
+
 Native Kimi OAuth usage queries use the fixed regional `/coding/v1/usages`
 endpoint with Bearer access-token authentication and the same trusted device
 identity as inference. A 401 refreshes the selected account once before retry;

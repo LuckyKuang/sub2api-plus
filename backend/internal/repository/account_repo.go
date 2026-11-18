@@ -1389,9 +1389,37 @@ func (r *accountRepository) BatchUpdateLastUsed(ctx context.Context, updates map
 	caseSQL += " END, updated_at = NOW() WHERE id = ANY($" + itoa(idx) + ") AND deleted_at IS NULL"
 	args = append(args, pq.Array(ids))
 
-	_, err := r.sql.ExecContext(ctx, caseSQL, args...)
+	// 同一事务内先按 id 升序锁定目标行再更新，与计费合并事务锁多个账号行的顺序一致；
+	// 锁强度与更新非键列相同，不阻塞引用 accounts 的外键检查。
+	exec := r.sql
+	var tx *sql.Tx
+	if db, ok := r.sql.(*sql.DB); ok {
+		var err error
+		if tx, err = db.BeginTx(ctx, nil); err != nil {
+			return err
+		}
+		defer func() {
+			if tx != nil {
+				_ = tx.Rollback()
+			}
+		}()
+		exec = tx
+	}
+	rows, err := exec.QueryContext(ctx, "SELECT id FROM accounts WHERE id = ANY($1) AND deleted_at IS NULL ORDER BY id FOR NO KEY UPDATE", pq.Array(ids))
 	if err != nil {
 		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if _, err := exec.ExecContext(ctx, caseSQL, args...); err != nil {
+		return err
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		tx = nil
 	}
 	lastUsedPayload := make(map[string]int64, len(updates))
 	for id, ts := range updates {
@@ -2203,7 +2231,8 @@ func (r *accountRepository) ListCommercialModelMappings(ctx context.Context, gro
 			COALESCE(a.credentials->'model_mapping', 'null'::jsonb)::text,
 			jsonb_build_object(
 				'openai_passthrough', a.extra->'openai_passthrough',
-				'openai_oauth_passthrough', a.extra->'openai_oauth_passthrough'
+				'openai_oauth_passthrough', a.extra->'openai_oauth_passthrough',
+				'openai_passthrough_model_filter', a.extra->'openai_passthrough_model_filter'
 			)::text
 		FROM account_groups ag
 		JOIN accounts a ON a.id = ag.account_id
@@ -2231,9 +2260,10 @@ func (r *accountRepository) ListCommercialModelMappings(ctx context.Context, gro
 		if err := json.Unmarshal([]byte(flags), &account.Extra); err != nil {
 			return nil, fmt.Errorf("decode commercial passthrough flags: %w", err)
 		}
-		if account.IsOpenAIPassthroughEnabled() {
-			// Forwarding bypasses the saved mapping. Catalog coverage must use
-			// the same unrestricted model scope, without hydrating credentials.
+		if account.IsOpenAIPassthroughEnabled() && !account.IsOpenAIPassthroughModelFilterEnabled() {
+			// Passthrough is unrestricted unless model filtering is explicitly
+			// enabled. Preserve its source keys for catalog coverage on opt-in,
+			// while continuing to avoid loading complete account credentials.
 			mapping.ModelMapping = nil
 		}
 		out[groupID] = append(out[groupID], mapping)
@@ -2651,8 +2681,11 @@ func (r *accountRepository) UpdateSessionWindow(ctx context.Context, id int64, s
 }
 
 func (r *accountRepository) UpdateSessionWindowEnd(ctx context.Context, id int64, end time.Time) error {
+	// Active five-hour quota reads must advance both bounds. Keeping the old
+	// start would charge the previous window against the new window's cost limit.
 	_, err := r.client.Account.Update().
 		Where(dbaccount.IDEQ(id)).
+		SetSessionWindowStart(end.Add(-5 * time.Hour)).
 		SetSessionWindowEnd(end).
 		Save(ctx)
 	if err != nil {

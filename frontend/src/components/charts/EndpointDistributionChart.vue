@@ -73,6 +73,7 @@
               <th class="pb-2 text-right">{{ t('admin.dashboard.requests') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.tokens') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.actual') }}</th>
+              <th v-if="showAccountCost" class="pb-2 text-right">{{ t('admin.dashboard.accountCost') }}</th>
               <th class="pb-2 text-right">{{ t('admin.dashboard.standard') }}</th>
             </tr>
           </thead>
@@ -98,6 +99,9 @@
               <td class="py-1.5 text-right text-green-600 dark:text-green-400">
                 ${{ formatCost(item.actual_cost) }}
               </td>
+              <td v-if="showAccountCost" class="py-1.5 text-right text-orange-500 dark:text-orange-400">
+                ${{ formatCost(item.account_cost) }}
+              </td>
               <td class="py-1.5 text-right surface-muted">
                 ${{ formatCost(item.cost) }}
               </td>
@@ -106,7 +110,7 @@
               v-if="expandedKey === item.endpoint"
               :items="breakdownItems"
               :loading="breakdownLoading"
-              :show-account-cost="false"
+              :show-account-cost="showAccountCost"
               :total-tokens="item.total_tokens"
             />
           </tbody>
@@ -152,6 +156,7 @@ const props = withDefaults(
     showMetricToggle?: boolean
     showSourceToggle?: boolean
     enableBreakdown?: boolean
+    showAccountCost?: boolean
     startDate?: string
     endDate?: string
     filters?: Record<string, any>
@@ -165,7 +170,8 @@ const props = withDefaults(
     source: 'inbound',
     showMetricToggle: false,
     showSourceToggle: false,
-    enableBreakdown: true
+    enableBreakdown: true,
+    showAccountCost: false
   }
 )
 
@@ -292,7 +298,8 @@ const formatNumber = (value: number): string => {
   return value.toLocaleString()
 }
 
-const formatCost = (value: number): string => {
+const formatCost = (value: number | undefined | null): string => {
+  if (value == null) return '0.0000'
   if (value >= 1000) {
     return (value / 1000).toFixed(2) + 'K'
   } else if (value >= 1) {

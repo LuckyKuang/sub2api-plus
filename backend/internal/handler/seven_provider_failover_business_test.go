@@ -66,6 +66,17 @@ func (s *sevenProviderBindings) DeleteSessionAccountID(_ context.Context, group 
 	return nil
 }
 
+func (s *sevenProviderBindings) CompareAndDeleteSessionAccountID(_ context.Context, group int64, hash string, accountID int64) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := sevenProviderSessionKey{group, hash}
+	if s.bindings[key] != accountID {
+		return false, nil
+	}
+	delete(s.bindings, key)
+	return true, nil
+}
+
 // Reuse the handler recovery fixture's generation/lease CAS and observe reads
 // from the production scheduler on each independently constructed gateway.
 type sevenProviderRouteStore struct {

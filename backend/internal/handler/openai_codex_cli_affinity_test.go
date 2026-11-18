@@ -71,6 +71,11 @@ func (s *codexCLIConversationCache) DeleteSessionAccountID(context.Context, int6
 	return nil
 }
 
+func (s *codexCLIConversationCache) CompareAndDeleteSessionAccountID(context.Context, int64, string, int64) (bool, error) {
+	s.writes.Add(1)
+	return false, nil
+}
+
 // Independent exec tasks have no conversation continuation. Caller session
 // headers and content-derived affinity must never borrow or alter a Responses
 // or WebSocket owner's durable route or legacy cache, including during outages.

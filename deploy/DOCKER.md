@@ -56,6 +56,12 @@ volumes:
 
 ## Startup and Database Recovery
 
+`concurrency.ping_interval` defaults to 10 seconds and accepts 0 or 5–30.
+Setting it to 0 disables SSE keepalives while waiting for a slot, allowing a
+later admission error to retain its HTTP status. A keepalive that has already
+committed streaming headers requires subsequent errors to use the stream's
+error framing. Configure this value in the mounted configuration file.
+
 Sub2API runs database migrations while starting. PostgreSQL may still be
 recovering briefly after a host or Docker daemon restart. The application
 retries transient PostgreSQL startup and connection errors with bounded
@@ -93,7 +99,7 @@ application container after changing these values.
 ## Tags
 
 - `latest` - Latest stable release
-- `vX.Y.Z-custom.NNN` - Immutable fork release, for example `v0.2.21-custom.002`
+- `vX.Y.Z-custom.NNN` - Immutable fork release, for example `v0.2.22-custom.001`
 - `x.y` - Latest patch of minor version
 - `x` - Latest minor of major version
 
@@ -102,8 +108,8 @@ preserves the leading `v` and replaces only `+` with `-` to produce the
 OCI-compatible image tag. For example:
 
 ```text
-Git/GitHub: v0.2.21+custom.002
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.2.21-custom.002
+Git/GitHub: v0.2.22+custom.001
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.2.22-custom.001
 ```
 
 Pin the immutable release tag in production. Use `latest` only when automatic

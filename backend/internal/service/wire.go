@@ -1097,6 +1097,8 @@ var ProviderSet = wire.NewSet(
 	ProvideChannelMonitorV2Aggregator,
 	NewChannelMonitorRequestTemplateService,
 	ProvideUserPlatformQuotaUsageFlusher,
+	NewUsageBillingLaneCombiner,
+	ProvideUsageBillingRepository,
 )
 
 func ProvideModelPlazaService(channelRepo ChannelRepository, groupRepo GroupRepository, pricingService *PricingService, billingService *BillingService, resolver *ModelPricingResolver, routes CompositeModelRouteRepository, accounts AccountRepository) *ModelPlazaService {
@@ -1223,4 +1225,9 @@ func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountReposit
 	gateway.projectTokens = projectTokens
 	tester.projectTokens = projectTokens
 	return svc
+}
+
+// ProvideUsageBillingRepository 以按用户合并结算的通道作为各服务使用的计费仓储。
+func ProvideUsageBillingRepository(lanes *UsageBillingLaneCombiner) UsageBillingRepository {
+	return lanes
 }

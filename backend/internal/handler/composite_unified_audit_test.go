@@ -73,8 +73,8 @@ func TestCompositeUnifiedChatAndMessagesAuditOriginalContentBeforeConversion(t *
 			groupID := int64(3)
 			key := &service.APIKey{ID: 9, UserID: 7, GroupID: &groupID, ConversionEnabled: true,
 				DefaultClient: "custom", DefaultEndpoint: tc.endpoint,
-				Group:         &service.Group{ID: groupID, Platform: service.PlatformComposite},
-				User:          &service.User{ID: 7, Concurrency: 1}}
+				Group: &service.Group{ID: groupID, Platform: service.PlatformComposite},
+				User:  &service.User{ID: 7, Concurrency: 1}}
 			c.Set(string(middleware.ContextKeyAPIKey), key)
 			c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 7, Concurrency: 1})
 			require.True(t, service.BindCompositeAccessPolicy(c, key))
