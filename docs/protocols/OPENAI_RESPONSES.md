@@ -1333,3 +1333,20 @@ breakdown cannot drive a declared total back down. `message_start` now also reco
 terminal `message_delta` no longer overwrites a positive output count with zero.
 See `gateway_cache_snapshot_semantics_test.go`.
 
+### Prompt total reconciliation
+
+A compatible provider reports `prompt_tokens` as the total of Anthropic's three
+buckets, then keeps refining only the cache buckets in later frames. The gateway
+remembers that total on the usage object, so a frame that carries nothing but
+`cache_read_input_tokens` still recomputes the uncached bucket as
+`prompt_tokens - cache_read - cache_write`. Without it a cache-only update grew the
+cache bucket while the uncached bucket kept its old value, and the three buckets
+stopped summing to the provider's own total.
+
+A reported `prompt_cache_miss_tokens` is authoritative and wins outright; it also
+invalidates the remembered total, because hit and miss describe the same quantity
+in different shapes and mixing them double counts. The reconciliation runs in the
+SSE patch merge, the Anthropic usage merge and the compat prompt normalization, and
+`message_start` and `message_delta` both feed it. See
+`anthropic_prompt_total_reconcile_test.go`.
+

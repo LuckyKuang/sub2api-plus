@@ -675,15 +675,8 @@ func parseSSEUsagePassthrough(data string, usage *ClaudeUsage) {
 		msgUsage := parsed.Get("message.usage")
 		if msgUsage.Exists() {
 			usage.InputTokens = int(msgUsage.Get("input_tokens").Int())
-			usage.CacheCreationInputTokens = int(msgUsage.Get("cache_creation_input_tokens").Int())
-			usage.CacheReadInputTokens = int(msgUsage.Get("cache_read_input_tokens").Int())
-
-			// 保持与通用解析一致：message_start 允许覆盖 5m/1h 明细（包括 0）。
-			cc5m := msgUsage.Get("cache_creation.ephemeral_5m_input_tokens")
-			cc1h := msgUsage.Get("cache_creation.ephemeral_1h_input_tokens")
-			if cc5m.Exists() || cc1h.Exists() {
-				usage.CacheCreation5mTokens = int(cc5m.Int())
-				usage.CacheCreation1hTokens = int(cc1h.Int())
+			if v := msgUsage.Get("cache_creation_input_tokens"); v.Exists() && v.Type != gjson.Null {
+				usage.CacheCreationInputTokens = int(v.Int())
 			}
 		}
 	case "message_delta":
@@ -698,52 +691,67 @@ func parseSSEUsagePassthrough(data string, usage *ClaudeUsage) {
 			if v := deltaUsage.Get("cache_creation_input_tokens").Int(); v > 0 {
 				usage.CacheCreationInputTokens = int(v)
 			}
-			if v := deltaUsage.Get("cache_read_input_tokens").Int(); v > 0 {
-				usage.CacheReadInputTokens = int(v)
-			}
+		}
+	}
 
-			cc5m := deltaUsage.Get("cache_creation.ephemeral_5m_input_tokens")
-			cc1h := deltaUsage.Get("cache_creation.ephemeral_1h_input_tokens")
-			if cc5m.Exists() {
-				usage.CacheCreation5mTokens = int(cc5m.Int())
+	usageNode := anthropicUsageNodeForCacheRead(parsed)
+
+	// 缓存读取统一在这里解析：兼容供应商可能用 cache_read_input_tokens、
+	// cached_tokens、prompt_tokens_details.cached_tokens 或 prompt_cache_hit_tokens。
+	// 0 不覆盖已知正数（同一请求的后续帧常把缓存字段重复成 0）。
+	if usageNode.Exists() {
+		for _, path := range []string{"cache_read_input_tokens", "cached_tokens", "prompt_tokens_details.cached_tokens", "prompt_cache_hit_tokens"} {
+			value := usageNode.Get(path)
+			if !value.Exists() || value.Type == gjson.Null {
+				continue
 			}
-			if cc1h.Exists() {
-				usage.CacheCreation1hTokens = int(cc1h.Int())
+			tokens := max(int(value.Int()), 0)
+			if tokens == 0 && usage.CacheReadInputTokens > 0 {
+				continue
+			}
+			usage.CacheReadInputTokens = tokens
+			if tokens > 0 {
+				break
 			}
 		}
 	}
 
-	if usage.CacheReadInputTokens == 0 {
-		if cached := parsed.Get("message.usage.cached_tokens").Int(); cached > 0 {
-			usage.CacheReadInputTokens = int(cached)
+	// 5m/1h 明细任意事件都可能补报（如 content_block_delta）。明细按帧覆盖，
+	// 但聚合量只在为空或为 0 时才由明细回填，避免过期明细改小已声明的总量。
+	if usageNode.Exists() {
+		if cc := usageNode.Get("cache_creation"); cc.IsObject() {
+			if v := cc.Get("ephemeral_5m_input_tokens"); v.Exists() && v.Type != gjson.Null {
+				usage.CacheCreation5mTokens = max(int(v.Int()), 0)
+			}
+			if v := cc.Get("ephemeral_1h_input_tokens"); v.Exists() && v.Type != gjson.Null {
+				usage.CacheCreation1hTokens = max(int(v.Int()), 0)
+			}
 		}
-		if cached := parsed.Get("usage.cached_tokens").Int(); usage.CacheReadInputTokens == 0 && cached > 0 {
-			usage.CacheReadInputTokens = int(cached)
-		}
-	}
-	if usage.CacheCreationInputTokens == 0 {
-		cc5m := parsed.Get("message.usage.cache_creation.ephemeral_5m_input_tokens").Int()
-		cc1h := parsed.Get("message.usage.cache_creation.ephemeral_1h_input_tokens").Int()
-		if cc5m == 0 && cc1h == 0 {
-			cc5m = parsed.Get("usage.cache_creation.ephemeral_5m_input_tokens").Int()
-			cc1h = parsed.Get("usage.cache_creation.ephemeral_1h_input_tokens").Int()
-		}
-		total := cc5m + cc1h
-		if total > 0 {
-			usage.CacheCreationInputTokens = int(total)
+		if usage.CacheCreationInputTokens <= 0 {
+			if details := max(usage.CacheCreation5mTokens, 0) + max(usage.CacheCreation1hTokens, 0); details > 0 {
+				usage.CacheCreationInputTokens = details
+				usage.cacheCreationInputTokensFromDetails = true
+			}
 		}
 	}
-
 	// Kimi's Anthropic-compatible stream uses input_tokens with two meanings:
 	// message_start reports total prompt input, while message_delta reports only
 	// uncached input. prompt_tokens remains the total in both events. Normalize
 	// to ClaudeUsage's mutually-exclusive buckets so downstream billing does not
 	// subtract cache tokens from an already-uncached value.
-	usageNode := parsed.Get("usage")
-	if parsed.Get("type").String() == "message_start" {
-		usageNode = parsed.Get("message.usage")
-	}
 	normalizeAnthropicCompatiblePromptUsage(usageNode, usage)
+}
+
+// anthropicUsageNodeForCacheRead returns the usage object of the current frame.
+// message_start nests it under message; every other event keeps it top-level.
+func anthropicUsageNodeForCacheRead(parsed gjson.Result) gjson.Result {
+	usageNode := parsed.Get("usage")
+	if parsed.Get("type").String() == "message_start" || !usageNode.Exists() || usageNode.Type == gjson.Null {
+		if msgUsage := parsed.Get("message.usage"); msgUsage.Exists() {
+			return msgUsage
+		}
+	}
+	return usageNode
 }
 
 // normalizeAnthropicCompatiblePromptUsage converts provider-native OpenAI-style
@@ -756,27 +764,21 @@ func normalizeAnthropicCompatiblePromptUsage(usageNode gjson.Result, usage *Clau
 	promptTokens := usageNode.Get("prompt_tokens")
 	promptCacheHitTokens := usageNode.Get("prompt_cache_hit_tokens")
 	promptCacheMissTokens := usageNode.Get("prompt_cache_miss_tokens")
+	// 即使本帧没有 prompt 字段，只要之前记住过总量，就仍然要对账：
+	// 兼容供应商常在后续帧里只更新缓存桶。
 	if (!promptTokens.Exists() || promptTokens.Int() <= 0) &&
-		!promptCacheHitTokens.Exists() && !promptCacheMissTokens.Exists() {
+		!promptCacheHitTokens.Exists() && !promptCacheMissTokens.Exists() && !usage.promptTotalPresent {
 		return false
 	}
 
 	cacheReadTokens := usage.CacheReadInputTokens
-	if v := usageNode.Get("cache_read_input_tokens"); v.Exists() {
-		cacheReadTokens = int(v.Int())
-	}
-	if cacheReadTokens == 0 {
-		if v := usageNode.Get("cached_tokens"); v.Exists() {
-			cacheReadTokens = int(v.Int())
+	for _, path := range []string{"cache_read_input_tokens", "cached_tokens", "prompt_tokens_details.cached_tokens", "prompt_cache_hit_tokens"} {
+		if value := usageNode.Get(path); value.Exists() && value.Type != gjson.Null {
+			cacheReadTokens = max(int(value.Int()), 0)
+			if cacheReadTokens > 0 {
+				break
+			}
 		}
-	}
-	if cacheReadTokens == 0 {
-		if v := usageNode.Get("prompt_tokens_details.cached_tokens"); v.Exists() {
-			cacheReadTokens = int(v.Int())
-		}
-	}
-	if cacheReadTokens == 0 && promptCacheHitTokens.Exists() {
-		cacheReadTokens = max(int(promptCacheHitTokens.Int()), 0)
 	}
 
 	cacheCreationTokens := usage.CacheCreationInputTokens
@@ -800,11 +802,12 @@ func normalizeAnthropicCompatiblePromptUsage(usageNode gjson.Result, usage *Clau
 		usage.CacheCreationInputTokens = cacheCreationTokens
 	}
 
-	if promptCacheMissTokens.Exists() {
-		usage.InputTokens = max(int(promptCacheMissTokens.Int()), 0)
-	} else {
-		usage.InputTokens = max(int(promptTokens.Int())-usage.CacheReadInputTokens-usage.cacheCreationTotal(), 0)
+	var cacheMissTokens *int
+	if promptCacheMissTokens.Exists() && promptCacheMissTokens.Type != gjson.Null {
+		value := max(int(promptCacheMissTokens.Int()), 0)
+		cacheMissTokens = &value
 	}
+	normalizeAnthropicPromptTotal(usage, int(promptTokens.Int()), cacheMissTokens)
 	return true
 }
 

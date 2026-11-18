@@ -1281,6 +1281,10 @@ func (s *GatewayService) parseSSEUsage(data string, usage *ClaudeUsage) {
 }
 
 type sseUsagePatch struct {
+	// promptTokens / promptCacheMissTokens 来自兼容供应商的 OpenAI 风格字段，
+	// 用于在只更新缓存的帧里重算未缓存输入。
+	promptTokens             int
+	promptCacheMissTokens    *int
 	inputTokens              int
 	hasInputTokens           bool
 	outputTokens             int
@@ -1309,7 +1313,7 @@ func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePat
 			return nil
 		}
 
-		patch := &sseUsagePatch{}
+		patch := extractAnthropicPromptPatch(usageObj)
 		patch.hasInputTokens = true
 		if v, ok := parseSSEUsageInt(usageObj["input_tokens"]); ok {
 			patch.inputTokens = v
@@ -1318,10 +1322,11 @@ func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePat
 		if v, ok := parseSSEUsageInt(usageObj["cache_creation_input_tokens"]); ok {
 			patch.cacheCreationInputTokens = v
 		}
-		patch.hasCacheReadInput = true
 		if v, ok := parseSSEUsageInt(usageObj["cache_read_input_tokens"]); ok {
-			patch.cacheReadInputTokens = v
+			patch.cacheReadInputTokens = max(v, 0)
+			patch.hasCacheReadInput = true
 		}
+		applyAnthropicCacheReadAliases(patch, usageObj)
 		if cc, ok := usageObj["cache_creation"].(map[string]any); ok {
 			if v, exists := parseSSEUsageInt(cc["ephemeral_5m_input_tokens"]); exists {
 				patch.cacheCreation5mTokens = v
@@ -1340,7 +1345,7 @@ func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePat
 			return nil
 		}
 
-		patch := &sseUsagePatch{}
+		patch := extractAnthropicPromptPatch(usageObj)
 		if v, ok := parseSSEUsageInt(usageObj["input_tokens"]); ok && v > 0 {
 			patch.inputTokens = v
 			patch.hasInputTokens = true
@@ -1353,10 +1358,11 @@ func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePat
 			patch.cacheCreationInputTokens = v
 			patch.hasCacheCreationInput = true
 		}
-		if v, ok := parseSSEUsageInt(usageObj["cache_read_input_tokens"]); ok && v > 0 {
-			patch.cacheReadInputTokens = v
+		if v, ok := parseSSEUsageInt(usageObj["cache_read_input_tokens"]); ok {
+			patch.cacheReadInputTokens = max(v, 0)
 			patch.hasCacheReadInput = true
 		}
+		applyAnthropicCacheReadAliases(patch, usageObj)
 		if cc, ok := usageObj["cache_creation"].(map[string]any); ok {
 			if v, exists := parseSSEUsageInt(cc["ephemeral_5m_input_tokens"]); exists {
 				patch.cacheCreation5mTokens = v
@@ -1371,6 +1377,36 @@ func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePat
 	}
 
 	return nil
+}
+
+// extractAnthropicPromptPatch pulls the OpenAI-style prompt fields a compatible
+// provider keeps sending alongside Anthropic usage. A zero means "absent" here;
+// only a positive value establishes a remembered total.
+func extractAnthropicPromptPatch(usageObj map[string]any) *sseUsagePatch {
+	patch := &sseUsagePatch{}
+	patch.promptTokens, _ = parseSSEUsageInt(usageObj["prompt_tokens"])
+	if value, ok := parseSSEUsageInt(usageObj["prompt_cache_miss_tokens"]); ok {
+		patch.promptCacheMissTokens = &value
+	}
+	return patch
+}
+
+// applyAnthropicCacheReadAliases fills the cache-read bucket from the OpenAI-style
+// spellings a compatible provider may use instead of cache_read_input_tokens.
+func applyAnthropicCacheReadAliases(patch *sseUsagePatch, usageObj map[string]any) {
+	if patch == nil || patch.cacheReadInputTokens != 0 {
+		return
+	}
+	details, _ := usageObj["prompt_tokens_details"].(map[string]any)
+	for _, alias := range []any{usageObj["cached_tokens"], details["cached_tokens"], usageObj["prompt_cache_hit_tokens"]} {
+		if value, ok := parseSSEUsageInt(alias); ok {
+			patch.cacheReadInputTokens = max(value, 0)
+			patch.hasCacheReadInput = true
+			if patch.cacheReadInputTokens > 0 {
+				return
+			}
+		}
+	}
 }
 
 func mergeSSEUsagePatch(usage *ClaudeUsage, patch *sseUsagePatch) {
@@ -1411,6 +1447,8 @@ func mergeSSEUsagePatch(usage *ClaudeUsage, patch *sseUsagePatch) {
 		usage.CacheCreationInputTokens = max(usage.CacheCreation5mTokens, 0) + max(usage.CacheCreation1hTokens, 0)
 		usage.cacheCreationInputTokensFromDetails = true
 	}
+	// 只更新缓存的帧也要重算未缓存的输入，否则总量与三个桶对不上。
+	normalizeAnthropicPromptTotal(usage, patch.promptTokens, patch.promptCacheMissTokens)
 }
 
 func parseSSEUsageInt(value any) (int, bool) {

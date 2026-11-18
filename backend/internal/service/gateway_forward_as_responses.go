@@ -363,18 +363,8 @@ func mergeAnthropicUsage(dst *ClaudeUsage, src apicompat.AnthropicUsage) {
 	// fields. Prefer those authoritative totals or hit/miss buckets over the
 	// overloaded input_tokens field. This covers Kimi's changing stream
 	// semantics as well as GLM/DeepSeek cache aliases.
-	if src.PromptTokens > 0 || src.PromptCacheHitTokens != nil || src.PromptCacheMissTokens != nil {
-		// 先定下缓存读取量，再算未缓存的输入：prompt_tokens 是包含缓存桶的总量，
-		// 减掉的必须是与最终计费一致的那两个桶。
-		if cacheReadTokens > 0 || dst.CacheReadInputTokens <= 0 {
-			dst.CacheReadInputTokens = max(cacheReadTokens, 0)
-		}
-		if src.PromptCacheMissTokens != nil {
-			dst.InputTokens = max(*src.PromptCacheMissTokens, 0)
-		} else {
-			dst.InputTokens = max(src.PromptTokens-dst.CacheReadInputTokens-dst.cacheCreationTotal(), 0)
-		}
-	} else {
+	hasPromptTotal := src.PromptTokens > 0 || src.PromptCacheHitTokens != nil || src.PromptCacheMissTokens != nil
+	if !hasPromptTotal && !dst.promptTotalPresent {
 		// Without an authoritative prompt total or miss bucket, input_tokens is
 		// provider-specific: it may already be the uncached bucket, or it may be
 		// a total from an earlier event. Do not infer a subtraction merely because
@@ -383,12 +373,38 @@ func mergeAnthropicUsage(dst *ClaudeUsage, src apicompat.AnthropicUsage) {
 		if src.InputTokens > 0 {
 			dst.InputTokens = src.InputTokens
 		}
-		if cacheReadTokens > 0 {
-			dst.CacheReadInputTokens = cacheReadTokens
-		}
 	}
+	if cacheReadTokens > 0 || dst.CacheReadInputTokens <= 0 {
+		dst.CacheReadInputTokens = max(cacheReadTokens, 0)
+	}
+	normalizeAnthropicPromptTotal(dst, src.PromptTokens, src.PromptCacheMissTokens)
 	if src.OutputTokens > 0 {
 		dst.OutputTokens = src.OutputTokens
+	}
+}
+
+// normalizeAnthropicPromptTotal recomputes the uncached input bucket from the
+// provider's own prompt total whenever that total is known. A compatible
+// provider reports prompt_tokens once and then keeps refining only the cache
+// buckets, so remembering the total is what keeps
+// `input + cache_read + cache_write == prompt_tokens` true across those
+// cache-only updates. A cache-miss bucket, when reported, is authoritative and
+// wins outright.
+func normalizeAnthropicPromptTotal(usage *ClaudeUsage, promptTokens int, promptCacheMissTokens *int) {
+	if usage == nil {
+		return
+	}
+	if promptCacheMissTokens != nil {
+		usage.promptTotalPresent = false
+		usage.InputTokens = max(*promptCacheMissTokens, 0)
+		return
+	}
+	if promptTokens > 0 {
+		usage.promptTotalTokens = promptTokens
+		usage.promptTotalPresent = true
+	}
+	if usage.promptTotalPresent {
+		usage.InputTokens = max(usage.promptTotalTokens-usage.CacheReadInputTokens-usage.cacheCreationTotal(), 0)
 	}
 }
 

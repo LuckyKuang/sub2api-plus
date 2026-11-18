@@ -687,6 +687,11 @@ type ClaudeUsage struct {
 	// cacheCreationInputTokensFromDetails 表示聚合量是由 5m/1h 明细推导出来的，
 	// 之后上游显式声明的聚合量应当替换它。
 	cacheCreationInputTokensFromDetails bool
+	// promptTotalTokens / promptTotalPresent 记住上游声明的 prompt 总量
+	// （input + cache read + cache write）。兼容供应商只在部分帧里报总量，
+	// 记住它才能让后续只更新缓存的帧仍然重算未缓存的输入。
+	promptTotalTokens  int
+	promptTotalPresent bool
 }
 
 // cacheCreationTotal 返回唯一的缓存写入量：上游显式声明过的正数聚合量优先，
