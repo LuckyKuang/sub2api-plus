@@ -31,6 +31,17 @@ session cleanup atomically preserves concurrent account rebindings. Tool-schema
 regex sanitation treats Unicode-escaped input consistently. Owning protocol,
 pricing, configuration and migration documentation records these behaviors.
 
+The Codex descriptor catalog is independent of the upstream baseline. The
+gateway serves the official `rust-v0.170.0`
+`codex-rs/models-manager/models.json` (release commit
+`29eb79e9866b3262a777fdf8195c1b9e63684c91`, catalog change `176cbbe92c`,
+SHA-256 `d50b6749506d97e5f334dbabcb666eb1689f423cf3e88cfabdcf3c536b873068`)
+instead of the 0.169-era descriptors embedded by the current upstream tag. The
+catalog is embedded byte for byte and pinned by digest; Plus policy is layered
+in code and never written back into it. See
+[Codex client profiles](docs/protocols/CODEX_CLIENT_PROFILES.md) and
+[Official agent baselines](docs/OFFICIAL_AGENT_BASELINES.md).
+
 The v0.2.22 import (187 upstream commits, 340 files) adds the group
 `force_openai_ultrafast` tier gated per model, `openai_passthrough_model_filter`,
 scheduler-snapshot projection fixes, SSE-error framing after keepalives,

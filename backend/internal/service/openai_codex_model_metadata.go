@@ -97,6 +97,16 @@ func accountCodexToolCapabilities(account *Account, modelID string) map[string]j
 		if disabled && bytes.Equal(capabilities["use_responses_lite"], []byte("true")) {
 			capabilities["use_responses_lite"] = json.RawMessage("false")
 		}
+		// The official catalog declares the ChatGPT-only Responses Lite wire for
+		// OAuth. An API-key route reaches its provider through standard Responses
+		// unless its own snapshot says otherwise, so the catalog value for an
+		// undeclared model must not leak into the API-key manifest.
+		if len(bytes.TrimSpace(capabilities["use_responses_lite"])) == 0 {
+			capabilities["use_responses_lite"] = json.RawMessage("false")
+		}
+		if len(bytes.TrimSpace(capabilities["tool_mode"])) == 0 {
+			capabilities["tool_mode"] = json.RawMessage("null")
+		}
 	}
 	// API Astra publicly supports Ultrafast. OAuth must advertise it in its
 	// account manifest; a subscription label alone does not grant the capability.

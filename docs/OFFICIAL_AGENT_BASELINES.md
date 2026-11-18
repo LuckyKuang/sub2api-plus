@@ -167,6 +167,20 @@ platforms. Settings installs or updates only this reviewed target on an
 explicit click. Runtime, browser catalog and compiled default identity version
 equality is enforced. The other six providers are unchanged.
 
+The gateway serves Codex model descriptors from the release's own
+[model catalog](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/models-manager/models.json)
+(pinned `rust-v0.170.0`, SHA-256 `d50b6749506d97e5f334dbabcb666eb1689f423cf3e88cfabdcf3c536b873068`,
+last catalog change `176cbbe92c` "Add GPT-6.2 Sol and Astra to model catalogs").
+The embedded bytes are served verbatim: fourteen descriptors replace the two
+per-model extracts and every hand-synthesized value they could not cover.
+Official values are authoritative for context and maximum windows, priorities,
+reasoning levels and defaults, truncation policy, model messages and every field
+the gateway does not model, which passes through unchanged. Plus keeps only
+catalog policy: listed visibility for administrator-configured models, the
+Plus-only ultrafast tier, the audited `unified_exec` shell surface and the
+verified image-input allowlist. A catalog refresh never changes the pinned
+identity, CLI executable or outbound fingerprint.
+
 ## November 7 protocol alignment
 
 - Codex's stable identity is manually advanced to `0.167.0`; source selection,

@@ -957,3 +957,41 @@ the gateway permutes the decimal value inside the same three-digit group width a
 keeps the salt instead of replacing the value with a UUID. A value outside the
 allocation grammar, including a restored UUIDv7 window, keeps its previous
 durable mapping. See `openai_codex_account_identity.go`.
+
+### Model catalog and descriptor source
+
+The Codex `/models` manifest is built from the release's own catalog:
+`codex-rs/models-manager/models.json` at `rust-v0.170.0`, embedded byte for byte
+as `codex_models_catalog.json` and pinned by SHA-256 in
+`internal/pkg/openai/codex_model_catalog.go`. Fourteen descriptors, including
+the GPT-6.2 Sol/Astra entries added by `176cbbe92c`, replace the previous
+per-model extracts and the synthesized values they could not cover.
+
+Official values are authoritative for everything the client reads: context and
+maximum windows, reasoning levels and defaults, priorities, truncation policy,
+model messages and instructions, and every field the descriptor struct does not
+model — those pass through unchanged through `MarshalJSON`. A synthesis path
+remains only for models outside the catalog (DeepSeek, Grok, Claude, compatible
+aggregators and administrator aliases).
+
+Plus layers exactly four policies on top, and never writes them into the
+embedded file:
+
+1. `visibility` is forced to `list`, so a model an administrator configured into
+   a group stays selectable even when the official catalog hides it (daybreak,
+   `codex-auto-review`).
+2. `service_tiers` come from Plus, which is the only source of the ultrafast
+   tier; the official catalog declares priority/fast only.
+3. `shell_type` stays `unified_exec`. The 0.170 snapshot declares
+   `shell_command` for every model, which changes the shell tool the client
+   announces; adopting it needs its own security-audit coverage revision.
+4. `input_modalities` advertises image input only where Plus verified it
+   (`gpt-6.1-sol`, `gpt-6.1-terra`, `gpt-6-astra`); a live capability snapshot
+   still widens other models.
+
+Refreshing the catalog for a new Codex release means replacing the file with the
+tag's exact bytes, updating `CodexModelCatalogRelease` and
+`CodexModelCatalogSHA256`, and re-running
+`TestCodexModelCatalogMatchesPinnedOfficialBytes` plus
+`TestConfiguredCodexDescriptorsFollowOfficialCatalog`. See `UPSTREAM.md` for the
+baseline trace.

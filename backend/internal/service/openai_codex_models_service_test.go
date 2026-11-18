@@ -212,7 +212,9 @@ func requireCompleteConfiguredCodexModel(t *testing.T, model map[string]any, slu
 	require.Equal(t, "list", model["visibility"])
 	require.Equal(t, true, model["supported_in_api"])
 	require.NotNil(t, model["priority"])
-	require.Equal(t, []any{}, model["additional_speed_tiers"])
+	// The official catalog declares additional speed tiers ("fast") for most
+	// models; synthesized models keep an empty list.
+	require.IsType(t, []any{}, model["additional_speed_tiers"])
 	require.IsType(t, []any{}, model["service_tiers"])
 	require.Contains(t, model, "default_service_tier")
 	require.Contains(t, model, "availability_nux")
@@ -351,11 +353,12 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, effortsFromConfiguredCodexLevels(claudeHaiku55.SupportedReasoningLevels))
 
 	gpt56 := newConfiguredCodexModelDescriptor("gpt-5.6-sol")
-	require.Equal(t, "GPT-5.6 Sol", gpt56.DisplayName)
-	require.Equal(t, "OpenAI GPT coding model routed through Sub2API.", gpt56.Description)
+	// The official catalog owns display name, description and levels; Plus keeps
+	// only catalog policy such as visibility and service tiers.
+	require.Equal(t, "GPT-5.6-Sol", gpt56.DisplayName)
+	require.Equal(t, "Legacy model for coding and everyday work.", gpt56.Description)
 	require.NotNil(t, gpt56.DefaultReasoningLevel)
 	require.Equal(t, "low", *gpt56.DefaultReasoningLevel)
-	require.Equal(t, configuredCodexGPTReasoningLevels("gpt-5.6-sol"), gpt56.SupportedReasoningLevels)
 	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max", "ultra"}, effortsFromConfiguredCodexLevels(gpt56.SupportedReasoningLevels))
 	require.True(t, gpt56.SupportsParallelToolCalls)
 	require.True(t, gpt56.SupportVerbosity)
@@ -366,13 +369,13 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.Equal(t, "low", *gpt56.DefaultVerbosity)
 	require.True(t, gpt56.SupportsReasoningSummaryParameter)
 	require.Equal(t, "none", gpt56.DefaultReasoningSummary)
-	require.Equal(t, configuredCodexModelPriority, gpt56.Priority)
+	require.Equal(t, 8, gpt56.Priority)
 
 	astra := newConfiguredCodexModelDescriptor("gpt-6-astra")
-	require.Equal(t, "GPT-6 Astra", astra.DisplayName)
+	require.Equal(t, "GPT-6-Astra", astra.DisplayName)
 	require.NotNil(t, astra.DefaultReasoningLevel)
 	require.Equal(t, "low", *astra.DefaultReasoningLevel)
-	require.Equal(t, 1, astra.Priority)
+	require.Equal(t, 5, astra.Priority)
 	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max", "ultra"}, effortsFromConfiguredCodexLevels(astra.SupportedReasoningLevels))
 	require.Equal(t, int64(272_000), astra.ContextWindow)
 	require.Equal(t, int64(872_000), astra.MaxContextWindow)
@@ -406,7 +409,7 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.Equal(t, "medium", *gpt56Luna.DefaultReasoningLevel)
 
 	gpt6Astra := newConfiguredCodexModelDescriptor("gpt-6-astra")
-	require.Equal(t, "GPT-6 Astra", gpt6Astra.DisplayName)
+	require.Equal(t, "GPT-6-Astra", gpt6Astra.DisplayName)
 	require.True(t, strings.HasPrefix(strings.TrimSpace(gpt6Astra.ModelMessages.InstructionsTemplate), "You are Codex, an agent based on GPT-6."))
 	require.NotNil(t, gpt6Astra.DefaultReasoningLevel)
 	require.Equal(t, "low", *gpt6Astra.DefaultReasoningLevel)

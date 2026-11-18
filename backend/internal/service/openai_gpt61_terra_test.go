@@ -63,7 +63,9 @@ func TestGPT61TerraIdentityAndEffort(t *testing.T) {
 		efforts = append(efforts, level.Effort)
 	}
 	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max", "ultra"}, efforts)
-	require.Equal(t, openai.CodexGPT61TerraMetadata, []byte(descriptor.officialMetadata))
+	officialTerra, ok := openai.CodexModelCatalogMetadata("gpt-6.1-terra")
+	require.True(t, ok)
+	require.Equal(t, officialTerra, []byte(descriptor.officialMetadata))
 	converted, err := apicompat.AnthropicToResponses(&apicompat.AnthropicRequest{Model: "gpt-6.1-terra"})
 	require.NoError(t, err)
 	require.Equal(t, "medium", converted.Reasoning.Effort)
@@ -191,7 +193,9 @@ func TestGPT61TerraBaseInstructionsUseOfficialTemplate(t *testing.T) {
 			InstructionsTemplate string `json:"instructions_template"`
 		} `json:"model_messages"`
 	}
-	require.NoError(t, json.Unmarshal(openai.CodexGPT61TerraMetadata, &descriptor))
+	officialTerra, ok := openai.CodexModelCatalogMetadata("gpt-6.1-terra")
+	require.True(t, ok)
+	require.NoError(t, json.Unmarshal(officialTerra, &descriptor))
 	require.NotEmpty(t, descriptor.ModelMessages.InstructionsTemplate)
 	for _, model := range []string{"gpt-6.1-terra", "openai/GPT-6.1-Terra-high", "gpt-6.1-terra-openai-compact"} {
 		require.Equal(t, descriptor.ModelMessages.InstructionsTemplate, openai.CodexBaseInstructionsForModel(model), model)

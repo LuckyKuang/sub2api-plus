@@ -83,17 +83,8 @@ var instructionsGPT55 string
 //go:embed instructions_gpt6_astra.txt
 var instructionsGPT6Astra string
 
-// CodexGPT61SolMetadata is the complete official descriptor from openai/codex
-// b1e72963c3b71a9265a551e54beff078384efed9, codex-rs/models-manager/models.json.
-//
-//go:embed codex_gpt61_sol.json
-var CodexGPT61SolMetadata []byte
-
-// CodexGPT61TerraMetadata is the complete official descriptor from openai/codex
-// 126a0ee92ed2c5e73cd8a8f7e37563e8527552d7, codex-rs/models-manager/models.json.
-//
-//go:embed codex_gpt61_terra.json
-var CodexGPT61TerraMetadata []byte
+// Official per-model descriptors come from the pinned catalog in
+// codex_model_catalog.go; no descriptor is duplicated per file.
 
 // codexInstructionsTemplate returns the base prompt bundled in an official
 // Codex model descriptor.
@@ -173,9 +164,13 @@ func CodexBaseInstructionsForModel(model string) string {
 	canonical := CanonicalizeOpenAIModelAliasSpelling(model)
 	switch {
 	case IsGPT61SolModelSpelling(canonical):
-		return codexInstructionsTemplate(CodexGPT61SolMetadata)
+		if descriptor, ok := CodexModelCatalogMetadata("gpt-6.1-sol"); ok {
+			return codexInstructionsTemplate(descriptor)
+		}
 	case IsGPT61TerraModelSpelling(canonical):
-		return codexInstructionsTemplate(CodexGPT61TerraMetadata)
+		if descriptor, ok := CodexModelCatalogMetadata("gpt-6.1-terra"); ok {
+			return codexInstructionsTemplate(descriptor)
+		}
 	case canonical == "gpt-6" || canonical == "gpt-6-astra" || strings.HasPrefix(canonical, "gpt-6-astra-"):
 		if v := strings.TrimSpace(instructionsGPT6Astra); v != "" {
 			return instructionsGPT6Astra
