@@ -2298,15 +2298,24 @@ func (s *BillingService) computeCacheCreationCost(pricing *ModelPricing, tokens 
 		return cost * multiplier
 	}
 	if pricing.SupportsCacheBreakdown && (pricing.CacheCreation5mPrice > 0 || pricing.CacheCreation1hPrice > 0) {
-		cacheCreation5mTokens, cacheCreation1hTokens := normalizeCacheCreationBreakdown(tokens)
-		if cacheCreation5mTokens == 0 && cacheCreation1hTokens == 0 && tokens.CacheCreationTokens > 0 {
-			// API 未返回 ephemeral 明细，回退到全部按 5m 单价计费
-			return float64(tokens.CacheCreationTokens) * pricing.CacheCreation5mPrice * multiplier * breakdownTierFactor
-		}
+		cacheCreation5mTokens, cacheCreation1hTokens := allocateCacheCreationBillingTokens(tokens)
 		return (float64(cacheCreation5mTokens)*pricing.CacheCreation5mPrice +
 			float64(cacheCreation1hTokens)*pricing.CacheCreation1hPrice) * multiplier * breakdownTierFactor
 	}
 	return float64(tokens.CacheCreationTokens) * price * multiplier
+}
+
+// allocateCacheCreationBillingTokens splits the cache-write aggregate into the two
+// TTL price buckets. A provider that reports a partial breakdown — or none — leaves
+// tokens unclassified, and those belong to the 5m bucket: it is the default write
+// class, so a 3k detail out of an 11k aggregate still bills all 11k instead of
+// dropping 8k, and a reported 1h class never implies that the remainder is 1h too.
+func allocateCacheCreationBillingTokens(tokens UsageTokens) (int, int) {
+	cacheCreation5mTokens, cacheCreation1hTokens := normalizeCacheCreationBreakdown(tokens)
+	if tokens.CacheCreationTokens > 0 {
+		cacheCreation5mTokens += tokens.CacheCreationTokens - cacheCreation5mTokens - cacheCreation1hTokens
+	}
+	return cacheCreation5mTokens, cacheCreation1hTokens
 }
 
 // OpenAI's two write buckets are disjoint and exhaustive. Do not add the

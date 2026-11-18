@@ -75,10 +75,9 @@ func (s *BillingService) validateUsedTokenPriceEvidence(resolved *ResolvedPricin
 		}
 		return nil
 	}
-	write5m, write1h := normalizeCacheCreationBreakdown(tokens)
-	if write5m == 0 && write1h == 0 && tokens.CacheCreationTokens > 0 {
-		write5m = tokens.CacheCreationTokens
-	}
+	// 与计费同源：未分类的写入归入 5m 档，因此只需要 5m 价；
+	// 只有上游真报了 1h 明细时才要求 1h 价。
+	write5m, write1h := allocateCacheCreationBillingTokens(tokens)
 	if write5m > 0 && !cacheWrite {
 		return &missingTokenPriceError{dimension: "cache_write"}
 	}

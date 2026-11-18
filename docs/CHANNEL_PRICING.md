@@ -327,6 +327,17 @@ observed counters through settlement and durable logs. Native WS keeps each
 turn's counters separate and sums them only for the session aggregate. Replacing
 an aggregate with unknown/invalid duration details clears any earlier duration
 classification; it never borrows another event's or turn's split.
+
+Anthropic cache writes are billed from the 5m/1h meters, and the aggregate is the
+authority on how many tokens were actually written. A provider that reports only
+the aggregate, or a partial breakdown, leaves tokens unclassified; those are
+charged in the 5m class at the 5m rate. A reported 1h detail therefore never
+implies that the remainder is also 1h, and a 3k detail next to an 11k aggregate
+still bills all 11k instead of leaving 8k free. Contradictory details are capped
+at the aggregate first, keeping their reported ratio, so the two meters never sum
+past the declared total. Account statistics and the generated price-evidence
+check use the same allocation, which keeps a card with `cache_write_1h_price`
+from silently under-billing a flat aggregate.
 Reference fill, user/model-plaza display,
 context tiers and frozen settlement carry the same 12h price. The release pricing resource records
 the API's 1050000 context window, 922000 maximum input and 128000 maximum output.
