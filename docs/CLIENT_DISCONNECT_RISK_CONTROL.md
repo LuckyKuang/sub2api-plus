@@ -124,6 +124,10 @@ updates, and `usage_logs` insertion commit in one PostgreSQL transaction. Batch
 image capture uses the same guarantee. A usage-log insert failure rolls back the
 charge or capture claim; legacy deduplicated charges can create a missing log on
 a later retry without charging twice.
+Per-user combined settlement transactions preserve this guarantee for every
+newly applied command. Any log-insert failure rolls back all commands in that
+transaction before the lane retries individually; duplicate or conflicting
+commands do not insert logs through the combined transaction.
 
 ## Operations
 

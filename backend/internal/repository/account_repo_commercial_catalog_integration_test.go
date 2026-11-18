@@ -66,6 +66,18 @@ func TestListCommercialModelMappingsKeepsConfiguredStateAndExactGroupBindings(t 
 	restricted := create("explicitly-restricted", allowed.ID)
 	_, err = client.Account.UpdateOneID(restricted.ID).SetExtra(map[string]any{"openai_passthrough": false, "openai_oauth_passthrough": true}).Save(ctx)
 	require.NoError(t, err)
+	// The opt-in filter affects account selection and commercial coverage even
+	// though passthrough forwarding continues to preserve the original model.
+	filtered := create("filtered-passthrough", allowed.ID)
+	_, err = client.Account.UpdateOneID(filtered.ID).SetExtra(map[string]any{
+		"openai_passthrough": true, "openai_passthrough_model_filter": true,
+	}).Save(ctx)
+	require.NoError(t, err)
+	legacyFiltered := create("filtered-legacy-passthrough", allowed.ID)
+	_, err = client.Account.UpdateOneID(legacyFiltered.ID).SetExtra(map[string]any{
+		"openai_oauth_passthrough": true, "openai_passthrough_model_filter": true,
+	}).Save(ctx)
+	require.NoError(t, err)
 
 	out, err := repo.ListCommercialModelMappings(ctx, []int64{allowed.ID})
 	require.NoError(t, err)
@@ -78,6 +90,8 @@ func TestListCommercialModelMappingsKeepsConfiguredStateAndExactGroupBindings(t 
 		{Platform: service.PlatformOpenAI},
 		{Platform: service.PlatformOpenAI},
 		{Platform: service.PlatformOpenAI, ModelMapping: map[string]any{"explicitly-restricted": "private-target"}},
+		{Platform: service.PlatformOpenAI, ModelMapping: map[string]any{"filtered-passthrough": "private-target"}},
+		{Platform: service.PlatformOpenAI, ModelMapping: map[string]any{"filtered-legacy-passthrough": "private-target"}},
 	}, out[allowed.ID])
 
 	out, err = repo.ListCommercialModelMappings(ctx, []int64{allowed.ID, other.ID})

@@ -43,6 +43,23 @@ observations remain null; token and total duration values never fill that gap.
 
 ## Compatibility and per-turn billing
 
+OpenAI API-key accounts in passthrough mode accept every model by default.
+The account `extra.openai_passthrough_model_filter` switch defaults to `false`.
+When explicitly enabled together with `extra.openai_passthrough`, scheduling
+and available-channel offers apply the source keys of `credentials.model_mapping`
+as model filters. Empty mappings remain unrestricted. Mapping targets do not
+rewrite the passthrough request model. Create, edit and bulk-edit controls persist
+the same switch, and the group model allowlist continues to apply independently.
+
+OpenAI groups can persist `force_openai_ultrafast`, default `false`, alongside
+`force_openai_fast`. For a supported final upstream model, the Ultrafast flag
+selects `ultrafast` before the global tier policy. When both flags are enabled,
+supported models use Ultrafast and other models use Fast. With only the
+Ultrafast flag enabled, other models retain the caller's tier. The supported
+model set and tier multipliers use the shared OpenAI policy in forwarding,
+reservation and settlement. Group duplication and API-key authentication-cache
+snapshots retain both flags.
+
 OAuth requests replaying `web_search_call` history declare a cached-only
 `web_search` tool (`external_web_access=false`) when absent. Standard Responses
 uses `tools`; Responses Lite uses an `additional_tools` input item and preserves
@@ -1251,3 +1268,24 @@ without search before sending the newly requested search turn. Later turns are
 not replayed after semantic output. Metadata, empty reasoning announcements,
 media and terminal aggregates never start strict token timing; first byte and
 first meaningful output remain separate. The obsolete TTFT setting stays removed.
+
+## v0.2.22 compatibility
+
+Codex `additional_tools` declarations retain their IDs when history storage is
+disabled. UUID-shaped `at_` IDs are compacted consistently with matching
+`item_reference` IDs. Other provider IDs retain their spelling. The raw HTTP/WS
+compatibility path patches the same declarations and references.
+
+The OpenAI tool-schema adapter removes unsupported regex constraints from
+`pattern` and `patternProperties` while retaining ordinary patterns. JSON
+Unicode escapes receive the same normalization as their decoded characters.
+Removing a pattern-property key reopens restrictive `additionalProperties` so formerly
+accepted argument keys remain representable. Traversal stays inside schema
+keywords and preserves instance values such as `examples`, `default`, `enum`
+and `const`. These transformations follow ingress audit and retain the shared
+body-size, nesting and edit-count limits.
+
+If a concurrency keepalive already committed SSE response headers, a later
+upstream error uses an SSE error event. Before streaming begins the endpoint
+retains the applicable HTTP error response. The concurrency ping setting is
+documented in [Docker configuration](../../deploy/DOCKER.md#startup-and-database-recovery).

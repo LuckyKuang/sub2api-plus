@@ -440,17 +440,18 @@ const (
 
 // InflightEstimateRequest 单请求估算输入。
 type InflightEstimateRequest struct {
-	Protocol           string
-	AnthropicFast      bool
-	RequireCompact     bool
-	ResponsesWebSocket bool
-	Model              string
-	BodyBytes          int
-	MaxTokens          int
-	ServiceTier        string
-	ReasoningEffort    string
-	effortMetadata     inflightEffortMetadata
-	Kind               InflightEstimateKind
+	Protocol              string
+	AnthropicFast         bool
+	RequireCompact        bool
+	ResponsesWebSocket    bool
+	Model                 string
+	BodyBytes             int
+	MaxTokens             int
+	ServiceTier           string
+	ReasoningEffort       string
+	effortMetadata        inflightEffortMetadata
+	cachedContentLocation string
+	Kind                  InflightEstimateKind
 	// Units 按次/按张数量（<=0 视为 1）。
 	Units int
 	// SearchCalls 叠加的搜索次数（按分组 search_price_per_1k 计）。
@@ -653,6 +654,7 @@ func (req InflightEstimateRequest) WithRequestPricingMetadata(body []byte) Infli
 		effort = ApplyThinkingEnabledFallback(effort, body, req.Model)
 	case ContentModerationProtocolGemini:
 		effort = extractGeminiReasoningEffortFromBody(body)
+		req.cachedContentLocation = geminiCachedContentLocationInBody(body)
 	case ContentModerationProtocolOpenAIChat, ContentModerationProtocolOpenAIResponses:
 		if tier := extractOpenAIServiceTierFromBody(body); tier != nil {
 			req.ServiceTier = *tier
@@ -705,6 +707,9 @@ func (d inflightEstimateDeps) estimateOne(ctx context.Context, apiKey *APIKey, m
 			PricingAt: at, ServiceTier: req.ServiceTier, ReasoningEffort: req.ReasoningEffort, Resolver: d.resolver, Resolved: resolved})
 		if err != nil || cost == nil {
 			return 0
+		}
+		if resolved == nil || (resolved.Source != PricingSourceGroup && resolved.Source != PricingSourceChannel) {
+			applyUpstreamPriceFactor(cost, &ForwardResult{UpstreamPriceMultiplier: d.selectedUpstreamPriceFactor(ctx, apiKey, req)})
 		}
 		priced = true
 		return cost.ActualCost

@@ -37,12 +37,12 @@ func (s *GatewayService) ReleaseStickySessionAfterCommittedNoContent(ctx context
 		return false
 	}
 	gid := derefGroupID(groupID)
-	bound, getErr := s.cache.GetSessionAccountID(ctx, gid, sessionHash)
-	if getErr != nil || bound != accountID {
+	removed, delErr := s.cache.CompareAndDeleteSessionAccountID(ctx, gid, sessionHash, accountID)
+	if delErr != nil {
+		slog.Warn("antigravity_compat_sticky_release_failed", "group_id", gid, "account_id", accountID, "error", delErr)
 		return false
 	}
-	if delErr := s.cache.DeleteSessionAccountID(ctx, gid, sessionHash); delErr != nil {
-		slog.Warn("antigravity_compat_sticky_release_failed", "group_id", gid, "account_id", accountID, "error", delErr)
+	if !removed {
 		return false
 	}
 	slog.Info("antigravity_compat_sticky_released", "group_id", gid, "account_id", accountID, "reason", err.Error())

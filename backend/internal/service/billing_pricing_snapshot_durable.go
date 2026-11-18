@@ -12,27 +12,37 @@ import (
 // explanation. It pins only the models needed by the task, never credentials or
 // the process configuration, so a delayed settlement survives reload/restart.
 type durableBillingPricingSnapshot struct {
-	IdentifiedImages       map[string]map[string]bool    `json:"identified_images,omitempty"`
-	Version                int                           `json:"version"`
-	RateCalculation        string                        `json:"rate_calculation"`
-	PeakScope              string                        `json:"peak_scope"`
-	Group                  *Group                        `json:"group"`
-	Ungrouped              bool                          `json:"ungrouped,omitempty"`
-	DefaultRate            *float64                      `json:"default_rate,omitempty"`
-	LegacyPriceSelection   bool                          `json:"legacy_price_selection,omitempty"`
-	PersonalRate           *float64                      `json:"personal_rate,omitempty"`
-	TokenPeak              *float64                      `json:"token_peak"`
-	PricingAt              time.Time                     `json:"pricing_at"`
-	Platform               string                        `json:"platform"`
-	PublicModel            string                        `json:"public_model"`
-	RoutingModel           string                        `json:"routing_model,omitempty"`
-	Channel                *Channel                      `json:"channel,omitempty"`
-	Models                 map[string]*ModelPricing      `json:"models"`
-	MissingModels          map[string]bool               `json:"missing_models,omitempty"`
-	Images                 map[string]map[string]float64 `json:"images"`
-	Videos                 map[string]map[string]float64 `json:"videos"`
-	CacheStorage           map[string]float64            `json:"cache_storage"`
-	DeepSeekPeakMultiplier float64                       `json:"deepseek_peak_multiplier"`
+	IdentifiedImages       map[string]map[string]bool            `json:"identified_images,omitempty"`
+	Version                int                                   `json:"version"`
+	RateCalculation        string                                `json:"rate_calculation"`
+	PeakScope              string                                `json:"peak_scope"`
+	Group                  *Group                                `json:"group"`
+	Ungrouped              bool                                  `json:"ungrouped,omitempty"`
+	DefaultRate            *float64                              `json:"default_rate,omitempty"`
+	LegacyPriceSelection   bool                                  `json:"legacy_price_selection,omitempty"`
+	PersonalRate           *float64                              `json:"personal_rate,omitempty"`
+	TokenPeak              *float64                              `json:"token_peak"`
+	PricingAt              time.Time                             `json:"pricing_at"`
+	Platform               string                                `json:"platform"`
+	PublicModel            string                                `json:"public_model"`
+	RoutingModel           string                                `json:"routing_model,omitempty"`
+	Channel                *Channel                              `json:"channel,omitempty"`
+	Models                 map[string]*ModelPricing              `json:"models"`
+	ModelPriceOverrides    map[string]durableTokenPriceOverrides `json:"model_price_overrides,omitempty"`
+	MissingModels          map[string]bool                       `json:"missing_models,omitempty"`
+	Images                 map[string]map[string]float64         `json:"images"`
+	Videos                 map[string]map[string]float64         `json:"videos"`
+	CacheStorage           map[string]float64                    `json:"cache_storage"`
+	DeepSeekPeakMultiplier float64                               `json:"deepseek_peak_multiplier"`
+}
+
+// Override provenance controls whether each frozen DeepSeek token price receives
+// its accepted peak factor. Keep it private to durable storage, separate from
+// the public model price card; older snapshots without it retain their policy.
+type durableTokenPriceOverrides struct {
+	Input     bool `json:"input,omitempty"`
+	Output    bool `json:"output,omitempty"`
+	CacheRead bool `json:"cache_read,omitempty"`
 }
 
 func pinBillingComponentDefaults(group *Group) {
@@ -72,6 +82,7 @@ func ExportBillingPricingSnapshot(ctx context.Context, models ...string) (json.R
 		MissingModels:          make(map[string]bool),
 		Models:                 make(map[string]*ModelPricing), Images: make(map[string]map[string]float64), Videos: make(map[string]map[string]float64), CacheStorage: make(map[string]float64)}
 	stored.IdentifiedImages = make(map[string]map[string]bool)
+	stored.ModelPriceOverrides = make(map[string]durableTokenPriceOverrides)
 	if snapshot.ungrouped {
 		rate := snapshot.defaultRate
 		stored.Ungrouped, stored.DefaultRate = true, &rate
@@ -144,6 +155,11 @@ func ExportBillingPricingSnapshot(ctx context.Context, models ...string) (json.R
 			price = &copy
 		}
 		stored.Models[model] = price
+		if price != nil && price.priceOverrides != (tokenPriceOverrides{}) {
+			stored.ModelPriceOverrides[model] = durableTokenPriceOverrides{
+				Input: price.priceOverrides.input, Output: price.priceOverrides.output, CacheRead: price.priceOverrides.cacheRead,
+			}
+		}
 		stored.Images[model] = make(map[string]float64)
 		stored.IdentifiedImages[model] = make(map[string]bool)
 		for _, tier := range []string{ImageBillingSize1K, ImageBillingSize2K, ImageBillingSize4K} {
@@ -198,6 +214,11 @@ func RestoreBillingPricingSnapshot(ctx context.Context, data json.RawMessage) (c
 	}
 	if stored.IdentifiedImages == nil {
 		stored.IdentifiedImages = make(map[string]map[string]bool)
+	}
+	for model, overrides := range stored.ModelPriceOverrides {
+		if price := stored.Models[model]; price != nil {
+			price.priceOverrides = tokenPriceOverrides{input: overrides.Input, output: overrides.Output, cacheRead: overrides.CacheRead}
+		}
 	}
 	billing := &BillingService{frozenPricing: true, frozenPricingAt: stored.PricingAt, frozenModelPrices: stored.Models,
 		frozenMissingModels:         stored.MissingModels,

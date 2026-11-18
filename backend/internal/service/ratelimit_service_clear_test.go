@@ -115,10 +115,6 @@ func (r *rateLimitClearRepoStub) ClearModelRateLimits(ctx context.Context, id in
 	return r.clearModelRateLimitErr
 }
 
-func (r *rateLimitClearRepoStub) ClearModelRateLimit(ctx context.Context, id int64, scope string) error {
-	return nil
-}
-
 func (r *rateLimitClearRepoStub) ClearTempUnschedulable(ctx context.Context, id int64) error {
 	r.clearTempUnschedCalls++
 	return r.clearTempUnschedulableErr

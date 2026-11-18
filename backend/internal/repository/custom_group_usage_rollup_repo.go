@@ -84,6 +84,28 @@ func (r *usageLogRepository) readGroupUsageRollupSnapshot(ctx context.Context, t
 }
 
 func (r *usageLogRepository) getAllGroupUsageSummaryFromRollups(ctx context.Context, todayStart time.Time) (results []usagestats.GroupUsageSummary, err error) {
+	if db, ok := r.sql.(*sql.DB); ok {
+		// The watermark and the rows it describes must come from the same MVCC
+		// snapshot. A late write, retention cleanup or rebuild may commit between
+		// these two queries; READ COMMITTED could otherwise combine stale bucket
+		// boundaries with newer buckets/tail rows. Keep the tail bound as a query
+		// parameter so PostgreSQL can still use the created_at index.
+		tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = tx.Rollback() }()
+		txRepo := &usageLogRepository{sql: tx}
+		results, err := txRepo.getAllGroupUsageSummaryFromRollups(ctx, todayStart)
+		if err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		return results, nil
+	}
+
 	todayStart = service.GroupUsageTodayStart(todayStart)
 	yesterdayStart := service.GroupUsageYesterdayStart(todayStart)
 	timezoneName := service.GroupUsageTimezoneName()

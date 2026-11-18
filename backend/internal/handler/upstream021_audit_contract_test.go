@@ -51,7 +51,11 @@ func TestUpstream021PageSnapshotCanonicalAudits(t *testing.T) {
 }
 
 func TestUpstream021PageSnapshotRealAuditsBeforeSideEffects(t *testing.T) {
-	fixture := []byte(upstream021PageBody)
+	testCodexCallLessContextRealAuditsBeforeSideEffects(t, []byte(upstream021PageBody), "audit page text")
+}
+
+func testCodexCallLessContextRealAuditsBeforeSideEffects(t *testing.T, fixture []byte, expectedText string) {
+	t.Helper()
 	for _, kind := range []string{service.AccountTypeOAuth, service.AccountTypeAPIKey} {
 		for _, engine := range []string{"moderation", "prompt"} {
 			for _, websocket := range []bool{false, true} {
@@ -103,7 +107,7 @@ func TestUpstream021PageSnapshotRealAuditsBeforeSideEffects(t *testing.T) {
 						observed := supplier.snapshot()
 						require.Len(t, observed, scans)
 						if recognized {
-							require.Contains(t, observed[0], "audit page text")
+							require.Contains(t, observed[0], expectedText)
 							require.NotContains(t, observed[0], "Updated tool definition")
 							assertCodexCLIIngressNoSideEffects(t, boundary)
 						} else {

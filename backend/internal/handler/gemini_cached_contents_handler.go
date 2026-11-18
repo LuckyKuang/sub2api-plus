@@ -150,7 +150,7 @@ func (h *GatewayHandler) GeminiCachedContentsCreate(c *gin.Context) {
 		return
 	}
 	// Cache creation has no inference effort or generated-output tier.
-	inflightRelease, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate("", modelName, body))
+	inflightRelease, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, tokenInflightEstimate("", reqModel, body))
 	if err != nil {
 		reqLog.Info("gemini.cached_content.inflight_reservation_rejected", zap.Error(err))
 		status, code, message, retryAfter := billingErrorDetails(err)

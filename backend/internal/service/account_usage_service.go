@@ -755,16 +755,16 @@ func (s *AccountUsageService) syncActiveToPassive(ctx context.Context, account *
 	accountID := account.ID
 	extraUpdates := make(map[string]any, 4)
 
-	if usage.FiveHour != nil {
+	if usage.FiveHour != nil && validAnthropicUtilization(usage.FiveHour.Utilization) {
 		extraUpdates["session_window_utilization"] = usage.FiveHour.Utilization / 100
 	}
-	if usage.SevenDay != nil {
+	if usage.SevenDay != nil && validAnthropicUtilization(usage.SevenDay.Utilization) {
 		extraUpdates["passive_usage_7d_utilization"] = usage.SevenDay.Utilization / 100
 		if usage.SevenDay.ResetsAt != nil {
 			extraUpdates["passive_usage_7d_reset"] = usage.SevenDay.ResetsAt.Unix()
 		}
 	}
-	if usage.SevenDayFable != nil {
+	if usage.SevenDayFable != nil && validAnthropicUtilization(usage.SevenDayFable.Utilization) {
 		extraUpdates["passive_usage_7d_oi_utilization"] = usage.SevenDayFable.Utilization / 100
 		if usage.SevenDayFable.ResetsAt != nil {
 			extraUpdates["passive_usage_7d_oi_reset"] = usage.SevenDayFable.ResetsAt.Unix()

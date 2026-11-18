@@ -15,8 +15,29 @@ including Google One's default model set; translated OAuth aliases are not adver
 If any Gemini account is unrestricted or an OAuth mapping has no native declarations,
 the selected account supplies discovery. Antigravity candidates and the group's
 model allowlist still apply. Built-in Gemini catalogs and account
-connection tests now use the current 3.x models; saved custom mappings can still
+connection tests include the supported 3.x and 4.x models. Saved custom mappings can still
 declare older models explicitly.
+
+For Vertex Gemini accounts, `credentials.vertex_model_locations` overrides
+the account location per model. Account locations `us` and `eu` use the
+multi-region host `aiplatform.LOCATION.rep.googleapis.com` for models listed in
+`vertex_locations.go`. Other models fall back to `global`. Single-region
+locations retain their regional endpoint. Model-detail discovery uses the global
+publisher catalog when generation uses a multi-region endpoint. Express-mode
+API keys without a project ID keep the global endpoint.
+
+For Vertex service-account requests using a supported model at a multi-region
+endpoint, default token charges include the configured 1.1 endpoint factor.
+Explicit group/channel token prices retain their chosen rates. Images, requests
+and cache-storage charges keep their own meter prices. Selected-account inflight
+reservations use the same mapped model and actual endpoint. A bound explicit
+cache keeps its original location even when account defaults change.
+
+Native Gemini content-based session affinity uses the gateway API key ID,
+model, tools, system instruction and first user message parts. Later conversation
+history can grow without changing that binding. A request without meaningful
+first-user content receives no content-based binding. Explicit CLI session IDs
+and bound-cache ownership retain their precedence.
 
 `gateway.max_same_account_retries_gemini` (environment
 `GATEWAY_MAX_SAME_ACCOUNT_RETRIES_GEMINI`) sets retries for retryable Gemini

@@ -90,6 +90,48 @@ func (s *GatewayCacheSuite) TestDeleteSessionAccountID() {
 	require.True(s.T(), errors.Is(err, service.ErrStickySessionNotFound), "expected ErrStickySessionNotFound after delete")
 }
 
+func (s *GatewayCacheSuite) TestCompareAndDeleteSessionAccountID() {
+	// docs/providers/ANTIGRAVITY.md: a failed committed stream must never
+	// erase the newer account binding installed by concurrent failover.
+	const sessionID = "antigravity:compare-delete"
+	const groupID int64 = 1
+	require.NoError(s.T(), s.cache.SetSessionAccountID(s.ctx, groupID, sessionID, 5, time.Minute))
+	observed, err := s.cache.GetSessionAccountID(s.ctx, groupID, sessionID)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), int64(5), observed)
+	require.NoError(s.T(), s.cache.SetSessionAccountID(s.ctx, groupID, sessionID, 6, time.Minute))
+
+	removed, err := s.cache.CompareAndDeleteSessionAccountID(s.ctx, groupID, sessionID, observed)
+	require.NoError(s.T(), err)
+	require.False(s.T(), removed)
+	current, err := s.cache.GetSessionAccountID(s.ctx, groupID, sessionID)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), int64(6), current)
+
+	// An equal binding in another group is outside this release's scope.
+	require.NoError(s.T(), s.cache.SetSessionAccountID(s.ctx, 2, sessionID, 6, time.Minute))
+	removed, err = s.cache.CompareAndDeleteSessionAccountID(s.ctx, groupID, sessionID, 6)
+	require.NoError(s.T(), err)
+	require.True(s.T(), removed)
+	_, err = s.cache.GetSessionAccountID(s.ctx, groupID, sessionID)
+	require.ErrorIs(s.T(), err, service.ErrStickySessionNotFound)
+	current, err = s.cache.GetSessionAccountID(s.ctx, 2, sessionID)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), int64(6), current)
+
+	removed, err = s.cache.CompareAndDeleteSessionAccountID(s.ctx, groupID, sessionID, 6)
+	require.NoError(s.T(), err)
+	require.False(s.T(), removed, "an absent binding is a no-op")
+
+	// Corrupt cache values must also survive a mismatched release.
+	key := buildSessionKey(groupID, sessionID)
+	require.NoError(s.T(), s.rdb.Set(s.ctx, key, "invalid", time.Minute).Err())
+	removed, err = s.cache.CompareAndDeleteSessionAccountID(s.ctx, groupID, sessionID, 6)
+	require.NoError(s.T(), err)
+	require.False(s.T(), removed)
+	require.Equal(s.T(), "invalid", s.rdb.Get(s.ctx, key).Val())
+}
+
 func (s *GatewayCacheSuite) TestGetSessionAccountID_CorruptedValue() {
 	sessionID := "corrupted"
 	groupID := int64(1)

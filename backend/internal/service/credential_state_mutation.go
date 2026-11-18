@@ -14,12 +14,16 @@ import (
 type CredentialStateMutation struct {
 	Extra map[string]any
 	// OpenAIPlanType is provider-issued metadata; it cannot replace tokens or identity.
-	OpenAIPlanType                    string
-	RateLimitUntil                    *time.Time
-	ExtendRateLimitOnly               bool
-	ClearRateLimit                    bool
-	ObservedLimitedAt                 *time.Time
-	ObservedResetAt                   *time.Time
+	OpenAIPlanType      string
+	RateLimitUntil      *time.Time
+	ExtendRateLimitOnly bool
+	ClearRateLimit      bool
+	ObservedLimitedAt   *time.Time
+	ObservedResetAt     *time.Time
+	// Model recovery removes only the exact observed scope payload for this
+	// credential owner, preserving concurrent replacements and other scopes.
+	ClearModelRateLimitScope          string
+	ObservedModelRateLimit            map[string]any
 	TempUnschedulableUntil            *time.Time
 	TempUnschedulableReason           string
 	ClearTempUnschedulable            bool

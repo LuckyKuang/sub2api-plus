@@ -233,6 +233,102 @@ func TestUsageBillingRepositoryApplyBatch_DuplicateAndConflictingRequests(t *tes
 	require.Equal(t, 3, state.dedupRows)
 }
 
+func TestUsageBillingRepositoryApplyBatch_PersistsOnlyAppliedUsageLogs(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB)
+	f := newBatchBillingFixture(t, client, 10)
+	t.Cleanup(func() {
+		_, err := integrationDB.ExecContext(context.Background(), "DELETE FROM usage_logs WHERE user_id = $1", f.userID)
+		require.NoError(t, err)
+	})
+	cmds := f.commands("atomic-logs-"+uuid.NewString(), []batchBillingStep{
+		{key: 'B', balance: 1.250000004},
+		{key: 'B', balance: 0.5},
+		{key: 'B', balance: 0.25},
+	})
+	for _, cmd := range cmds {
+		cmd.UsageLog = &service.UsageLog{UserID: f.userID, APIKeyID: cmd.APIKeyID, AccountID: cmd.AccountID,
+			RequestID: cmd.RequestID, Model: "batch-atomic-model", ActualCost: cmd.BalanceCost}
+	}
+
+	outcomes, err := repo.ApplyBatch(ctx, cmds[:2])
+	require.NoError(t, err)
+	require.Len(t, outcomes, 2)
+	for _, outcome := range outcomes {
+		require.NoError(t, outcome.Err)
+		require.True(t, outcome.Result.Applied)
+		require.True(t, outcome.Result.UsageLogPersisted)
+	}
+	var cost string
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT actual_cost::text FROM usage_logs WHERE request_id = $1 AND api_key_id = $2", cmds[0].RequestID, f.keyB).Scan(&cost))
+	require.Equal(t, "1.2500000000", cost, "the DECIMAL(20,10) log column stores the debit rounded at its eight-decimal monetary boundary")
+
+	retry, conflicting := *cmds[0], *cmds[1]
+	conflicting.RequestFingerprint = "changed-billable-request"
+	// Duplicate/conflicting commands must not attempt their supplied log inserts.
+	retry.UsageLog = &service.UsageLog{AccountID: 0}
+	conflicting.UsageLog = &service.UsageLog{AccountID: 0}
+	outcomes, err = repo.ApplyBatch(ctx, []*service.UsageBillingCommand{&retry, &conflicting, cmds[2]})
+	require.NoError(t, err)
+	require.False(t, outcomes[0].Result.Applied)
+	require.False(t, outcomes[0].Result.UsageLogPersisted)
+	require.ErrorIs(t, outcomes[1].Err, service.ErrUsageBillingRequestConflict)
+	require.Nil(t, outcomes[1].Result)
+	require.True(t, outcomes[2].Result.Applied)
+	require.True(t, outcomes[2].Result.UsageLogPersisted)
+	var count int
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM usage_logs WHERE user_id = $1", f.userID).Scan(&count))
+	require.Equal(t, 3, count)
+	state := readBatchBillingState(t, ctx, f)
+	require.Equal(t, "8.00000000", state.balance)
+	require.Equal(t, 3, state.dedupRows)
+}
+
+func TestUsageBillingRepositoryApplyBatch_UsageInsertFailureRollsBackEveryEffect(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB)
+	f := newBatchBillingFixture(t, client, 10)
+	t.Cleanup(func() {
+		_, err := integrationDB.ExecContext(context.Background(), "DELETE FROM usage_logs WHERE user_id = $1", f.userID)
+		require.NoError(t, err)
+	})
+	before := readBatchBillingState(t, ctx, f)
+	cmds := f.commands("atomic-rollback-"+uuid.NewString(), []batchBillingStep{
+		{key: 'A', account: 'P', balance: 3, subscription: 1, keyQuota: 3, keyRate: 3, accountQuota: 3},
+		{key: 'A', account: 'P', balance: 3, subscription: 1, keyQuota: 3, keyRate: 3, accountQuota: 3},
+	})
+	for _, cmd := range cmds {
+		cmd.UsageLog = &service.UsageLog{UserID: f.userID, APIKeyID: cmd.APIKeyID, AccountID: cmd.AccountID,
+			RequestID: cmd.RequestID, Model: "batch-atomic-model", ActualCost: 3}
+	}
+	cmds[1].UsageLog.AccountID = 0 // A foreign-key failure after the first log was inserted.
+	outcomes, err := repo.ApplyBatch(ctx, cmds)
+	require.Error(t, err)
+	require.Nil(t, outcomes)
+	require.Equal(t, before, readBatchBillingState(t, ctx, f), "balances, quotas, dedup claims and scheduler outbox all roll back")
+	var count int
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM usage_logs WHERE user_id = $1", f.userID).Scan(&count))
+	require.Zero(t, count, "the first log must roll back with the failed second log")
+
+	cmds[1].UsageLog.AccountID = cmds[1].AccountID
+	outcomes, err = repo.ApplyBatch(ctx, cmds)
+	require.NoError(t, err)
+	for _, outcome := range outcomes {
+		require.NoError(t, outcome.Err)
+		require.True(t, outcome.Result.Applied, "a rolled-back claim can be retried")
+		require.True(t, outcome.Result.UsageLogPersisted)
+	}
+	state := readBatchBillingState(t, ctx, f)
+	require.Equal(t, "4.00000000", state.balance)
+	require.Equal(t, 2, state.dedupRows)
+	require.Equal(t, 1, state.pOutbox)
+	require.Equal(t, service.StatusAPIKeyQuotaExhausted, state.keyAStatus)
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM usage_logs WHERE user_id = $1", f.userID).Scan(&count))
+	require.Equal(t, 2, count)
+}
+
 func TestUsageBillingRepositoryApplyBatch_ArchivedRequestsAreNotReapplied(t *testing.T) {
 	ctx := context.Background()
 	client := testEntClient(t)

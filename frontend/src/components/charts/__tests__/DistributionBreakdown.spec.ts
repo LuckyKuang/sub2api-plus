@@ -26,6 +26,7 @@ const cases = [
   { name: 'group with account cost', component: GroupDistributionChart, props: { groupStats: [{ group_id: 1, group_name: 'group-a', ...usage }] }, accountCost: true },
   { name: 'group without account cost', component: GroupDistributionChart, props: { groupStats: [{ group_id: 1, group_name: 'group-a', ...usage }], showAccountCost: false }, accountCost: false },
   { name: 'endpoint', component: EndpointDistributionChart, props: { endpointStats: [{ endpoint: '/v1/messages', ...usage }] }, accountCost: false },
+  { name: 'endpoint with account cost', component: EndpointDistributionChart, props: { endpointStats: [{ endpoint: '/v1/messages', ...usage }], showAccountCost: true }, accountCost: true },
 ] as const
 
 describe.each(cases)('$name expanded user columns', ({ component, props, accountCost }) => {
@@ -43,6 +44,9 @@ describe.each(cases)('$name expanded user columns', ({ component, props, account
     expect(headers.slice(1)).toEqual([
       'admin.dashboard.requests', 'admin.dashboard.tokens', 'admin.dashboard.actual',
       ...(accountCost ? ['admin.dashboard.accountCost'] : []), 'admin.dashboard.standard',
+    ])
+    expect(table.get('tbody tr').findAll('td').map(cell => cell.text()).slice(1)).toEqual([
+      '7', '800 (100.0%)', '$1.25', ...(accountCost ? ['$2.50'] : []), '$3.75',
     ])
     await table.get('tbody tr').trigger('click')
     await flushPromises()

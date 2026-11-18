@@ -554,3 +554,52 @@ func TestDeepseekOverrideFileReloadRestoresOfficialPolicy(t *testing.T) {
 	svc.reloadIfCustomFilesChanged()
 	check(0.0003, 0.0006, 0.000012)
 }
+
+func TestDeepseekOverrideFileDurableSnapshotPreservesPeakPolicyPerField(t *testing.T) {
+	const model = "deepseek-flash"
+	// Monday 02:00 UTC has the official 2x peak factor. Explicit operator
+	// fields are final rates; only omitted fields receive that factor.
+	at := time.Date(2026, 8, 24, 2, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name, patch                     string
+		input, output, cacheRead, total float64
+	}{
+		{"full nonzero", `{"input_cost_per_token":0.000002,"output_cost_per_token":0.000003,"cache_read_input_token_cost":0.0000004}`, .002, .0015, .0008, .0043},
+		{"input only", `{"input_cost_per_token":0.000002}`, .002, .0006, .000012, .002612},
+		{"zero input", `{"input_cost_per_token":0}`, 0, .0006, .000012, .000612},
+		{"zero output", `{"output_cost_per_token":0}`, .0003, 0, .000012, .000312},
+		{"zero cache read", `{"cache_read_input_token_cost":0}`, .0003, .0006, 0, .0009},
+		{"all zero", `{"input_cost_per_token":0,"output_cost_per_token":0,"cache_read_input_token_cost":0}`, 0, 0, 0, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pricing := newHotReloadPricingService(t,
+				`{"deepseek-flash":{"input_cost_per_token":0.00001,"output_cost_per_token":0.00002,"cache_read_input_token_cost":0.000001}}`,
+				`{"deepseek-flash":`+tc.patch+`}`)
+			billing := NewBillingService(pricing.cfg, pricing)
+			key := &APIKey{Group: &Group{ID: 7, Platform: PlatformDeepseek, RateMultiplier: 1.25}}
+			ctx := withBillingPricingSnapshot(context.Background(), key, at, billing, nil, nil, model)
+			require.NoError(t, ValidateBillingPricingSnapshot(ctx))
+			// Later operator changes must not alter accepted evidence, including
+			// its per-field exemption from peak pricing.
+			require.NoError(t, os.WriteFile(pricing.cfg.Pricing.OverrideFile, []byte(`{"deepseek-flash":{"input_cost_per_token":0.1,"output_cost_per_token":0.2,"cache_read_input_token_cost":0.3}}`), 0644))
+			pricing.reloadIfCustomFilesChanged()
+			for round := 0; round < 3; round++ {
+				snapshot := BillingPricingSnapshotFromContext(ctx)
+				cost, err := billing.CalculateTokenCostForRequest(TokenCostRequest{
+					Ctx: ctx, Model: model, Group: snapshot.group, Resolver: snapshot.resolver,
+					Tokens: UsageTokens{InputTokens: 1000, OutputTokens: 500, CacheReadTokens: 2000}, RateMultiplier: 1.25,
+				})
+				require.NoError(t, err, "durable round %d", round)
+				require.InDelta(t, tc.input, cost.InputCost, 1e-12)
+				require.InDelta(t, tc.output, cost.OutputCost, 1e-12)
+				require.InDelta(t, tc.cacheRead, cost.CacheReadCost, 1e-12)
+				require.InDelta(t, tc.total, cost.TotalCost, 1e-12)
+				require.InDelta(t, tc.total*1.25, cost.ActualCost, 1e-12)
+				encoded, err := ExportBillingPricingSnapshot(ctx, model)
+				require.NoError(t, err)
+				ctx, err = RestoreBillingPricingSnapshot(context.Background(), encoded)
+				require.NoError(t, err)
+			}
+		})
+	}
+}

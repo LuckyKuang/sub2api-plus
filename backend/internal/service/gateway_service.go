@@ -546,6 +546,9 @@ type GatewayCache interface {
 	// DeleteSessionAccountID 删除粘性会话绑定，用于账号不可用时主动清理
 	// Delete sticky session binding, used to proactively clean up when account becomes unavailable
 	DeleteSessionAccountID(ctx context.Context, groupID int64, sessionHash string) error
+	// CompareAndDeleteSessionAccountID atomically removes only the expected
+	// account binding. A missing or replaced binding returns false without changes.
+	CompareAndDeleteSessionAccountID(ctx context.Context, groupID int64, sessionHash string, accountID int64) (bool, error)
 
 	// Grok async video billing snapshot (create → status success).
 	// SetGrokVideoPendingBilling stores create-time model/duration/resolution for status billing.

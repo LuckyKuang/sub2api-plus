@@ -216,6 +216,10 @@ func (c *openAIWSStateStoreTimeoutProbeCache) DeleteSessionAccountID(ctx context
 	return nil
 }
 
+func (c *openAIWSStateStoreTimeoutProbeCache) CompareAndDeleteSessionAccountID(context.Context, int64, string, int64) (bool, error) {
+	return false, nil
+}
+
 func (c *openAIWSStateStoreTimeoutProbeCache) SetGrokVideoPendingBilling(_ context.Context, _ string, _ []byte, _ time.Duration) error {
 	return nil
 }

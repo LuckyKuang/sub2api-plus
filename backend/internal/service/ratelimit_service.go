@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -1617,6 +1618,10 @@ const (
 	anthropicFableWindowRecoveredUtilization = 0.95
 )
 
+func validAnthropicUtilization(utilization float64) bool {
+	return !math.IsNaN(utilization) && !math.IsInf(utilization, 0) && utilization >= 0
+}
+
 // recoverAnthropicFableWindowLimit 在上游明确回报 7d_oi 用量已回落到耗尽线以下时，
 // 撤销此前由窗口耗尽写入的 claude-fable-5 模型级限流。
 //
@@ -1629,7 +1634,7 @@ func recoverAnthropicFableWindowLimit(ctx context.Context, repo AccountRepositor
 	if repo == nil || account == nil || account.ID <= 0 {
 		return false
 	}
-	if utilization < 0 || utilization >= anthropicFableWindowRecoveredUtilization {
+	if !validAnthropicUtilization(utilization) || utilization >= anthropicFableWindowRecoveredUtilization {
 		return false
 	}
 	if !account.isRateLimitActiveForKey(anthropicFableRateLimitKey) {
@@ -1638,11 +1643,24 @@ func recoverAnthropicFableWindowLimit(ctx context.Context, repo AccountRepositor
 	if account.modelRateLimitReason(anthropicFableRateLimitKey) != anthropicFableWindowReason {
 		return false
 	}
-	if err := repo.ClearModelRateLimit(ctx, account.ID, anthropicFableRateLimitKey); err != nil {
+	owner, known := credentialStateMutationOwner(ctx, account)
+	guarded, supported := repo.(CredentialStateMutationRepository)
+	if !known || !supported {
+		return false
+	}
+	limits, _ := account.Extra[modelRateLimitsKey].(map[string]any)
+	observed, _ := limits[anthropicFableRateLimitKey].(map[string]any)
+	accepted, err := guarded.ApplyCredentialStateMutation(ctx, owner, CredentialStateMutation{
+		ClearModelRateLimitScope: anthropicFableRateLimitKey, ObservedModelRateLimit: observed,
+	})
+	if err != nil {
 		slog.Warn("anthropic_fable_window_recovery_clear_failed",
 			"account_id", account.ID,
 			"utilization", utilization,
 			"error", err)
+		return false
+	}
+	if !accepted {
 		return false
 	}
 	clearAccountModelRateLimitSnapshot(account, anthropicFableRateLimitKey)
@@ -2278,13 +2296,13 @@ func (s *RateLimitService) samplePassiveUsageFromHeaders(ctx context.Context, ac
 	extraUpdates := make(map[string]any, 6)
 	// 5h utilization（0-1 小数），供 estimateSetupTokenUsage 使用
 	if utilStr := headers.Get("anthropic-ratelimit-unified-5h-utilization"); utilStr != "" {
-		if util, err := strconv.ParseFloat(utilStr, 64); err == nil {
+		if util, err := strconv.ParseFloat(utilStr, 64); err == nil && validAnthropicUtilization(util) {
 			extraUpdates["session_window_utilization"] = util
 		}
 	}
 	// 7d utilization（0-1 小数）
 	if utilStr := headers.Get("anthropic-ratelimit-unified-7d-utilization"); utilStr != "" {
-		if util, err := strconv.ParseFloat(utilStr, 64); err == nil {
+		if util, err := strconv.ParseFloat(utilStr, 64); err == nil && validAnthropicUtilization(util) {
 			extraUpdates["passive_usage_7d_utilization"] = util
 		}
 	}
@@ -2300,7 +2318,7 @@ func (s *RateLimitService) samplePassiveUsageFromHeaders(ctx context.Context, ac
 	// 7d_oi (Fable 专属 7d 窗口) utilization（0-1 小数）
 	var fableUtil *float64
 	if utilStr := headers.Get("anthropic-ratelimit-unified-7d_oi-utilization"); utilStr != "" {
-		if util, err := strconv.ParseFloat(utilStr, 64); err == nil {
+		if util, err := strconv.ParseFloat(utilStr, 64); err == nil && validAnthropicUtilization(util) {
 			extraUpdates["passive_usage_7d_oi_utilization"] = util
 			fableUtil = &util
 		}

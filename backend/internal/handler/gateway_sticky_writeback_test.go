@@ -65,6 +65,14 @@ func (s *stickyWritebackCache) DeleteSessionAccountID(context.Context, int64, st
 	return nil
 }
 
+func (s *stickyWritebackCache) CompareAndDeleteSessionAccountID(_ context.Context, _ int64, _ string, accountID int64) (bool, error) {
+	if s.accountID != accountID {
+		return false, nil
+	}
+	s.accountID = 0
+	return true, nil
+}
+
 type stickyWritebackBody struct {
 	io.Reader
 	finish func()

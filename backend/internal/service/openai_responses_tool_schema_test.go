@@ -412,6 +412,25 @@ func TestSanitizeOpenAIResponsesToolSchemaPatterns_RemovesLookaroundOnly(t *test
 	require.Equal(t, "^[a-z]+$", gjson.GetBytes(sanitized, "tools.0.parameters.properties.id.pattern").String())
 }
 
+func TestSanitizeOpenAIResponsesToolSchemaPatterns_EscapedUnsupportedRegexLetter(t *testing.T) {
+	for _, body := range []string{
+		`{"tools":[{"type":"function","name":"test","parameters":{"type":"string","pattern":"\\\u0070{L}+"}}]}`,
+		`{"tools":[{"type":"function","name":"test","parameters":{"type":"string","pattern":"\\\u0052"}}]}`,
+	} {
+		sanitized, changed, err := sanitizeOpenAIResponsesToolSchemaPatterns([]byte(body))
+		require.NoError(t, err)
+		require.True(t, changed, "JSON escaping cannot preserve a Python-incompatible regex constraint")
+		require.False(t, gjson.GetBytes(sanitized, "tools.0.parameters.pattern").Exists())
+	}
+	body := []byte(`{"tools":[{"type":"function","name":"test","parameters":{"type":"object","patternProperties":{"^\\\u0070{L}+$":{"type":"string"}},"additionalProperties":false}}]}`)
+	sanitized, changed, err := sanitizeOpenAIResponsesToolSchemaPatterns(body)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.True(t, gjson.GetBytes(sanitized, "tools.0.parameters.additionalProperties").Bool(), "removing an escaped incompatible pattern must keep its accepted argument keys representable")
+	properties := gjson.GetBytes(sanitized, "tools.0.parameters.patternProperties")
+	require.True(t, !properties.Exists() || len(properties.Map()) == 0)
+}
+
 func TestSanitizeOpenAIResponsesToolSchemaPatterns_DropsPythonRegexIncompatiblePatterns(t *testing.T) {
 	body := []byte(`{"tools":[{"type":"function","name":"search","parameters":{"type":"object","properties":{
 		"unicode":{"type":"string","pattern":"^\\p{L}+$"},

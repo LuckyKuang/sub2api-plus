@@ -59,3 +59,7 @@ func (c *stubSmartRetryCache) DeleteSessionAccountID(_ context.Context, groupID 
 	c.deleteCalls = append(c.deleteCalls, defaultDeleteSessionCall{groupID: groupID, sessionHash: sessionHash})
 	return nil
 }
+
+func (c *stubSmartRetryCache) CompareAndDeleteSessionAccountID(context.Context, int64, string, int64) (bool, error) {
+	panic("unexpected CompareAndDeleteSessionAccountID call")
+}

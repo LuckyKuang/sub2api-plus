@@ -103,6 +103,9 @@ func (c StubGatewayCache) RefreshSessionTTL(_ context.Context, _ int64, _ string
 func (c StubGatewayCache) DeleteSessionAccountID(_ context.Context, _ int64, _ string) error {
 	return nil
 }
+func (c StubGatewayCache) CompareAndDeleteSessionAccountID(_ context.Context, _ int64, _ string, _ int64) (bool, error) {
+	return false, nil
+}
 
 func (c StubGatewayCache) SetGrokVideoPendingBilling(_ context.Context, _ string, _ []byte, _ time.Duration) error {
 	return nil

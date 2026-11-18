@@ -16,6 +16,21 @@ its release mapping is recorded once an artifact is published. Integration and
 local validation do not publish artifacts.
 Post-tag official main is excluded.
 
+The branch review restores atomic usage-log persistence for batched billing,
+persists DeepSeek per-field override provenance across durable snapshot restores,
+and aligns Ultrafast and Vertex endpoint reservation pricing with settlement.
+Available-channel catalogs preserve the passthrough account's model-filter
+opt-in. Group usage summaries read their state, buckets and raw tail from one
+repeatable-read snapshot, closing a race also present in the starting Plus main.
+Native Gemini admission also fixes a pre-existing repeated channel mapping,
+preserving the original requested model before account selection.
+The review adds v0.2.22 external-context audit boundary regressions and completes
+the endpoint chart's optional account-cost column. Fable recovery conditionally
+clears only the observed credential owner's unchanged cooldown, and sticky
+session cleanup atomically preserves concurrent account rebindings. Tool-schema
+regex sanitation treats Unicode-escaped input consistently. Owning protocol,
+pricing, configuration and migration documentation records these behaviors.
+
 The v0.2.22 import (187 upstream commits, 340 files) adds the group
 `force_openai_ultrafast` tier gated per model, `openai_passthrough_model_filter`,
 scheduler-snapshot projection fixes, SSE-error framing after keepalives,

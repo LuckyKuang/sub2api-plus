@@ -153,6 +153,7 @@ func TestMain(m *testing.M) {
 // integration tests apply migrations and create persistent fixture rows.
 func runIntegrationTestsWithExternalServices(ctx context.Context, m *testing.M, postgresDSN, redisAddr string) int {
 	var err error
+	integrationDSN = postgresDSN
 	integrationPostgresDSN = postgresDSN
 	integrationDB, err = openSQLWithRetry(ctx, postgresDSN, 30*time.Second)
 	if err != nil {

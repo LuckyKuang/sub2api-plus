@@ -129,9 +129,11 @@ func estimateInflightWithFastPolicy(ctx context.Context, key *APIKey, req Inflig
 		req.ServiceTier = OpenAIFastTierPriority
 	}
 	force := openAIGroupForcesFast(ctx, &Account{Platform: PlatformOpenAI})
+	executionGroup := openAIFastExecutionGroup(ctx)
+	forceUltrafast := IsGroupContextValid(executionGroup) && groupSupportsOpenAIFast(executionGroup.Platform) && executionGroup.ForceOpenAIUltrafast
 	free := group != nil && groupSupportsOpenAIFast(group.Platform) && group.FreeOpenAIFast
 	tier := normalizedOpenAIServiceTierValue(req.ServiceTier)
-	if tier == "" && req.ServiceTier != "" && !force {
+	if tier == "" && req.ServiceTier != "" && !force && !forceUltrafast {
 		return deps.estimate(ctx, key, req) // Unknown explicit tiers are never "missing".
 	}
 	if force {
@@ -145,23 +147,25 @@ func estimateInflightWithFastPolicy(ctx context.Context, key *APIKey, req Inflig
 				continue
 			}
 			matchTier := strings.ToLower(strings.TrimSpace(rule.ServiceTier))
-			if (tier == "" && matchTier == OpenAIFastTierMissing) || (tier != "" && (matchTier == "" || matchTier == OpenAIFastTierAny || matchTier == tier)) {
+			if (tier == "" && matchTier == OpenAIFastTierMissing) || (tier != "" && (matchTier == "" || matchTier == OpenAIFastTierAny || matchTier == tier)) ||
+				(forceUltrafast && (matchTier == "" || matchTier == OpenAIFastTierAny || matchTier == OpenAIFastTierUltrafast)) {
 				if rule.Action != BetaPolicyActionPass || (rule.FallbackAction != "" && rule.FallbackAction != BetaPolicyActionPass) {
 					policyRelevant = true
 				}
 			}
 		}
 	}
-	if !force && !free && !policyRelevant {
+	if !force && !forceUltrafast && !free && !policyRelevant {
 		return deps.estimate(ctx, key, req)
 	}
-	_, _, upstreamModel := inflightBillingModelCandidates(ctx, deps, key, req.Model)
+	routingModel := req.Model
 	if routed, ok := ResolvedUpstreamModelFromContext(ctx); ok && strings.TrimSpace(routed) != "" {
-		upstreamModel = routed
+		routingModel = routed
 	}
 	if snapshot := BillingPricingSnapshotFromContext(ctx); snapshot != nil && snapshot.routingModel != "" {
-		upstreamModel = snapshot.routingModel
+		routingModel = snapshot.routingModel
 	}
+	_, _, upstreamModel := inflightBillingModelCandidates(ctx, deps, key, routingModel)
 	tiers := make(map[string]struct{})
 	add := func(tier string) {
 		if free && normalizeBillingServiceTier(tier) == "priority" {
@@ -171,6 +175,14 @@ func estimateInflightWithFastPolicy(ctx context.Context, key *APIKey, req Inflig
 	}
 	forAccount := func(account *Account, model string) {
 		final := tier
+		if forcedTier := openAIGroupForcedServiceTier(ctx, account, model); forcedTier != "" {
+			final = forcedTier
+		} else if !force && normalizedOpenAIServiceTierValue(req.ServiceTier) == "" && req.ServiceTier != "" {
+			// Unsupported models preserve an unknown explicit client tier;
+			// it must not become a missing-tier policy match.
+			add(req.ServiceTier)
+			return
+		}
 		matchTier := final
 		if matchTier == "" {
 			matchTier = OpenAIFastTierMissing
@@ -192,9 +204,9 @@ func estimateInflightWithFastPolicy(ctx context.Context, key *APIKey, req Inflig
 		}
 		add(final)
 	}
-	// Group-only force/free does not depend on account scope or wire mapping.
-	// Ordinary traffic and these common policies never enumerate the pool.
-	if !policyRelevant {
+	// Fast/free alone does not depend on the account mapping. Ultrafast does:
+	// the selected wire model controls whether it overrides Fast or the client.
+	if !policyRelevant && !forceUltrafast {
 		add(tier)
 	} else {
 		var accounts []Account
@@ -216,11 +228,11 @@ func estimateInflightWithFastPolicy(ctx context.Context, key *APIKey, req Inflig
 			if account.Platform != PlatformOpenAI || !account.IsSchedulable() {
 				continue
 			}
-			model, _ := account.ResolveMappedModel(upstreamModel)
-			model = normalizeOpenAIModelForUpstream(account, model)
-			if deps.selectedUpstreamModel != nil {
-				model = deps.selectedUpstreamModel(upstreamModel)
+			resolveModel := deps.selectedUpstreamModel
+			if resolveModel == nil {
+				resolveModel = deps.forAccount(ctx, account, req, true).selectedUpstreamModel
 			}
+			model := resolveModel(upstreamModel)
 			forAccount(account, model)
 		}
 		if len(accounts) == 0 {
@@ -230,6 +242,11 @@ func estimateInflightWithFastPolicy(ctx context.Context, key *APIKey, req Inflig
 			add(tier)
 			add("")
 			add(OpenAIFastTierPriority)
+			if forceUltrafast {
+				// The unavailable pool cannot prove that every wire model lacks
+				// Ultrafast. Retain its possible charge until selection reconciles.
+				add(OpenAIFastTierUltrafast)
+			}
 		}
 	}
 	if len(tiers) == 0 {

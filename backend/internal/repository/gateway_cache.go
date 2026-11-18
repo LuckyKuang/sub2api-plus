@@ -72,6 +72,19 @@ func (c *gatewayCache) DeleteSessionAccountID(ctx context.Context, groupID int64
 	return c.rdb.Del(ctx, key).Err()
 }
 
+func (c *gatewayCache) CompareAndDeleteSessionAccountID(ctx context.Context, groupID int64, sessionHash string, accountID int64) (bool, error) {
+	if c == nil || c.rdb == nil {
+		return false, errors.New("gateway cache unavailable")
+	}
+	if sessionHash == "" || accountID <= 0 {
+		return false, errors.New("invalid sticky session binding delete")
+	}
+	n, err := compareAndDeleteGatewayValueScript.Run(
+		ctx, c.rdb, []string{buildSessionKey(groupID, sessionHash)}, strconv.FormatInt(accountID, 10),
+	).Int()
+	return n == 1, err
+}
+
 var claimOpenAIResponsesSessionWindowScript = redis.NewScript(`
 local previous = redis.call('GET', KEYS[1])
 redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
@@ -87,7 +100,7 @@ redis.call('PEXPIRE', KEYS[1], ARGV[2])
 return 1
 `)
 
-var compareAndDeleteOpenAIResponsesSessionWindowScript = redis.NewScript(`
+var compareAndDeleteGatewayValueScript = redis.NewScript(`
 local current = redis.call('GET', KEYS[1])
 if current == false or current ~= ARGV[1] then
   return 0
@@ -152,7 +165,7 @@ func (c *gatewayCache) CompareAndDeleteOpenAIResponsesSessionWindow(ctx context.
 	if len(expected) == 0 || strings.TrimSpace(sessionHash) == "" {
 		return false, errors.New("invalid OpenAI Responses session-window delete")
 	}
-	n, err := compareAndDeleteOpenAIResponsesSessionWindowScript.Run(
+	n, err := compareAndDeleteGatewayValueScript.Run(
 		ctx,
 		c.rdb,
 		[]string{buildOpenAIResponsesSessionWindowKey(groupID, sessionHash)},

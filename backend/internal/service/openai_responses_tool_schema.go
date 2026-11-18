@@ -65,9 +65,9 @@ func sanitizeOpenAIResponsesToolSchemasForPlatform(body []byte, platform string)
 	return normalized, changed, nil
 }
 
-// sanitizeOpenAIResponsesToolSchemaPatterns removes schema constraints whose
-// regular expressions OpenAI's Python re validator rejects, including
-// lookaround, non-Python named groups, and unsupported backslash escapes. It
+// sanitizeOpenAIResponsesToolSchemaPatterns removes schema constraints outside
+// the supported OpenAI endpoint subset: lookaround, non-Python named groups
+// and unsupported backslash escapes. It
 // also drops patternProperties keys with such expressions. When dropping a key
 // would otherwise close a schema object (additionalProperties: false), the
 // object is reopened so arguments that matched the removed pattern stay
@@ -97,10 +97,9 @@ func sanitizeOpenAIResponsesToolParameterTypes(body []byte) ([]byte, bool, error
 }
 
 func openAIResponsesBodyMayContainUnsupportedRegex(body []byte) bool {
-	// An opening parenthesis may be literal or encoded as JSON's canonical
-	// Unicode escape. A backslash inside a JSON string is escaped as \\, so the
-	// sequence \\<letter> exposes the decoded regex escape without parsing.
-	if bytes.Contains(body, []byte("(")) || bytes.Contains(body, []byte(`\u0028`)) ||
+	// Unicode escapes can hide either the regex operator or the letter after
+	// its backslash. Otherwise \\<letter> exposes the decoded regex escape.
+	if bytes.Contains(body, []byte("(")) || JSONMayEscapePlainASCII(body) ||
 		bytes.Contains(body, []byte(`\u005c`)) || bytes.Contains(body, []byte(`\u005C`)) {
 		return true
 	}
@@ -116,10 +115,10 @@ func openAIResponsesBodyMayContainUnsupportedRegex(body []byte) bool {
 	return false
 }
 
-// hasUnsupportedOpenAIRegexPattern reports whether Python re rejects pattern.
-// OpenAI validates tool-schema patterns with Python re, which supports neither
-// lookaround nor the .NET/Java (?<name>...) and (?'name'...) group forms, and
-// reserves unknown ASCII-letter escapes such as \p and \R.
+// hasUnsupportedOpenAIRegexPattern checks the gateway's supported OpenAI tool
+// schema subset. It excludes lookaround as an endpoint compatibility rule and
+// rejects non-Python named groups and unknown ASCII-letter escapes such as \p
+// and \R. Python re itself supports lookaround.
 func hasUnsupportedOpenAIRegexPattern(pattern string) bool {
 	inCharacterClass := false
 	for i := 0; i < len(pattern); i++ {

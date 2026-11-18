@@ -147,6 +147,14 @@ func (s *stickyGatewayCacheHotpathStub) DeleteSessionAccountID(ctx context.Conte
 	return nil
 }
 
+func (s *stickyGatewayCacheHotpathStub) CompareAndDeleteSessionAccountID(_ context.Context, _ int64, _ string, accountID int64) (bool, error) {
+	if s.stickyID != accountID {
+		return false, nil
+	}
+	s.stickyID = 0
+	return true, nil
+}
+
 func (s *stickyGatewayCacheHotpathStub) SetGrokVideoPendingBilling(_ context.Context, _ string, _ []byte, _ time.Duration) error {
 	return nil
 }

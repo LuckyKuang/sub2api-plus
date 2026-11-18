@@ -56,6 +56,17 @@ func (c *handlerWSAffinityRecordingCache) DeleteSessionAccountID(_ context.Conte
 	return nil
 }
 
+func (c *handlerWSAffinityRecordingCache) CompareAndDeleteSessionAccountID(_ context.Context, groupID int64, key string, accountID int64) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cacheKey := fmt.Sprintf("%d:%s", groupID, key)
+	if c.values[cacheKey] != accountID {
+		return false, nil
+	}
+	delete(c.values, cacheKey)
+	return true, nil
+}
+
 func TestOpenAIResponsesWebSocket_CacheOnlyClientPolicyRejectionPublishesNoAffinity(t *testing.T) {
 	// This runs the real downstream WS handler and upstream WS exchange. The
 	// first OAuth account opts into cross-key sharing but rejects the client's

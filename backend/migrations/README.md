@@ -1,5 +1,19 @@
 # Database Migrations
 
+Migration `314_group_force_openai_ultrafast.sql` adds the non-null,
+false-default group Ultrafast preference. Existing groups retain their tier
+policy until an administrator enables it. See
+[OpenAI group tier policy](../../docs/protocols/OPENAI_RESPONSES.md#compatibility-and-per-turn-billing).
+
+Migration `315_group_usage_rollup_nonblocking_build.sql` adds the retention
+floor and active-build dirty-date tracking to the group usage rollup state.
+Rebuild computation permits usage writes, and publication stops at the earliest
+dirty date so changed days remain in the raw-log tail. Summary reads use one
+read-only repeatable-read snapshot for state, published buckets and raw rows.
+Cleanup advances the retention floor and invalidates affected retained days.
+The two official migration files numbered 251 become Plus 314 and 315.
+Historical migration filenames and checksums remain immutable.
+
 Migration `311_async_image_task_user_history.sql` adds the platform of an
 asynchronous image task and the user-scoped indexes used by the console. The
 console lists every API key of one user, while gateway endpoints keep their

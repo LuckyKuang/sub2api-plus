@@ -5,7 +5,9 @@ package service
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -24,11 +26,17 @@ type fableRecoveryRepo struct {
 	sessionWindowMockRepo
 	clearedScopes []string
 	clearErr      error
+	currentLimit  map[string]any
+	mutation      *CredentialStateMutation
 }
 
-func (r *fableRecoveryRepo) ClearModelRateLimit(_ context.Context, _ int64, scope string) error {
-	r.clearedScopes = append(r.clearedScopes, scope)
-	return r.clearErr
+func (r *fableRecoveryRepo) ApplyCredentialStateMutation(_ context.Context, _ *Account, mutation CredentialStateMutation) (bool, error) {
+	r.mutation = &mutation
+	if r.currentLimit != nil && !reflect.DeepEqual(r.currentLimit, mutation.ObservedModelRateLimit) {
+		return false, nil
+	}
+	r.clearedScopes = append(r.clearedScopes, mutation.ClearModelRateLimitScope)
+	return r.clearErr == nil, r.clearErr
 }
 
 func newFableRecoveryAccount(reason string, extraLimits map[string]any) *Account {
@@ -129,6 +137,67 @@ func TestPassiveUsageKeepsCreditsRequiredLimit(t *testing.T) {
 
 	require.Empty(t, repo.clearedScopes)
 	require.True(t, account.isModelRateLimitedWithContext(ctx, "claude-fable-5-2"))
+}
+
+func TestFableWindowRecoveryKeepsConcurrentScopeReplacement(t *testing.T) {
+	for _, reason := range []string{anthropicFableCreditsRequiredReason, "admin_threshold", anthropicFableWindowReason} {
+		t.Run(reason, func(t *testing.T) {
+			account := newFableRecoveryAccount(anthropicFableWindowReason, nil)
+			limits := account.Extra[modelRateLimitsKey].(map[string]any)
+			observed := limits[anthropicFableRateLimitKey].(map[string]any)
+			// The observation still has the old exhausted-window record while
+			// storage has received a newer rejection or administrator decision.
+			replacement := map[string]any{
+				"reason": reason, "rate_limit_reset_at": observed["rate_limit_reset_at"],
+				"rate_limited_at": time.Now().UTC().Format(time.RFC3339),
+			}
+			repo := &fableRecoveryRepo{currentLimit: replacement}
+			require.False(t, recoverAnthropicFableWindowLimit(context.Background(), repo, account, 0))
+			require.Empty(t, repo.clearedScopes)
+			require.NotNil(t, repo.mutation)
+			require.Equal(t, anthropicFableRateLimitKey, repo.mutation.ClearModelRateLimitScope)
+			require.Equal(t, observed, repo.mutation.ObservedModelRateLimit)
+			require.True(t, account.isRateLimitActiveForKey(anthropicFableRateLimitKey), "rejected CAS must preserve the local snapshot")
+		})
+	}
+}
+
+func TestFableWindowRecoveryRejectsInvalidUtilization(t *testing.T) {
+	for _, raw := range []string{"NaN", "+Inf", "-Inf", "-0.1"} {
+		t.Run(raw, func(t *testing.T) {
+			repo := &fableRecoveryRepo{}
+			account := newFableRecoveryAccount(anthropicFableWindowReason, nil)
+			headers := fableUsageHeaders(raw, false)
+			headers.Set("anthropic-ratelimit-unified-5h-utilization", raw)
+			headers.Set("anthropic-ratelimit-unified-7d-utilization", raw)
+			(&RateLimitService{accountRepo: repo}).samplePassiveUsageFromHeaders(context.Background(), account, headers)
+			require.Empty(t, repo.clearedScopes)
+			require.Nil(t, repo.mutation)
+			require.True(t, account.isRateLimitActiveForKey(anthropicFableRateLimitKey))
+			for _, call := range repo.updateExtraCalls {
+				require.NotContains(t, call.Updates, "session_window_utilization")
+				require.NotContains(t, call.Updates, "passive_usage_7d_utilization")
+				require.NotContains(t, call.Updates, "passive_usage_7d_oi_utilization")
+			}
+		})
+	}
+	for _, utilization := range []float64{math.NaN(), math.Inf(1), math.Inf(-1), -1} {
+		repo := &fableRecoveryRepo{}
+		account := newFableRecoveryAccount(anthropicFableWindowReason, nil)
+		(&AccountUsageService{accountRepo: repo}).syncActiveToPassive(context.Background(), account, &UsageInfo{
+			FiveHour: &UsageProgress{Utilization: utilization}, SevenDay: &UsageProgress{Utilization: utilization}, SevenDayFable: &UsageProgress{Utilization: utilization},
+		})
+		require.Empty(t, repo.updateExtraCalls)
+		require.Empty(t, repo.clearedScopes)
+		require.Nil(t, repo.mutation)
+		require.True(t, account.isRateLimitActiveForKey(anthropicFableRateLimitKey))
+	}
+}
+
+func TestFableWindowRecoveryRequiresConditionalRepository(t *testing.T) {
+	account := newFableRecoveryAccount(anthropicFableWindowReason, nil)
+	require.False(t, recoverAnthropicFableWindowLimit(context.Background(), &sessionWindowMockRepo{}, account, 0))
+	require.True(t, account.isRateLimitActiveForKey(anthropicFableRateLimitKey))
 }
 
 func TestPassiveUsageKeepsOtherModelLimitsWhenRecoveringFable(t *testing.T) {

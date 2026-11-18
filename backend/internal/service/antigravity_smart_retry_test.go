@@ -30,6 +30,10 @@ func (c *stubSmartRetryCache) DeleteSessionAccountID(_ context.Context, groupID 
 	return nil
 }
 
+func (c *stubSmartRetryCache) CompareAndDeleteSessionAccountID(context.Context, int64, string, int64) (bool, error) {
+	panic("unexpected CompareAndDeleteSessionAccountID call")
+}
+
 // mockSmartRetryUpstream 用于 handleSmartRetry 测试的 mock upstream
 type mockSmartRetryUpstream struct {
 	responses      []*http.Response

@@ -215,9 +215,6 @@ func (m *mockAccountRepoForPlatform) ClearModelRateLimits(ctx context.Context, i
 	return nil
 }
 
-func (m *mockAccountRepoForPlatform) ClearModelRateLimit(ctx context.Context, id int64, scope string) error {
-	return nil
-}
 func (m *mockAccountRepoForPlatform) UpdateSessionWindow(ctx context.Context, id int64, start, end *time.Time, status string) error {
 	return nil
 }
@@ -285,6 +282,13 @@ func (m *mockGatewayCacheForPlatform) DeleteSessionAccountID(ctx context.Context
 	m.deletedSessions[sessionHash]++
 	delete(m.sessionBindings, sessionHash)
 	return nil
+}
+
+func (m *mockGatewayCacheForPlatform) CompareAndDeleteSessionAccountID(ctx context.Context, groupID int64, sessionHash string, accountID int64) (bool, error) {
+	if m.sessionBindings[sessionHash] != accountID {
+		return false, nil
+	}
+	return true, m.DeleteSessionAccountID(ctx, groupID, sessionHash)
 }
 
 func (m *mockGatewayCacheForPlatform) SetGrokVideoPendingBilling(_ context.Context, _ string, _ []byte, _ time.Duration) error {

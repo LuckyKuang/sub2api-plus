@@ -197,6 +197,11 @@ selection. Restored version-1 tasks retain their original candidate order and
 re-export as version 1; a restart cannot switch their accepted upstream card to
 a newly preferred public card. Calculation and peak-scope compatibility remain
 independent of this private format version.
+The private evidence also preserves which DeepSeek token fields came from an
+explicit `pricing.override_file` patch. Those fields, including explicit zero,
+remain final operator rates after reload, restart and repeated export/restore;
+only omitted fields receive the accepted official peak factor. Older snapshots
+without this provenance retain their original all-default peak behavior.
 
 Sale and authorized catalogs use the same backend rate selection. They publish
 supplier, public model, billing unit, policy revision, timestamp and factor
@@ -512,6 +517,12 @@ happened, so it cannot be a `GET`.
 Refresh only uses the existing manifest / digest / version / allowed-host /
 proxy / validated-cache chain. It never bypasses them.
 
+Startup can use a validated local catalog immediately and refresh its trusted
+Release in the background. A failed refresh retains that validated generation.
+A local catalog without validation evidence must complete trusted refresh or
+fail initialization. A fresh installation can use its bundled fallback if the
+initial Release refresh fails. Shutdown waits for scheduled background work.
+
 Error responses:
 
 | Condition | Status | Code |
@@ -696,6 +707,12 @@ omitted or unconfigured effort retains factor `1`. Explicit free cards remain
 free. Actual usage and response-model declarations can still differ from an
 admission estimate.
 
+Group-forced OpenAI Ultrafast reservations follow the final channel/account
+wire model: supported Astra/Sol models use Ultrafast before the global tier
+policy; unsupported models retain the client tier or the independent Fast
+override. Preselection keeps the highest reachable charge, while reconciliation
+uses only the selected account. Free Fast discounts priority only.
+
 After selecting and revalidating the account, supported synchronous inference
 handlers reconcile the estimate before forwarding. The selected account's actual
 model mapping and protocol policy determine the concrete price candidate without
@@ -709,6 +726,14 @@ request's slots and hold, and does not fail over or send the request upstream.
 Expired or released owners cannot be recreated by an increase. A preliminary
 free or unpriced estimate can create a hold after selection if the selected
 contract becomes paid.
+
+Selected Vertex Gemini multi-region endpoints also reconcile the default token
+estimate with their 10% endpoint surcharge. Account mappings and an explicitly
+referenced cache's location determine the endpoint. Explicit group/channel
+prices, per-request charges and search/storage surcharges retain their prices.
+Native Gemini and cache-creation admission retain the model before channel
+mapping, so channel rules apply once before the selected account's mapping;
+requested, channel-mapped and upstream price sources keep their own cards.
 
 Responses WebSocket requests hold a separate reservation for each accepted turn;
 each turn uses its own public model, pricing snapshot and output bound. A turn's
@@ -915,7 +940,12 @@ upstream name. Account-test pickers likewise preserve exact public aliases when
 the provider catalog contains their mapped upstream target; passthrough accounts
 retain their existing catalog behavior.
 
-For OpenAI passthrough accounts, saved account mappings do not restrict public
-offers: forwarding ignores them too. The catalog projects only the current and
-legacy passthrough flags alongside model mappings, applies the account flag
-precedence, and never loads complete account credentials or extra metadata.
+OpenAI passthrough accounts ignore saved account mappings by default. The
+explicit boolean `extra.openai_passthrough_model_filter=true` instead restricts
+account selection and public offers to the mapping's source keys, using the
+existing exact/wildcard rules. Mapping targets still do not rewrite the
+passthrough body. Empty mappings remain unrestricted; an absent, false or
+malformed filter flag retains the default. The opt-in applies to both the
+current and legacy passthrough flags with their existing precedence. The
+catalog projects only those three flags alongside model mappings and never
+loads complete account credentials or extra metadata.

@@ -29,6 +29,9 @@ func (r *accountRepository) ApplyCredentialStateMutation(ctx context.Context, ow
 	if mutation.ClearTempUnschedulable && (mutation.TempUnschedulableUntil != nil || mutation.ObservedTempUntil == nil) {
 		return false, errors.New("credential temporary cooldown clear requires exact observed state")
 	}
+	if mutation.ClearModelRateLimitScope != "" && (strings.TrimSpace(mutation.ClearModelRateLimitScope) == "" || len(mutation.ObservedModelRateLimit) == 0) {
+		return false, errors.New("credential model rate-limit clear requires exact observed scope state")
+	}
 	expected, err := json.Marshal(normalizeJSONMap(owner.Credentials))
 	if err != nil {
 		return false, err
@@ -50,12 +53,25 @@ func (r *accountRepository) ApplyCredentialStateMutation(ctx context.Context, ow
 	if mutation.OpenAIPlanType != "" {
 		sets = append(sets, "credentials = a.credentials || jsonb_build_object('plan_type', "+arg(mutation.OpenAIPlanType)+"::text)")
 	}
+	extraExpression := "COALESCE(a.extra, '{}'::jsonb)"
 	if len(mutation.Extra) > 0 {
 		raw, err := json.Marshal(mutation.Extra)
 		if err != nil {
 			return false, err
 		}
-		sets = append(sets, "extra = COALESCE(a.extra, '{}'::jsonb) || "+arg(string(raw))+"::jsonb")
+		extraExpression += " || " + arg(string(raw)) + "::jsonb"
+	}
+	if mutation.ClearModelRateLimitScope != "" {
+		raw, err := json.Marshal(mutation.ObservedModelRateLimit)
+		if err != nil {
+			return false, err
+		}
+		scope := arg(mutation.ClearModelRateLimitScope) + "::text"
+		predicates = append(predicates, "(a.extra->'model_rate_limits'->"+scope+") = "+arg(string(raw))+"::jsonb")
+		extraExpression = "jsonb_set((" + extraExpression + "), '{model_rate_limits}', COALESCE(a.extra->'model_rate_limits', '{}'::jsonb) - " + scope + ", true)"
+	}
+	if len(mutation.Extra) > 0 || mutation.ClearModelRateLimitScope != "" {
+		sets = append(sets, "extra = "+extraExpression)
 	}
 	if mutation.RateLimitUntil != nil {
 		p := arg(*mutation.RateLimitUntil)

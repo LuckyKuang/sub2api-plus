@@ -241,6 +241,13 @@ a hosted tool based on its name, or changes `tool_choice` to obtain cache hits.
 When a request explicitly includes a hosted search tool and a same-named client
 function, the hosted declaration wins, following the official Responses mapper.
 Malformed or unsupported controls still follow the existing protocol validation.
+
+For xAI upstreams, Responses `custom_tool_call` items with `xs_` or `as_`
+call IDs represent server-executed search. Buffered and streaming Chat/Messages
+conversions keep them out of client tool calls, and native search accounting
+counts the observed calls. The same IDs on other suppliers retain client-tool
+semantics. Grok media errors also recognize flat string `error` and top-level
+`code` fields while retaining nested-field precedence and configured error rules.
 The retired account tool-cache switch and client-fingerprint route are removed;
 migration 280 removes only its Grok account extra key, preserving other data.
 Free OAuth prompt-cache hits are upstream capability, not guaranteed by a key.

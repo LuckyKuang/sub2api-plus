@@ -89,6 +89,17 @@ func (r *usageBillingRepository) ApplyBatch(ctx context.Context, cmds []*service
 	if err := applyUsageBillingBatchAccountQuotas(ctx, tx, cmds, applied, outcomes); err != nil {
 		return nil, err
 	}
+	usageRepo := newUsageLogRepositoryWithSQL(nil, tx)
+	for i, cmd := range cmds {
+		if !applied[i] || cmd.UsageLog == nil {
+			continue
+		}
+		cmd.UsageLog.ActualCost = service.QuantizeUsageBillingAmount(cmd.UsageLog.ActualCost)
+		if _, err := usageRepo.createSingle(ctx, tx, cmd.UsageLog); err != nil {
+			return nil, err
+		}
+		outcomes[i].Result.UsageLogPersisted = true
+	}
 
 	if err := tx.Commit(); err != nil {
 		return nil, err

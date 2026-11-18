@@ -56,6 +56,12 @@ volumes:
 
 ## Startup and Database Recovery
 
+`concurrency.ping_interval` defaults to 10 seconds and accepts 0 or 5–30.
+Setting it to 0 disables SSE keepalives while waiting for a slot, allowing a
+later admission error to retain its HTTP status. A keepalive that has already
+committed streaming headers requires subsequent errors to use the stream's
+error framing. Configure this value in the mounted configuration file.
+
 Sub2API runs database migrations while starting. PostgreSQL may still be
 recovering briefly after a host or Docker daemon restart. The application
 retries transient PostgreSQL startup and connection errors with bounded

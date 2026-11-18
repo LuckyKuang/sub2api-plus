@@ -176,9 +176,6 @@ func (m *mockAccountRepoForGemini) ClearModelRateLimits(ctx context.Context, id 
 	return nil
 }
 
-func (m *mockAccountRepoForGemini) ClearModelRateLimit(ctx context.Context, id int64, scope string) error {
-	return nil
-}
 func (m *mockAccountRepoForGemini) UpdateSessionWindow(ctx context.Context, id int64, start, end *time.Time, status string) error {
 	return nil
 }
@@ -310,6 +307,13 @@ func (m *mockGatewayCacheForGemini) DeleteSessionAccountID(ctx context.Context, 
 	m.deletedSessions[sessionHash]++
 	delete(m.sessionBindings, sessionHash)
 	return nil
+}
+
+func (m *mockGatewayCacheForGemini) CompareAndDeleteSessionAccountID(ctx context.Context, groupID int64, sessionHash string, accountID int64) (bool, error) {
+	if m.sessionBindings[sessionHash] != accountID {
+		return false, nil
+	}
+	return true, m.DeleteSessionAccountID(ctx, groupID, sessionHash)
 }
 
 func (m *mockGatewayCacheForGemini) SetGrokVideoPendingBilling(_ context.Context, _ string, _ []byte, _ time.Duration) error {
