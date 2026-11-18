@@ -1398,7 +1398,7 @@ func (s *GatewayService) calculateTokenCost(
 	tokens := UsageTokens{
 		InputTokens:           result.Usage.InputTokens,
 		OutputTokens:          result.Usage.OutputTokens,
-		CacheCreationTokens:   result.Usage.CacheCreationInputTokens,
+		CacheCreationTokens:   result.Usage.cacheCreationTotal(),
 		CacheReadTokens:       result.Usage.CacheReadInputTokens,
 		CacheCreation5mTokens: result.Usage.CacheCreation5mTokens,
 		CacheCreation1hTokens: result.Usage.CacheCreation1hTokens,
@@ -1480,7 +1480,7 @@ func (s *GatewayService) buildRecordUsageLog(
 		UpstreamEndpoint:         optionalTrimmedStringPtr(input.UpstreamEndpoint),
 		InputTokens:              result.Usage.InputTokens,
 		OutputTokens:             result.Usage.OutputTokens,
-		CacheCreationTokens:      result.Usage.CacheCreationInputTokens,
+		CacheCreationTokens:      result.Usage.cacheCreationTotal(),
 		CacheReadTokens:          result.Usage.CacheReadInputTokens,
 		CacheCreation5mTokens:    result.Usage.CacheCreation5mTokens,
 		CacheCreation1hTokens:    result.Usage.CacheCreation1hTokens,

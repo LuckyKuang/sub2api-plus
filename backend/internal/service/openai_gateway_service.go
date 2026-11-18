@@ -312,6 +312,19 @@ type OpenAIUsage struct {
 	CodexRolloutBudgetUnits *float64 `json:"codex_rollout_budget_units,omitempty"`
 }
 
+// cacheCreationTotal 返回唯一的缓存写入量：正数聚合量优先，其次才是
+// 30m/12h 分档之和。只报分档的兼容上游不会被计成 0 写入，
+// 也不会因为分档过期而丢掉聚合量。
+func (usage OpenAIUsage) cacheCreationTotal() int {
+	if usage.CacheCreationInputTokens > 0 {
+		return usage.CacheCreationInputTokens
+	}
+	if details := max(usage.CacheCreation30mInputTokens, 0) + max(usage.CacheCreation12hInputTokens, 0); details > 0 {
+		return details
+	}
+	return max(usage.CacheCreationInputTokens, 0)
+}
+
 // OpenAIForwardResult represents the result of forwarding
 type OpenAIForwardResult struct {
 	AsyncTaskTerminal bool // provider-confirmed async terminal state, independent of billable usage

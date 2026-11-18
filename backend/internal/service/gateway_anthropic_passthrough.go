@@ -791,13 +791,20 @@ func normalizeAnthropicCompatiblePromptUsage(usageNode gjson.Result, usage *Clau
 		}
 	}
 
+	// 兼容供应商会在后续帧里把缓存字段重复成 0；不能用 0 覆盖已知的正数，
+	// 否则同一请求的缓存读取/写入会被抹掉并少计费。
+	if cacheReadTokens > 0 || usage.CacheReadInputTokens <= 0 {
+		usage.CacheReadInputTokens = cacheReadTokens
+	}
+	if cacheCreationTokens > 0 || usage.CacheCreationInputTokens <= 0 {
+		usage.CacheCreationInputTokens = cacheCreationTokens
+	}
+
 	if promptCacheMissTokens.Exists() {
 		usage.InputTokens = max(int(promptCacheMissTokens.Int()), 0)
 	} else {
-		usage.InputTokens = max(int(promptTokens.Int())-cacheReadTokens-cacheCreationTokens, 0)
+		usage.InputTokens = max(int(promptTokens.Int())-usage.CacheReadInputTokens-usage.cacheCreationTotal(), 0)
 	}
-	usage.CacheReadInputTokens = cacheReadTokens
-	usage.CacheCreationInputTokens = cacheCreationTokens
 	return true
 }
 

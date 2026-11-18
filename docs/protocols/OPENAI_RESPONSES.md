@@ -1292,13 +1292,20 @@ documented in [Docker configuration](../../deploy/DOCKER.md#startup-and-database
 
 ## v0.2.23 cache-creation accounting
 
-Anthropic's `cache_creation` breakdown is authoritative for the TTL classes a
-write is billed at. `ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens`
-are read as pointers, so an explicit zero means "no write in this class" rather
-than "field omitted", and the flat `cache_creation_input_tokens` follows the
-breakdown sum when both are present. The buffered converter, the streaming state
-machine and the service usage merge all resolve the same total, so the uncached
-input bucket (`prompt_tokens - cache_read - cache_creation`) cannot drift.
+Anthropic's `cache_creation` breakdown decides the TTL classes a write is billed
+at, while the flat `cache_creation_input_tokens` is the provider's own total.
+`ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens` are read as pointers,
+so an explicit zero means "no write in this class" rather than "field omitted".
+
+Both quantities resolve into one total, in this order: a positive flat total, then
+the breakdown sum, then zero. A positive total wins because a stale breakdown can
+report zero classes while the aggregate still carries the write; the breakdown
+only becomes the source when the total is missing or zero, which is how
+compatible providers that report the split alone stay billable. Billing caps a
+contradictory breakdown at that total instead of trusting the classes. The
+buffered converter, the streaming state machine and the service usage merge all
+resolve the same total, so the uncached input bucket
+(`prompt_tokens - cache_read - cache_creation`) cannot drift.
 
 `cache_write_tokens` and `cache_creation_tokens` remain two spellings of one
 quantity. A declared `cache_write_tokens` now wins even when its value is zero or
@@ -1308,3 +1315,21 @@ keep the previous fallback to `cache_creation_tokens`. The resolved total is als
 what `input_tokens_details` advertises, so a zero write leaves no uncounted
 alias in the detail block. See [channel pricing](../CHANNEL_PRICING.md) for the
 price side of the TTL classes.
+
+### Compatible snapshot semantics
+
+Anthropic-compatible providers replay the whole usage object. A later
+`message_delta` therefore often repeats `cache_read_input_tokens` and
+`cache_creation_input_tokens` as zeros after `message_start` already reported real
+values. Treating those repetitions as authoritative silently erased the write and
+under-billed the request, so a zero now only applies when the current value is
+also zero; a positive value always wins. The same rule governs the compat prompt
+normalization path, the passthrough SSE reader and the Antigravity extractor.
+
+The stream state remembers whether its total was declared or derived from the
+breakdown, so a later declared total replaces a derived one while a stale zero
+breakdown cannot drive a declared total back down. `message_start` now also records
+`output_tokens`, which compatible providers sometimes send only there; the
+terminal `message_delta` no longer overwrites a positive output count with zero.
+See `gateway_cache_snapshot_semantics_test.go`.
+

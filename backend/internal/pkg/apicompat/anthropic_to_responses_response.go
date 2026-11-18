@@ -30,9 +30,14 @@ func encodeAnthropicThinking(block AnthropicContentBlock) string {
 }
 
 // anthropicCacheCreationInputTokens returns the authoritative cache-write count.
-// A TTL breakdown, when present, wins over the flat field: it is the provider's
-// own split and the flat field can be zero while the breakdown carries the write.
+// A positive flat field wins: it is the provider's own total, and a stale
+// breakdown can report zero classes while the aggregate still carries the write.
+// Only when the flat field is missing or zero does the TTL breakdown become the
+// source, because compatible providers sometimes report the split alone.
 func anthropicCacheCreationInputTokens(usage AnthropicUsage) int {
+	if usage.CacheCreationInputTokens > 0 {
+		return usage.CacheCreationInputTokens
+	}
 	if usage.CacheCreation != nil && (usage.CacheCreation.Ephemeral5mInputTokens != nil || usage.CacheCreation.Ephemeral1hInputTokens != nil) {
 		cacheCreationTokens := 0
 		if usage.CacheCreation.Ephemeral5mInputTokens != nil {
@@ -43,7 +48,7 @@ func anthropicCacheCreationInputTokens(usage AnthropicUsage) int {
 		}
 		return cacheCreationTokens
 	}
-	return usage.CacheCreationInputTokens
+	return max(usage.CacheCreationInputTokens, 0)
 }
 
 // AnthropicToResponsesResponse converts an Anthropic Messages response into a
@@ -242,6 +247,12 @@ type AnthropicEventToResponsesState struct {
 	CacheCreationInputTokens int
 	CacheCreation            AnthropicCacheCreation
 
+	// cacheCreationInputTokensPresent 表示上游显式声明过聚合写入量；
+	// cacheCreationInputTokensFromDetails 表示当前总量是由 5m/1h 明细推导的，
+	// 之后显式声明的正数聚合量应当替换它。
+	cacheCreationInputTokensPresent     bool
+	cacheCreationInputTokensFromDetails bool
+
 	StopReason string
 }
 
@@ -250,6 +261,16 @@ func NewAnthropicEventToResponsesState() *AnthropicEventToResponsesState {
 	return &AnthropicEventToResponsesState{
 		Created: time.Now().Unix(),
 	}
+}
+
+// SetCacheCreationTotal records a cache-write total that was already resolved
+// outside the stream (for example the gateway's normalized usage). It counts as
+// declared, so a later frame carrying stale zero details cannot recompute it
+// back down.
+func (state *AnthropicEventToResponsesState) SetCacheCreationTotal(tokens int) {
+	state.CacheCreationInputTokens = max(tokens, 0)
+	state.cacheCreationInputTokensPresent = true
+	state.cacheCreationInputTokensFromDetails = false
 }
 
 // mergeCacheCreationUsage folds a usage update into the stream state. The TTL
@@ -267,10 +288,16 @@ func (state *AnthropicEventToResponsesState) mergeCacheCreationUsage(usage Anthr
 			state.CacheCreation.Ephemeral1hInputTokens = &tokens
 		}
 	}
-	if state.CacheCreation.Ephemeral5mInputTokens != nil || state.CacheCreation.Ephemeral1hInputTokens != nil {
+	hasBreakdown := state.CacheCreation.Ephemeral5mInputTokens != nil || state.CacheCreation.Ephemeral1hInputTokens != nil
+	// 后续帧重复 0 时不能抹掉已经报过的写入；明细也不能把已声明的总量改小。
+	if usage.CacheCreationInputTokens > 0 || (state.CacheCreationInputTokens <= 0 && !hasBreakdown) {
+		state.CacheCreationInputTokens = max(usage.CacheCreationInputTokens, 0)
+		state.cacheCreationInputTokensPresent = true
+		state.cacheCreationInputTokensFromDetails = false
+	}
+	if hasBreakdown && (!state.cacheCreationInputTokensPresent || state.cacheCreationInputTokensFromDetails || state.CacheCreationInputTokens <= 0) {
 		state.CacheCreationInputTokens = anthropicCacheCreationInputTokens(AnthropicUsage{CacheCreation: &state.CacheCreation})
-	} else if usage.CacheCreationInputTokens > 0 {
-		state.CacheCreationInputTokens = usage.CacheCreationInputTokens
+		state.cacheCreationInputTokensFromDetails = true
 	}
 }
 
@@ -336,6 +363,11 @@ func anthToResHandleMessageStart(evt *AnthropicStreamEvent, state *AnthropicEven
 		}
 		if evt.Message.Usage.InputTokens > 0 {
 			state.InputTokens = evt.Message.Usage.InputTokens
+		}
+		// message_start 也带 output_tokens：只在这一帧报输出的兼容供应商
+		// 否则会按 0 结算。
+		if evt.Message.Usage.OutputTokens > 0 {
+			state.OutputTokens = evt.Message.Usage.OutputTokens
 		}
 		if evt.Message.Usage.CacheReadInputTokens > 0 {
 			state.CacheReadInputTokens = evt.Message.Usage.CacheReadInputTokens
@@ -619,7 +651,11 @@ func anthToResHandleContentBlockStop(evt *AnthropicStreamEvent, state *Anthropic
 
 func anthToResHandleMessageDelta(evt *AnthropicStreamEvent, state *AnthropicEventToResponsesState) []ResponsesStreamEvent {
 	if evt.Usage != nil {
-		state.OutputTokens = evt.Usage.OutputTokens
+		// 兼容供应商会在 message_delta 里把 output_tokens 报成 0，
+		// 抹掉 message_start 已给出的值会让下游看到 0 输出。
+		if evt.Usage.OutputTokens > 0 {
+			state.OutputTokens = evt.Usage.OutputTokens
+		}
 		if evt.Usage.InputTokens > 0 {
 			state.InputTokens = evt.Usage.InputTokens
 		}

@@ -335,6 +335,8 @@ func mergeAnthropicUsage(dst *ClaudeUsage, src apicompat.AnthropicUsage) {
 	// An Anthropic usage breakdown is authoritative for cache-write TTL classes:
 	// the flat field can be zero while the classes carry the writes, and billing
 	// prices 5m and 1h writes differently.
+	hasBreakdown := src.CacheCreation != nil &&
+		(src.CacheCreation.Ephemeral5mInputTokens != nil || src.CacheCreation.Ephemeral1hInputTokens != nil)
 	if src.CacheCreation != nil {
 		if src.CacheCreation.Ephemeral5mInputTokens != nil {
 			dst.CacheCreation5mTokens = max(*src.CacheCreation.Ephemeral5mInputTokens, 0)
@@ -342,13 +344,19 @@ func mergeAnthropicUsage(dst *ClaudeUsage, src apicompat.AnthropicUsage) {
 		if src.CacheCreation.Ephemeral1hInputTokens != nil {
 			dst.CacheCreation1hTokens = max(*src.CacheCreation.Ephemeral1hInputTokens, 0)
 		}
-		if src.CacheCreation.Ephemeral5mInputTokens != nil || src.CacheCreation.Ephemeral1hInputTokens != nil {
-			dst.CacheCreationInputTokens = dst.CacheCreation5mTokens + dst.CacheCreation1hTokens
-		}
 	}
-	cacheCreationTokens := src.CacheCreationInputTokens
-	if src.CacheCreation != nil && (src.CacheCreation.Ephemeral5mInputTokens != nil || src.CacheCreation.Ephemeral1hInputTokens != nil) {
-		cacheCreationTokens = dst.CacheCreationInputTokens
+	// 一个权威的缓存写入量：正数聚合量优先，其次才是 5m/1h 明细之和。
+	// 兼容供应商在后续帧里重复 0 时不能抹掉已经报过的写入。
+	cacheCreationTokens := max(src.CacheCreationInputTokens, 0)
+	creationFromDetails := false
+	if cacheCreationTokens == 0 && hasBreakdown {
+		cacheCreationTokens = max(dst.CacheCreation5mTokens, 0) + max(dst.CacheCreation1hTokens, 0)
+		creationFromDetails = true
+	}
+	if cacheCreationTokens > 0 || dst.CacheCreationInputTokens <= 0 {
+		dst.CacheCreationInputTokens = cacheCreationTokens
+		dst.cacheCreationInputTokensPresent = !creationFromDetails
+		dst.cacheCreationInputTokensFromDetails = creationFromDetails
 	}
 
 	// Some Anthropic-compatible providers retain OpenAI-style prompt/cache
@@ -356,13 +364,16 @@ func mergeAnthropicUsage(dst *ClaudeUsage, src apicompat.AnthropicUsage) {
 	// overloaded input_tokens field. This covers Kimi's changing stream
 	// semantics as well as GLM/DeepSeek cache aliases.
 	if src.PromptTokens > 0 || src.PromptCacheHitTokens != nil || src.PromptCacheMissTokens != nil {
+		// 先定下缓存读取量，再算未缓存的输入：prompt_tokens 是包含缓存桶的总量，
+		// 减掉的必须是与最终计费一致的那两个桶。
+		if cacheReadTokens > 0 || dst.CacheReadInputTokens <= 0 {
+			dst.CacheReadInputTokens = max(cacheReadTokens, 0)
+		}
 		if src.PromptCacheMissTokens != nil {
 			dst.InputTokens = max(*src.PromptCacheMissTokens, 0)
 		} else {
-			dst.InputTokens = max(src.PromptTokens-cacheReadTokens-cacheCreationTokens, 0)
+			dst.InputTokens = max(src.PromptTokens-dst.CacheReadInputTokens-dst.cacheCreationTotal(), 0)
 		}
-		dst.CacheReadInputTokens = cacheReadTokens
-		dst.CacheCreationInputTokens = cacheCreationTokens
 	} else {
 		// Without an authoritative prompt total or miss bucket, input_tokens is
 		// provider-specific: it may already be the uncached bucket, or it may be
@@ -375,9 +386,6 @@ func mergeAnthropicUsage(dst *ClaudeUsage, src apicompat.AnthropicUsage) {
 		if cacheReadTokens > 0 {
 			dst.CacheReadInputTokens = cacheReadTokens
 		}
-		if cacheCreationTokens > 0 {
-			dst.CacheCreationInputTokens = cacheCreationTokens
-		}
 	}
 	if src.OutputTokens > 0 {
 		dst.OutputTokens = src.OutputTokens
@@ -388,7 +396,9 @@ func syncAnthropicResponsesUsage(state *apicompat.AnthropicEventToResponsesState
 	state.InputTokens = usage.InputTokens
 	state.OutputTokens = usage.OutputTokens
 	state.CacheReadInputTokens = usage.CacheReadInputTokens
-	state.CacheCreationInputTokens = usage.CacheCreationInputTokens
+	// 同步的是已归一化的权威总量，必须按“已声明”写入：
+	// 否则后续帧里过期的 0 明细会把它重新推导成 0。
+	state.SetCacheCreationTotal(usage.cacheCreationTotal())
 }
 
 func normalizeAnthropicEventUsageForResponses(event *apicompat.AnthropicStreamEvent, usage ClaudeUsage) {
@@ -399,7 +409,7 @@ func normalizeAnthropicEventUsageForResponses(event *apicompat.AnthropicStreamEv
 		dst.InputTokens = usage.InputTokens
 		dst.OutputTokens = usage.OutputTokens
 		dst.CacheReadInputTokens = usage.CacheReadInputTokens
-		dst.CacheCreationInputTokens = usage.CacheCreationInputTokens
+		dst.CacheCreationInputTokens = usage.cacheCreationTotal()
 	}
 	normalize(event.Usage)
 	if event.Message != nil {
