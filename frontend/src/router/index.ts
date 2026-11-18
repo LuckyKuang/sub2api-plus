@@ -547,6 +547,17 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/quality-inspection',
+    name: 'AdminQualityInspection',
+    component: () => import('@/views/admin/QualityInspectionView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Model Quality Inspection',
+      titleKey: 'nav.qualityInspection'
+    }
+  },
+  {
     path: '/monitor',
     name: 'ChannelStatus',
     component: () => import('@/views/user/ChannelStatusView.vue'),

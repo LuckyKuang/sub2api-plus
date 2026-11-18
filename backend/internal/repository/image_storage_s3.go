@@ -246,3 +246,9 @@ func (s *S3ImageStorage) CheckStoredImage(ctx context.Context, key string) error
 	}
 	return err
 }
+
+// Delete 实现 service.ImageStorageDeleter，供质量巡检按轮次淘汰作品对象。
+func (s *S3ImageStorage) Delete(ctx context.Context, key string) error {
+	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	return err
+}

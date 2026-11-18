@@ -345,6 +345,13 @@ type UpdateSettingsRequest struct {
 	// Use Alipay face-to-face precreate and an app deep link on mobile clients.
 	PaymentAlipayMobilePrecreateDeepLink *bool `json:"payment_alipay_mobile_precreate_deep_link"`
 
+	// Model Quality Inspection feature switches
+	ModelQualityInspectionEnabled              *bool `json:"model_quality_inspection_enabled"`
+	QualityInspectionQuarantineEnabled         *bool `json:"quality_inspection_quarantine_enabled"`
+	QualityInspectionQuarantineCooldownMinutes *int  `json:"quality_inspection_quarantine_cooldown_minutes"`
+	QualityInspectionMaxRequestsPerRound       *int  `json:"quality_inspection_max_requests_per_round"`
+	QualityInspectionStabilityRounds           *int  `json:"quality_inspection_stability_rounds"`
+
 	// Channel Monitor feature switch
 	ChannelMonitorEnabled                *bool   `json:"channel_monitor_enabled"`
 	ChannelMonitorMode                   *string `json:"channel_monitor_mode"`
@@ -2069,6 +2076,36 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.AccountQuotaNotifyEmails
 		}(),
+		ModelQualityInspectionEnabled: func() bool {
+			if req.ModelQualityInspectionEnabled != nil {
+				return *req.ModelQualityInspectionEnabled
+			}
+			return previousSettings.ModelQualityInspectionEnabled
+		}(),
+		QualityInspectionQuarantineEnabled: func() bool {
+			if req.QualityInspectionQuarantineEnabled != nil {
+				return *req.QualityInspectionQuarantineEnabled
+			}
+			return previousSettings.QualityInspectionQuarantineEnabled
+		}(),
+		QualityInspectionQuarantineCooldownMinutes: func() int {
+			if req.QualityInspectionQuarantineCooldownMinutes != nil {
+				return *req.QualityInspectionQuarantineCooldownMinutes
+			}
+			return previousSettings.QualityInspectionQuarantineCooldownMinutes
+		}(),
+		QualityInspectionMaxRequestsPerRound: func() int {
+			if req.QualityInspectionMaxRequestsPerRound != nil {
+				return *req.QualityInspectionMaxRequestsPerRound
+			}
+			return previousSettings.QualityInspectionMaxRequestsPerRound
+		}(),
+		QualityInspectionStabilityRounds: func() int {
+			if req.QualityInspectionStabilityRounds != nil {
+				return *req.QualityInspectionStabilityRounds
+			}
+			return previousSettings.QualityInspectionStabilityRounds
+		}(),
 		ChannelMonitorEnabled: func() bool {
 			if req.ChannelMonitorEnabled != nil {
 				return *req.ChannelMonitorEnabled
@@ -2628,6 +2665,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PaymentCancelRateLimitMode:                             updatedPaymentCfg.CancelRateLimitMode,
 		PaymentAlipayForceQRCode:                               updatedPaymentCfg.AlipayForceQRCode,
 		PaymentAlipayMobilePrecreateDeepLink:                   updatedPaymentCfg.AlipayMobilePrecreateDeepLink,
+
+		ModelQualityInspectionEnabled:              updatedSettings.ModelQualityInspectionEnabled,
+		QualityInspectionQuarantineEnabled:         updatedSettings.QualityInspectionQuarantineEnabled,
+		QualityInspectionQuarantineCooldownMinutes: updatedSettings.QualityInspectionQuarantineCooldownMinutes,
+		QualityInspectionMaxRequestsPerRound:       updatedSettings.QualityInspectionMaxRequestsPerRound,
+		QualityInspectionStabilityRounds:           updatedSettings.QualityInspectionStabilityRounds,
 
 		ChannelMonitorEnabled:                updatedSettings.ChannelMonitorEnabled,
 		ChannelMonitorMode:                   updatedSettings.ChannelMonitorMode,

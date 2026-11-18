@@ -2,6 +2,8 @@
 package routes
 
 import (
+	"net/http"
+
 	"github.com/LuckyKuang/sub2api-plus/internal/handler"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/response"
 	"github.com/LuckyKuang/sub2api-plus/internal/server/middleware"
@@ -22,6 +24,12 @@ func RegisterAdminRoutes(
 ) {
 	// 插件 UI 使用短时能力 URL，仅提供经过安装校验的静态资源。
 	v1.GET("/plugin-ui/:token/*path", h.Admin.Plugin.ServeUIAsset)
+
+	// 巡检作品字节流：浏览器 iframe 无法携带 Authorization 头，因此仅凭 10 分钟
+	// 签名访问（签名由管理员会话换取）。这条路由必须注册在 adminAuth 之前。
+	if h.Admin.QualityInspection != nil {
+		v1.GET("/admin/quality-inspections/results/:id/artifact", h.Admin.QualityInspection.Artifact)
+	}
 
 	admin := v1.Group("/admin")
 	admin.Use(gin.HandlerFunc(adminAuth))
@@ -130,6 +138,9 @@ func RegisterAdminRoutes(
 
 		// 渠道监控
 		registerChannelMonitorRoutes(admin, h, settingService)
+
+		// 模型质量巡检（仅管理员；总开关关闭时统一 403）
+		registerQualityInspectionRoutes(admin, h, settingService)
 		registerChannelMonitorV2Routes(admin, h, settingService)
 		monitorV3 := admin.Group("/channel-monitor-v3")
 		monitorV3.Use(channelMonitorAdminFeatureGuard(settingService))
@@ -857,8 +868,7 @@ func registerChannelRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	}
 }
 
-func registerChannelMonitorRoutes(admin *gin.RouterGroup, h *handler.Handlers, settingService *service.SettingService) {
-	guard := channelMonitorAdminFeatureGuard(settingService)
+func registerChannelMonitorRoutes(admin *gin.RouterGroup, h *handler.Handlers, settingService *service.SettingService) {	guard := channelMonitorAdminFeatureGuard(settingService)
 	monitors := admin.Group("/channel-monitors")
 	monitors.Use(guard)
 	{
@@ -1002,5 +1012,48 @@ func registerZhipuOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		zhipu.POST("/oauth/create-from-oauth", h.Admin.ZhipuOAuth.CreateAccountFromLink)
 		zhipu.GET("/accounts/:id/off-peak/segment", h.Admin.ZhipuOAuth.GetOffPeakSegment)
 		zhipu.POST("/accounts/:id/off-peak/segment/terminate", h.Admin.ZhipuOAuth.TerminateOffPeakSegment)
+	}
+}
+
+// registerQualityInspectionRoutes 注册模型质量巡检管理端路由。
+// 全部挂在 admin 组内（AdminAuth + 审计），只有作品字节流在组外凭签名访问。
+func registerQualityInspectionRoutes(admin *gin.RouterGroup, h *handler.Handlers, settingService *service.SettingService) {
+	if h.Admin.QualityInspection == nil {
+		return
+	}
+	group := admin.Group("/quality-inspections")
+	group.Use(qualityInspectionAdminFeatureGuard(settingService))
+	{
+		group.GET("", h.Admin.QualityInspection.List)
+		group.POST("", h.Admin.QualityInspection.Create)
+		group.POST("/estimate", h.Admin.QualityInspection.Estimate)
+		group.GET("/questions", h.Admin.QualityInspection.Questions)
+		group.GET("/compare", h.Admin.QualityInspection.Compare)
+
+		group.PUT("/plans/:id", h.Admin.QualityInspection.Update)
+		group.DELETE("/plans/:id", h.Admin.QualityInspection.Delete)
+		group.POST("/plans/:id/run", h.Admin.QualityInspection.Run)
+		group.GET("/plans/:id/runs", h.Admin.QualityInspection.ListRuns)
+
+		group.GET("/runs/:runId", h.Admin.QualityInspection.RunDetail)
+		group.POST("/runs/:runId/stop", h.Admin.QualityInspection.StopRun)
+
+		group.GET("/results/:id", h.Admin.QualityInspection.Result)
+		group.GET("/results/:id/artifact-url", h.Admin.QualityInspection.ArtifactURL)
+
+		group.GET("/quarantines", h.Admin.QualityInspection.Quarantines)
+		group.POST("/quarantines/:accountId/handover", h.Admin.QualityInspection.Handover)
+	}
+}
+
+// qualityInspectionAdminFeatureGuard 总开关关闭时统一拒绝，且不触发任何上游请求。
+func qualityInspectionAdminFeatureGuard(settingService *service.SettingService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if settingService != nil && settingService.ModelQualityInspectionEnabled(c.Request.Context()) {
+			c.Next()
+			return
+		}
+		response.Error(c, http.StatusForbidden, "模型质量巡检未开启")
+		c.Abort()
 	}
 }

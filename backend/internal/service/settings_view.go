@@ -203,6 +203,13 @@ type SystemSettings struct {
 	OpsQueryModeDefault          string
 	OpsMetricsIntervalSeconds    int
 
+	// Model Quality Inspection feature
+	ModelQualityInspectionEnabled                bool `json:"model_quality_inspection_enabled"`
+	QualityInspectionQuarantineEnabled           bool `json:"quality_inspection_quarantine_enabled"`
+	QualityInspectionQuarantineCooldownMinutes   int  `json:"quality_inspection_quarantine_cooldown_minutes"`
+	QualityInspectionMaxRequestsPerRound         int  `json:"quality_inspection_max_requests_per_round"`
+	QualityInspectionStabilityRounds             int  `json:"quality_inspection_stability_rounds"`
+
 	// Channel Monitor feature
 	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`
 	ChannelMonitorMode                   string `json:"channel_monitor_mode"`
@@ -406,6 +413,10 @@ type PublicSettings struct {
 	AccountQuotaNotifyEnabled   bool
 	BalanceLowNotifyThreshold   float64
 	BalanceLowNotifyRechargeURL string
+
+	// Model Quality Inspection feature (admin-only surface; flag only drives the
+	// admin sidebar entry, never data authorization).
+	ModelQualityInspectionEnabled bool `json:"model_quality_inspection_enabled"`
 
 	// Channel Monitor feature
 	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`

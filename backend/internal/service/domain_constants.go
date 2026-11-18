@@ -497,6 +497,30 @@ const (
 	SettingKeyOpsRuntimeLogConfig = "ops_runtime_log_config"
 
 	// =========================
+	// Model Quality Inspection (模型质量巡检)
+	// =========================
+
+	// SettingKeyModelQualityInspectionEnabled is the master switch. When false the
+	// admin routes are not registered and the scheduler performs zero upstream calls.
+	SettingKeyModelQualityInspectionEnabled = "model_quality_inspection_enabled"
+
+	// SettingKeyQualityInspectionQuarantineEnabled is the capability gate for
+	// auto-quarantine. It must be on before any plan may enable it.
+	SettingKeyQualityInspectionQuarantineEnabled = "quality_inspection_quarantine_enabled"
+
+	// SettingKeyQualityInspectionQuarantineCooldownMinutes is the default cooldown
+	// applied to new plans; each plan may override it.
+	SettingKeyQualityInspectionQuarantineCooldownMinutes = "quality_inspection_quarantine_cooldown_minutes"
+
+	// SettingKeyQualityInspectionMaxRequestsPerRound hard-caps one round's
+	// estimated request count (accounts × enabled question rounds).
+	SettingKeyQualityInspectionMaxRequestsPerRound = "quality_inspection_max_requests_per_round"
+
+	// SettingKeyQualityInspectionStabilityRounds is the window used by the
+	// stability metric shown next to each run.
+	SettingKeyQualityInspectionStabilityRounds = "quality_inspection_stability_rounds"
+
+	// =========================
 	// Channel Monitor (渠道监控)
 	// =========================
 

@@ -41,6 +41,11 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/ent/promocode"
 	"github.com/LuckyKuang/sub2api-plus/ent/promocodeusage"
 	"github.com/LuckyKuang/sub2api-plus/ent/proxy"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionplan"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionquarantine"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionquestion"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionresult"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionrun"
 	"github.com/LuckyKuang/sub2api-plus/ent/redeemcode"
 	"github.com/LuckyKuang/sub2api-plus/ent/securitysecret"
 	"github.com/LuckyKuang/sub2api-plus/ent/setting"
@@ -115,6 +120,16 @@ type Client struct {
 	PromoCodeUsage *PromoCodeUsageClient
 	// Proxy is the client for interacting with the Proxy builders.
 	Proxy *ProxyClient
+	// QualityInspectionPlan is the client for interacting with the QualityInspectionPlan builders.
+	QualityInspectionPlan *QualityInspectionPlanClient
+	// QualityInspectionQuarantine is the client for interacting with the QualityInspectionQuarantine builders.
+	QualityInspectionQuarantine *QualityInspectionQuarantineClient
+	// QualityInspectionQuestion is the client for interacting with the QualityInspectionQuestion builders.
+	QualityInspectionQuestion *QualityInspectionQuestionClient
+	// QualityInspectionResult is the client for interacting with the QualityInspectionResult builders.
+	QualityInspectionResult *QualityInspectionResultClient
+	// QualityInspectionRun is the client for interacting with the QualityInspectionRun builders.
+	QualityInspectionRun *QualityInspectionRunClient
 	// RedeemCode is the client for interacting with the RedeemCode builders.
 	RedeemCode *RedeemCodeClient
 	// SecuritySecret is the client for interacting with the SecuritySecret builders.
@@ -178,6 +193,11 @@ func (c *Client) init() {
 	c.PromoCode = NewPromoCodeClient(c.config)
 	c.PromoCodeUsage = NewPromoCodeUsageClient(c.config)
 	c.Proxy = NewProxyClient(c.config)
+	c.QualityInspectionPlan = NewQualityInspectionPlanClient(c.config)
+	c.QualityInspectionQuarantine = NewQualityInspectionQuarantineClient(c.config)
+	c.QualityInspectionQuestion = NewQualityInspectionQuestionClient(c.config)
+	c.QualityInspectionResult = NewQualityInspectionResultClient(c.config)
+	c.QualityInspectionRun = NewQualityInspectionRunClient(c.config)
 	c.RedeemCode = NewRedeemCodeClient(c.config)
 	c.SecuritySecret = NewSecuritySecretClient(c.config)
 	c.Setting = NewSettingClient(c.config)
@@ -309,6 +329,11 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		PromoCode:                     NewPromoCodeClient(cfg),
 		PromoCodeUsage:                NewPromoCodeUsageClient(cfg),
 		Proxy:                         NewProxyClient(cfg),
+		QualityInspectionPlan:         NewQualityInspectionPlanClient(cfg),
+		QualityInspectionQuarantine:   NewQualityInspectionQuarantineClient(cfg),
+		QualityInspectionQuestion:     NewQualityInspectionQuestionClient(cfg),
+		QualityInspectionResult:       NewQualityInspectionResultClient(cfg),
+		QualityInspectionRun:          NewQualityInspectionRunClient(cfg),
 		RedeemCode:                    NewRedeemCodeClient(cfg),
 		SecuritySecret:                NewSecuritySecretClient(cfg),
 		Setting:                       NewSettingClient(cfg),
@@ -367,6 +392,11 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		PromoCode:                     NewPromoCodeClient(cfg),
 		PromoCodeUsage:                NewPromoCodeUsageClient(cfg),
 		Proxy:                         NewProxyClient(cfg),
+		QualityInspectionPlan:         NewQualityInspectionPlanClient(cfg),
+		QualityInspectionQuarantine:   NewQualityInspectionQuarantineClient(cfg),
+		QualityInspectionQuestion:     NewQualityInspectionQuestionClient(cfg),
+		QualityInspectionResult:       NewQualityInspectionResultClient(cfg),
+		QualityInspectionRun:          NewQualityInspectionRunClient(cfg),
 		RedeemCode:                    NewRedeemCodeClient(cfg),
 		SecuritySecret:                NewSecuritySecretClient(cfg),
 		Setting:                       NewSettingClient(cfg),
@@ -416,7 +446,9 @@ func (c *Client) Use(hooks ...Hook) {
 		c.CompositeModelRoute, c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
 		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
 		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
-		c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
+		c.Proxy, c.QualityInspectionPlan, c.QualityInspectionQuarantine,
+		c.QualityInspectionQuestion, c.QualityInspectionResult, c.QualityInspectionRun,
+		c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
 		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
 		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
 		c.UserPlatformQuota, c.UserSubscription,
@@ -436,7 +468,9 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.CompositeModelRoute, c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
 		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
 		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
-		c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
+		c.Proxy, c.QualityInspectionPlan, c.QualityInspectionQuarantine,
+		c.QualityInspectionQuestion, c.QualityInspectionResult, c.QualityInspectionRun,
+		c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
 		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
 		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
 		c.UserPlatformQuota, c.UserSubscription,
@@ -500,6 +534,16 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.PromoCodeUsage.mutate(ctx, m)
 	case *ProxyMutation:
 		return c.Proxy.mutate(ctx, m)
+	case *QualityInspectionPlanMutation:
+		return c.QualityInspectionPlan.mutate(ctx, m)
+	case *QualityInspectionQuarantineMutation:
+		return c.QualityInspectionQuarantine.mutate(ctx, m)
+	case *QualityInspectionQuestionMutation:
+		return c.QualityInspectionQuestion.mutate(ctx, m)
+	case *QualityInspectionResultMutation:
+		return c.QualityInspectionResult.mutate(ctx, m)
+	case *QualityInspectionRunMutation:
+		return c.QualityInspectionRun.mutate(ctx, m)
 	case *RedeemCodeMutation:
 		return c.RedeemCode.mutate(ctx, m)
 	case *SecuritySecretMutation:
@@ -4654,6 +4698,671 @@ func (c *ProxyClient) mutate(ctx context.Context, m *ProxyMutation) (Value, erro
 	}
 }
 
+// QualityInspectionPlanClient is a client for the QualityInspectionPlan schema.
+type QualityInspectionPlanClient struct {
+	config
+}
+
+// NewQualityInspectionPlanClient returns a client for the QualityInspectionPlan from the given config.
+func NewQualityInspectionPlanClient(c config) *QualityInspectionPlanClient {
+	return &QualityInspectionPlanClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `qualityinspectionplan.Hooks(f(g(h())))`.
+func (c *QualityInspectionPlanClient) Use(hooks ...Hook) {
+	c.hooks.QualityInspectionPlan = append(c.hooks.QualityInspectionPlan, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `qualityinspectionplan.Intercept(f(g(h())))`.
+func (c *QualityInspectionPlanClient) Intercept(interceptors ...Interceptor) {
+	c.inters.QualityInspectionPlan = append(c.inters.QualityInspectionPlan, interceptors...)
+}
+
+// Create returns a builder for creating a QualityInspectionPlan entity.
+func (c *QualityInspectionPlanClient) Create() *QualityInspectionPlanCreate {
+	mutation := newQualityInspectionPlanMutation(c.config, OpCreate)
+	return &QualityInspectionPlanCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of QualityInspectionPlan entities.
+func (c *QualityInspectionPlanClient) CreateBulk(builders ...*QualityInspectionPlanCreate) *QualityInspectionPlanCreateBulk {
+	return &QualityInspectionPlanCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *QualityInspectionPlanClient) MapCreateBulk(slice any, setFunc func(*QualityInspectionPlanCreate, int)) *QualityInspectionPlanCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &QualityInspectionPlanCreateBulk{err: fmt.Errorf("calling to QualityInspectionPlanClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*QualityInspectionPlanCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &QualityInspectionPlanCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for QualityInspectionPlan.
+func (c *QualityInspectionPlanClient) Update() *QualityInspectionPlanUpdate {
+	mutation := newQualityInspectionPlanMutation(c.config, OpUpdate)
+	return &QualityInspectionPlanUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *QualityInspectionPlanClient) UpdateOne(_m *QualityInspectionPlan) *QualityInspectionPlanUpdateOne {
+	mutation := newQualityInspectionPlanMutation(c.config, OpUpdateOne, withQualityInspectionPlan(_m))
+	return &QualityInspectionPlanUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *QualityInspectionPlanClient) UpdateOneID(id int64) *QualityInspectionPlanUpdateOne {
+	mutation := newQualityInspectionPlanMutation(c.config, OpUpdateOne, withQualityInspectionPlanID(id))
+	return &QualityInspectionPlanUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for QualityInspectionPlan.
+func (c *QualityInspectionPlanClient) Delete() *QualityInspectionPlanDelete {
+	mutation := newQualityInspectionPlanMutation(c.config, OpDelete)
+	return &QualityInspectionPlanDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *QualityInspectionPlanClient) DeleteOne(_m *QualityInspectionPlan) *QualityInspectionPlanDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *QualityInspectionPlanClient) DeleteOneID(id int64) *QualityInspectionPlanDeleteOne {
+	builder := c.Delete().Where(qualityinspectionplan.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &QualityInspectionPlanDeleteOne{builder}
+}
+
+// Query returns a query builder for QualityInspectionPlan.
+func (c *QualityInspectionPlanClient) Query() *QualityInspectionPlanQuery {
+	return &QualityInspectionPlanQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeQualityInspectionPlan},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a QualityInspectionPlan entity by its id.
+func (c *QualityInspectionPlanClient) Get(ctx context.Context, id int64) (*QualityInspectionPlan, error) {
+	return c.Query().Where(qualityinspectionplan.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *QualityInspectionPlanClient) GetX(ctx context.Context, id int64) *QualityInspectionPlan {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *QualityInspectionPlanClient) Hooks() []Hook {
+	return c.hooks.QualityInspectionPlan
+}
+
+// Interceptors returns the client interceptors.
+func (c *QualityInspectionPlanClient) Interceptors() []Interceptor {
+	return c.inters.QualityInspectionPlan
+}
+
+func (c *QualityInspectionPlanClient) mutate(ctx context.Context, m *QualityInspectionPlanMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&QualityInspectionPlanCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&QualityInspectionPlanUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&QualityInspectionPlanUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&QualityInspectionPlanDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown QualityInspectionPlan mutation op: %q", m.Op())
+	}
+}
+
+// QualityInspectionQuarantineClient is a client for the QualityInspectionQuarantine schema.
+type QualityInspectionQuarantineClient struct {
+	config
+}
+
+// NewQualityInspectionQuarantineClient returns a client for the QualityInspectionQuarantine from the given config.
+func NewQualityInspectionQuarantineClient(c config) *QualityInspectionQuarantineClient {
+	return &QualityInspectionQuarantineClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `qualityinspectionquarantine.Hooks(f(g(h())))`.
+func (c *QualityInspectionQuarantineClient) Use(hooks ...Hook) {
+	c.hooks.QualityInspectionQuarantine = append(c.hooks.QualityInspectionQuarantine, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `qualityinspectionquarantine.Intercept(f(g(h())))`.
+func (c *QualityInspectionQuarantineClient) Intercept(interceptors ...Interceptor) {
+	c.inters.QualityInspectionQuarantine = append(c.inters.QualityInspectionQuarantine, interceptors...)
+}
+
+// Create returns a builder for creating a QualityInspectionQuarantine entity.
+func (c *QualityInspectionQuarantineClient) Create() *QualityInspectionQuarantineCreate {
+	mutation := newQualityInspectionQuarantineMutation(c.config, OpCreate)
+	return &QualityInspectionQuarantineCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of QualityInspectionQuarantine entities.
+func (c *QualityInspectionQuarantineClient) CreateBulk(builders ...*QualityInspectionQuarantineCreate) *QualityInspectionQuarantineCreateBulk {
+	return &QualityInspectionQuarantineCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *QualityInspectionQuarantineClient) MapCreateBulk(slice any, setFunc func(*QualityInspectionQuarantineCreate, int)) *QualityInspectionQuarantineCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &QualityInspectionQuarantineCreateBulk{err: fmt.Errorf("calling to QualityInspectionQuarantineClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*QualityInspectionQuarantineCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &QualityInspectionQuarantineCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for QualityInspectionQuarantine.
+func (c *QualityInspectionQuarantineClient) Update() *QualityInspectionQuarantineUpdate {
+	mutation := newQualityInspectionQuarantineMutation(c.config, OpUpdate)
+	return &QualityInspectionQuarantineUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *QualityInspectionQuarantineClient) UpdateOne(_m *QualityInspectionQuarantine) *QualityInspectionQuarantineUpdateOne {
+	mutation := newQualityInspectionQuarantineMutation(c.config, OpUpdateOne, withQualityInspectionQuarantine(_m))
+	return &QualityInspectionQuarantineUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *QualityInspectionQuarantineClient) UpdateOneID(id int64) *QualityInspectionQuarantineUpdateOne {
+	mutation := newQualityInspectionQuarantineMutation(c.config, OpUpdateOne, withQualityInspectionQuarantineID(id))
+	return &QualityInspectionQuarantineUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for QualityInspectionQuarantine.
+func (c *QualityInspectionQuarantineClient) Delete() *QualityInspectionQuarantineDelete {
+	mutation := newQualityInspectionQuarantineMutation(c.config, OpDelete)
+	return &QualityInspectionQuarantineDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *QualityInspectionQuarantineClient) DeleteOne(_m *QualityInspectionQuarantine) *QualityInspectionQuarantineDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *QualityInspectionQuarantineClient) DeleteOneID(id int64) *QualityInspectionQuarantineDeleteOne {
+	builder := c.Delete().Where(qualityinspectionquarantine.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &QualityInspectionQuarantineDeleteOne{builder}
+}
+
+// Query returns a query builder for QualityInspectionQuarantine.
+func (c *QualityInspectionQuarantineClient) Query() *QualityInspectionQuarantineQuery {
+	return &QualityInspectionQuarantineQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeQualityInspectionQuarantine},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a QualityInspectionQuarantine entity by its id.
+func (c *QualityInspectionQuarantineClient) Get(ctx context.Context, id int64) (*QualityInspectionQuarantine, error) {
+	return c.Query().Where(qualityinspectionquarantine.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *QualityInspectionQuarantineClient) GetX(ctx context.Context, id int64) *QualityInspectionQuarantine {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *QualityInspectionQuarantineClient) Hooks() []Hook {
+	return c.hooks.QualityInspectionQuarantine
+}
+
+// Interceptors returns the client interceptors.
+func (c *QualityInspectionQuarantineClient) Interceptors() []Interceptor {
+	return c.inters.QualityInspectionQuarantine
+}
+
+func (c *QualityInspectionQuarantineClient) mutate(ctx context.Context, m *QualityInspectionQuarantineMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&QualityInspectionQuarantineCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&QualityInspectionQuarantineUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&QualityInspectionQuarantineUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&QualityInspectionQuarantineDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown QualityInspectionQuarantine mutation op: %q", m.Op())
+	}
+}
+
+// QualityInspectionQuestionClient is a client for the QualityInspectionQuestion schema.
+type QualityInspectionQuestionClient struct {
+	config
+}
+
+// NewQualityInspectionQuestionClient returns a client for the QualityInspectionQuestion from the given config.
+func NewQualityInspectionQuestionClient(c config) *QualityInspectionQuestionClient {
+	return &QualityInspectionQuestionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `qualityinspectionquestion.Hooks(f(g(h())))`.
+func (c *QualityInspectionQuestionClient) Use(hooks ...Hook) {
+	c.hooks.QualityInspectionQuestion = append(c.hooks.QualityInspectionQuestion, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `qualityinspectionquestion.Intercept(f(g(h())))`.
+func (c *QualityInspectionQuestionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.QualityInspectionQuestion = append(c.inters.QualityInspectionQuestion, interceptors...)
+}
+
+// Create returns a builder for creating a QualityInspectionQuestion entity.
+func (c *QualityInspectionQuestionClient) Create() *QualityInspectionQuestionCreate {
+	mutation := newQualityInspectionQuestionMutation(c.config, OpCreate)
+	return &QualityInspectionQuestionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of QualityInspectionQuestion entities.
+func (c *QualityInspectionQuestionClient) CreateBulk(builders ...*QualityInspectionQuestionCreate) *QualityInspectionQuestionCreateBulk {
+	return &QualityInspectionQuestionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *QualityInspectionQuestionClient) MapCreateBulk(slice any, setFunc func(*QualityInspectionQuestionCreate, int)) *QualityInspectionQuestionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &QualityInspectionQuestionCreateBulk{err: fmt.Errorf("calling to QualityInspectionQuestionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*QualityInspectionQuestionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &QualityInspectionQuestionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for QualityInspectionQuestion.
+func (c *QualityInspectionQuestionClient) Update() *QualityInspectionQuestionUpdate {
+	mutation := newQualityInspectionQuestionMutation(c.config, OpUpdate)
+	return &QualityInspectionQuestionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *QualityInspectionQuestionClient) UpdateOne(_m *QualityInspectionQuestion) *QualityInspectionQuestionUpdateOne {
+	mutation := newQualityInspectionQuestionMutation(c.config, OpUpdateOne, withQualityInspectionQuestion(_m))
+	return &QualityInspectionQuestionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *QualityInspectionQuestionClient) UpdateOneID(id int64) *QualityInspectionQuestionUpdateOne {
+	mutation := newQualityInspectionQuestionMutation(c.config, OpUpdateOne, withQualityInspectionQuestionID(id))
+	return &QualityInspectionQuestionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for QualityInspectionQuestion.
+func (c *QualityInspectionQuestionClient) Delete() *QualityInspectionQuestionDelete {
+	mutation := newQualityInspectionQuestionMutation(c.config, OpDelete)
+	return &QualityInspectionQuestionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *QualityInspectionQuestionClient) DeleteOne(_m *QualityInspectionQuestion) *QualityInspectionQuestionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *QualityInspectionQuestionClient) DeleteOneID(id int64) *QualityInspectionQuestionDeleteOne {
+	builder := c.Delete().Where(qualityinspectionquestion.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &QualityInspectionQuestionDeleteOne{builder}
+}
+
+// Query returns a query builder for QualityInspectionQuestion.
+func (c *QualityInspectionQuestionClient) Query() *QualityInspectionQuestionQuery {
+	return &QualityInspectionQuestionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeQualityInspectionQuestion},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a QualityInspectionQuestion entity by its id.
+func (c *QualityInspectionQuestionClient) Get(ctx context.Context, id int64) (*QualityInspectionQuestion, error) {
+	return c.Query().Where(qualityinspectionquestion.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *QualityInspectionQuestionClient) GetX(ctx context.Context, id int64) *QualityInspectionQuestion {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *QualityInspectionQuestionClient) Hooks() []Hook {
+	return c.hooks.QualityInspectionQuestion
+}
+
+// Interceptors returns the client interceptors.
+func (c *QualityInspectionQuestionClient) Interceptors() []Interceptor {
+	return c.inters.QualityInspectionQuestion
+}
+
+func (c *QualityInspectionQuestionClient) mutate(ctx context.Context, m *QualityInspectionQuestionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&QualityInspectionQuestionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&QualityInspectionQuestionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&QualityInspectionQuestionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&QualityInspectionQuestionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown QualityInspectionQuestion mutation op: %q", m.Op())
+	}
+}
+
+// QualityInspectionResultClient is a client for the QualityInspectionResult schema.
+type QualityInspectionResultClient struct {
+	config
+}
+
+// NewQualityInspectionResultClient returns a client for the QualityInspectionResult from the given config.
+func NewQualityInspectionResultClient(c config) *QualityInspectionResultClient {
+	return &QualityInspectionResultClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `qualityinspectionresult.Hooks(f(g(h())))`.
+func (c *QualityInspectionResultClient) Use(hooks ...Hook) {
+	c.hooks.QualityInspectionResult = append(c.hooks.QualityInspectionResult, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `qualityinspectionresult.Intercept(f(g(h())))`.
+func (c *QualityInspectionResultClient) Intercept(interceptors ...Interceptor) {
+	c.inters.QualityInspectionResult = append(c.inters.QualityInspectionResult, interceptors...)
+}
+
+// Create returns a builder for creating a QualityInspectionResult entity.
+func (c *QualityInspectionResultClient) Create() *QualityInspectionResultCreate {
+	mutation := newQualityInspectionResultMutation(c.config, OpCreate)
+	return &QualityInspectionResultCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of QualityInspectionResult entities.
+func (c *QualityInspectionResultClient) CreateBulk(builders ...*QualityInspectionResultCreate) *QualityInspectionResultCreateBulk {
+	return &QualityInspectionResultCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *QualityInspectionResultClient) MapCreateBulk(slice any, setFunc func(*QualityInspectionResultCreate, int)) *QualityInspectionResultCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &QualityInspectionResultCreateBulk{err: fmt.Errorf("calling to QualityInspectionResultClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*QualityInspectionResultCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &QualityInspectionResultCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for QualityInspectionResult.
+func (c *QualityInspectionResultClient) Update() *QualityInspectionResultUpdate {
+	mutation := newQualityInspectionResultMutation(c.config, OpUpdate)
+	return &QualityInspectionResultUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *QualityInspectionResultClient) UpdateOne(_m *QualityInspectionResult) *QualityInspectionResultUpdateOne {
+	mutation := newQualityInspectionResultMutation(c.config, OpUpdateOne, withQualityInspectionResult(_m))
+	return &QualityInspectionResultUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *QualityInspectionResultClient) UpdateOneID(id int64) *QualityInspectionResultUpdateOne {
+	mutation := newQualityInspectionResultMutation(c.config, OpUpdateOne, withQualityInspectionResultID(id))
+	return &QualityInspectionResultUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for QualityInspectionResult.
+func (c *QualityInspectionResultClient) Delete() *QualityInspectionResultDelete {
+	mutation := newQualityInspectionResultMutation(c.config, OpDelete)
+	return &QualityInspectionResultDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *QualityInspectionResultClient) DeleteOne(_m *QualityInspectionResult) *QualityInspectionResultDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *QualityInspectionResultClient) DeleteOneID(id int64) *QualityInspectionResultDeleteOne {
+	builder := c.Delete().Where(qualityinspectionresult.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &QualityInspectionResultDeleteOne{builder}
+}
+
+// Query returns a query builder for QualityInspectionResult.
+func (c *QualityInspectionResultClient) Query() *QualityInspectionResultQuery {
+	return &QualityInspectionResultQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeQualityInspectionResult},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a QualityInspectionResult entity by its id.
+func (c *QualityInspectionResultClient) Get(ctx context.Context, id int64) (*QualityInspectionResult, error) {
+	return c.Query().Where(qualityinspectionresult.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *QualityInspectionResultClient) GetX(ctx context.Context, id int64) *QualityInspectionResult {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *QualityInspectionResultClient) Hooks() []Hook {
+	return c.hooks.QualityInspectionResult
+}
+
+// Interceptors returns the client interceptors.
+func (c *QualityInspectionResultClient) Interceptors() []Interceptor {
+	return c.inters.QualityInspectionResult
+}
+
+func (c *QualityInspectionResultClient) mutate(ctx context.Context, m *QualityInspectionResultMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&QualityInspectionResultCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&QualityInspectionResultUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&QualityInspectionResultUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&QualityInspectionResultDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown QualityInspectionResult mutation op: %q", m.Op())
+	}
+}
+
+// QualityInspectionRunClient is a client for the QualityInspectionRun schema.
+type QualityInspectionRunClient struct {
+	config
+}
+
+// NewQualityInspectionRunClient returns a client for the QualityInspectionRun from the given config.
+func NewQualityInspectionRunClient(c config) *QualityInspectionRunClient {
+	return &QualityInspectionRunClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `qualityinspectionrun.Hooks(f(g(h())))`.
+func (c *QualityInspectionRunClient) Use(hooks ...Hook) {
+	c.hooks.QualityInspectionRun = append(c.hooks.QualityInspectionRun, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `qualityinspectionrun.Intercept(f(g(h())))`.
+func (c *QualityInspectionRunClient) Intercept(interceptors ...Interceptor) {
+	c.inters.QualityInspectionRun = append(c.inters.QualityInspectionRun, interceptors...)
+}
+
+// Create returns a builder for creating a QualityInspectionRun entity.
+func (c *QualityInspectionRunClient) Create() *QualityInspectionRunCreate {
+	mutation := newQualityInspectionRunMutation(c.config, OpCreate)
+	return &QualityInspectionRunCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of QualityInspectionRun entities.
+func (c *QualityInspectionRunClient) CreateBulk(builders ...*QualityInspectionRunCreate) *QualityInspectionRunCreateBulk {
+	return &QualityInspectionRunCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *QualityInspectionRunClient) MapCreateBulk(slice any, setFunc func(*QualityInspectionRunCreate, int)) *QualityInspectionRunCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &QualityInspectionRunCreateBulk{err: fmt.Errorf("calling to QualityInspectionRunClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*QualityInspectionRunCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &QualityInspectionRunCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for QualityInspectionRun.
+func (c *QualityInspectionRunClient) Update() *QualityInspectionRunUpdate {
+	mutation := newQualityInspectionRunMutation(c.config, OpUpdate)
+	return &QualityInspectionRunUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *QualityInspectionRunClient) UpdateOne(_m *QualityInspectionRun) *QualityInspectionRunUpdateOne {
+	mutation := newQualityInspectionRunMutation(c.config, OpUpdateOne, withQualityInspectionRun(_m))
+	return &QualityInspectionRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *QualityInspectionRunClient) UpdateOneID(id int64) *QualityInspectionRunUpdateOne {
+	mutation := newQualityInspectionRunMutation(c.config, OpUpdateOne, withQualityInspectionRunID(id))
+	return &QualityInspectionRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for QualityInspectionRun.
+func (c *QualityInspectionRunClient) Delete() *QualityInspectionRunDelete {
+	mutation := newQualityInspectionRunMutation(c.config, OpDelete)
+	return &QualityInspectionRunDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *QualityInspectionRunClient) DeleteOne(_m *QualityInspectionRun) *QualityInspectionRunDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *QualityInspectionRunClient) DeleteOneID(id int64) *QualityInspectionRunDeleteOne {
+	builder := c.Delete().Where(qualityinspectionrun.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &QualityInspectionRunDeleteOne{builder}
+}
+
+// Query returns a query builder for QualityInspectionRun.
+func (c *QualityInspectionRunClient) Query() *QualityInspectionRunQuery {
+	return &QualityInspectionRunQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeQualityInspectionRun},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a QualityInspectionRun entity by its id.
+func (c *QualityInspectionRunClient) Get(ctx context.Context, id int64) (*QualityInspectionRun, error) {
+	return c.Query().Where(qualityinspectionrun.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *QualityInspectionRunClient) GetX(ctx context.Context, id int64) *QualityInspectionRun {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *QualityInspectionRunClient) Hooks() []Hook {
+	return c.hooks.QualityInspectionRun
+}
+
+// Interceptors returns the client interceptors.
+func (c *QualityInspectionRunClient) Interceptors() []Interceptor {
+	return c.inters.QualityInspectionRun
+}
+
+func (c *QualityInspectionRunClient) mutate(ctx context.Context, m *QualityInspectionRunMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&QualityInspectionRunCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&QualityInspectionRunUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&QualityInspectionRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&QualityInspectionRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown QualityInspectionRun mutation op: %q", m.Op())
+	}
+}
+
 // RedeemCodeClient is a client for the RedeemCode schema.
 type RedeemCodeClient struct {
 	config
@@ -6847,10 +7556,11 @@ type (
 		ChannelMonitorRequestTemplate, CompositeModelRoute, ErrorPassthroughRule,
 		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
 		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
-		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
-		UserAttributeDefinition, UserAttributeValue, UserPlatformQuota,
-		UserSubscription []ent.Hook
+		PromoCodeUsage, Proxy, QualityInspectionPlan, QualityInspectionQuarantine,
+		QualityInspectionQuestion, QualityInspectionResult, QualityInspectionRun,
+		RedeemCode, SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
+		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
+		UserAttributeValue, UserPlatformQuota, UserSubscription []ent.Hook
 	}
 	inters struct {
 		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
@@ -6859,10 +7569,11 @@ type (
 		ChannelMonitorRequestTemplate, CompositeModelRoute, ErrorPassthroughRule,
 		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
 		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
-		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
-		UserAttributeDefinition, UserAttributeValue, UserPlatformQuota,
-		UserSubscription []ent.Interceptor
+		PromoCodeUsage, Proxy, QualityInspectionPlan, QualityInspectionQuarantine,
+		QualityInspectionQuestion, QualityInspectionResult, QualityInspectionRun,
+		RedeemCode, SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
+		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
+		UserAttributeValue, UserPlatformQuota, UserSubscription []ent.Interceptor
 	}
 )
 

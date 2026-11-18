@@ -84,6 +84,21 @@ type PromoCodeUsage func(*sql.Selector)
 // Proxy is the predicate function for proxy builders.
 type Proxy func(*sql.Selector)
 
+// QualityInspectionPlan is the predicate function for qualityinspectionplan builders.
+type QualityInspectionPlan func(*sql.Selector)
+
+// QualityInspectionQuarantine is the predicate function for qualityinspectionquarantine builders.
+type QualityInspectionQuarantine func(*sql.Selector)
+
+// QualityInspectionQuestion is the predicate function for qualityinspectionquestion builders.
+type QualityInspectionQuestion func(*sql.Selector)
+
+// QualityInspectionResult is the predicate function for qualityinspectionresult builders.
+type QualityInspectionResult func(*sql.Selector)
+
+// QualityInspectionRun is the predicate function for qualityinspectionrun builders.
+type QualityInspectionRun func(*sql.Selector)
+
 // RedeemCode is the predicate function for redeemcode builders.
 type RedeemCode func(*sql.Selector)
 

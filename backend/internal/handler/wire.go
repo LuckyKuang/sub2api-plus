@@ -67,6 +67,7 @@ func ProvideAdminHandlers(
 	usageAlert *service.UsageAlertService,
 	opencodeGoUsage *service.OpenCodeGoUsageService,
 	claudeResetCredits *service.ClaudeResetCreditService,
+	qualityInspectionHandler *admin.QualityInspectionHandler,
 ) *AdminHandlers {
 	accountHandler.SetCNOAuthService(cnOAuthService)
 	accountHandler.SetOllamaCloudUsageService(ollamaCloudUsage)
@@ -114,6 +115,7 @@ func ProvideAdminHandlers(
 		AuditLog:               auditLogHandler,
 		IPAccessControl:        ipAccessControlHandler,
 		ImageTask:              imageTaskSettingsHandler,
+		QualityInspection:      qualityInspectionHandler,
 	}
 }
 
@@ -383,6 +385,7 @@ var ProviderSet = wire.NewSet(
 	admin.NewComplianceHandler,
 	admin.NewAuditLogHandler,
 	admin.NewIPAccessControlHandler,
+	ProvideQualityInspectionHandler,
 
 	// AdminHandlers and Handlers constructors
 	ProvideAdminHandlers,
@@ -394,4 +397,13 @@ func ProvidePaymentHandler(paymentService *service.PaymentService, configService
 	h.modelCatalog = catalog
 	h.userRates = apiKeys
 	return h
+}
+
+// ProvideQualityInspectionHandler 注入巡检处理器；签名密钥取自 JWT 配置。
+func ProvideQualityInspectionHandler(bundle *service.QualityInspectionBundle, settings *service.SettingService, cfg *config.Config) *admin.QualityInspectionHandler {
+	secret := ""
+	if cfg != nil {
+		secret = cfg.JWT.Secret
+	}
+	return admin.NewQualityInspectionHandler(bundle.Plans, bundle.Runner, bundle.Repo, bundle.Artifacts, settings, secret)
 }

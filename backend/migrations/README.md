@@ -1,5 +1,12 @@
 # Database Migrations
 
+Migration `316_quality_inspection.sql` adds the model quality inspection tables:
+plans (single group + single model, `unique(group_id, model)`), per-plan question
+snapshots, runs (one per schedule slot, `unique(plan_id, trigger, slot)`), per-question
+results, and account-level quarantine records (`unique(account_id)`). Artifacts live in
+the async-image object bucket, so only `artifact_key` is stored. See
+[MODEL_QUALITY_INSPECTION.md](../../docs/MODEL_QUALITY_INSPECTION.md).
+
 Migration `314_group_force_openai_ultrafast.sql` adds the non-null,
 false-default group Ultrafast preference. Existing groups retain their tier
 policy until an administrator enables it. See

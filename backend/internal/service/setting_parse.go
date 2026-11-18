@@ -192,6 +192,13 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyOpsQueryModeDefault:          "auto",
 		SettingKeyOpsMetricsIntervalSeconds:    "60",
 
+		// Model quality inspection defaults (disabled, conservative limits)
+		SettingKeyModelQualityInspectionEnabled:            "false",
+		SettingKeyQualityInspectionQuarantineEnabled:       "false",
+		SettingKeyQualityInspectionQuarantineCooldownMinutes: "60",
+		SettingKeyQualityInspectionMaxRequestsPerRound:     "30",
+		SettingKeyQualityInspectionStabilityRounds:         "5",
+
 		// Channel monitor defaults (enabled, 60s)
 		SettingKeyChannelMonitorEnabled:                "true",
 		SettingKeyChannelMonitorMode:                   ChannelMonitorModeV1,
@@ -833,6 +840,16 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 			result.OpsMetricsIntervalSeconds = v
 		}
 	}
+
+	// Model quality inspection (default: disabled)
+	result.ModelQualityInspectionEnabled = isTrueSettingValue(settings[SettingKeyModelQualityInspectionEnabled])
+	result.QualityInspectionQuarantineEnabled = isTrueSettingValue(settings[SettingKeyQualityInspectionQuarantineEnabled])
+	result.QualityInspectionQuarantineCooldownMinutes = parseIntWithRange(
+		settings[SettingKeyQualityInspectionQuarantineCooldownMinutes], 60, 5, 10080)
+	result.QualityInspectionMaxRequestsPerRound = parseIntWithRange(
+		settings[SettingKeyQualityInspectionMaxRequestsPerRound], 30, 1, 200)
+	result.QualityInspectionStabilityRounds = parseIntWithRange(
+		settings[SettingKeyQualityInspectionStabilityRounds], 5, 3, 30)
 
 	// Channel monitor feature (default: enabled, 60s)
 	result.ChannelMonitorEnabled = !isFalseSettingValue(settings[SettingKeyChannelMonitorEnabled])

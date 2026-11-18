@@ -56,6 +56,12 @@ type ImageStorageSigner interface {
 	Sign(ctx context.Context, key string) (string, error)
 }
 
+// ImageStorageDeleter 是可选的删除能力：质量巡检按轮次淘汰结果时需要删除作品对象。
+// 保持可选，避免破坏只实现上传的第三方适配器。
+type ImageStorageDeleter interface {
+	Delete(ctx context.Context, key string) error
+}
+
 type ImageStorageObject struct {
 	Body        io.ReadCloser
 	ContentType string
