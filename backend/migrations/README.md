@@ -1,5 +1,11 @@
 # Database Migrations
 
+Migration `316_channel_pricing_ultrafast_multiplier.sql` adds an optional
+channel-level multiplier for the OpenAI ultrafast service tier. `NULL` keeps the
+model-owned default (6x for models that support the tier); a positive value
+overrides it for that channel only and leaves the Fast/priority and Flex
+multipliers untouched. Official migration 252 is renumbered to Plus 316.
+
 Migration `314_group_force_openai_ultrafast.sql` adds the non-null,
 false-default group Ultrafast preference. Existing groups retain their tier
 policy until an administrator enables it. See

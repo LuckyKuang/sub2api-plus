@@ -23,6 +23,10 @@ func TestConfiguredServiceTierMultiplier(t *testing.T) {
 		{name: "legacy fast default", serviceTier: "fast", pricing: &ModelPricing{}, want: 2},
 		{name: "ultrafast default", serviceTier: "ultrafast", pricing: &ModelPricing{}, want: 2},
 		{name: "ultrafast ignores fast multiplier", serviceTier: "ultrafast", pricing: &ModelPricing{FastMultiplier: pricingMultiplier(2.5)}, want: 2},
+		{name: "ultrafast model default", serviceTier: "ultrafast", pricing: &ModelPricing{UltrafastMultiplier: 6}, want: 6},
+		{name: "channel ultrafast override beats model default", serviceTier: "ultrafast", pricing: &ModelPricing{UltrafastMultiplier: 6, UltrafastMultiplierOverride: pricingMultiplier(3)}, want: 3},
+		{name: "ultrafast override does not change fast", serviceTier: "fast", pricing: &ModelPricing{FastMultiplier: pricingMultiplier(2.5), UltrafastMultiplierOverride: pricingMultiplier(3)}, want: 2.5},
+		{name: "ultrafast override does not change flex", serviceTier: "flex", pricing: &ModelPricing{FlexMultiplier: pricingMultiplier(0.4), UltrafastMultiplierOverride: pricingMultiplier(3)}, want: 0.4},
 		{name: "legacy flex default", serviceTier: "flex", pricing: &ModelPricing{}, want: 0.5},
 	}
 

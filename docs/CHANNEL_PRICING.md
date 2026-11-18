@@ -654,6 +654,23 @@ window; it does not inherit the GPT-6 long-context threshold. Opus 5.5 retains
 its Fast/priority 2x pricing. Explicit channel prices, context intervals and
 tier multipliers retain their existing precedence over model defaults.
 
+### Ultrafast channel multiplier
+
+`ultrafast_multiplier` on a channel model card prices the OpenAI ultrafast
+service tier independently of Fast/priority. Resolution order for a request whose
+service tier is `ultrafast` is: the channel value when set, then the model-owned
+default (6x for models that support the tier), then the generic 2x service-tier
+factor. The column is `NULL`-by-default and constrained to positive values;
+official migration 252 is Plus migration 316.
+
+The multiplier only changes cost for the ultrafast tier. Fast/priority keep
+`fast_multiplier`, Flex keeps `flex_multiplier`, and an unset column never turns
+ultrafast into a cheaper tier. Capability is unchanged: the tier still requires a
+model that supports ultrafast and the group's `force_openai_ultrafast` policy, so
+a configured multiplier cannot enable ultrafast for an unsupported model. The
+admin API accepts and returns the field as `ultrafast_multiplier` on
+`model_pricing[]`.
+
 Explicit `cache_creation_input_token_cost: 0` stays zero. Derived cache-write
 rules only apply when the catalog field is absent, and the derived value is
 never presented as an operator override.
