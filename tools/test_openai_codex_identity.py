@@ -47,14 +47,14 @@ class CodexIdentityGuardTests(unittest.TestCase):
         # pinned runtime and browser catalog. Restoring the old runtime version
         # alone must fail even when the outbound declarations remain coherent.
         for filename, pattern in (
-            ("backend/internal/codexcli/manifest.go", 'const targetVersion = "0.167.0"'),
-            ("frontend/src/api/codex.ts", "const DEFAULT_CODEX_CLIENT_VERSION = '0.167.0'"),
+            ("backend/internal/codexcli/manifest.go", 'const targetVersion = "0.170.0"'),
+            ("frontend/src/api/codex.ts", "const DEFAULT_CODEX_CLIENT_VERSION = '0.170.0'"),
         ):
             with self.subTest(path=filename):
                 target = self.root / filename
                 original = target.read_text(encoding="utf-8")
                 self.assertIn(pattern, original)
-                target.write_text(original.replace(pattern, pattern.replace("0.167.0", "0.165.0"), 1), encoding="utf-8")
+                target.write_text(original.replace(pattern, pattern.replace("0.170.0", "0.165.0"), 1), encoding="utf-8")
                 try:
                     result, errors = self.check()
                     self.assertEqual(1, result, errors)

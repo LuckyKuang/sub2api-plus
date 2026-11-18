@@ -107,9 +107,9 @@ func TestOpenAIInputTerminalWrappedStatusForwarding(t *testing.T) {
 							require.NoError(t, err)
 							require.Equal(t, 200, recorder.Code)
 							require.Len(t, upstream.requests, 1, "426 must reach HTTP without replaying the WS turn")
-							require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", upstream.lastReq.UserAgent())
+							require.Equal(t, "codex_cli_rs/0.170.0 (Ubuntu 24.04; x86_64) xterm-256color", upstream.lastReq.UserAgent())
 							require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("Originator"))
-							require.Equal(t, "0.167.0", upstream.lastReq.Header.Get("Version"))
+							require.Equal(t, "0.170.0", upstream.lastReq.Header.Get("Version"))
 						} else {
 							require.Error(t, err)
 							require.Equal(t, status, recorder.Code)

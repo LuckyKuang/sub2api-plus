@@ -84,9 +84,9 @@ func TestOpenAIActorAuthorizationCannotReachProvider(t *testing.T) {
 					case wire := <-observed:
 						require.Empty(t, wire.Values("X-OpenAI-Actor-Authorization"), "generic overrides and inbound auth cannot add a second credential")
 						require.Equal(t, []string{wantAuth}, wire.Values("Authorization"))
-						require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", wire.Get("User-Agent"))
+						require.Equal(t, "codex_cli_rs/0.170.0 (Ubuntu 24.04; x86_64) xterm-256color", wire.Get("User-Agent"))
 						require.Equal(t, "codex_cli_rs", wire.Get("Originator"))
-						require.Equal(t, "0.167.0", wire.Get("Version"))
+						require.Equal(t, "0.170.0", wire.Get("Version"))
 						if kind == AccountTypeAPIKey {
 							require.Equal(t, "retained", wire.Get("X-Route"))
 						}

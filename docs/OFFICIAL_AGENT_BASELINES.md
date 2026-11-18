@@ -3,14 +3,15 @@
 Both **OAuth and API Key** accounts for each platform use its official agent
 below. This is the source index for future version and outbound-protocol reviews;
 it contains no developer checkout paths. The seven-provider review was refreshed
-on 2026-11-08 against each official default branch. It covers OAuth and API-key
+on 2026-11-08 against each official default branch; Codex was re-reviewed on
+2026-11-18 for the `0.170.0` identity and CLI baseline. It covers OAuth and API-key
 request headers/bodies, SDK and runtime declarations, auxiliary authentication,
 model discovery, request ownership and terminal errors. Historical review notes
 below retain the source/version they originally evaluated.
 
 | Platform | Official source | Reviewed commit | Selected agent version |
 | --- | --- | --- | --- |
-| OpenAI | [openai/codex](https://github.com/openai/codex.git) | `c9b4267c370a755da12ec1c8648c2451163212b7` | stable `rust-v0.167.0` |
+| OpenAI | [openai/codex](https://github.com/openai/codex.git) | `29eb79e9866b3262a777fdf8195c1b9e63684c91` | stable `rust-v0.170.0` |
 | xAI | [xai-org/grok-build](https://github.com/xai-org/grok-build.git) | `2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8` | `1.0.45` |
 | DeepSeek | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness.git) | `fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159` | `0.2.2-rc.1` (prerelease) |
 | Kimi | [MoonshotAI/kimi-code](https://github.com/MoonshotAI/kimi-code.git) | `eb2035f3cad57cc12d4d5082ec626f7f0ea5f651` | stable `2.5.2` |
@@ -19,9 +20,9 @@ below retain the source/version they originally evaluated.
 | Zhipu | [zai-org/ZCode](https://github.com/zai-org/ZCode.git) | `a9fe401eede6e6e5e01be9048679c206fe6f02d9` | stable product `3.17.2`; separate CLI line `0.17.1` |
 
 The managed Codex bridge/task runtime additionally pins the official
-[`rust-v0.167.0` release](https://github.com/openai/codex/releases/tag/rust-v0.167.0)
+[`rust-v0.170.0` release](https://github.com/openai/codex/releases/tag/rust-v0.170.0)
 and its source commit
-[`086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a`](https://github.com/openai/codex/tree/086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a).
+[`29eb79e9866b3262a777fdf8195c1b9e63684c91`](https://github.com/openai/codex/tree/29eb79e9866b3262a777fdf8195c1b9e63684c91).
 Its execution review includes static API-key file authentication, custom model
 providers, Responses Lite `additional_tools`, `exec` JSONL events, noninteractive
 approval enforcement, plugin startup, cloud skills, configuration discovery and
@@ -108,8 +109,8 @@ Migration 294 stores random outbound IDs by namespace and irreversible scope
 digest, without a scheduling-cache TTL. See [OFFICIAL_AGENT_REQUEST_STATE.md](OFFICIAL_AGENT_REQUEST_STATE.md)
 for ID versions, lifetime, grant ownership and failover contracts. Codex main
 uses a development manifest version, so its stable identity is manually selected
-as `0.167.0` (stable tag commit `086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a`,
-[published November 6](https://github.com/openai/codex/releases/tag/rust-v0.167.0));
+as `0.170.0` (stable tag commit `29eb79e9866b3262a777fdf8195c1b9e63684c91`,
+[published November 18](https://github.com/openai/codex/releases/tag/rust-v0.170.0));
 reviewing protocol changes never enables automatic identity-version updates.
 
 ## November 8 protocol alignment
@@ -117,7 +118,7 @@ reviewing protocol changes never enables automatic identity-version updates.
 The other five official source heads are unchanged from November 7. None of
 the seven platforms requires a selected product-version, SDK or default
 fingerprint change in this review. Codex's selected stable release remains
-`rust-v0.167.0`; `rust-v0.169.0-alpha.3` is a prerelease and is not selected.
+`rust-v0.170.0`; `rust-v0.171.0-alpha.13` is a prerelease and is not selected.
 Account/global pins retain their existing precedence for both credential types.
 
 - Codex's [incremental Code Mode catalog](https://github.com/openai/codex/blob/c9b4267c370a755da12ec1c8648c2451163212b7/codex-rs/core/src/context/world_state/top_level_tools.rs)
@@ -154,6 +155,17 @@ and BYOK profiles, Step-Code's versionless inference profile, and ZCode's paired
 product/control declarations. Existing owner, strict-proxy, signing and audit
 boundaries still apply to every path. The regressions and their exact scope
 are listed in [the business matrix](SEVEN_PROVIDER_TEST_MATRIX.md#november-8-official-agent-review).
+
+## November 18 identity and CLI alignment
+
+Codex's stable identity is manually advanced to `0.170.0`; source selection,
+Originator, Ubuntu/architecture/terminal fingerprint and explicit administrator
+version pins keep their existing contracts. The separately embedded, digest
+verified CLI executable is upgraded to the same release with independently
+computed archive and native executable digests for all four supported
+platforms. Settings installs or updates only this reviewed target on an
+explicit click. Runtime, browser catalog and compiled default identity version
+equality is enforced. The other six providers are unchanged.
 
 ## November 7 protocol alignment
 

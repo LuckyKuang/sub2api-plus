@@ -63,7 +63,7 @@ shared validator and the existing aggregate fallback for unknown durations.
 Upstream semantic/visible TTFT settings and its injectable WS classifier are
 excluded: Plus removed that setting and retains strict nonempty token deltas,
 independent first-output/first-byte clocks and per-response WS timing windows.
-The Codex pin remains `0.167.0`, with no automatic version synchronization.
+The Codex pin remains `0.170.0`, with no automatic version synchronization.
 Call-less page snapshots share the wire validator with canonical audit extraction;
 raw ingress audit still precedes account selection, pricing and forwarding.
 Plus Release-manifest pricing trust, atomic validated cache bundles, frozen
@@ -82,7 +82,7 @@ migrations 304–306. No historical migration is rewritten.
 Plus retains its credential-owner snapshots and generation-checked observations,
 strict proxy binding, canonical session routing, ingress audit ordering and
 unknown-content pass-through, frozen prices, Composite access/rates, asynchronous
-task capacity and console controls. Codex keeps manually selected `0.167.0`, its
+task capacity and console controls. Codex keeps manually selected `0.170.0`, its
 identity precedence and reviewed fingerprints; the WS HTTP bridge uses the same
 owner-bound fingerprint resolver. Upstream's generic Grok transport fallback,
 legacy scheduler replacement, sponsor content and host-based CI/release paths do
@@ -116,7 +116,7 @@ This import adds scoped administrator keys, owner-bound Grok catalog diagnostics
 and opt-in image-count billing for dedicated image requests. New upstream SQL
 migrations 247/248 are imported as 302/303, preserving deployed Plus migrations.
 At the v0.2.19 import Codex used manually selected 0.165.0; the current
-0.167.0 identity and reviewed Terra descriptor follow the official-agent baseline;
+0.170.0 identity and reviewed Terra descriptor follow the official-agent baseline;
 Terra API pricing/specifications are verified separately from the pinned client
 descriptor. Shared domestic-provider keyword/90% quota cooldown heuristics remain
 deferred. DeepSeek Pro pricing no longer switches

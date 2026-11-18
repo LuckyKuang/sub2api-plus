@@ -364,7 +364,7 @@ func TestSevenProviderFailoverPersistsRedisAffinityAndPostgresDebits(t *testing.
 	providers := []sevenBusinessProvider{
 		// OUTBOUND_IDENTITY.md: Native OpenAI API-key inference declares the
 		// same selected Codex triple as OAuth inference.
-		{"openai", "codex", "0.167.0", "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", map[string]string{"Originator": "codex_cli_rs", "Version": "0.167.0"}},
+		{"openai", "codex", "0.170.0", "codex_cli_rs/0.170.0 (Ubuntu 24.04; x86_64) xterm-256color", map[string]string{"Originator": "codex_cli_rs", "Version": "0.170.0"}},
 		{"grok", "grok", "1.0.45", "grok-shell/1.0.45 (linux; x86_64)", map[string]string{"X-Grok-Client-Identifier": "grok-shell", "X-Grok-Client-Version": "1.0.45"}},
 		{"deepseek", "deepseek", "0.2.2-rc.1", "deepseek-harness/0.2.2-rc.1 (+https://github.com/deepseek-ai/deepseek-harness)", nil},
 		{"kimi", "kimi", "2.5.2", "kimi-code-cli/2.5.2", map[string]string{"X-Msh-Platform": "kimi_code_cli", "X-Msh-Version": "2.5.2", "X-Stainless-Package-Version": "6.34.0"}},

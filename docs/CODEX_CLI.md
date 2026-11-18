@@ -2,7 +2,7 @@
 
 Sub2API Plus can install the reviewed official Codex CLI and bridge existing
 gateway traffic for credential-owning OpenAI ChatGPT OAuth and API Key accounts. The
-project pins CLI **0.167.0**, matching the compiled default outbound identity.
+project pins CLI **0.170.0**, matching the compiled default outbound identity.
 Each manual default identity upgrade must include reviewed runtime artifacts
 and wire regressions; the version-consistency gate rejects drift.
 Installation never resolves `latest`, upgrades a
@@ -54,7 +54,7 @@ to inspect the sanitized readiness reason before retrying.
 The installer downloads only the embedded official release asset, checks its
 embedded SHA-256 digest and verifies the executable version. The retained
 release archive is part of later integrity verification. Files are stored
-under `${DATA_DIR:-./data}/codex/cli/versions/0.167.0/`; the host's global
+under `${DATA_DIR:-./data}/codex/cli/versions/0.170.0/`; the host's global
 `codex` installation is left in place.
 
 After the runtime is installed and verified, enable **Enable bridge environment**
@@ -491,7 +491,7 @@ separate download transport and URL policy; they are not inference bridge hops.
 
 ## Usage accuracy and outbound evidence
 
-The pinned executable remains **0.167.0**. A task's execution mode is not a
+The pinned executable remains **0.170.0**. A task's execution mode is not a
 `usage_source`: the database's existing accuracy enum remains unchanged.
 A valid `turn.completed` JSONL usage object (including all-zero counters) is
 `upstream_exact`, independently of a later process, output or client failure.

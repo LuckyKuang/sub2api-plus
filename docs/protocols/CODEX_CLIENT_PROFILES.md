@@ -383,7 +383,7 @@ its result cannot overwrite a newer account binding.
 This source matrix applies identically to OAuth and API-key HTTP/WS provider
 requests, including retries, discovery and probes. Transport preference and
 inbound client classification never change the selected source.
-The November 7 manual upgrade selects stable `0.167.0` after this matrix;
+The November 18 manual upgrade selects stable `0.170.0` after this matrix;
 it changes the version declaration only. Valid administrator version overrides
 retain priority and every selected family, OS, architecture and terminal stays intact.
 
@@ -404,9 +404,9 @@ string clears it through an explicit null in the JSONB update.
 The exact compiled identity is:
 
 ```text
-User-Agent: codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color
+User-Agent: codex_cli_rs/0.170.0 (Ubuntu 24.04; x86_64) xterm-256color
 Originator: codex_cli_rs
-Version: 0.167.0
+Version: 0.170.0
 ```
 
 The version resolver runs after source selection: a valid administrator version
@@ -657,7 +657,7 @@ Neither capability is implied by matching UA/Originator/Version.
 ## User-Agent suffix
 
 An administrator User-Agent may end with the official ` ({suffix})` group, for
-example `codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
+example `codex_cli_rs/0.170.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
 Pairing, validation, and manual version updates accept that form and keep the
 suffix unchanged. The gateway does not generate a suffix.
 
@@ -845,12 +845,13 @@ not count as authentication, account health or quota failures. A generation-
 scoped negative model cache prevents a late old-grant response from blocking
 a replacement grant. Other models on that account remain schedulable.
 
-## November 7 protocol compatibility
+## November 18 protocol compatibility
 
-The manually selected default identity is stable `rust-v0.167.0` at
-`086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a`; its existing source-priority matrix
-and environment fingerprint remain authoritative. The embedded managed CLI
-executable is upgraded to the same reviewed `0.167.0` release. Every compiled
+The manually selected default identity is stable `rust-v0.170.0` at
+`29eb79e9866b3262a777fdf8195c1b9e63684c91`; its source-priority matrix and
+environment fingerprint remain authoritative. The previous November 7 selection
+of `0.167.0` is superseded. The embedded managed CLI executable is upgraded to
+the same reviewed `0.170.0` release. Every compiled
 default identity upgrade must also update the runtime manifest, official archive
 and executable digests, browser catalog and real-binary wire regressions.
 Settings offers explicit installation/update to that reviewed target; it does

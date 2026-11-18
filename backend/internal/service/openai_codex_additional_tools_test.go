@@ -198,7 +198,7 @@ func TestOpenAIGatewayService_OAuthAdditionalToolsDeclarationID(t *testing.T) {
 					recorder := httptest.NewRecorder()
 					c, _ := gin.CreateTestContext(recorder)
 					c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
-					c.Request.Header.Set("User-Agent", "codex_cli_rs/0.167.0")
+					c.Request.Header.Set("User-Agent", "codex_cli_rs/0.170.0")
 					if lite {
 						c.Request.Header.Set(responsesLiteHeader, "true")
 					}
