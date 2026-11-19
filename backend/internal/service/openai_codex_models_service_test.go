@@ -398,10 +398,12 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.True(t, astra.NodeREPLAutoReviewRequired)
 	require.Equal(t, "3000", astra.CompHash)
 	require.Contains(t, astra.ModelMessages.InstructionsTemplate, "You are Codex, an agent based on GPT-6")
+	// The catalog owns the published Fast factor, so the descriptor keeps the
+	// official wording; Plus only appends the Ultra Fast tier it declares itself.
 	require.Equal(t, []configuredCodexServiceTier{{
 		ID:          "priority",
 		Name:        "Fast",
-		Description: "Priority processing for lower latency.",
+		Description: "2x speed, increased usage",
 	}}, astra.ServiceTiers)
 
 	gpt56Luna := newConfiguredCodexModelDescriptor("gpt-5.6-luna")
@@ -419,7 +421,7 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.Equal(t, []configuredCodexServiceTier{{
 		ID:          "priority",
 		Name:        "Fast",
-		Description: "Priority processing for lower latency.",
+		Description: "2x speed, increased usage",
 	}}, gpt6Astra.ServiceTiers)
 	require.True(t, isOpenAICodexImageInputModel("gpt-6-astra"))
 	require.True(t, isOpenAICodexReasoningGPTModel("openai/gpt-6-astra"))
@@ -538,14 +540,24 @@ func TestBuildCodexModelsManifestAdvertisesPriorityServiceTierForFastGPTModels(t
 	models := decodeCodexManifestModels(t, body)
 	require.Len(t, models, 3)
 
+	// A catalog model keeps the official speed factor (the 5.5/5.6 families say
+	// 1.5x); a model outside the catalog keeps Plus's generic wording.
+	wantDescription := map[string]string{
+		"gpt-5.4-mini":  "Priority processing for lower latency.",
+		"gpt-5.5":       "1.5x speed, increased usage",
+		"gpt-5.6-terra": "1.5x speed, increased usage",
+	}
 	for _, model := range models {
+		id, _ := model["slug"].(string)
+		description, ok := wantDescription[id]
+		require.True(t, ok, id)
 		require.Equal(t, []any{
 			map[string]any{
 				"id":          "priority",
 				"name":        "Fast",
-				"description": "Priority processing for lower latency.",
+				"description": description,
 			},
-		}, model["service_tiers"])
+		}, model["service_tiers"], id)
 		require.Nil(t, model["default_service_tier"])
 	}
 }
@@ -562,20 +574,29 @@ func TestBuildCodexModelsManifestAdvertisesUltrafastServiceTierForSol(t *testing
 	models := decodeCodexManifestModels(t, body)
 	require.Len(t, models, 2)
 
-	wantTiers := []any{
-		map[string]any{
-			"id":          "priority",
-			"name":        "Fast",
-			"description": "Priority processing for lower latency.",
-		},
-		map[string]any{
-			"id":          "ultrafast",
-			"name":        "Ultrafast",
-			"description": "Ultra-low latency processing.",
-		},
+	// The canonical slug keeps the catalog's published Fast factor. The bare
+	// "gpt-5.6" alias is outside the catalog, so it keeps the synthesized
+	// wording; both still declare Plus's Ultra Fast tier.
+	wantPriorityDescription := map[string]string{
+		"gpt-5.6-sol": "1.5x speed, increased usage",
+		"gpt-5.6":     "Priority processing for lower latency.",
 	}
 	for _, model := range models {
-		require.Equal(t, wantTiers, model["service_tiers"])
+		slug, _ := model["slug"].(string)
+		description, ok := wantPriorityDescription[slug]
+		require.True(t, ok, slug)
+		require.Equal(t, []any{
+			map[string]any{
+				"id":          "priority",
+				"name":        "Fast",
+				"description": description,
+			},
+			map[string]any{
+				"id":          "ultrafast",
+				"name":        "Ultrafast",
+				"description": "Ultra-low latency processing.",
+			},
+		}, model["service_tiers"], slug)
 		require.Nil(t, model["default_service_tier"])
 	}
 }

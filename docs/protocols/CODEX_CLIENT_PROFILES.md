@@ -980,8 +980,9 @@ embedded file:
 1. `visibility` is forced to `list`, so a model an administrator configured into
    a group stays selectable even when the official catalog hides it (daybreak,
    `codex-auto-review`).
-2. `service_tiers` come from Plus, which is the only source of the ultrafast
-   tier; the official catalog declares priority/fast only.
+2. `service_tiers` keep the official entries and their published speed wording
+   (a 1.5x model stays described as 1.5x, not as Plus's generic Fast text); Plus
+   only appends the ultrafast tier, which the official catalog never declares.
 3. `shell_type` stays `unified_exec`. The 0.170 snapshot declares
    `shell_command` for every model, which changes the shell tool the client
    announces; adopting it needs its own security-audit coverage revision.
@@ -995,3 +996,20 @@ tag's exact bytes, updating `CodexModelCatalogRelease` and
 `TestCodexModelCatalogMatchesPinnedOfficialBytes` plus
 `TestConfiguredCodexDescriptorsFollowOfficialCatalog`. See `UPSTREAM.md` for the
 baseline trace.
+
+### GPT-6.2 Sol and Astra
+
+GPT-6.2 is addressed by its published IDs (`gpt-6.2-sol`, `gpt-6.2-astra`) plus
+the same local effort and `-openai-compact` spellings the earlier families accept;
+`gpt-6.2` bare is not a model. Both reject `none` and `minimal` reasoning instead
+of coercing them, only reach tool calls through the Responses surface, and drop
+sampling controls on the Chat Completions fallback.
+
+The Ultra Fast tier resolves its multiplier at the request instant: GPT-6.2 is 3×
+the Standard rate through February 28, 2027 (Pacific) and 6× from March 1, 2027,
+while GPT-6 Astra and GPT-6.1 Sol stay at 6×. Settlement uses the request's own
+timestamp, so a delayed settlement cannot pick up a later rate. On ChatGPT
+subscriptions the Pro plan grant fills the gap an older account snapshot leaves:
+Pro 200 includes Sol, Pro 500 includes both, and a workspace grant discovered from
+the account manifest still applies. A model the account neither advertises nor is
+entitled to keeps the Fast tier only.

@@ -562,9 +562,15 @@ func applyOfficialCodexModelDescriptor(descriptor *configuredCodexModelDescripto
 	//    even when the official catalog hides it (daybreak, codex-auto-review).
 	descriptor.Visibility = "list"
 	// 2. Ultrafast is a Plus declaration: the official catalog only knows
-	//    priority/fast, so it can never arrive from the embedded file.
-	if tiers := configuredCodexServiceTiersForModel(descriptor.Slug); len(tiers) > 0 {
-		descriptor.ServiceTiers = tiers
+	//    priority/fast, so it can never arrive from the embedded file. Append it
+	//    without touching the official entries or their published descriptions
+	//    (fast factors differ per model: 1.5x for 6.1 Terra, 2x for 6.x).
+	if configuredCodexSupportsUltrafastServiceTier(descriptor.Slug) && !codexServiceTiersInclude(descriptor.ServiceTiers, OpenAIFastTierUltrafast) {
+		descriptor.ServiceTiers = append(descriptor.ServiceTiers, configuredCodexServiceTier{
+			ID:          OpenAIFastTierUltrafast,
+			Name:        "Ultrafast",
+			Description: "Ultra-low latency processing.",
+		})
 	}
 	// 3. Keep the audited shell tool surface. The 0.170 snapshot declares
 	//    shell_command for every model; switching the tool the client announces
@@ -617,6 +623,16 @@ func configuredCodexServiceTiersForModel(modelID string) []configuredCodexServic
 	return tiers
 }
 
+// codexServiceTiersInclude reports whether the tier list already declares id.
+func codexServiceTiersInclude(tiers []configuredCodexServiceTier, id string) bool {
+	for _, tier := range tiers {
+		if tier.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func configuredCodexSupportsPriorityServiceTier(modelID string) bool {
 	normalized := canonicalizeOpenAIModelAliasSpelling(modelID)
 	if isOpenAIGPT6AstraModel(normalized) {
@@ -627,8 +643,8 @@ func configuredCodexSupportsPriorityServiceTier(modelID string) bool {
 			return true
 		}
 	}
-	// GPT-6 Astra advertises Fast via service_tier=priority in public model metadata.
-	return isOpenAIGPT6AstraModel(modelID)
+	// GPT-6 models advertise Fast via service_tier=priority in public model metadata.
+	return isOpenAIGPT6Model(modelID)
 }
 
 func configuredCodexSupportsUltrafastServiceTier(modelID string) bool {
@@ -2164,6 +2180,8 @@ func CodexModelsManifestETag(body []byte) string {
 }
 
 var apiKeyCodexModelsWithoutResponsesLite = map[string]struct{}{
+	"gpt-6.2-sol":   {},
+	"gpt-6.2-astra": {},
 	"gpt-6.1-terra": {},
 	"gpt-6.1-sol":   {},
 	"gpt-6-astra":   {},

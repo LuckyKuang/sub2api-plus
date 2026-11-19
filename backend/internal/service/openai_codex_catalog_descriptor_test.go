@@ -141,12 +141,12 @@ func TestAPIKeyRoutesDoNotInheritOfficialResponsesLite(t *testing.T) {
 	// An explicit snapshot remains authoritative for a model the gateway has no
 	// standing "no Lite" rule for.
 	account.SetUpstreamModelMetadataSnapshot(UpstreamModelMetadataSnapshot{Models: map[string]UpstreamModelMetadata{
-		"gpt-6.2-sol": {CodexToolCapabilities: map[string]json.RawMessage{
+		"gpt-5.5": {CodexToolCapabilities: map[string]json.RawMessage{
 			"use_responses_lite": json.RawMessage("true"),
 			"tool_mode":          json.RawMessage(`"code_mode_only"`),
 		}},
 	}})
-	declared := accountCodexToolCapabilities(&account, "gpt-6.2-sol")
+	declared := accountCodexToolCapabilities(&account, "gpt-5.5")
 	require.JSONEq(t, `true`, string(declared["use_responses_lite"]))
 	require.JSONEq(t, `"code_mode_only"`, string(declared["tool_mode"]))
 }

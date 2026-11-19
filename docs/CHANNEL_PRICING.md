@@ -676,9 +676,11 @@ tier multipliers retain their existing precedence over model defaults.
 `ultrafast_multiplier` on a channel model card prices the OpenAI ultrafast
 service tier independently of Fast/priority. Resolution order for a request whose
 service tier is `ultrafast` is: the channel value when set, then the model-owned
-default (6x for models that support the tier), then the generic 2x service-tier
-factor. The column is `NULL`-by-default and constrained to positive values;
-official migration 252 is Plus migration 316.
+default, then the generic 2x service-tier factor. The model default is 6x, except
+GPT-6.2 before March 1, 2027 Pacific (08:00 UTC), which is charged 3x and resolved
+at the request instant so a delayed settlement cannot pick up the later rate. The
+column is `NULL`-by-default and constrained to positive values; official migration
+252 is Plus migration 316.
 
 The multiplier only changes cost for the ultrafast tier. Fast/priority keep
 `fast_multiplier`, Flex keeps `flex_multiplier`, and an unset column never turns
