@@ -7,12 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/LuckyKuang/sub2api-plus/internal/config"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/usagestats"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/usagestats"
 	"github.com/stretchr/testify/require"
 )
 
@@ -79,7 +78,6 @@ func TestAuditActualCompactExclusionKeepsSelectionEvidence(t *testing.T) {
 }
 
 func TestAuditGrokQuotaGateDoesNotReportInventedEmptyPool(t *testing.T) {
-	openaiGrokFreeQuotaGateCache = sync.Map{}
 	account := Account{ID: 1, Platform: PlatformGrok, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Credentials: map[string]any{"subscription_tier": "FREE"}}
 	usage := &grokFreeQuotaUsageRepoStub{stats: map[int64]*usagestats.AccountStats{1: {Tokens: 475_000}}}
 	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{account}}, cfg: grokFreeQuotaTestConfig(), usageLogRepo: usage}

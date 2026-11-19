@@ -108,16 +108,7 @@ func TestGetSchedulableAccount_AppliesGrokFreeSoftGate(t *testing.T) {
 	usageRepo := &grokFreeQuotaUsageRepoStub{stats: map[int64]*usagestats.AccountStats{
 		account.ID: {Tokens: 480_000}, // above 95% of 500k
 	}}
-	// Clear shared gateway free-gate cache so this test is deterministic.
-	gatewayGrokFreeQuotaGateCache.Range(func(key, _ any) bool {
-		gatewayGrokFreeQuotaGateCache.Delete(key)
-		return true
-	})
-	if root, ok := freeQuotaRefreshInFlight.Load(&gatewayGrokFreeQuotaGateCache); ok {
-		if m, ok := root.(*sync.Map); ok {
-			m.Delete(account.ID)
-		}
-	}
+	clearGrokFreeQuotaTestAccount(t, &gatewayGrokFreeQuotaGateCache, account.ID)
 	svc := &GatewayService{
 		cfg:          cfg,
 		accountRepo:  repo,
@@ -155,15 +146,7 @@ func TestOpenAIGetSchedulableAccount_AppliesGrokFreeSoftGate(t *testing.T) {
 	usageRepo := &grokFreeQuotaUsageRepoStub{stats: map[int64]*usagestats.AccountStats{
 		account.ID: {Tokens: 480_000},
 	}}
-	openaiGrokFreeQuotaGateCache.Range(func(key, _ any) bool {
-		openaiGrokFreeQuotaGateCache.Delete(key)
-		return true
-	})
-	if root, ok := freeQuotaRefreshInFlight.Load(&openaiGrokFreeQuotaGateCache); ok {
-		if m, ok := root.(*sync.Map); ok {
-			m.Delete(account.ID)
-		}
-	}
+	clearGrokFreeQuotaTestAccount(t, &openaiGrokFreeQuotaGateCache, account.ID)
 	svc := &OpenAIGatewayService{
 		cfg:          cfg,
 		accountRepo:  repo,
@@ -178,6 +161,17 @@ func TestOpenAIGetSchedulableAccount_AppliesGrokFreeSoftGate(t *testing.T) {
 		got, err := svc.getSchedulableAccount(context.Background(), account.ID)
 		return err == nil && got == nil
 	}, 2*time.Second, 10*time.Millisecond, "OpenAI legacy sticky must apply free soft-gate after cache warm")
+}
+
+func clearGrokFreeQuotaTestAccount(t *testing.T, cache *sync.Map, accountID int64) {
+	t.Helper()
+	cache.Delete(accountID)
+	t.Cleanup(func() {
+		require.Eventually(t, func() bool {
+			return !grokFreeQuotaTestRefreshPending(cache, accountID)
+		}, 2*time.Second, 10*time.Millisecond)
+		cache.Delete(accountID)
+	})
 }
 
 func TestCountGrokNativeSearchCallsFromJSON_MessagesStyleBody(t *testing.T) {
