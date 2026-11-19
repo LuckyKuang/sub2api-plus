@@ -172,7 +172,8 @@ func TestRewriteCacheCreationJSON(t *testing.T) {
 			},
 		}
 		require.True(t, rewriteCacheCreationJSON(usageObj, "1h"))
-		cc := usageObj["cache_creation"].(map[string]any)
+		cc, ok := usageObj["cache_creation"].(map[string]any)
+		require.True(t, ok, "cache_creation must stay a JSON object")
 		require.Equal(t, float64(400), cc["ephemeral_1h_input_tokens"])
 		require.Equal(t, float64(0), cc["ephemeral_5m_input_tokens"])
 	})

@@ -81,8 +81,8 @@ func TestAllocateCacheCreationBillingTokens(t *testing.T) {
 func TestCalculateTokenStatsCost_ChargesUnclassifiedRemainder(t *testing.T) {
 	pricing := &ChannelModelPricing{
 		BillingMode:       BillingModeToken,
-		CacheWritePrice:   testPtrFloat64(0.003),
-		CacheWrite1hPrice: testPtrFloat64(0.005),
+		CacheWritePrice:   float64Ptr(0.003),
+		CacheWrite1hPrice: float64Ptr(0.005),
 	}
 
 	tests := []struct {

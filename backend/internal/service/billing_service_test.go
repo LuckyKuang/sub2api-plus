@@ -30,10 +30,6 @@ func captureStdLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-func newTestBillingService() *BillingService {
-	return NewBillingService(&config.Config{}, nil)
-}
-
 func newTestBillingServiceWithOpenAILadderCatalog(t *testing.T) *BillingService {
 	t.Helper()
 	return NewBillingService(&config.Config{}, newStubPricingServiceFromJSON(t, openAILadderCatalogJSON))

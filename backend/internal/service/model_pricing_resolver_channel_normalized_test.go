@@ -42,19 +42,6 @@ func tokenPricingForModels(models []string, inputPerMillion float64) ChannelMode
 	}
 }
 
-func newChannelServiceWithPricings(groupID int64, pricings []ChannelModelPricing) *ChannelService {
-	ch := Channel{
-		ID:           1,
-		Name:         "codex-channel",
-		Status:       StatusActive,
-		ModelPricing: pricings,
-		GroupIDs:     []int64{groupID},
-	}
-	cs := &ChannelService{}
-	cs.cache.Store(populateChannelCache([]Channel{ch}, map[int64]string{groupID: PlatformOpenAI}))
-	return cs
-}
-
 // recordUsageWithChannelPricing 用给定的渠道定价跑一次 RecordUsage，返回落库的 UsageLog。
 func recordUsageWithChannelPricing(t *testing.T, requestedModel string, subscriptionGroup bool, pricings []ChannelModelPricing) *UsageLog {
 	t.Helper()

@@ -74,10 +74,7 @@ func shouldStripOpenAIResponsesInputItemID(itemType, id string) bool {
 			return false
 		}
 	}
-	if acceptsOpenAIResponsesOfficialItemIDAlias(itemType, id) {
-		return false
-	}
-	return true
+	return !acceptsOpenAIResponsesOfficialItemIDAlias(itemType, id)
 }
 
 // acceptsOpenAIResponsesOfficialItemIDAlias covers kinds where the official

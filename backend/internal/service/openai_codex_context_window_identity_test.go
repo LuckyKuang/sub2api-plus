@@ -104,8 +104,10 @@ func TestCodexContextWindowIdentityMetadataStaysString(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, changed)
 
-	clientMetadata := body["client_metadata"].(map[string]any)
-	rebuilt := clientMetadata[openAIWSTurnMetadataHeader].(string)
+	clientMetadata, ok := body["client_metadata"].(map[string]any)
+	require.True(t, ok, "client_metadata must stay a JSON object")
+	rebuilt, ok := clientMetadata[openAIWSTurnMetadataHeader].(string)
+	require.True(t, ok, "turn metadata must stay a JSON string")
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal([]byte(rebuilt), &decoded))
 	windowID, ok := decoded["context_window_id"].(string)
