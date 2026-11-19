@@ -6,15 +6,34 @@ publication status. Release naming and procedures live in
 
 ## Integrated Baseline
 
-The current tree integrates official `v0.2.22`, peeled commit
-`b0fa9f3e6eeab1968a53e1289b69daa4bb40ca2b`, after official `v0.2.21`
-`10ba8f9b4dc2e6023d4a9879ab77b21841babd10`. The sync branch starts at
+The current tree integrates official `v0.2.23`, peeled commit
+`5af9afb588c4b014b3df9db7d4073af1f8ae01b6`, after official `v0.2.22`
+`b0fa9f3e6eeab1968a53e1289b69daa4bb40ca2b`. The sync branch starts at
 Plus main `4bb155f1a45bc11ba22be3ed15fe98f7b49cd279`.
 Plus remains authoritative when upstream behavior conflicts with an intentional
-Plus contract. The current tree carries the `v0.2.22` baseline in `VERSION`;
+Plus contract. The current tree carries the `v0.2.23` baseline in `VERSION`;
 its release mapping is recorded once an artifact is published. Integration and
 local validation do not publish artifacts.
 Post-tag official main is excluded.
+
+The `v0.2.23` sync (32 official commits) aligns the Codex client surface with
+official `rust-v0.170.0`: the gateway serves the release's own
+`codex-rs/models-manager/models.json`, honors a declared
+`x-codex-websocket-max-message-bytes` instead of synthesizing a default, preserves
+the per-kind response item ID prefixes the client allocates, and keeps
+`context_window_id` in its model-facing display form. Channel cards gain an
+optional Ultra Fast multiplier (official migration 252, renumbered to Plus 316)
+so the ultrafast tier can be priced independently of Fast/priority. Cache
+accounting is rewritten rather than cherry-picked: one authoritative write total
+feeds billing and logs, a repeated zero from a compatible provider no longer
+erases a reported write, prompt totals reconcile across cache-only updates, and
+unclassified writes are billed in the 5m class instead of being dropped. Stream
+deadlines follow the last upstream read, and an idle stream that has produced no
+model output fails over once instead of surfacing a timeout. GPT-6.2 Sol and Astra
+are fully supported: the published model IDs, their request-instant Ultra Fast
+multiplier (3× through February 2027, then 6×), the published token rates, the
+Pro-plan Ultra Fast entitlement and the Chat-fallback sampling rules all ship with
+this sync.
 
 The branch review restores atomic usage-log persistence for batched billing,
 persists DeepSeek per-field override provenance across durable snapshot restores,
@@ -202,9 +221,9 @@ These identifiers describe the current planned source revision. Its tag and
 image are not published; the mapping status below governs publication.
 
 ```text
-Git/GitHub: v0.2.22+custom.001
-Application: 0.2.22+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.22-custom.001
+Git/GitHub: v0.2.23+custom.001
+Application: 0.2.23+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.23-custom.001
 ```
 
 ## Release Mapping
@@ -295,6 +314,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.22-custom.001
 | `v0.2.21+custom.001` | `v0.2.21` | `10ba8f9b4dc2e6023d4a9879ab77b21841babd10` | published |
 | `v0.2.21+custom.002` | `v0.2.21` | `10ba8f9b4dc2e6023d4a9879ab77b21841babd10` | published |
 | `v0.2.22+custom.001` | `v0.2.22` | `b0fa9f3e6eeab1968a53e1289b69daa4bb40ca2b` | published |
+| `v0.2.23+custom.001` | `v0.2.23` | `5af9afb588c4b014b3df9db7d4073af1f8ae01b6` | planned |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains
