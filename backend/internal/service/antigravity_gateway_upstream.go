@@ -175,14 +175,7 @@ func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.
 		FirstOutputKind:               firstOutputKind,
 		ClientDisconnect:              clientDisconnect,
 		UpstreamHeaders:               resp.Header,
-		Usage: ClaudeUsage{
-			InputTokens:              usage.InputTokens,
-			OutputTokens:             usage.OutputTokens,
-			CacheReadInputTokens:     usage.CacheReadInputTokens,
-			CacheCreationInputTokens: usage.CacheCreationInputTokens,
-			ImageOutputTokens:        usage.ImageOutputTokens,
-			AudioOutputTokens:        usage.AudioOutputTokens,
-		},
+		Usage:                         *usage,
 	}, forwardErr
 }
 

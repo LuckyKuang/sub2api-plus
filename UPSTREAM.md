@@ -6,17 +6,42 @@ publication status. Release naming and procedures live in
 
 ## Integrated Baseline
 
-The current tree integrates official `v0.2.22`, peeled commit
-`b0fa9f3e6eeab1968a53e1289b69daa4bb40ca2b`, after official `v0.2.21`
-`10ba8f9b4dc2e6023d4a9879ab77b21841babd10`. The sync branch starts at
-Plus main `4bb155f1a45bc11ba22be3ed15fe98f7b49cd279`.
+The current tree integrates official `v0.2.23`, peeled commit
+`5af9afb588c4b014b3df9db7d4073af1f8ae01b6`, after official `v0.2.22`
+`b0fa9f3e6eeab1968a53e1289b69daa4bb40ca2b`. The sync branch starts at
+Plus main `f3f55fd22ce9432544085c7543f12a2d0a3394dd`.
 Plus remains authoritative when upstream behavior conflicts with an intentional
-Plus contract. The current tree carries the `v0.2.22` baseline in `VERSION`;
+Plus contract. The current tree carries the `v0.2.23` baseline in `VERSION`;
 its release mapping is recorded once an artifact is published. Integration and
 local validation do not publish artifacts.
 Post-tag official main is excluded.
 
-The branch review restores atomic usage-log persistence for batched billing,
+The `v0.2.23` sync (32 official commits) aligns the Codex client surface with
+official `rust-v0.170.0`: the gateway serves the release's own
+`codex-rs/models-manager/models.json`, honors a declared
+`x-codex-websocket-max-message-bytes` across pooled, prewarmed and passthrough
+writes, preserves the per-kind response item ID prefixes the client allocates,
+and permutes model-facing `context_window_id` values within their official
+decimal pools. Registered GPT-6 effort and compact aliases use the published
+descriptors. Channel cards gain an
+optional Ultra Fast multiplier (official migration 252, renumbered to Plus 316)
+so the ultrafast tier can be priced independently of Fast/priority. Cache
+accounting is rewritten rather than cherry-picked: one authoritative write total
+feeds billing and logs, a repeated zero from a compatible provider no longer
+erases a reported write, prompt totals reconcile across cache-only updates, and
+unclassified writes are billed in the 5m class instead of being dropped. Stream
+deadlines follow the last upstream byte read, and an idle stream that has produced no
+model output fails over once instead of surfacing a timeout. GPT-6.2 Sol and Astra
+are fully supported: the published model IDs, their request-instant Ultra Fast
+multiplier (3× through February 2027, then 6×), the published token rates, the
+Pro-plan Ultra Fast entitlement and the Chat-fallback sampling rules all ship with
+this sync.
+
+The Go and `follow-redirects` pins already match the reviewed tag. Plus retains
+its existing native Chat SSE flush timing and DeepSeek/Ollama reasoning rewrites
+for upstream performance-only commits `2c6784496` and `d86729926`.
+
+The `v0.2.22` branch review restored atomic usage-log persistence for batched billing,
 persists DeepSeek per-field override provenance across durable snapshot restores,
 and aligns Ultrafast and Vertex endpoint reservation pricing with settlement.
 Available-channel catalogs preserve the passthrough account's model-filter
@@ -30,6 +55,17 @@ clears only the observed credential owner's unchanged cooldown, and sticky
 session cleanup atomically preserves concurrent account rebindings. Tool-schema
 regex sanitation treats Unicode-escaped input consistently. Owning protocol,
 pricing, configuration and migration documentation records these behaviors.
+
+The Codex descriptor catalog is independent of the upstream baseline. The
+gateway serves the official `rust-v0.170.0`
+`codex-rs/models-manager/models.json` (release commit
+`29eb79e9866b3262a777fdf8195c1b9e63684c91`, catalog change `176cbbe92c`,
+SHA-256 `d50b6749506d97e5f334dbabcb666eb1689f423cf3e88cfabdcf3c536b873068`)
+instead of the 0.169-era descriptors embedded by the current upstream tag. The
+catalog is embedded byte for byte and pinned by digest; Plus policy is layered
+in code and never written back into it. See
+[Codex client profiles](docs/protocols/CODEX_CLIENT_PROFILES.md) and
+[Official agent baselines](docs/OFFICIAL_AGENT_BASELINES.md).
 
 The v0.2.22 import (187 upstream commits, 340 files) adds the group
 `force_openai_ultrafast` tier gated per model, `openai_passthrough_model_filter`,
@@ -63,7 +99,7 @@ shared validator and the existing aggregate fallback for unknown durations.
 Upstream semantic/visible TTFT settings and its injectable WS classifier are
 excluded: Plus removed that setting and retains strict nonempty token deltas,
 independent first-output/first-byte clocks and per-response WS timing windows.
-The Codex pin remains `0.167.0`, with no automatic version synchronization.
+At that import the Codex pin was `0.167.0`, with no automatic version synchronization.
 Call-less page snapshots share the wire validator with canonical audit extraction;
 raw ingress audit still precedes account selection, pricing and forwarding.
 Plus Release-manifest pricing trust, atomic validated cache bundles, frozen
@@ -82,7 +118,7 @@ migrations 304–306. No historical migration is rewritten.
 Plus retains its credential-owner snapshots and generation-checked observations,
 strict proxy binding, canonical session routing, ingress audit ordering and
 unknown-content pass-through, frozen prices, Composite access/rates, asynchronous
-task capacity and console controls. Codex keeps manually selected `0.167.0`, its
+task capacity and console controls. Codex used manually selected `0.167.0`, its
 identity precedence and reviewed fingerprints; the WS HTTP bridge uses the same
 owner-bound fingerprint resolver. Upstream's generic Grok transport fallback,
 legacy scheduler replacement, sponsor content and host-based CI/release paths do
@@ -116,7 +152,7 @@ This import adds scoped administrator keys, owner-bound Grok catalog diagnostics
 and opt-in image-count billing for dedicated image requests. New upstream SQL
 migrations 247/248 are imported as 302/303, preserving deployed Plus migrations.
 At the v0.2.19 import Codex used manually selected 0.165.0; the current
-0.167.0 identity and reviewed Terra descriptor follow the official-agent baseline;
+0.170.0 identity and reviewed Terra descriptor follow the official-agent baseline;
 Terra API pricing/specifications are verified separately from the pinned client
 descriptor. Shared domestic-provider keyword/90% quota cooldown heuristics remain
 deferred. DeepSeek Pro pricing no longer switches
@@ -191,9 +227,9 @@ These identifiers describe the current planned source revision. Its tag and
 image are not published; the mapping status below governs publication.
 
 ```text
-Git/GitHub: v0.2.22+custom.001
-Application: 0.2.22+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.22-custom.001
+Git/GitHub: v0.2.23+custom.001
+Application: 0.2.23+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.23-custom.001
 ```
 
 ## Release Mapping
@@ -284,6 +320,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.22-custom.001
 | `v0.2.21+custom.001` | `v0.2.21` | `10ba8f9b4dc2e6023d4a9879ab77b21841babd10` | published |
 | `v0.2.21+custom.002` | `v0.2.21` | `10ba8f9b4dc2e6023d4a9879ab77b21841babd10` | published |
 | `v0.2.22+custom.001` | `v0.2.22` | `b0fa9f3e6eeab1968a53e1289b69daa4bb40ca2b` | published |
+| `v0.2.23+custom.001` | `v0.2.23` | `5af9afb588c4b014b3df9db7d4073af1f8ae01b6` | planned |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains

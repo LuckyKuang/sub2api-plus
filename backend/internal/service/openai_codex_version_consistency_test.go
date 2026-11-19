@@ -11,7 +11,7 @@ import (
 )
 
 func TestCodexVersionConstants_Consistency(t *testing.T) {
-	const expectedDefaultUserAgent = "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color"
+	const expectedDefaultUserAgent = "codex_cli_rs/0.170.0 (Ubuntu 24.04; x86_64) xterm-256color"
 
 	require.Equal(t, codexCLIVersion, DefaultOpenAICodexVersion,
 		"the compiled-in Codex identity version must have one source of truth")
@@ -20,7 +20,7 @@ func TestCodexVersionConstants_Consistency(t *testing.T) {
 	// User requirement: each reviewed default identity upgrade also upgrades
 	// the executable and its independently reviewed release artifact manifest.
 	// Explicit administrator identity pins do not select an executable.
-	require.Equal(t, "0.167.0", codexcli.TargetVersion())
+	require.Equal(t, "0.170.0", codexcli.TargetVersion())
 	require.Equal(t, codexCLIVersion, codexcli.TargetVersion(),
 		"the reviewed runtime must advance with the compiled outbound identity")
 	require.Equal(t, expectedDefaultUserAgent, DefaultOpenAICodexUserAgent)

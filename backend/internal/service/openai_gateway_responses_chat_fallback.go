@@ -91,6 +91,11 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 	// 国产模型默认 effort 补充：需要 mappedModel 判定，推迟到 billingModel 算出之后。
 	reasoningEffort = ApplyThinkingEnabledFallback(reasoningEffort, body, billingModel)
 	chatReq.Model = upstreamModel
+	if openai.GPT62ModelID(upstreamModel) != "" {
+		// GPT-6.2 rejects sampling controls on the Chat fallback surface.
+		chatReq.Temperature = nil
+		chatReq.TopP = nil
+	}
 	if clientStream {
 		chatReq.StreamOptions = &apicompat.ChatStreamOptions{IncludeUsage: true}
 	}

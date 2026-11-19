@@ -368,14 +368,10 @@ func (s *GatewayService) handleCCBufferedFromAnthropic(
 		return nil, fmt.Errorf("upstream stream ended without response")
 	}
 
-	// Update usage from accumulated delta
-	if usage.InputTokens > 0 || usage.OutputTokens > 0 {
-		finalResp.Usage = apicompat.AnthropicUsage{
-			InputTokens:              usage.InputTokens,
-			OutputTokens:             usage.OutputTokens,
-			CacheCreationInputTokens: usage.CacheCreationInputTokens,
-			CacheReadInputTokens:     usage.CacheReadInputTokens,
-		}
+	// 累积 usage 保留了缓存明细与 prompt 总量对账结果，直接回填响应；
+	// 重建 AnthropicUsage 会把 5m/1h 与推导出的聚合量一起丢掉。
+	if usage.hasReportedTokens() {
+		normalizeAnthropicEventUsageForResponses(&apicompat.AnthropicStreamEvent{Message: finalResp}, usage)
 	}
 
 	// Chain: Anthropic → Responses → Chat Completions

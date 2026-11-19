@@ -91,6 +91,8 @@ describe('useModelWhitelist', () => {
     expect(models).toContain('codex-auto-review')
     expect(models).toContain('gpt-5.6')
     expect(models).toContain('gpt-6-astra')
+    expect(models).toContain('gpt-6.2-sol')
+    expect(models).toContain('gpt-6.2-astra')
     expect(models).toContain('gpt-6.1-sol')
     expect(models).toContain('gpt-6.1-terra')
     expect(models).toContain('gpt-6-sol')
@@ -109,8 +111,10 @@ describe('useModelWhitelist', () => {
       to: 'gpt-6-astra'
     })
     expect(presets.some(preset => preset.from === 'gpt-6')).toBe(false)
-    expect(presets.map(preset => preset.from).slice(0, 12)).toEqual([
+    expect(presets.map(preset => preset.from).slice(0, 14)).toEqual([
       'gpt-6-astra',
+      'gpt-6.2-sol',
+      'gpt-6.2-astra',
       'gpt-6.1-sol',
       'gpt-6.1-terra',
       'gpt-6-sol',
@@ -126,8 +130,10 @@ describe('useModelWhitelist', () => {
   })
 
   it('openai 模型列表按新系列优先排列', () => {
-    expect(getModelsByPlatform('openai').slice(0, 11)).toEqual([
+    expect(getModelsByPlatform('openai').slice(0, 13)).toEqual([
       'gpt-6-astra',
+      'gpt-6.2-sol',
+      'gpt-6.2-astra',
       'gpt-6.1-sol',
       'gpt-6.1-terra',
       'gpt-6-sol',

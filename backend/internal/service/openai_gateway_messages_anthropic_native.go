@@ -635,9 +635,11 @@ func claudeUsageToOpenAIUsage(u *ClaudeUsage) OpenAIUsage {
 		return OpenAIUsage{}
 	}
 	return OpenAIUsage{
-		InputTokens:              u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens,
-		OutputTokens:             u.OutputTokens,
-		CacheCreationInputTokens: u.CacheCreationInputTokens,
-		CacheReadInputTokens:     u.CacheReadInputTokens,
+		InputTokens:                u.InputTokens + u.cacheCreationTotal() + u.CacheReadInputTokens,
+		OutputTokens:               u.OutputTokens,
+		CacheCreationInputTokens:   u.cacheCreationTotal(),
+		CacheCreation5mInputTokens: u.CacheCreation5mTokens,
+		CacheCreation1hInputTokens: u.CacheCreation1hTokens,
+		CacheReadInputTokens:       u.CacheReadInputTokens,
 	}
 }

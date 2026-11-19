@@ -84,6 +84,25 @@ var (
 		Mode:                                "chat",
 		SupportsPromptCaching:               true,
 	}
+	// OpenAI API pricing, reviewed 2026-11-17:
+	// https://developers.openai.com/api/docs/models/gpt-6.2-astra
+	openAIGPT62AstraFallbackPricing = &LiteLLMModelPricing{
+		InputCostPerToken:                   8e-6,
+		InputCostPerTokenPriority:           16e-6,
+		OutputCostPerToken:                  40e-6,
+		OutputCostPerTokenPriority:          80e-6,
+		CacheCreationInputTokenCost:         10e-6,
+		CacheCreationInputTokenCostPriority: 20e-6,
+		CacheReadInputTokenCost:             0.4e-6,
+		CacheReadInputTokenCostPriority:     0.8e-6,
+		LongContextInputTokenThreshold:      272_000,
+		LongContextInputCostMultiplier:      2,
+		LongContextOutputCostMultiplier:     1.5,
+		SupportsServiceTier:                 true,
+		LiteLLMProvider:                     "openai",
+		Mode:                                "chat",
+		SupportsPromptCaching:               true,
+	}
 	openAIGPT61SolFallbackPricing = &LiteLLMModelPricing{
 		InputCostPerToken:                   2e-6,
 		InputCostPerTokenPriority:           4e-6,
@@ -1683,6 +1702,9 @@ func normalizeModelNameForPricing(model string) string {
 		return "claude-sonnet-5"
 	}
 	if canonical := canonicalizeOpenAIModelAliasSpelling(model); canonical != "" {
+		if base := openai.GPT62ModelID(canonical); base != "" {
+			return base
+		}
 		if openai.IsGPT61TerraModelSpelling(canonical) {
 			return "gpt-6.1-terra"
 		}
@@ -1963,6 +1985,15 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 		}
 	}
 
+	if base := openai.GPT62ModelID(model); base != "" {
+		if pricing, ok := s.pricingData[base]; ok {
+			return pricing
+		}
+		if base == "gpt-6.2-sol" {
+			return openAIGPT61SolFallbackPricing // Same published token rates.
+		}
+		return openAIGPT62AstraFallbackPricing
+	}
 	if openai.IsGPT61TerraModelSpelling(model) {
 		if pricing, ok := s.pricingData["gpt-6.1-terra"]; ok {
 			return pricing

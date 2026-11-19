@@ -2,33 +2,47 @@ package service
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
 
-func openAIResponsesInputItemIDPrefix(itemType string) (string, bool) {
+// openAIResponsesInputItemIDPrefixes lists every prefix a replayed item of this
+// type may legitimately carry. Since Codex 0.170 the client allocates item IDs
+// from a per-kind prefix (protocol::ResponseItem::id_prefix), so the legacy
+// single-prefix inference is no longer enough: `local_shell_call` IDs now arrive
+// as lsh_*, not fc_*. Legacy prefixes stay accepted so history replayed by older
+// clients is never rewritten.
+func openAIResponsesInputItemIDPrefixes(itemType string) ([]string, bool) {
 	switch strings.TrimSpace(itemType) {
 	case "message":
-		return "msg", true
+		return []string{"msg"}, true
 	case "reasoning":
-		return "rs", true
+		return []string{"rs"}, true
 	case "web_search_call":
-		return "ws", true
+		return []string{"ws"}, true
+	case "local_shell_call":
+		return []string{"lsh", "fc"}, true
 	case "custom_tool_call":
-		return openAIResponsesToolCallIDPrefix(itemType), true
+		return []string{"ctc"}, true
 	case "tool_search_call":
-		return openAIResponsesToolCallIDPrefix(itemType), true
+		return []string{"tsc"}, true
 	case "custom_tool_call_output":
-		// Although custom calls use ctc IDs, OpenAI validates replayed custom
-		// call output item IDs against the generic fc namespace.
-		return "fc", true
+		// Although the client allocates ctco IDs, OpenAI validates replayed
+		// custom call output item IDs against the generic fc namespace, so only
+		// fc survives upstream replay. The official ctco shape is accepted
+		// separately, because 0.170 emits it and upstream must accept it for the
+		// official client to work.
+		return []string{"fc"}, true
 	default:
 		if isCodexToolCallInputType(itemType) {
-			return openAIResponsesToolCallIDPrefix(itemType), true
+			// function_call keeps fc_; function_call_output/programmatic call
+			// kinds accept fco_ as well because "fc" is a prefix of "fco".
+			return []string{openAIResponsesToolCallIDPrefix(itemType), "fco"}, true
 		}
-		return "", false
+		return nil, false
 	}
 }
 
@@ -45,13 +59,86 @@ func openAIResponsesToolCallIDPrefix(itemType string) string {
 
 // Invalid replayed IDs are removed rather than rewritten because a fabricated
 // item ID may point at a different upstream object. The prefix is part of the
-// Responses item contract and differs for custom tool calls.
+// Responses item contract and differs per item kind, so an assigned ID from any
+// accepted prefix is preserved byte for byte.
 func shouldStripOpenAIResponsesInputItemID(itemType, id string) bool {
-	prefix, constrained := openAIResponsesInputItemIDPrefix(itemType)
+	prefixes, constrained := openAIResponsesInputItemIDPrefixes(itemType)
 	if !constrained {
 		return false
 	}
-	return id == "" || len(id) > 64 || !strings.HasPrefix(id, prefix)
+	if id == "" || len(id) > 64 {
+		return true
+	}
+	for _, prefix := range prefixes {
+		if prefix != "" && strings.HasPrefix(id, prefix) {
+			return false
+		}
+	}
+	return !acceptsOpenAIResponsesOfficialItemIDAlias(itemType, id)
+}
+
+// acceptsOpenAIResponsesOfficialItemIDAlias covers kinds where the official
+// allocation prefix is not the prefix upstream validates. Only the exact
+// model-facing shape is accepted (e.g. ctco_item004): an opaque ID such as
+// ctco_bad_output can still belong to another object and stays stripped.
+func acceptsOpenAIResponsesOfficialItemIDAlias(itemType, id string) bool {
+	switch strings.TrimSpace(itemType) {
+	case "custom_tool_call_output":
+		return strings.HasPrefix(id, "ctco_") && isOpenAIResponsesModelFacingItemID(id)
+	default:
+		return false
+	}
+}
+
+// isOpenAIResponsesModelFacingItemID matches the IDs Codex allocates itself:
+// `<kind>_<salt><digits>` with zero-padded decimal digits, optionally followed by
+// a provider suffix (`_2`). Server IDs are UUIDs or opaque strings instead.
+func isOpenAIResponsesModelFacingItemID(id string) bool {
+	body := id
+	// A provider suffix is a short decimal tail appended to an allocated ID.
+	if cut := strings.LastIndexByte(body, '_'); cut > 0 {
+		if tail := body[cut+1:]; len(tail) > 0 && len(tail) <= 3 && isOpenAIResponsesDecimalDigits(tail) {
+			body = body[:cut]
+		}
+	}
+	digitStart := len(body)
+	for digitStart > 0 && body[digitStart-1] >= '0' && body[digitStart-1] <= '9' {
+		digitStart--
+	}
+	digits := body[digitStart:]
+	if len(digits) < 3 || len(digits) > 21 || len(digits)%3 != 0 ||
+		(len(digits) > 3 && digits[:3] == "000") {
+		return false
+	}
+	if _, err := strconv.ParseUint(digits, 10, 64); err != nil {
+		return false
+	}
+	kind, salt, ok := strings.Cut(body[:digitStart], "_")
+	return ok && isOpenAIResponsesLowerAlpha(kind) && isOpenAIResponsesLowerAlpha(salt)
+}
+
+func isOpenAIResponsesDecimalDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		if value[i] < '0' || value[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func isOpenAIResponsesLowerAlpha(value string) bool {
+	if value == "" {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		if value[i] < 'a' || value[i] > 'z' {
+			return false
+		}
+	}
+	return true
 }
 
 func shouldStripOpenAIResponsesNonPairCallID(itemType string) bool {

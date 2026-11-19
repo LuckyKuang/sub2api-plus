@@ -39,6 +39,7 @@ export interface PricingFormEntry {
   cache_read_price: number | string | null
   fast_multiplier?: number | string | null
   flex_multiplier?: number | string | null
+  ultrafast_multiplier?: number | string | null
   reasoning_effort_multipliers?: Record<string, number | string> | null
   image_input_price: number | string | null
   image_output_price: number | string | null
@@ -260,6 +261,7 @@ function emptyPricingFormEntry(model: string): PricingFormEntry {
     cache_read_price: null,
     fast_multiplier: null,
     flex_multiplier: null,
+    ultrafast_multiplier: null,
     reasoning_effort_multipliers: null,
     image_input_price: null,
     image_output_price: null,

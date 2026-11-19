@@ -271,7 +271,7 @@ func TestCodexForkKeepsParentPromptCacheKeyUpstream(t *testing.T) {
 				t.Helper()
 				c, _ := gin.CreateTestContext(httptest.NewRecorder())
 				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
-				c.Request.Header.Set("User-Agent", "codex_cli_rs/0.167.0")
+				c.Request.Header.Set("User-Agent", "codex_cli_rs/0.170.0")
 				c.Request.Header.Set("originator", "codex_cli_rs")
 				c.Request.Header.Set("session-id", "parent-session")
 				body := []byte(`{"model":"gpt-5.6-sol","stream":false,"input":[{"type":"message","role":"user","content":"hi"}]}`)

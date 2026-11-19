@@ -1576,7 +1576,7 @@ func normalizeOpenAIOAuthResponsesCompatibilityBody(body []byte) ([]byte, bool, 
 }
 
 func normalizeGPT6ResponsesSampling(body []byte, model string) ([]byte, bool, error) {
-	if (!openai.IsGPT6SolOrLunaModelSpelling(model) && !openai.IsGPT61SolModelSpelling(model)) || gjson.GetBytes(body, "reasoning.effort").String() == "none" {
+	if (!openai.IsGPT6SolOrLunaModelSpelling(model) && !openai.IsGPT61SolModelSpelling(model) && openai.GPT62ModelID(model) == "") || gjson.GetBytes(body, "reasoning.effort").String() == "none" {
 		return body, false, nil
 	}
 	out := body
@@ -2373,7 +2373,10 @@ func openAIModelSupportsUltrafast(model string) bool {
 	}
 	// Sol 的变体（-high、-openai-compact 等）沿用同一档位声明；
 	// "gpt-6.1-solar" 之类不同型号不会被前缀误判。
-	return normalized == "gpt-6.1-sol" || strings.HasPrefix(normalized, "gpt-6.1-sol-")
+	if normalized == "gpt-6.1-sol" || strings.HasPrefix(normalized, "gpt-6.1-sol-") {
+		return true
+	}
+	return openai.GPT62ModelID(normalized) != ""
 }
 
 // openAIGroupForcedServiceTier returns the service_tier that the trusted request
@@ -2408,14 +2411,26 @@ func openAIGroupForcedServiceTier(ctx context.Context, account *Account, model s
 	if !IsGroupContextValid(group) || !groupSupportsOpenAIFast(group.Platform) {
 		return ""
 	}
-	switch {
-	case group.ForceOpenAIUltrafast && openAIModelSupportsUltrafast(model):
-		return OpenAIFastTierUltrafast
-	case group.ForceOpenAIFast:
-		return OpenAIFastTierPriority
-	default:
-		return ""
+	if group.ForceOpenAIUltrafast && openAIModelSupportsUltrafast(model) {
+		// Resolve the published Pro entitlement first, then account-specific grants.
+		// Without either, the request falls through to the Fast policy below
+		// instead of losing the group's declared tier entirely.
+		if base := openai.GPT62ModelID(model); base != "" && account.IsOpenAIOAuthLike() {
+			if gpt62PlanIncludesUltrafast(account, base) {
+				return OpenAIFastTierUltrafast
+			}
+			if metadata, ok := account.GetUpstreamModelMetadata(base); ok &&
+				gjson.GetBytes(metadata.CodexToolCapabilities["service_tiers"], `#(id=="ultrafast")`).Exists() {
+				return OpenAIFastTierUltrafast
+			}
+		} else {
+			return OpenAIFastTierUltrafast
+		}
 	}
+	if group.ForceOpenAIFast {
+		return OpenAIFastTierPriority
+	}
+	return ""
 }
 
 // applyOpenAIFastPolicyToBody applies the OpenAI fast policy to a raw request
@@ -2988,7 +3003,7 @@ func validateGPT61CompatRequest(body []byte, model string) error {
 }
 
 func validateGPT61RawEffort(body []byte, model string) error {
-	if !openai.IsGPT61SolModelSpelling(model) && !openai.IsGPT61TerraModelSpelling(model) {
+	if !openai.IsGPT61SolModelSpelling(model) && !openai.IsGPT61TerraModelSpelling(model) && openai.GPT62ModelID(model) == "" {
 		return nil
 	}
 	for _, path := range []string{"reasoning.effort", "reasoning_effort", "output_config.effort"} {

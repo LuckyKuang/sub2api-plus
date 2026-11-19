@@ -53,6 +53,7 @@ type openAIWSStagedCaptureDialer struct {
 	mu          sync.Mutex
 	conn        openAIWSClientConn
 	lastHeaders http.Header
+	handshake   http.Header
 	dialCount   int
 }
 
@@ -69,7 +70,7 @@ func (d *openAIWSStagedCaptureDialer) Dial(
 	d.lastHeaders = cloneHeader(headers)
 	d.dialCount++
 	d.mu.Unlock()
-	return d.conn, http.StatusSwitchingProtocols, nil, nil
+	return d.conn, http.StatusSwitchingProtocols, d.handshake.Clone(), nil
 }
 
 func (d *openAIWSStagedCaptureDialer) DialCount() int {

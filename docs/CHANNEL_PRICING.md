@@ -327,6 +327,23 @@ observed counters through settlement and durable logs. Native WS keeps each
 turn's counters separate and sums them only for the session aggregate. Replacing
 an aggregate with unknown/invalid duration details clears any earlier duration
 classification; it never borrows another event's or turn's split.
+
+Anthropic cache writes are billed from the 5m/1h meters, and the aggregate is the
+authority on how many tokens were actually written. A provider that reports only
+the aggregate, or a partial breakdown, leaves tokens unclassified; those are
+charged in the 5m class at the 5m rate. A reported 1h detail therefore never
+implies that the remainder is also 1h, and a 3k detail next to an 11k aggregate
+still bills all 11k instead of leaving 8k free. Contradictory details are capped
+at the aggregate first, keeping their reported ratio, so the two meters never sum
+past the declared total. Account statistics and the generated price-evidence
+check use the same allocation, which keeps a card with `cache_write_1h_price`
+from silently under-billing a flat aggregate.
+
+Routing an Anthropic-native upstream through the OpenAI gateway keeps that split
+too: the OpenAI usage object carries `cache_creation_5m_input_tokens` and
+`cache_creation_1h_input_tokens` next to the aggregate, and settlement prices each class
+with its own rate. Without it every write on that route collapsed into the
+aggregate and was priced as the cheaper 5m class.
 Reference fill, user/model-plaza display,
 context tiers and frozen settlement carry the same 12h price. The release pricing resource records
 the API's 1050000 context window, 922000 maximum input and 128000 maximum output.
@@ -653,6 +670,25 @@ Sonnet 5.5 uses the same fallback rates throughout its 1,000,000-token context
 window; it does not inherit the GPT-6 long-context threshold. Opus 5.5 retains
 its Fast/priority 2x pricing. Explicit channel prices, context intervals and
 tier multipliers retain their existing precedence over model defaults.
+
+### Ultrafast channel multiplier
+
+`ultrafast_multiplier` on a channel model card prices the OpenAI ultrafast
+service tier independently of Fast/priority. Resolution order for a request whose
+service tier is `ultrafast` is: the channel value when set, then the model-owned
+default, then the generic 2x service-tier factor. The model default is 6x, except
+GPT-6.2 before March 1, 2027 Pacific (08:00 UTC), which is charged 3x and resolved
+at the request instant so a delayed settlement cannot pick up the later rate. The
+column is `NULL`-by-default and constrained to positive values; official migration
+252 is Plus migration 316.
+
+The multiplier only changes cost for the ultrafast tier. Fast/priority keep
+`fast_multiplier`, Flex keeps `flex_multiplier`, and an unset column never turns
+ultrafast into a cheaper tier. Capability is unchanged: the tier still requires a
+model that supports ultrafast and the group's `force_openai_ultrafast` policy, so
+a configured multiplier cannot enable ultrafast for an unsupported model. The
+admin API accepts and returns the field as `ultrafast_multiplier` on
+`model_pricing[]`.
 
 Explicit `cache_creation_input_token_cost: 0` stays zero. Derived cache-write
 rules only apply when the catalog field is absent, and the derived value is

@@ -317,6 +317,21 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		}
 	}
 
+	if err := s.requireCodexUpstreamWS(ctx, account); err != nil {
+		return nil, wrapOpenAIWSFallback("outbound_ws_disabled", err)
+	}
+	// Check the serialized turn before binding its handshake state or writing
+	// an optional prewarm. A rejected attempt contributes neither.
+	if limitErr := s.checkOpenAIWSDeclaredMessageLimit(account, lease, resolvePayloadBytes()); limitErr != nil {
+		logOpenAIWSModeInfo(
+			"write_request_declared_limit account_id=%d conn_id=%s payload_bytes=%d limit_bytes=%d action=fallback_http",
+			account.ID,
+			connID,
+			resolvePayloadBytes(),
+			openAIWSDeclaredLimitFromError(limitErr),
+		)
+		return nil, limitErr
+	}
 	handshakeTurnState := strings.TrimSpace(lease.HandshakeHeader(openAIWSTurnStateHeader))
 	logOpenAIWSModeDebug(
 		"handshake account_id=%d conn_id=%s has_turn_state=%v turn_state_len=%d",
@@ -335,9 +350,6 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		}
 	}
 
-	if err := s.requireCodexUpstreamWS(ctx, account); err != nil {
-		return nil, wrapOpenAIWSFallback("outbound_ws_disabled", err)
-	}
 	if err := s.performOpenAIWSGeneratePrewarm(
 		ctx,
 		lease,

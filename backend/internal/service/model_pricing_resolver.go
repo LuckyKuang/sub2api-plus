@@ -172,6 +172,7 @@ func overlayModelPricing(lower, upper *ChannelModelPricing) *ChannelModelPricing
 		{&merged.CacheReadPrice, lower.CacheReadPrice}, {&merged.ImageInputPrice, lower.ImageInputPrice},
 		{&merged.ImageOutputPrice, lower.ImageOutputPrice}, {&merged.PerRequestPrice, lower.PerRequestPrice},
 		{&merged.FastMultiplier, lower.FastMultiplier}, {&merged.FlexMultiplier, lower.FlexMultiplier},
+		{&merged.UltrafastMultiplier, lower.UltrafastMultiplier},
 	} {
 		if *field.target == nil && field.inherited != nil {
 			value := *field.inherited
@@ -202,7 +203,8 @@ func hasIntervalTokenPrice(interval *PricingInterval) bool {
 
 func hasConfiguredPricingOverrides(config *ChannelModelPricing) bool {
 	return config != nil && (hasFlatTokenPrice(config) || config.PerRequestPrice != nil ||
-		config.FastMultiplier != nil || config.FlexMultiplier != nil || len(config.ReasoningEffortMultipliers) > 0 ||
+		config.FastMultiplier != nil || config.FlexMultiplier != nil || config.UltrafastMultiplier != nil ||
+		len(config.ReasoningEffortMultipliers) > 0 ||
 		len(filterValidIntervals(config.Intervals)) > 0 || config.TimePricing != nil)
 }
 
@@ -370,6 +372,9 @@ func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricin
 	}
 	if chPricing.FlexMultiplier != nil {
 		resolved.BasePricing.FlexMultiplier = chPricing.FlexMultiplier
+	}
+	if chPricing.UltrafastMultiplier != nil {
+		resolved.BasePricing.UltrafastMultiplierOverride = chPricing.UltrafastMultiplier
 	}
 	if chPricing.ReasoningEffortMultipliers != nil {
 		resolved.BasePricing.ReasoningEffortMultipliers = maps.Clone(chPricing.ReasoningEffortMultipliers)

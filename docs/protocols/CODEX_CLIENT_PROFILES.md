@@ -383,7 +383,7 @@ its result cannot overwrite a newer account binding.
 This source matrix applies identically to OAuth and API-key HTTP/WS provider
 requests, including retries, discovery and probes. Transport preference and
 inbound client classification never change the selected source.
-The November 7 manual upgrade selects stable `0.167.0` after this matrix;
+The November 18 manual upgrade selects stable `0.170.0` after this matrix;
 it changes the version declaration only. Valid administrator version overrides
 retain priority and every selected family, OS, architecture and terminal stays intact.
 
@@ -404,9 +404,9 @@ string clears it through an explicit null in the JSONB update.
 The exact compiled identity is:
 
 ```text
-User-Agent: codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color
+User-Agent: codex_cli_rs/0.170.0 (Ubuntu 24.04; x86_64) xterm-256color
 Originator: codex_cli_rs
-Version: 0.167.0
+Version: 0.170.0
 ```
 
 The version resolver runs after source selection: a valid administrator version
@@ -657,7 +657,7 @@ Neither capability is implied by matching UA/Originator/Version.
 ## User-Agent suffix
 
 An administrator User-Agent may end with the official ` ({suffix})` group, for
-example `codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
+example `codex_cli_rs/0.170.0 (Ubuntu 24.04; x86_64) xterm-256color (mcp: server-a)`.
 Pairing, validation, and manual version updates accept that form and keep the
 suffix unchanged. The gateway does not generate a suffix.
 
@@ -845,12 +845,13 @@ not count as authentication, account health or quota failures. A generation-
 scoped negative model cache prevents a late old-grant response from blocking
 a replacement grant. Other models on that account remain schedulable.
 
-## November 7 protocol compatibility
+## November 18 protocol compatibility
 
-The manually selected default identity is stable `rust-v0.167.0` at
-`086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a`; its existing source-priority matrix
-and environment fingerprint remain authoritative. The embedded managed CLI
-executable is upgraded to the same reviewed `0.167.0` release. Every compiled
+The manually selected default identity is stable `rust-v0.170.0` at
+`29eb79e9866b3262a777fdf8195c1b9e63684c91`; its source-priority matrix and
+environment fingerprint remain authoritative. The previous November 7 selection
+of `0.167.0` is superseded. The embedded managed CLI executable is upgraded to
+the same reviewed `0.170.0` release. Every compiled
 default identity upgrade must also update the runtime manifest, official archive
 and executable digests, browser catalog and real-binary wire regressions.
 Settings offers explicit installation/update to that reviewed target; it does
@@ -895,3 +896,127 @@ use `image/gif`. OAuth animation requires a supported native Codex Images model;
 an unavailable endpoint returns its error instead of falling back to a Responses
 image tool that has no reviewed animation contract. Existing still-image fallback
 behavior is unchanged. See `openai_images_official_gif_test.go`.
+
+### WebSocket message-size declaration
+
+`codex-api` reads `x-codex-websocket-max-message-bytes` from the upstream 101
+response and refuses to upload a `response.create` whose serialized size exceeds
+it (`ApiError::WebsocketMessageTooLarge`); the turn then continues over HTTP. The
+gateway mirrors that contract without inventing a value:
+
+- The declaration is accepted only as a positive decimal handshake header. A
+  missing, empty, non-numeric, zero or above-64 MiB value means "no declaration"
+  and never becomes a synthesized default.
+- Every dial records the declaration for that upstream account (process-local,
+  bounded, 10-minute TTL), so pooled connections, internal HTTP-bridged turns and
+  the passthrough adapter decide from the same value.
+- Before writing a turn upstream the gateway compares the exact serialized
+  payload with the declaration. An oversized turn is neither written nor retried
+  on WebSocket: the ingress closes the client with 1009
+  (`StatusMessageTooBig`) before any output, and the official client answers that
+  size close by replaying the turn over HTTP. On the HTTP-entry transport the
+  attempt falls back to HTTP silently and increments
+  `declared_limit_fallback_total` without entering fallback cooling, because the
+  payload — not the transport — is at fault.
+- The passthrough relay checks the first frame and every following write against
+  the active connection's declaration. HTTP-entry WebSocket forwarding checks
+  the turn before optional prewarm. When adding `generate:false` would exceed
+  the cap for an otherwise admissible turn, the gateway skips prewarm.
+- A known declaration also short-circuits the next attempt: when the first frame
+  already exceeds it, the attempt starts on the HTTP bridge instead of dialing a
+  socket it must abandon.
+
+The gateway cannot relay the header on its own 101. It accepts the downstream
+upgrade before any account is selected, while the declaration arrives with the
+upstream handshake that follows the client's first frame. The turn-level outcome
+is preserved (the oversized turn is served over HTTP exactly once), but the
+client does not learn the announced byte cap up front, so it discovers the limit
+through the size close rather than skipping the WebSocket upload. See
+`openai_ws_declared_message_limit.go`.
+
+### Allocated response item IDs
+
+Codex 0.170 allocates every response item ID from a per-kind prefix
+(`protocol::ResponseItem::id_prefix`), keeps the allocation provenance internally
+and still renders a plain string on the wire. Replayed IDs therefore arrive as
+`msg_item042`, `fc_item007`, `rs_item003`, `ctc_item004`, `tsc_item005`,
+`ws_item006`, `lsh_item008`, `fco_item009`, `tso_item010`, `ctco_item004` or
+`amsg_item011` rather than server UUIDs.
+
+The gateway preserves an assigned ID byte for byte when its prefix belongs to the
+item kind. The accepted prefixes follow the official table and keep the legacy
+spellings (`fc` for call kinds, `lsh` alongside `fc` for `local_shell_call`), so
+an `item_reference` to a retained item never dangles. `custom_tool_call_output`
+remains the one documented exception: upstream validates replayed output IDs
+against the `fc` namespace, so only the official model-facing
+`ctco_<salt><digits>` shape is kept and every other `ctco_` value is still
+stripped. See `openai_responses_item_id.go`.
+
+### Context window identity
+
+`context_window_id` is a UUIDv7 string when the window was restored from a
+rollout and the display form of an allocated `ModelFacingId` (`window003`) when it
+was not. Turn metadata always carries a string. Tenant isolation keeps that shape:
+the gateway applies a deterministic, collision-free permutation within each
+decimal pool for the tenant and credential owner. The salt and width stay the
+same. Restored UUIDv7 windows still use the timestamp-preserving UUIDv7 mapping.
+Other values outside the allocation grammar use the durable opaque mapping.
+See `openai_codex_account_identity.go`.
+
+### Model catalog and descriptor source
+
+The Codex `/models` manifest is built from the release's own catalog:
+`codex-rs/models-manager/models.json` at `rust-v0.170.0`, embedded byte for byte
+as `codex_models_catalog.json` and pinned by SHA-256 in
+`internal/pkg/openai/codex_model_catalog.go`. Fourteen descriptors, including
+the GPT-6.2 Sol/Astra entries added by `176cbbe92c`, replace the previous
+per-model extracts and the synthesized values they could not cover.
+
+Official values are authoritative for everything the client reads: context and
+maximum windows, reasoning levels and defaults, priorities, truncation policy,
+model messages and instructions, and every field the descriptor struct does not
+model — those pass through unchanged through `MarshalJSON`. Registered effort
+and compact spellings for GPT-6 Sol/Luna, GPT-6.1 and GPT-6.2 keep their configured
+slug and use the published model's descriptor. Other models outside the catalog,
+including compatible providers and administrator aliases, use a synthesized
+descriptor.
+
+Plus layers exactly four policies on top, and never writes them into the
+embedded file:
+
+1. `visibility` is forced to `list`, so a model an administrator configured into
+   a group stays selectable even when the official catalog hides it (daybreak,
+   `codex-auto-review`).
+2. `service_tiers` keep the official entries and their published speed wording
+   (a 1.5x model stays described as 1.5x, not as Plus's generic Fast text); Plus
+   only appends the ultrafast tier, which the official catalog never declares.
+3. `shell_type` stays `unified_exec`. The 0.170 snapshot declares
+   `shell_command` for every model, which changes the shell tool the client
+   announces; adopting it needs its own security-audit coverage revision.
+4. `input_modalities` advertises image input only where Plus verified it
+   (`gpt-6.1-sol`, `gpt-6.1-terra`, `gpt-6-astra`); a live capability snapshot
+   still widens other models.
+
+Refreshing the catalog for a new Codex release means replacing the file with the
+tag's exact bytes, updating `CodexModelCatalogRelease` and
+`CodexModelCatalogSHA256`, and re-running
+`TestCodexModelCatalogMatchesPinnedOfficialBytes` plus
+`TestConfiguredCodexDescriptorsFollowOfficialCatalog`. See `UPSTREAM.md` for the
+baseline trace.
+
+### GPT-6.2 Sol and Astra
+
+GPT-6.2 is addressed by its published IDs (`gpt-6.2-sol`, `gpt-6.2-astra`) plus
+the same local effort and `-openai-compact` spellings the earlier families accept;
+`gpt-6.2` bare is not a model. Both reject `none` and `minimal` reasoning instead
+of coercing them, only reach tool calls through the Responses surface, and drop
+sampling controls on the Chat Completions fallback.
+
+The Ultra Fast tier resolves its multiplier at the request instant: GPT-6.2 is 3×
+the Standard rate through February 28, 2027 (Pacific) and 6× from March 1, 2027,
+while GPT-6 Astra and GPT-6.1 Sol stay at 6×. Settlement uses the request's own
+timestamp, so a delayed settlement cannot pick up a later rate. On ChatGPT
+subscriptions the Pro plan grant fills the gap an older account snapshot leaves:
+Pro 200 includes Sol, Pro 500 includes both, and a workspace grant discovered from
+the account manifest still applies. A model the account neither advertises nor is
+entitled to keeps the Fast tier only.

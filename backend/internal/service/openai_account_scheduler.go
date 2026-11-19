@@ -1561,18 +1561,18 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 	req OpenAIAccountScheduleRequest,
 ) (*AccountSelectionResult, int, int, float64, error) {
 	budget := newOpenAISelectionProbeBudget()
-	accounts, err := s.service.listSchedulableAccounts(ctx, req.GroupID, req.Platform)
+	accounts, listQuotaExclusions, err := s.service.listSchedulableAccountsWithGrokQuotaExclusions(ctx, req.GroupID, req.Platform)
 	if err != nil {
 		return nil, 0, 0, 0, err
 	}
-	if len(accounts) == 0 {
+	if len(accounts) == 0 && listQuotaExclusions == 0 {
 		return nil, 0, 0, 0, noAvailableOpenAISelectionErrorWithStats(req.RequestedModel, false, openAISelectionFilterStats{}, "")
 	}
-	filterStats := openAISelectionFilterStats{pool: len(accounts)}
+	filterStats := openAISelectionFilterStats{pool: len(accounts) + listQuotaExclusions}
 	// Keep the observed pool before each real gate, including partial exclusions.
 	before := len(accounts)
 	accounts = s.filterGrokFreeQuotaAccounts(ctx, accounts)
-	filterStats.excludeCount("grok_free_quota_soft_gate", before-len(accounts))
+	filterStats.excludeCount("grok_free_quota_soft_gate", listQuotaExclusions+before-len(accounts))
 	if len(accounts) == 0 {
 		return nil, 0, 0, 0, noAvailableOpenAISelectionErrorWithStats(req.RequestedModel, false, filterStats, "grok_free_quota_soft_gate")
 	}

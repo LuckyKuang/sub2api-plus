@@ -38,7 +38,9 @@ func TestGPT61TerraOfficialIdentityAndMetadata(t *testing.T) {
 			Effort string `json:"effort"`
 		} `json:"supported_reasoning_levels"`
 	}
-	require.NoError(t, json.Unmarshal(CodexGPT61TerraMetadata, &metadata))
+	terraDescriptor, ok := CodexModelCatalogMetadata("gpt-6.1-terra")
+	require.True(t, ok)
+	require.NoError(t, json.Unmarshal(terraDescriptor, &metadata))
 	require.Equal(t, "gpt-6.1-terra", metadata.Slug)
 	require.Equal(t, "GPT-6.1 Terra", metadata.DisplayName)
 	require.Equal(t, 500_000, metadata.ContextWindow)

@@ -212,7 +212,9 @@ func requireCompleteConfiguredCodexModel(t *testing.T, model map[string]any, slu
 	require.Equal(t, "list", model["visibility"])
 	require.Equal(t, true, model["supported_in_api"])
 	require.NotNil(t, model["priority"])
-	require.Equal(t, []any{}, model["additional_speed_tiers"])
+	// The official catalog declares additional speed tiers ("fast") for most
+	// models; synthesized models keep an empty list.
+	require.IsType(t, []any{}, model["additional_speed_tiers"])
 	require.IsType(t, []any{}, model["service_tiers"])
 	require.Contains(t, model, "default_service_tier")
 	require.Contains(t, model, "availability_nux")
@@ -351,11 +353,12 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, effortsFromConfiguredCodexLevels(claudeHaiku55.SupportedReasoningLevels))
 
 	gpt56 := newConfiguredCodexModelDescriptor("gpt-5.6-sol")
-	require.Equal(t, "GPT-5.6 Sol", gpt56.DisplayName)
-	require.Equal(t, "OpenAI GPT coding model routed through Sub2API.", gpt56.Description)
+	// The official catalog owns display name, description and levels; Plus keeps
+	// only catalog policy such as visibility and service tiers.
+	require.Equal(t, "GPT-5.6-Sol", gpt56.DisplayName)
+	require.Equal(t, "Legacy model for coding and everyday work.", gpt56.Description)
 	require.NotNil(t, gpt56.DefaultReasoningLevel)
 	require.Equal(t, "low", *gpt56.DefaultReasoningLevel)
-	require.Equal(t, configuredCodexGPTReasoningLevels("gpt-5.6-sol"), gpt56.SupportedReasoningLevels)
 	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max", "ultra"}, effortsFromConfiguredCodexLevels(gpt56.SupportedReasoningLevels))
 	require.True(t, gpt56.SupportsParallelToolCalls)
 	require.True(t, gpt56.SupportVerbosity)
@@ -366,13 +369,13 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.Equal(t, "low", *gpt56.DefaultVerbosity)
 	require.True(t, gpt56.SupportsReasoningSummaryParameter)
 	require.Equal(t, "none", gpt56.DefaultReasoningSummary)
-	require.Equal(t, configuredCodexModelPriority, gpt56.Priority)
+	require.Equal(t, 8, gpt56.Priority)
 
 	astra := newConfiguredCodexModelDescriptor("gpt-6-astra")
-	require.Equal(t, "GPT-6 Astra", astra.DisplayName)
+	require.Equal(t, "GPT-6-Astra", astra.DisplayName)
 	require.NotNil(t, astra.DefaultReasoningLevel)
 	require.Equal(t, "low", *astra.DefaultReasoningLevel)
-	require.Equal(t, 1, astra.Priority)
+	require.Equal(t, 5, astra.Priority)
 	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max", "ultra"}, effortsFromConfiguredCodexLevels(astra.SupportedReasoningLevels))
 	require.Equal(t, int64(272_000), astra.ContextWindow)
 	require.Equal(t, int64(872_000), astra.MaxContextWindow)
@@ -395,10 +398,12 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.True(t, astra.NodeREPLAutoReviewRequired)
 	require.Equal(t, "3000", astra.CompHash)
 	require.Contains(t, astra.ModelMessages.InstructionsTemplate, "You are Codex, an agent based on GPT-6")
+	// The catalog owns the published Fast factor, so the descriptor keeps the
+	// official wording; Plus only appends the Ultra Fast tier it declares itself.
 	require.Equal(t, []configuredCodexServiceTier{{
 		ID:          "priority",
 		Name:        "Fast",
-		Description: "Priority processing for lower latency.",
+		Description: "2x speed, increased usage",
 	}}, astra.ServiceTiers)
 
 	gpt56Luna := newConfiguredCodexModelDescriptor("gpt-5.6-luna")
@@ -406,7 +411,7 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.Equal(t, "medium", *gpt56Luna.DefaultReasoningLevel)
 
 	gpt6Astra := newConfiguredCodexModelDescriptor("gpt-6-astra")
-	require.Equal(t, "GPT-6 Astra", gpt6Astra.DisplayName)
+	require.Equal(t, "GPT-6-Astra", gpt6Astra.DisplayName)
 	require.True(t, strings.HasPrefix(strings.TrimSpace(gpt6Astra.ModelMessages.InstructionsTemplate), "You are Codex, an agent based on GPT-6."))
 	require.NotNil(t, gpt6Astra.DefaultReasoningLevel)
 	require.Equal(t, "low", *gpt6Astra.DefaultReasoningLevel)
@@ -416,7 +421,7 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.Equal(t, []configuredCodexServiceTier{{
 		ID:          "priority",
 		Name:        "Fast",
-		Description: "Priority processing for lower latency.",
+		Description: "2x speed, increased usage",
 	}}, gpt6Astra.ServiceTiers)
 	require.True(t, isOpenAICodexImageInputModel("gpt-6-astra"))
 	require.True(t, isOpenAICodexReasoningGPTModel("openai/gpt-6-astra"))
@@ -535,14 +540,24 @@ func TestBuildCodexModelsManifestAdvertisesPriorityServiceTierForFastGPTModels(t
 	models := decodeCodexManifestModels(t, body)
 	require.Len(t, models, 3)
 
+	// A catalog model keeps the official speed factor (the 5.5/5.6 families say
+	// 1.5x); a model outside the catalog keeps Plus's generic wording.
+	wantDescription := map[string]string{
+		"gpt-5.4-mini":  "Priority processing for lower latency.",
+		"gpt-5.5":       "1.5x speed, increased usage",
+		"gpt-5.6-terra": "1.5x speed, increased usage",
+	}
 	for _, model := range models {
+		id, _ := model["slug"].(string)
+		description, ok := wantDescription[id]
+		require.True(t, ok, id)
 		require.Equal(t, []any{
 			map[string]any{
 				"id":          "priority",
 				"name":        "Fast",
-				"description": "Priority processing for lower latency.",
+				"description": description,
 			},
-		}, model["service_tiers"])
+		}, model["service_tiers"], id)
 		require.Nil(t, model["default_service_tier"])
 	}
 }
@@ -559,20 +574,29 @@ func TestBuildCodexModelsManifestAdvertisesUltrafastServiceTierForSol(t *testing
 	models := decodeCodexManifestModels(t, body)
 	require.Len(t, models, 2)
 
-	wantTiers := []any{
-		map[string]any{
-			"id":          "priority",
-			"name":        "Fast",
-			"description": "Priority processing for lower latency.",
-		},
-		map[string]any{
-			"id":          "ultrafast",
-			"name":        "Ultrafast",
-			"description": "Ultra-low latency processing.",
-		},
+	// The canonical slug keeps the catalog's published Fast factor. The bare
+	// "gpt-5.6" alias is outside the catalog, so it keeps the synthesized
+	// wording; both still declare Plus's Ultra Fast tier.
+	wantPriorityDescription := map[string]string{
+		"gpt-5.6-sol": "1.5x speed, increased usage",
+		"gpt-5.6":     "Priority processing for lower latency.",
 	}
 	for _, model := range models {
-		require.Equal(t, wantTiers, model["service_tiers"])
+		slug, _ := model["slug"].(string)
+		description, ok := wantPriorityDescription[slug]
+		require.True(t, ok, slug)
+		require.Equal(t, []any{
+			map[string]any{
+				"id":          "priority",
+				"name":        "Fast",
+				"description": description,
+			},
+			map[string]any{
+				"id":          "ultrafast",
+				"name":        "Ultrafast",
+				"description": "Ultra-low latency processing.",
+			},
+		}, model["service_tiers"], slug)
 		require.Nil(t, model["default_service_tier"])
 	}
 }
@@ -1795,10 +1819,10 @@ func TestFetchCodexModelsManifestShadowFreezesCredentialProxyAcrossRelink(t *tes
 	case request := <-requests:
 		require.Equal(t, "Bearer test-access-token", request.Header.Get("Authorization"))
 		require.Equal(t, "acc-123", request.Header.Get("ChatGPT-Account-ID"))
-		require.Equal(t, "codex_vscode/0.167.0 (Ubuntu 24.04; aarch64) vscode", request.UserAgent())
+		require.Equal(t, "codex_vscode/0.170.0 (Ubuntu 24.04; aarch64) vscode", request.UserAgent())
 		require.Equal(t, "codex_vscode", request.Header.Get("Originator"))
-		require.Equal(t, "0.167.0", request.Header.Get("Version"))
-		require.Equal(t, "0.167.0", request.URL.Query().Get("client_version"))
+		require.Equal(t, "0.170.0", request.Header.Get("Version"))
+		require.Equal(t, "0.170.0", request.URL.Query().Get("client_version"))
 		require.Equal(t, "/backend-api/codex/models", request.URL.Path)
 	default:
 		t.Fatal("credential owner proxy received no models request")
@@ -2273,10 +2297,10 @@ func TestFetchCodexModelsManifestNativeAPIKeyRequiresClientVersion(t *testing.T)
 	ctx := outboundidentity.WithResolver(context.Background(), settings.resolveOutboundIdentityKey)
 	_, err := svc.FetchCodexModelsManifest(ctx, account, "9.9.9", "")
 	require.NoError(t, err)
-	require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", captured.UserAgent())
+	require.Equal(t, "codex_cli_rs/0.170.0 (Ubuntu 24.04; x86_64) xterm-256color", captured.UserAgent())
 	require.Equal(t, "codex_cli_rs", captured.Header.Get("Originator"))
-	require.Equal(t, "0.167.0", captured.Header.Get("Version"))
-	require.Equal(t, "0.167.0", captured.URL.Query().Get("client_version"))
+	require.Equal(t, "0.170.0", captured.Header.Get("Version"))
+	require.Equal(t, "0.170.0", captured.URL.Query().Get("client_version"))
 }
 
 func TestFetchCodexModelsManifestRefreshRetainsIdentitySnapshot(t *testing.T) {
@@ -2349,7 +2373,7 @@ func TestFetchCodexModelsManifestAPIKeyCustomUpstream(t *testing.T) {
 	if gotRequest.Header.Get("Originator") != "codex-tui" {
 		t.Errorf("originator header: got %q", gotRequest.Header.Get("Originator"))
 	}
-	if gotRequest.Header.Get("Version") != "0.167.0" {
+	if gotRequest.Header.Get("Version") != "0.170.0" {
 		t.Errorf("version header: got %q", gotRequest.Header.Get("Version"))
 	}
 	if gotRequest.Header.Get("User-Agent") != codexModelsCustomAccountCurrentUserAgent {

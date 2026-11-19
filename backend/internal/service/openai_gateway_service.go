@@ -61,7 +61,7 @@ const (
 	// 陈旧版本可能被优先丢弃（HTTP 200 + 流内 server_is_overloaded）；非官方客户端配不出
 	// 官方身份时整体回退到本常量，因此它必须跟随官方 CLI 的当前发布版本，
 	// 落后多个版本会让这些请求稳定落在被优先丢弃的一侧。
-	codexCLIVersion = "0.167.0"
+	codexCLIVersion = "0.170.0"
 	// openAICodexProbeVersion is kept as an explicit alias for probe callers
 	// and version-consistency tests; both declarations must remain identical.
 	openAICodexProbeVersion = codexCLIVersion
@@ -302,14 +302,36 @@ type OpenAIUsage struct {
 	CacheCreationInputTokens    int `json:"cache_creation_input_tokens,omitempty"`
 	CacheCreation30mInputTokens int `json:"cache_creation_30m_input_tokens,omitempty"`
 	CacheCreation12hInputTokens int `json:"cache_creation_12h_input_tokens,omitempty"`
-	CacheReadInputTokens        int `json:"cache_read_input_tokens,omitempty"`
-	ImageOutputTokens           int `json:"image_output_tokens,omitempty"`
-	AudioOutputTokens           int `json:"audio_output_tokens,omitempty"`
+	// Anthropic-native upstreams reached through the OpenAI gateway keep their
+	// own 5m/1h write split; without these the split would flatten into the
+	// aggregate and every write would be priced as the cheaper 5m class.
+	CacheCreation5mInputTokens int `json:"cache_creation_5m_input_tokens,omitempty"`
+	CacheCreation1hInputTokens int `json:"cache_creation_1h_input_tokens,omitempty"`
+	CacheReadInputTokens       int `json:"cache_read_input_tokens,omitempty"`
+	ImageOutputTokens          int `json:"image_output_tokens,omitempty"`
+	AudioOutputTokens          int `json:"audio_output_tokens,omitempty"`
 	// CodexRolloutBudgetUnits carries the official `codex_rollout_budget_units`
 	// declaration from the response.completed usage payload (JSON number,
 	// fractional allowed). Parsed and recorded as a reserved billing dimension;
 	// nil means the upstream did not report it.
 	CodexRolloutBudgetUnits *float64 `json:"codex_rollout_budget_units,omitempty"`
+}
+
+// cacheCreationTotal 返回唯一的缓存写入量：正数聚合量优先，其次才是分档之和
+// （OpenAI 的 30m/12h 与 Anthropic 原生的 5m/1h，二者互斥）。
+// 只报分档的兼容上游不会被计成 0 写入，也不会因为分档过期而丢掉聚合量。
+func (usage OpenAIUsage) cacheCreationTotal() int {
+	if usage.CacheCreationInputTokens > 0 {
+		return usage.CacheCreationInputTokens
+	}
+	details := max(usage.CacheCreation30mInputTokens, 0) + max(usage.CacheCreation12hInputTokens, 0)
+	if details > 0 {
+		return details
+	}
+	if anthropicDetails := max(usage.CacheCreation5mInputTokens, 0) + max(usage.CacheCreation1hInputTokens, 0); anthropicDetails > 0 {
+		return anthropicDetails
+	}
+	return max(usage.CacheCreationInputTokens, 0)
 }
 
 // OpenAIForwardResult represents the result of forwarding
@@ -491,6 +513,7 @@ type OpenAIWSRetryMetricsSnapshot struct {
 	RetryBackoffMsTotal           int64 `json:"retry_backoff_ms_total"`
 	RetryExhaustedTotal           int64 `json:"retry_exhausted_total"`
 	NonRetryableFastFallbackTotal int64 `json:"non_retryable_fast_fallback_total"`
+	DeclaredLimitFallbackTotal    int64 `json:"declared_limit_fallback_total"`
 }
 
 type OpenAICompatibilityFallbackMetricsSnapshot struct {
@@ -513,6 +536,7 @@ type openAIWSRetryMetrics struct {
 	retryBackoffMs           atomic.Int64
 	retryExhausted           atomic.Int64
 	nonRetryableFastFallback atomic.Int64
+	declaredLimitFallbacks   atomic.Int64
 }
 
 type accountWriteThrottle struct {
@@ -1204,6 +1228,16 @@ func (s *OpenAIGatewayService) recordOpenAIWSNonRetryableFastFallback() {
 	s.openaiWSRetryMetrics.nonRetryableFastFallback.Add(1)
 }
 
+// recordOpenAIWSDeclaredLimitFallback counts turns a size declaration moved from
+// WebSocket to HTTP. It stays separate from the fast-fallback counter so an
+// oversized payload is not mistaken for a transport failure.
+func (s *OpenAIGatewayService) recordOpenAIWSDeclaredLimitFallback() {
+	if s == nil {
+		return
+	}
+	s.openaiWSRetryMetrics.declaredLimitFallbacks.Add(1)
+}
+
 func (s *OpenAIGatewayService) SnapshotOpenAIWSRetryMetrics() OpenAIWSRetryMetricsSnapshot {
 	if s == nil {
 		return OpenAIWSRetryMetricsSnapshot{}
@@ -1213,6 +1247,7 @@ func (s *OpenAIGatewayService) SnapshotOpenAIWSRetryMetrics() OpenAIWSRetryMetri
 		RetryBackoffMsTotal:           s.openaiWSRetryMetrics.retryBackoffMs.Load(),
 		RetryExhaustedTotal:           s.openaiWSRetryMetrics.retryExhausted.Load(),
 		NonRetryableFastFallbackTotal: s.openaiWSRetryMetrics.nonRetryableFastFallback.Load(),
+		DeclaredLimitFallbackTotal:    s.openaiWSRetryMetrics.declaredLimitFallbacks.Load(),
 	}
 }
 

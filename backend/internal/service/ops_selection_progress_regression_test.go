@@ -7,12 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/LuckyKuang/sub2api-plus/internal/config"
-	"github.com/LuckyKuang/sub2api-plus/internal/pkg/usagestats"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	"github.com/LuckyKuang/sub2api-plus/internal/pkg/usagestats"
 	"github.com/stretchr/testify/require"
 )
 
@@ -79,23 +78,40 @@ func TestAuditActualCompactExclusionKeepsSelectionEvidence(t *testing.T) {
 }
 
 func TestAuditGrokQuotaGateDoesNotReportInventedEmptyPool(t *testing.T) {
-	openaiGrokFreeQuotaGateCache = sync.Map{}
-	account := Account{ID: 1, Platform: PlatformGrok, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Credentials: map[string]any{"subscription_tier": "FREE"}}
-	usage := &grokFreeQuotaUsageRepoStub{stats: map[int64]*usagestats.AccountStats{1: {Tokens: 475_000}}}
-	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{account}}, cfg: grokFreeQuotaTestConfig(), usageLogRepo: usage}
-	scheduler := newDefaultOpenAIAccountScheduler(svc, newOpenAIAccountRuntimeStats()).(*defaultOpenAIAccountScheduler)
-	scheduler.filterGrokFreeQuotaAccounts(context.Background(), []Account{account})
-	require.Eventually(t, func() bool {
-		return len(scheduler.filterGrokFreeQuotaAccounts(context.Background(), []Account{account})) == 0
-	}, time.Second, 10*time.Millisecond)
-	_, _, _, _, err := scheduler.selectByLoadBalance(context.Background(), OpenAIAccountScheduleRequest{Platform: PlatformGrok, RequestedModel: "grok-4"})
-	require.ErrorIs(t, err, ErrNoAvailableAccounts)
-	d := OpsRoutingDiagnosticsFromSelectionError(err)
-	require.NotNil(t, d)
-	require.NotNil(t, d.CandidatePool)
-	require.Equal(t, 1, *d.CandidatePool, "one observed account was rejected by quota; the pool was not empty")
-	require.Equal(t, "grok_free_quota_soft_gate", d.SelectionReason)
-	require.Equal(t, map[string]int{"grok_free_quota_soft_gate": 1}, d.FilteredCandidates)
+	for _, scenario := range []struct {
+		name            string
+		warmLegacyCache bool
+	}{
+		{name: "scheduler cache"},
+		{name: "legacy account-list cache", warmLegacyCache: true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			ctx := context.Background()
+			account := Account{ID: 8820, Platform: PlatformGrok, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Credentials: map[string]any{"subscription_tier": "FREE"}}
+			accounts := []Account{account}
+			usage := &grokFreeQuotaUsageRepoStub{stats: map[int64]*usagestats.AccountStats{account.ID: {Tokens: 475_000}}}
+			svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: accounts}, cfg: grokFreeQuotaTestConfig(), usageLogRepo: usage}
+			scheduler := newDefaultOpenAIAccountScheduler(svc, newOpenAIAccountRuntimeStats()).(*defaultOpenAIAccountScheduler)
+			clearGrokFreeQuotaTestAccount(t, &openaiGrokFreeQuotaGateCache, account.ID)
+			if scenario.warmLegacyCache {
+				require.Eventually(t, func() bool {
+					return len(svc.filterGrokFreeQuotaAccountsForOpenAI(ctx, accounts)) == 0
+				}, 2*time.Second, 10*time.Millisecond)
+			} else {
+				require.Eventually(t, func() bool {
+					return len(scheduler.filterGrokFreeQuotaAccounts(ctx, accounts)) == 0
+				}, 2*time.Second, 10*time.Millisecond)
+			}
+			_, _, _, _, err := scheduler.selectByLoadBalance(ctx, OpenAIAccountScheduleRequest{Platform: PlatformGrok, RequestedModel: "grok-4"})
+			require.ErrorIs(t, err, ErrNoAvailableAccounts)
+			d := OpsRoutingDiagnosticsFromSelectionError(err)
+			require.NotNil(t, d)
+			require.NotNil(t, d.CandidatePool)
+			require.Equal(t, 1, *d.CandidatePool, "one observed account was rejected by quota")
+			require.Equal(t, "grok_free_quota_soft_gate", d.SelectionReason)
+			require.Equal(t, map[string]int{"grok_free_quota_soft_gate": 1}, d.FilteredCandidates)
+		})
+	}
 }
 
 func TestAuditNewUnknownSelectionCannotBorrowEarlierPool(t *testing.T) {

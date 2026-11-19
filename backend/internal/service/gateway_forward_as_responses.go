@@ -332,20 +332,19 @@ func mergeAnthropicUsage(dst *ClaudeUsage, src apicompat.AnthropicUsage) {
 	if cacheReadTokens == 0 && src.PromptCacheHitTokens != nil {
 		cacheReadTokens = max(*src.PromptCacheHitTokens, 0)
 	}
+	var fiveMinutes, oneHour *int
+	if src.CacheCreation != nil {
+		fiveMinutes = src.CacheCreation.Ephemeral5mInputTokens
+		oneHour = src.CacheCreation.Ephemeral1hInputTokens
+	}
+	dst.mergeCacheCreation(src.CacheCreationInputTokens, fiveMinutes, oneHour)
 
 	// Some Anthropic-compatible providers retain OpenAI-style prompt/cache
 	// fields. Prefer those authoritative totals or hit/miss buckets over the
 	// overloaded input_tokens field. This covers Kimi's changing stream
 	// semantics as well as GLM/DeepSeek cache aliases.
-	if src.PromptTokens > 0 || src.PromptCacheHitTokens != nil || src.PromptCacheMissTokens != nil {
-		if src.PromptCacheMissTokens != nil {
-			dst.InputTokens = max(*src.PromptCacheMissTokens, 0)
-		} else {
-			dst.InputTokens = max(src.PromptTokens-cacheReadTokens-src.CacheCreationInputTokens, 0)
-		}
-		dst.CacheReadInputTokens = cacheReadTokens
-		dst.CacheCreationInputTokens = src.CacheCreationInputTokens
-	} else {
+	hasPromptTotal := src.PromptTokens > 0 || src.PromptCacheHitTokens != nil || src.PromptCacheMissTokens != nil
+	if !hasPromptTotal && !dst.promptTotalPresent {
 		// Without an authoritative prompt total or miss bucket, input_tokens is
 		// provider-specific: it may already be the uncached bucket, or it may be
 		// a total from an earlier event. Do not infer a subtraction merely because
@@ -354,15 +353,38 @@ func mergeAnthropicUsage(dst *ClaudeUsage, src apicompat.AnthropicUsage) {
 		if src.InputTokens > 0 {
 			dst.InputTokens = src.InputTokens
 		}
-		if cacheReadTokens > 0 {
-			dst.CacheReadInputTokens = cacheReadTokens
-		}
-		if src.CacheCreationInputTokens > 0 {
-			dst.CacheCreationInputTokens = src.CacheCreationInputTokens
-		}
 	}
+	if cacheReadTokens > 0 || dst.CacheReadInputTokens <= 0 {
+		dst.CacheReadInputTokens = max(cacheReadTokens, 0)
+	}
+	normalizeAnthropicPromptTotal(dst, src.PromptTokens, src.PromptCacheMissTokens)
 	if src.OutputTokens > 0 {
 		dst.OutputTokens = src.OutputTokens
+	}
+}
+
+// normalizeAnthropicPromptTotal recomputes the uncached input bucket from the
+// provider's own prompt total whenever that total is known. A compatible
+// provider reports prompt_tokens once and then keeps refining only the cache
+// buckets, so remembering the total is what keeps
+// `input + cache_read + cache_write == prompt_tokens` true across those
+// cache-only updates. A cache-miss bucket, when reported, is authoritative and
+// wins outright.
+func normalizeAnthropicPromptTotal(usage *ClaudeUsage, promptTokens int, promptCacheMissTokens *int) {
+	if usage == nil {
+		return
+	}
+	if promptCacheMissTokens != nil {
+		usage.promptTotalPresent = false
+		usage.InputTokens = max(*promptCacheMissTokens, 0)
+		return
+	}
+	if promptTokens > 0 {
+		usage.promptTotalTokens = promptTokens
+		usage.promptTotalPresent = true
+	}
+	if usage.promptTotalPresent {
+		usage.InputTokens = max(usage.promptTotalTokens-usage.CacheReadInputTokens-usage.cacheCreationTotal(), 0)
 	}
 }
 
@@ -370,7 +392,9 @@ func syncAnthropicResponsesUsage(state *apicompat.AnthropicEventToResponsesState
 	state.InputTokens = usage.InputTokens
 	state.OutputTokens = usage.OutputTokens
 	state.CacheReadInputTokens = usage.CacheReadInputTokens
-	state.CacheCreationInputTokens = usage.CacheCreationInputTokens
+	// 同步的是已归一化的权威总量，必须按“已声明”写入：
+	// 否则后续帧里过期的 0 明细会把它重新推导成 0。
+	state.SetCacheCreationTotal(usage.cacheCreationTotal())
 }
 
 func normalizeAnthropicEventUsageForResponses(event *apicompat.AnthropicStreamEvent, usage ClaudeUsage) {
@@ -381,7 +405,7 @@ func normalizeAnthropicEventUsageForResponses(event *apicompat.AnthropicStreamEv
 		dst.InputTokens = usage.InputTokens
 		dst.OutputTokens = usage.OutputTokens
 		dst.CacheReadInputTokens = usage.CacheReadInputTokens
-		dst.CacheCreationInputTokens = usage.CacheCreationInputTokens
+		dst.CacheCreationInputTokens = usage.cacheCreationTotal()
 	}
 	normalize(event.Usage)
 	if event.Message != nil {
@@ -529,14 +553,10 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
 		return nil, fmt.Errorf("upstream stream ended without response")
 	}
 
-	// Update usage from accumulated delta
-	if usage.InputTokens > 0 || usage.OutputTokens > 0 {
-		finalResp.Usage = apicompat.AnthropicUsage{
-			InputTokens:              usage.InputTokens,
-			OutputTokens:             usage.OutputTokens,
-			CacheCreationInputTokens: usage.CacheCreationInputTokens,
-			CacheReadInputTokens:     usage.CacheReadInputTokens,
-		}
+	// 累积 usage 保留了缓存明细与 prompt 总量对账结果，直接回填响应；
+	// 重建 AnthropicUsage 会把 5m/1h 与推导出的聚合量一起丢掉。
+	if usage.hasReportedTokens() {
+		normalizeAnthropicEventUsageForResponses(&apicompat.AnthropicStreamEvent{Message: finalResp}, usage)
 	}
 
 	// Convert to Responses format

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -329,14 +330,15 @@ func openAIConfiguredCodexModelIDsForGroup(accounts []Account, group *Group) []s
 const (
 	configuredCodexModelPriority     = 50
 	configuredCodexCustomDescription = "Custom model routed through Sub2API."
-	configuredCodexFallbackContext   = 272_000
-	configuredCodexDeepSeekV4Context = 1_000_000
-	configuredCodexGrokContext       = 500_000
-	configuredCodexGrokBuildContext  = 256_000
-	configuredCodexGPT56MaxContext   = 872_000
-	// Plus preserves the reviewed Astra manifest ceiling; the official 1.05M
-	// catalog hint must not silently expand the Plus routing contract.
-	configuredCodexGPT6AstraMaxContext = 872_000
+	// configuredCodexShellType keeps the shell tool the audited gateway already
+	// covers. The official snapshot moved to shell_command; adopting it is a
+	// separate protocol change with its own audit-coverage work.
+	configuredCodexShellType           = "unified_exec"
+	configuredCodexFallbackContext     = 272_000
+	configuredCodexDeepSeekV4Context   = 1_000_000
+	configuredCodexGrokContext         = 500_000
+	configuredCodexGrokBuildContext    = 256_000
+	configuredCodexGPT56MaxContext     = 872_000
 	configuredCodexToolOutputMaxTokens = 10_000
 )
 
@@ -439,7 +441,7 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
 		SupportedReasoningLevels: []configuredCodexReasoningLevel{
 			{Effort: "none", Description: configuredCodexReasoningLevelDescription("none")},
 		},
-		ShellType:                         "unified_exec",
+		ShellType:                         configuredCodexShellType,
 		Visibility:                        "list",
 		SupportedInAPI:                    true,
 		Priority:                          configuredCodexModelPriority,
@@ -522,24 +524,9 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
 			if isOpenAIGPT56Model(modelID) || openai.IsGPT6SolOrLunaModelSpelling(modelID) || openai.IsGPT61SolModelSpelling(modelID) {
 				descriptor.MaxContextWindow = configuredCodexGPT56MaxContext
 			}
-			if isOpenAIGPT6AstraModel(modelID) {
-				descriptor.Priority = 1
-				descriptor.ContextWindow = configuredCodexFallbackContext
-				descriptor.MaxContextWindow = configuredCodexGPT6AstraMaxContext
-				descriptor.InputModalities = []string{"text", "image"}
-				descriptor.SupportsImageDetailOriginal = true
-				descriptor.WebSearchToolType = "text_and_image"
-				applyPatchToolType := "freeform"
-				descriptor.ApplyPatchToolType = &applyPatchToolType
-				descriptor.ToolMode = "code_mode_only"
-				descriptor.MultiAgentVersion = "v2"
-				multiAgentEffort := "xhigh"
-				descriptor.MultiAgentReasoningEffort = &multiAgentEffort
-				descriptor.PreferWebSockets = true
-				descriptor.MinimalClientVersion = "0.153.0"
-				descriptor.NodeREPLAutoReviewRequired = true
-				descriptor.CompHash = "3000"
-			}
+			// Astra's priority, windows, tool mode, multi-agent and comp-hash
+			// values live in the pinned official catalog; only models outside it
+			// reach this synthesis path.
 		}
 		if SupportsVerbosity(modelID) {
 			defaultVerbosity := "low"
@@ -548,26 +535,73 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
 		}
 	}
 
-	if openai.IsGPT61SolModelSpelling(modelID) {
-		if err := json.Unmarshal(openai.CodexGPT61SolMetadata, &descriptor); err != nil {
-			panic(err)
-		}
-		descriptor.Slug = modelID
-		descriptor.officialMetadata = openai.CodexGPT61SolMetadata
-		// The October 12, 2026 Codex/Work default increased to 500k after
-		// the bundled official snapshot. Explicit upstream metadata still wins.
-		descriptor.ContextWindow = 500_000
-	}
-	if openai.IsGPT61TerraModelSpelling(modelID) {
-		// The Codex descriptor differs from the API model page: Codex offers
-		// low through ultra with a 500k default window. API requests keep none.
-		if err := json.Unmarshal(openai.CodexGPT61TerraMetadata, &descriptor); err != nil {
-			panic(err)
-		}
-		descriptor.Slug = modelID
-		descriptor.officialMetadata = openai.CodexGPT61TerraMetadata
-	}
+	applyOfficialCodexModelDescriptor(&descriptor, modelID)
 	return descriptor
+}
+
+// applyOfficialCodexModelDescriptor replaces a synthesized descriptor with the
+// pinned official one whenever the embedded catalog knows the model, then
+// restores the fields Plus owns. Official values stay authoritative for
+// everything the client reads (context window, reasoning levels, priorities,
+// model messages), so an identity upgrade never keeps yesterday's numbers.
+func applyOfficialCodexModelDescriptor(descriptor *configuredCodexModelDescriptor, modelID string) {
+	if descriptor == nil {
+		return
+	}
+	official, ok := openai.CodexModelCatalogMetadata(modelID)
+	if !ok {
+		return
+	}
+	if err := json.Unmarshal(official, descriptor); err != nil {
+		panic(err)
+	}
+	descriptor.Slug = strings.TrimSpace(modelID)
+	descriptor.officialMetadata = official
+	// Plus owns the catalog policy below; the official file never carries it.
+	// 1. A model an administrator configured into a group must stay selectable
+	//    even when the official catalog hides it (daybreak, codex-auto-review).
+	descriptor.Visibility = "list"
+	// 2. Ultrafast is a Plus declaration: the official catalog only knows
+	//    priority/fast, so it can never arrive from the embedded file. Append it
+	//    without touching the official entries or their published descriptions
+	//    (fast factors differ per model: 1.5x for 6.1 Terra, 2x for 6.x).
+	if configuredCodexSupportsUltrafastServiceTier(descriptor.Slug) && !codexServiceTiersInclude(descriptor.ServiceTiers, OpenAIFastTierUltrafast) {
+		descriptor.ServiceTiers = append(descriptor.ServiceTiers, configuredCodexServiceTier{
+			ID:          OpenAIFastTierUltrafast,
+			Name:        "Ultrafast",
+			Description: "Ultra-low latency processing.",
+		})
+	}
+	// 3. Keep the audited shell tool surface. The 0.170 snapshot declares
+	//    shell_command for every model; switching the tool the client announces
+	//    is a protocol change that needs its own security-audit coverage
+	//    revision, not a side effect of a catalog refresh.
+	descriptor.ShellType = configuredCodexShellType
+	// 4. Advertise image input only where Plus has verified it. The 0.170
+	//    snapshot declares image input for every model, but a group may route the
+	//    same slug to a provider without vision; a false claim makes the client
+	//    send images that upstream rejects. A live capability snapshot still
+	//    widens this later in the manifest builder.
+	if configuredCodexDefaultsToImageInput(descriptor.Slug) {
+		descriptor.InputModalities = []string{"text", "image"}
+	} else {
+		descriptor.InputModalities = []string{"text"}
+		descriptor.SupportsImageDetailOriginal = false
+	}
+}
+
+// configuredCodexDefaultsToImageInput lists the models whose image support Plus
+// has verified independently of a live capability snapshot.
+func configuredCodexDefaultsToImageInput(modelID string) bool {
+	canonical := canonicalizeOpenAIModelAliasSpelling(modelID)
+	switch {
+	case openai.IsGPT61SolModelSpelling(canonical), openai.IsGPT61TerraModelSpelling(canonical):
+		return true
+	case isOpenAIGPT6AstraModel(canonical):
+		return true
+	default:
+		return false
+	}
 }
 
 func configuredCodexServiceTiersForModel(modelID string) []configuredCodexServiceTier {
@@ -589,6 +623,16 @@ func configuredCodexServiceTiersForModel(modelID string) []configuredCodexServic
 	return tiers
 }
 
+// codexServiceTiersInclude reports whether the tier list already declares id.
+func codexServiceTiersInclude(tiers []configuredCodexServiceTier, id string) bool {
+	for _, tier := range tiers {
+		if tier.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func configuredCodexSupportsPriorityServiceTier(modelID string) bool {
 	normalized := canonicalizeOpenAIModelAliasSpelling(modelID)
 	if isOpenAIGPT6AstraModel(normalized) {
@@ -599,8 +643,8 @@ func configuredCodexSupportsPriorityServiceTier(modelID string) bool {
 			return true
 		}
 	}
-	// GPT-6 Astra advertises Fast via service_tier=priority in public model metadata.
-	return isOpenAIGPT6AstraModel(modelID)
+	// GPT-6 models advertise Fast via service_tier=priority in public model metadata.
+	return isOpenAIGPT6Model(modelID)
 }
 
 func configuredCodexSupportsUltrafastServiceTier(modelID string) bool {
@@ -2136,6 +2180,8 @@ func CodexModelsManifestETag(body []byte) string {
 }
 
 var apiKeyCodexModelsWithoutResponsesLite = map[string]struct{}{
+	"gpt-6.2-sol":   {},
+	"gpt-6.2-astra": {},
 	"gpt-6.1-terra": {},
 	"gpt-6.1-sol":   {},
 	"gpt-6-astra":   {},
@@ -2722,6 +2768,22 @@ func buildCodexModelsManifestURL(endpoint string, appendModelsPath bool, clientV
 	return requestURL, nil
 }
 
+// configuredCodexDescriptorFieldNames lists the JSON keys this struct models.
+// The official merge must not fill a modelled key the descriptor omitted on
+// purpose.
+var configuredCodexDescriptorFieldNames = func() map[string]struct{} {
+	typ := reflect.TypeOf(configuredCodexModelDescriptor{})
+	names := make(map[string]struct{}, typ.NumField())
+	for i := 0; i < typ.NumField(); i++ {
+		tag := strings.Split(typ.Field(i).Tag.Get("json"), ",")[0]
+		if tag == "" || tag == "-" {
+			continue
+		}
+		names[tag] = struct{}{}
+	}
+	return names
+}()
+
 // MarshalJSON keeps fields added by the official client, including nested tool
 // instructions, while the generated descriptor still controls routing metadata.
 func (d configuredCodexModelDescriptor) MarshalJSON() ([]byte, error) {
@@ -2738,9 +2800,17 @@ func (d configuredCodexModelDescriptor) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	for key, value := range official {
-		if _, exists := fields[key]; !exists {
-			fields[key] = value
+		if _, exists := fields[key]; exists {
+			continue
 		}
+		// A modelled field the descriptor deliberately omitted was cleared by
+		// policy (for example a fail-closed reasoning slider). Re-adding it from
+		// the official snapshot would resurrect the value the policy rejected, so
+		// only fields this struct does not model pass through.
+		if _, modelled := configuredCodexDescriptorFieldNames[key]; modelled {
+			continue
+		}
+		fields[key] = value
 	}
 	var messages, officialMessages map[string]json.RawMessage
 	if err := json.Unmarshal(fields["model_messages"], &messages); err != nil {

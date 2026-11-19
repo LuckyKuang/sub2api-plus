@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math/bits"
 	"net/http"
 	"strconv"
 	"strings"
@@ -166,11 +168,21 @@ func resolveCodexAccountIdentityValueForOwner(ctx context.Context, account *Acco
 		// shape rather than invent a compaction transition.
 		return resolveOutboundMappedID(ctx, "codex-legacy-window-v2", fmt.Sprintf("%d:%s:%s", apiKeyID, namespace, raw), 7)
 	}
-	scope := fmt.Sprintf("tenant:%d:owner:%s:kind:%s:value:%s", apiKeyID, namespace, kind, raw)
+	scope := fmt.Sprintf("tenant:%d:owner:%s:kind:%s", apiKeyID, namespace, kind)
 	version := 7
 	if kind == "installation" {
 		version = 4
 	}
+	if kind == "context-window" {
+		// Codex 0.170 sends context_window_id in its model-facing display form
+		// (`window003`) whenever the window was allocated instead of restored
+		// from a UUIDv7 rollout. Turn metadata carries a string, so the tenant
+		// mapping keeps the salt and digit width and only permutes the number.
+		if mapped, ok := resolveCodexModelFacingIdentityValue(scope, raw); ok {
+			return mapped, nil
+		}
+	}
+	scope += ":value:" + raw
 	if id, err := uuid.Parse(raw); err == nil && id.Version() == 7 && version == 7 {
 		digest := sha256.Sum256([]byte("codex-id-v2:" + scope))
 		copy(id[6:], digest[:10])
@@ -179,6 +191,70 @@ func resolveCodexAccountIdentityValueForOwner(ctx context.Context, account *Acco
 		return id.String(), nil
 	}
 	return resolveOutboundMappedID(ctx, "codex-identity-v2", scope, version)
+}
+
+// resolveCodexModelFacingIdentityValue maps a model-facing ID (`window003`) to a
+// tenant-specific value of the same shape. Codex allocates these IDs from a salt
+// plus zero-padded decimal digits, and turn metadata must carry the display form
+// as a string, so an opaque UUID would both change the wire shape and lose the
+// token economy the format exists for.
+func resolveCodexModelFacingIdentityValue(scope, raw string) (string, bool) {
+	digits := 0
+	for digits < len(raw) && raw[len(raw)-1-digits] >= '0' && raw[len(raw)-1-digits] <= '9' {
+		digits++
+	}
+	// ModelFacingId pads its decimal value to whole groups of three digits, so a
+	// width outside that ladder is not an allocated ID and keeps the generic map.
+	if digits < 3 || digits > 21 || digits%3 != 0 || digits == len(raw) {
+		return "", false
+	}
+	salt := raw[:len(raw)-digits]
+	for i := 0; i < len(salt); i++ {
+		if salt[i] < 'a' || salt[i] > 'z' {
+			return "", false
+		}
+	}
+	value, err := strconv.ParseUint(raw[len(salt):], 10, 64)
+	if err != nil {
+		return "", false
+	}
+	start := uint64(0)
+	end := uint64(999)
+	for width := 3; width < digits; width += 3 {
+		start = end + 1
+		if start > ^uint64(0)/1000 {
+			end = ^uint64(0)
+		} else {
+			end = start*1000 - 1
+		}
+	}
+	if value < start || value > end {
+		return "", false
+	}
+
+	// Like Codex's allocator, use a Feistel permutation and walk the cycle
+	// until the result is back in the decimal pool. Each tenant and owner get
+	// their own permutation, and distinct windows in that scope stay distinct.
+	size := end - start + 1
+	halfBits := (bits.Len64(size-1) + 1) / 2
+	halfMask := uint64(1)<<halfBits - 1
+	seed := sha256.Sum256(fmt.Appendf(nil, "codex-context-window-v3:%s:salt:%s:width:%d", scope, salt, digits))
+	var input [sha256.Size + 1 + 8]byte
+	copy(input[:], seed[:])
+	slot := value - start
+	for {
+		left, right := slot>>halfBits, slot&halfMask
+		for round := byte(0); round < 4; round++ {
+			input[sha256.Size] = round
+			binary.LittleEndian.PutUint64(input[sha256.Size+1:], right)
+			hash := sha256.Sum256(input[:])
+			left, right = right, left^(binary.LittleEndian.Uint64(hash[:])&halfMask)
+		}
+		slot = left<<halfBits | right
+		if slot < size {
+			return fmt.Sprintf("%s%0*d", salt, digits, start+slot), true
+		}
+	}
 }
 
 var codexAccountIdentityFields = []struct{ name, kind string }{

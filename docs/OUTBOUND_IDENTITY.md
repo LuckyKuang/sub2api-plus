@@ -10,7 +10,7 @@ The optional [managed CLI mode](CODEX_CLI.md) uses the fixed official
 `responses-api-proxy` for existing gateway traffic only when both the global
 bridge environment and credential-owning account switches are enabled. It also
 retains the distinct `POST /v1/codex-cli/responses` agent task route. Both modes
-require global permission. Its pinned executable version is `0.167.0`; installing
+require global permission. Its pinned executable version is `0.170.0`; installing
 it never automatically enables a transport or updates Codex identity declarations.
 Runtime installation and wire identity are
 separate checks. A system CLI can execute only after both its exact version and
@@ -21,8 +21,8 @@ Bridge and task execution resolve the same credential-owning account identity as
 gateway forwarding: valid `credentials.user_agent` → valid global
 `openai_codex_user_agent` → compiled default. Invalid/empty candidates fall
 through only to the next source. The exact default remains
-`codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color`, with
-`Originator: codex_cli_rs` and `Version: 0.167.0`. Running an official binary
+`codex_cli_rs/0.170.0 (Ubuntu 24.04; x86_64) xterm-256color`, with
+`Originator: codex_cli_rs` and `Version: 0.170.0`. Running an official binary
 does not authorize its ambient OS, architecture, terminal or default headers
 to replace the selected identity.
 
@@ -163,8 +163,8 @@ credential-owner metadata. Existing API-key explicit keys may see one cache
 miss when upgrading to this shared derivation; subsequent owner changes keep
 the key stable. Explicit OAuth sharing retains its authorized scope.
 The Codex source-priority matrix below is unchanged. Its manually reviewed
-compiled version is `0.167.0`; the client family and environment stay fixed.
-The manual November 7 upgrade retains the account/global/default source matrix
+compiled version is `0.170.0`; the client family and environment stay fixed.
+The manual November 18 upgrade retains the account/global/default source matrix
 and administrator version pins. Government endpoint selection for recognized
 native OpenAI API-key issuance prefixes and `X-OpenAI-Fedramp` comes from the
 acquired credential owner, never from the inbound client or a generic header
@@ -182,7 +182,7 @@ SDK versions do not update this baseline.
 
 | Preset | Exact default OS/architecture declarations |
 | --- | --- |
-| Codex | `codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color` |
+| Codex | `codex_cli_rs/0.170.0 (Ubuntu 24.04; x86_64) xterm-256color` |
 | Claude | `X-Stainless-OS: Linux`, `X-Stainless-Arch: x64` |
 | Gemini | `GeminiCLI/0.1.5 (Linux; x64)` |
 | Grok | `grok-shell/1.0.45 (linux; x86_64)` |
@@ -1560,7 +1560,7 @@ The reviewed sources and selected releases are recorded in
 Only the four manually selected product defaults changed; all source-priority
 matrices, administrator version pins, OS/architecture/terminal declarations and
 locked SDK fingerprints retain their contracts. The managed CLI executable is
-pinned at `0.167.0`, matching the reviewed compiled default identity. Settings
+pinned at `0.170.0`, matching the reviewed compiled default identity. Settings
 can explicitly install or update this reviewed runtime; archive and native
 executable digests remain independently pinned. The version-consistency gate
 rejects a runtime or browser catalog that lags behind the compiled default.
@@ -1588,7 +1588,7 @@ reuses the captured credential owner. Installation is declared in
 account-wide session ID or a direct `x-codex-installation-id` header. Inference,
 quota, referral and retry paths retain the same owner/proxy snapshot; the
 referral adapter is injected through `ProvideOpenAIQuotaService` alongside the
-existing identity resolver. Codex remains pinned to 0.167.0. Resource limits,
+existing identity resolver. Codex remains pinned to 0.170.0. Resource limits,
 MCP dependency additions and model metadata never select a new client identity.
 The existing owner/wire matrices and
 `TestProxyOpenAIWSHTTPBridgeTurn_StagesCodexFingerprint` cover these boundaries.

@@ -50,7 +50,7 @@ func TestOfficialCodexGIFControlsReachImagesEndpoint(t *testing.T) {
 						require.Equal(t, gjson.GetBytes(body, "frame_count").Int(), gjson.GetBytes(upstream.lastBody, "frame_count").Int())
 						require.Equal(t, gjson.GetBytes(body, "frame_duration_ms").Int(), gjson.GetBytes(upstream.lastBody, "frame_duration_ms").Int())
 					}
-					require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", upstream.lastReq.UserAgent())
+					require.Equal(t, "codex_cli_rs/0.170.0 (Ubuntu 24.04; x86_64) xterm-256color", upstream.lastReq.UserAgent())
 					if kind != AccountTypeAPIKey {
 						require.Equal(t, "/backend-api/codex/images/"+endpoint, upstream.lastReq.URL.Path)
 						require.True(t, strings.HasPrefix(gjson.GetBytes(rec.Body.Bytes(), "data.0.url").String(), "data:image/gif;base64,"))

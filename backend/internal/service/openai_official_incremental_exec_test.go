@@ -101,9 +101,9 @@ func TestResponsesLiteOfficialIncrementalExecForward(t *testing.T) {
 				require.NotNil(t, upstream.lastReq)
 				assertOfficialIncrementalExecHistory(t, upstream.lastBody)
 				require.Equal(t, "true", upstream.lastReq.Header.Get(responsesLiteHeader))
-				require.Equal(t, "codex_cli_rs/0.167.0 (Ubuntu 24.04; x86_64) xterm-256color", upstream.lastReq.Header.Get("User-Agent"))
+				require.Equal(t, "codex_cli_rs/0.170.0 (Ubuntu 24.04; x86_64) xterm-256color", upstream.lastReq.Header.Get("User-Agent"))
 				require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("Originator"))
-				require.Equal(t, "0.167.0", upstream.lastReq.Header.Get("Version"))
+				require.Equal(t, "0.170.0", upstream.lastReq.Header.Get("Version"))
 				require.Contains(t, rec.Body.String(), "resp_incremental")
 			})
 		}

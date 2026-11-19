@@ -48,6 +48,18 @@ type openAIWSPolicyEnforcingFrameConn struct {
 	onBlock func(blocked *OpenAIFastBlockedError)
 }
 
+type openAIWSDeclaredLimitFrameConn struct {
+	openaiwsv2.FrameConn
+	limit int
+}
+
+func (c *openAIWSDeclaredLimitFrameConn) WriteFrame(ctx context.Context, msgType coderws.MessageType, payload []byte) error {
+	if len(payload) > c.limit {
+		return newOpenAIWSDeclaredLimitClientClose(&openAIWSDeclaredLimitExceededError{limit: c.limit, length: len(payload)})
+	}
+	return c.FrameConn.WriteFrame(ctx, msgType, payload)
+}
+
 func readNextOpenAIWSPassthroughResponseCreate(
 	ctx context.Context,
 	client openaiwsv2.FrameConn,
@@ -999,6 +1011,10 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	}
 	if wire, ok := upstreamConn.(*coderOpenAIWSClientConn); ok {
 		upstreamFrameConn = &openAIWSObservedFrameConn{FrameConn: upstreamFrameConn, headers: wire.outboundHeaders, observation: &usageMeta.outbound}
+	}
+	if limit, ok := parseOpenAIWSDeclaredMaxMessageBytes(handshakeHeaders); ok {
+		openAIWSDeclaredLimits.remember(openAIWSDeclaredLimitAccountKey(account), limit)
+		upstreamFrameConn = &openAIWSDeclaredLimitFrameConn{FrameConn: upstreamFrameConn, limit: limit}
 	}
 	relayUpstreamFrameConn := &openAIWSPassthroughFirstOutputFrameConn{
 		inner:             upstreamFrameConn,

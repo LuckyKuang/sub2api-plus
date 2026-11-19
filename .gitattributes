@@ -28,3 +28,7 @@ deploy/.env.example text eol=lf
 
 # Dockerfile
 Dockerfile text eol=lf
+
+# 官方 Codex 模型目录必须与上游 models.json 字节一致（含 LF），
+# 否则内部摘要校验 TestCodexModelCatalogMatchesPinnedOfficialBytes 会失败
+backend/internal/pkg/openai/codex_models_catalog.json -text

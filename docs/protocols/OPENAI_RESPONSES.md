@@ -1289,3 +1289,76 @@ If a concurrency keepalive already committed SSE response headers, a later
 upstream error uses an SSE error event. Before streaming begins the endpoint
 retains the applicable HTTP error response. The concurrency ping setting is
 documented in [Docker configuration](../../deploy/DOCKER.md#startup-and-database-recovery).
+
+## v0.2.23 cache-creation accounting
+
+Anthropic's `cache_creation` breakdown decides the TTL classes a write is billed
+at, while the flat `cache_creation_input_tokens` is the provider's own total.
+`ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens` are read as pointers,
+so an explicit zero means "no write in this class" rather than "field omitted".
+
+Both quantities resolve into one total, in this order: a positive flat total, then
+the breakdown sum, then zero. A positive total wins because a stale breakdown can
+report zero classes while the aggregate still carries the write; the breakdown
+only becomes the source when the total is missing or zero, which is how
+compatible providers that report the split alone stay billable. Billing caps a
+contradictory breakdown at that total instead of trusting the classes. The
+buffered converter, the streaming state machine and the service usage merge all
+resolve the same total, so the uncached input bucket
+(`prompt_tokens - cache_read - cache_creation`) cannot drift.
+
+`cache_write_tokens` and `cache_creation_tokens` remain two spellings of one
+quantity. A declared `cache_write_tokens` now wins even when its value is zero or
+negative: presence is preserved through JSON round trips, a negative value clamps
+to zero, and the older alias is not counted on top. Clients that omit the field
+keep the previous fallback to `cache_creation_tokens`. The resolved total is also
+what `input_tokens_details` advertises, so a zero write leaves no uncounted
+alias in the detail block. See [channel pricing](../CHANNEL_PRICING.md) for the
+price side of the TTL classes.
+
+### Compatible snapshot semantics
+
+Anthropic-compatible providers replay the whole usage object. A later
+`message_delta` therefore often repeats `cache_read_input_tokens` and
+`cache_creation_input_tokens` as zeros after `message_start` already reported real
+values. Treating those repetitions as authoritative silently erased the write and
+under-billed the request, so a zero now only applies when the current value is
+also zero; a positive value always wins. The same rule governs the compat prompt
+normalization path, the passthrough SSE reader and the Antigravity extractor.
+
+The generic SSE reader, passthrough SSE reader and Anthropic bridges track whether
+the total came from a positive aggregate or the TTL breakdown. A TTL-only update
+recomputes a derived total. Once the provider sends a positive aggregate, later
+TTL fields update the classes while that aggregate continues to govern the total.
+These readers also retain `message_start.output_tokens` if a later frame repeats
+zero. The Antigravity forwarder carries both parsed TTL classes into settlement.
+See `gateway_cache_snapshot_semantics_test.go`.
+
+For Responses-to-Messages conversion, a terminal frame's `response.usage` governs
+the client message and settlement. The frame's top-level `usage` provides the
+fallback when the nested field is absent.
+
+### Prompt total reconciliation
+
+A compatible provider reports `prompt_tokens` as the total of Anthropic's three
+buckets, then keeps refining only the cache buckets in later frames. The gateway
+remembers that total on the usage object, so a frame that carries nothing but
+`cache_read_input_tokens` still recomputes the uncached bucket as
+`prompt_tokens - cache_read - cache_write`. Without it a cache-only update grew the
+cache bucket while the uncached bucket kept its old value, and the three buckets
+stopped summing to the provider's own total.
+
+A reported `prompt_cache_miss_tokens` is authoritative and wins outright; it also
+invalidates the remembered total, because hit and miss describe the same quantity
+in different shapes and mixing them double counts. The reconciliation runs in the
+SSE patch merge, the Anthropic usage merge and the compat prompt normalization, and
+`message_start` and `message_delta` both feed it. See
+`anthropic_prompt_total_reconcile_test.go`.
+
+Buffered conversions (Responses, Chat Completions, and both native-Anthropic
+bridges) now rebuild the client response from the merged usage instead of a
+stripped structure. Previously those paths copied only input, output, cache-read
+and the flat cache-write fields, so a response whose writes arrived as a 5m/1h
+breakdown reported `cache_creation_input_tokens: 0` to the client while the
+request was billed for the writes. A stream that reported only cache buckets also
+counts as reported usage, so the guard no longer discards it as "nothing to say".

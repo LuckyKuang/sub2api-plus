@@ -15,8 +15,9 @@ const compatPromptCacheKeyPrefix = "compat_cc_"
 func shouldAutoInjectPromptCacheKeyForCompat(model string) bool {
 	trimmed := strings.TrimSpace(strings.ToLower(model))
 	canonical := canonicalizeOpenAIModelAliasSpelling(trimmed)
-	// GPT-6 Sol/Luna and GPT-6.1 Sol/Terra share the supported Responses cache identity contract.
-	if canonical == "gpt-6-astra" || openai.IsGPT6SolOrLunaModelSpelling(canonical) || openai.IsGPT61SolModelSpelling(canonical) || openai.IsGPT61TerraModelSpelling(canonical) {
+	// GPT-6 Sol/Luna, GPT-6.1 Sol/Terra and GPT-6.2 Sol/Astra share the supported
+	// Responses cache identity contract.
+	if openai.GPT62ModelID(canonical) != "" || canonical == "gpt-6-astra" || openai.IsGPT6SolOrLunaModelSpelling(canonical) || openai.IsGPT61SolModelSpelling(canonical) || openai.IsGPT61TerraModelSpelling(canonical) {
 		return true
 	}
 	// 仅对 Responses 兼容路径支持的 GPT-5 族开启自动注入，避免 normalizeCodexModel
