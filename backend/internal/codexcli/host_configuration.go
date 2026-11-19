@@ -16,7 +16,7 @@ const managedPreferencesTimeout = 5 * time.Second
 
 // The reviewed CLI reads these Unix system sources independently of CODEX_HOME.
 // Its legacy managed source and macOS forced preferences even outrank -c flags.
-// Source: openai/codex commit 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a,
+// Source: openai/codex rust-v0.170.0 (29eb79e9866b3262a777fdf8195c1b9e63684c91),
 // codex-rs/config/src/loader/{mod.rs,layer_io.rs,macos.rs}.
 var hostConfigurationPaths = [...]string{
 	"/etc/codex/config.toml",

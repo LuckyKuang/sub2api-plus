@@ -340,8 +340,8 @@ check use the same allocation, which keeps a card with `cache_write_1h_price`
 from silently under-billing a flat aggregate.
 
 Routing an Anthropic-native upstream through the OpenAI gateway keeps that split
-too: the OpenAI usage object carries `cache_creation_5m_tokens` and
-`cache_creation_1h_tokens` next to the aggregate, and settlement prices each class
+too: the OpenAI usage object carries `cache_creation_5m_input_tokens` and
+`cache_creation_1h_input_tokens` next to the aggregate, and settlement prices each class
 with its own rate. Without it every write on that route collapsed into the
 aggregate and was priced as the cheaper 5m class.
 Reference fill, user/model-plaza display,

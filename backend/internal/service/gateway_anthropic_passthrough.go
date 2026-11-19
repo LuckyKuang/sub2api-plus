@@ -670,68 +670,22 @@ func parseSSEUsagePassthrough(data string, usage *ClaudeUsage) {
 	}
 
 	parsed := gjson.Parse(data)
+	usageNode := anthropicEventUsageNode(parsed)
+	if !usageNode.IsObject() {
+		return
+	}
 	switch parsed.Get("type").String() {
 	case "message_start":
-		msgUsage := parsed.Get("message.usage")
-		if msgUsage.Exists() {
-			usage.InputTokens = int(msgUsage.Get("input_tokens").Int())
-			if v := msgUsage.Get("cache_creation_input_tokens"); v.Exists() && v.Type != gjson.Null {
-				usage.CacheCreationInputTokens = int(v.Int())
-			}
+		usage.InputTokens = int(usageNode.Get("input_tokens").Int())
+		if output := int(usageNode.Get("output_tokens").Int()); output > 0 {
+			usage.OutputTokens = output
 		}
 	case "message_delta":
-		deltaUsage := parsed.Get("usage")
-		if deltaUsage.Exists() {
-			if v := deltaUsage.Get("input_tokens").Int(); v > 0 {
-				usage.InputTokens = int(v)
-			}
-			if v := deltaUsage.Get("output_tokens").Int(); v > 0 {
-				usage.OutputTokens = int(v)
-			}
-			if v := deltaUsage.Get("cache_creation_input_tokens").Int(); v > 0 {
-				usage.CacheCreationInputTokens = int(v)
-			}
+		if input := int(usageNode.Get("input_tokens").Int()); input > 0 {
+			usage.InputTokens = input
 		}
-	}
-
-	usageNode := anthropicUsageNodeForCacheRead(parsed)
-
-	// 缓存读取统一在这里解析：兼容供应商可能用 cache_read_input_tokens、
-	// cached_tokens、prompt_tokens_details.cached_tokens 或 prompt_cache_hit_tokens。
-	// 0 不覆盖已知正数（同一请求的后续帧常把缓存字段重复成 0）。
-	if usageNode.Exists() {
-		for _, path := range []string{"cache_read_input_tokens", "cached_tokens", "prompt_tokens_details.cached_tokens", "prompt_cache_hit_tokens"} {
-			value := usageNode.Get(path)
-			if !value.Exists() || value.Type == gjson.Null {
-				continue
-			}
-			tokens := max(int(value.Int()), 0)
-			if tokens == 0 && usage.CacheReadInputTokens > 0 {
-				continue
-			}
-			usage.CacheReadInputTokens = tokens
-			if tokens > 0 {
-				break
-			}
-		}
-	}
-
-	// 5m/1h 明细任意事件都可能补报（如 content_block_delta）。明细按帧覆盖，
-	// 但聚合量只在为空或为 0 时才由明细回填，避免过期明细改小已声明的总量。
-	if usageNode.Exists() {
-		if cc := usageNode.Get("cache_creation"); cc.IsObject() {
-			if v := cc.Get("ephemeral_5m_input_tokens"); v.Exists() && v.Type != gjson.Null {
-				usage.CacheCreation5mTokens = max(int(v.Int()), 0)
-			}
-			if v := cc.Get("ephemeral_1h_input_tokens"); v.Exists() && v.Type != gjson.Null {
-				usage.CacheCreation1hTokens = max(int(v.Int()), 0)
-			}
-		}
-		if usage.CacheCreationInputTokens <= 0 {
-			if details := max(usage.CacheCreation5mTokens, 0) + max(usage.CacheCreation1hTokens, 0); details > 0 {
-				usage.CacheCreationInputTokens = details
-				usage.cacheCreationInputTokensFromDetails = true
-			}
+		if output := int(usageNode.Get("output_tokens").Int()); output > 0 {
+			usage.OutputTokens = output
 		}
 	}
 	// Kimi's Anthropic-compatible stream uses input_tokens with two meanings:
@@ -739,12 +693,12 @@ func parseSSEUsagePassthrough(data string, usage *ClaudeUsage) {
 	// uncached input. prompt_tokens remains the total in both events. Normalize
 	// to ClaudeUsage's mutually-exclusive buckets so downstream billing does not
 	// subtract cache tokens from an already-uncached value.
-	normalizeAnthropicCompatiblePromptUsage(usageNode, usage)
+	mergeAnthropicUsageJSON(usageNode, usage)
 }
 
-// anthropicUsageNodeForCacheRead returns the usage object of the current frame.
+// anthropicEventUsageNode returns the usage object of the current frame.
 // message_start nests it under message; every other event keeps it top-level.
-func anthropicUsageNodeForCacheRead(parsed gjson.Result) gjson.Result {
+func anthropicEventUsageNode(parsed gjson.Result) gjson.Result {
 	usageNode := parsed.Get("usage")
 	if parsed.Get("type").String() == "message_start" || !usageNode.Exists() || usageNode.Type == gjson.Null {
 		if msgUsage := parsed.Get("message.usage"); msgUsage.Exists() {
@@ -754,61 +708,30 @@ func anthropicUsageNodeForCacheRead(parsed gjson.Result) gjson.Result {
 	return usageNode
 }
 
-// normalizeAnthropicCompatiblePromptUsage converts provider-native OpenAI-style
-// prompt/cache fields into Claude's mutually-exclusive usage buckets. Native
-// Anthropic responses do not expose these aliases and are left alone.
-func normalizeAnthropicCompatiblePromptUsage(usageNode gjson.Result, usage *ClaudeUsage) bool {
-	if usage == nil || !usageNode.Exists() {
-		return false
-	}
-	promptTokens := usageNode.Get("prompt_tokens")
-	promptCacheHitTokens := usageNode.Get("prompt_cache_hit_tokens")
-	promptCacheMissTokens := usageNode.Get("prompt_cache_miss_tokens")
-	// 即使本帧没有 prompt 字段，只要之前记住过总量，就仍然要对账：
-	// 兼容供应商常在后续帧里只更新缓存桶。
-	if (!promptTokens.Exists() || promptTokens.Int() <= 0) &&
-		!promptCacheHitTokens.Exists() && !promptCacheMissTokens.Exists() && !usage.promptTotalPresent {
-		return false
-	}
-
-	cacheReadTokens := usage.CacheReadInputTokens
+// mergeAnthropicUsageJSON merges cache buckets and reconciles any compatible
+// provider's inclusive prompt total with Anthropic's uncached input count.
+func mergeAnthropicUsageJSON(usageNode gjson.Result, usage *ClaudeUsage) {
 	for _, path := range []string{"cache_read_input_tokens", "cached_tokens", "prompt_tokens_details.cached_tokens", "prompt_cache_hit_tokens"} {
-		if value := usageNode.Get(path); value.Exists() && value.Type != gjson.Null {
-			cacheReadTokens = max(int(value.Int()), 0)
-			if cacheReadTokens > 0 {
-				break
-			}
+		if tokens := int(usageNode.Get(path).Int()); tokens > 0 {
+			usage.CacheReadInputTokens = tokens
+			break
 		}
 	}
+	usage.mergeCacheCreation(
+		int(usageNode.Get("cache_creation_input_tokens").Int()),
+		anthropicUsageJSONCount(usageNode.Get("cache_creation.ephemeral_5m_input_tokens")),
+		anthropicUsageJSONCount(usageNode.Get("cache_creation.ephemeral_1h_input_tokens")),
+	)
+	normalizeAnthropicPromptTotal(usage, int(usageNode.Get("prompt_tokens").Int()),
+		anthropicUsageJSONCount(usageNode.Get("prompt_cache_miss_tokens")))
+}
 
-	cacheCreationTokens := usage.CacheCreationInputTokens
-	if v := usageNode.Get("cache_creation_input_tokens"); v.Exists() {
-		cacheCreationTokens = int(v.Int())
+func anthropicUsageJSONCount(value gjson.Result) *int {
+	if !value.Exists() || value.Type == gjson.Null {
+		return nil
 	}
-	if cacheCreationTokens == 0 {
-		cc5m := usageNode.Get("cache_creation.ephemeral_5m_input_tokens").Int()
-		cc1h := usageNode.Get("cache_creation.ephemeral_1h_input_tokens").Int()
-		if cc5m > 0 || cc1h > 0 {
-			cacheCreationTokens = int(cc5m + cc1h)
-		}
-	}
-
-	// 兼容供应商会在后续帧里把缓存字段重复成 0；不能用 0 覆盖已知的正数，
-	// 否则同一请求的缓存读取/写入会被抹掉并少计费。
-	if cacheReadTokens > 0 || usage.CacheReadInputTokens <= 0 {
-		usage.CacheReadInputTokens = cacheReadTokens
-	}
-	if cacheCreationTokens > 0 || usage.CacheCreationInputTokens <= 0 {
-		usage.CacheCreationInputTokens = cacheCreationTokens
-	}
-
-	var cacheMissTokens *int
-	if promptCacheMissTokens.Exists() && promptCacheMissTokens.Type != gjson.Null {
-		value := max(int(promptCacheMissTokens.Int()), 0)
-		cacheMissTokens = &value
-	}
-	normalizeAnthropicPromptTotal(usage, int(promptTokens.Int()), cacheMissTokens)
-	return true
+	count := int(value.Int())
+	return &count
 }
 
 func parseClaudeUsageFromResponseBody(body []byte) *ClaudeUsage {
@@ -825,24 +748,7 @@ func parseClaudeUsageFromResponseBody(body []byte) *ClaudeUsage {
 
 	usage.InputTokens = int(usageNode.Get("input_tokens").Int())
 	usage.OutputTokens = int(usageNode.Get("output_tokens").Int())
-	usage.CacheCreationInputTokens = int(usageNode.Get("cache_creation_input_tokens").Int())
-	usage.CacheReadInputTokens = int(usageNode.Get("cache_read_input_tokens").Int())
-
-	cc5m := usageNode.Get("cache_creation.ephemeral_5m_input_tokens").Int()
-	cc1h := usageNode.Get("cache_creation.ephemeral_1h_input_tokens").Int()
-	if cc5m > 0 || cc1h > 0 {
-		usage.CacheCreation5mTokens = int(cc5m)
-		usage.CacheCreation1hTokens = int(cc1h)
-	}
-	if usage.CacheCreationInputTokens == 0 && (cc5m > 0 || cc1h > 0) {
-		usage.CacheCreationInputTokens = int(cc5m + cc1h)
-	}
-	if usage.CacheReadInputTokens == 0 {
-		if cached := usageNode.Get("cached_tokens").Int(); cached > 0 {
-			usage.CacheReadInputTokens = int(cached)
-		}
-	}
-	normalizeAnthropicCompatiblePromptUsage(usageNode, usage)
+	mergeAnthropicUsageJSON(usageNode, usage)
 	return usage
 }
 

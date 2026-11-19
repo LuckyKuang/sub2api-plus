@@ -3,12 +3,19 @@
 package service
 
 import (
+	"context"
 	"errors"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/config"
+	coderws "github.com/coder/websocket"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -181,4 +188,151 @@ func TestIsOpenAIWSDeclaredLimitFallbackReason(t *testing.T) {
 	require.True(t, isOpenAIWSDeclaredLimitFallbackReason(" prewarm_message_too_big "))
 	require.False(t, isOpenAIWSDeclaredLimitFallbackReason("upgrade_required"))
 	require.False(t, isOpenAIWSDeclaredLimitFallbackReason(""))
+}
+
+func TestOpenAIWSDeclaredLimitRejectsPassthroughWrites(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, later := range []bool{false, true} {
+		t.Run(map[bool]string{false: "first turn", true: "later turn"}[later], func(t *testing.T) {
+			const accountID = 10231
+			key := strconv.Itoa(accountID)
+			openAIWSDeclaredLimits.forget(key)
+			t.Cleanup(func() { openAIWSDeclaredLimits.forget(key) })
+
+			cfg := &config.Config{}
+			cfg.Gateway.OpenAIWS.Enabled = true
+			cfg.Gateway.OpenAIWS.APIKeyEnabled = true
+			cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 = true
+			cfg.Gateway.OpenAIWS.ModeRouterV2Enabled = true
+			upstream := newStagedPassthroughConn()
+			dialer := &openAIWSStagedCaptureDialer{
+				conn:      upstream,
+				handshake: http.Header{openAIWSMaxMessageBytesHeader: []string{"1024"}},
+			}
+			svc := &OpenAIGatewayService{
+				cfg: cfg, cache: &stubGatewayCache{}, openaiWSResolver: NewOpenAIWSProtocolResolver(cfg),
+				toolCorrector: NewCodexToolCorrector(), openaiWSPassthroughDialer: dialer,
+			}
+			account := &Account{
+				ID: accountID, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+				Status: StatusActive, Schedulable: true, Concurrency: 1,
+				Credentials: map[string]any{"api_key": "sk-test"},
+				Extra:       map[string]any{"openai_apikey_responses_websockets_v2_mode": OpenAIWSIngressModePassthrough},
+			}
+			serverErr := make(chan error, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				conn, err := coderws.Accept(w, r, nil)
+				if err != nil {
+					serverErr <- err
+					return
+				}
+				defer conn.CloseNow()
+				ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+				ginCtx.Request = r
+				_, first, err := conn.Read(r.Context())
+				if err == nil {
+					err = svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-test", first, nil)
+				}
+				var closeErr *OpenAIWSClientCloseError
+				if errors.As(err, &closeErr) {
+					_ = conn.Close(closeErr.StatusCode(), closeErr.Reason())
+				}
+				serverErr <- err
+			}))
+			defer server.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			conn, _, err := coderws.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+			require.NoError(t, err)
+			defer conn.CloseNow()
+			if later {
+				require.NoError(t, conn.Write(ctx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.1","input":"ok"}`)))
+				select {
+				case <-upstream.writes:
+				case <-ctx.Done():
+					t.Fatal("first turn did not reach the upstream socket")
+				}
+				upstream.Send(`{"type":"response.completed","response":{"id":"resp_first","model":"gpt-5.1","usage":{"input_tokens":2,"output_tokens":3}}}`)
+				_, _, err = conn.Read(ctx)
+				require.NoError(t, err)
+			}
+
+			oversized := `{"type":"response.create","model":"gpt-5.1","input":"` + strings.Repeat("x", 1024) + `"}`
+			require.NoError(t, conn.Write(ctx, coderws.MessageText, []byte(oversized)))
+			_, _, err = conn.Read(ctx)
+			require.Equal(t, coderws.StatusMessageTooBig, coderws.CloseStatus(err))
+			select {
+			case err := <-serverErr:
+				var sizeErr *openAIWSDeclaredLimitExceededError
+				require.ErrorAs(t, err, &sizeErr)
+			case <-ctx.Done():
+				t.Fatal("gateway did not finish the oversized turn")
+			}
+			require.Empty(t, upstream.writes)
+			limit, ok := svc.openAIWSDeclaredMessageLimitForAccount(account)
+			require.True(t, ok)
+			require.Equal(t, 1024, limit)
+		})
+	}
+}
+
+func TestOpenAIWSDeclaredLimitSkipsOversizedGeneratePrewarm(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Gateway.OpenAIWS.PrewarmGenerateEnabled = true
+	svc := &OpenAIGatewayService{cfg: cfg}
+	account := &Account{ID: 10232}
+	upstream := &openAIWSCaptureConn{}
+	payload := map[string]any{"type": "response.create", "model": "gpt-5.1"}
+	headers := http.Header{openAIWSMaxMessageBytesHeader: []string{"44"}}
+	lease := &openAIWSConnLease{conn: newOpenAIWSConn("prewarm_limit", account.ID, upstream, headers)}
+	decision := OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}
+
+	require.NoError(t, svc.performOpenAIWSGeneratePrewarm(t.Context(), lease, decision, payload, "", payload, account, nil, 0))
+	require.Empty(t, upstream.writes)
+}
+
+func TestOpenAIWSDeclaredLimitFallsBackBeforePrewarmAndTurnState(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Gateway.OpenAIWS.Enabled = true
+	cfg.Gateway.OpenAIWS.APIKeyEnabled = true
+	cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 = true
+	cfg.Gateway.OpenAIWS.PrewarmGenerateEnabled = true
+	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 1
+	cfg.Gateway.OpenAIWS.MaxIdlePerAccount = 1
+	wsConn := &openAIWSCaptureConn{}
+	dialer := &openAIWSCaptureDialer{conn: wsConn, handshake: http.Header{
+		openAIWSMaxMessageBytesHeader:                    {"128"},
+		http.CanonicalHeaderKey(openAIWSTurnStateHeader): {"unused-websocket-state"},
+	}}
+	pool := newOpenAIWSConnPool(cfg)
+	t.Cleanup(pool.Close)
+	pool.setClientDialerForTest(dialer)
+	httpUpstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}},
+		Body: io.NopCloser(strings.NewReader(`{"id":"resp_http","model":"gpt-5.1","output":[],"usage":{"input_tokens":2,"output_tokens":3}}`)),
+	}}
+	svc := &OpenAIGatewayService{
+		cfg: cfg, cache: &stubGatewayCache{}, httpUpstream: httpUpstream,
+		openaiWSResolver: NewOpenAIWSProtocolResolver(cfg), toolCorrector: NewCodexToolCorrector(), openaiWSPool: pool,
+	}
+	account := &Account{
+		ID: 10233, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Status: StatusActive, Schedulable: true, Concurrency: 1,
+		Credentials: map[string]any{"api_key": "sk-test"},
+		Extra:       map[string]any{"responses_websockets_v2_enabled": true},
+	}
+	t.Cleanup(func() { openAIWSDeclaredLimits.forget("10233") })
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	body := `{"model":"gpt-5.1","stream":false,"input":"` + strings.Repeat("x", 128) + `"}`
+
+	result, err := svc.Forward(t.Context(), c, account, []byte(body))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, dialer.DialCount())
+	require.Empty(t, wsConn.writes)
+	require.Len(t, httpUpstream.requests, 1)
+	require.Empty(t, rec.Header().Get(openAIWSTurnStateHeader))
+	require.Contains(t, rec.Body.String(), "resp_http")
 }

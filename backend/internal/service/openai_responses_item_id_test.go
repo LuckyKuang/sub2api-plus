@@ -106,6 +106,9 @@ func TestShouldStripOpenAIResponsesInputItemIDKeepsCodexAllocatedIDs(t *testing.
 		{itemType: "custom_tool_call_output", id: "ctco_item004", strip: false},
 		{itemType: "custom_tool_call_output", id: "ctco_item004_2", strip: false},
 		{itemType: "custom_tool_call_output", id: "ctco_bad_output", strip: true},
+		{itemType: "custom_tool_call_output", id: "ctcoextra_item004", strip: true},
+		{itemType: "custom_tool_call_output", id: "ctco_item0004", strip: true},
+		{itemType: "custom_tool_call_output", id: "ctco_bad_salt004", strip: true},
 		{itemType: "custom_tool_call_output", id: "ctc_item004", strip: true},
 		// A model-facing suffix does not rescue a kind that must carry another
 		// namespace.

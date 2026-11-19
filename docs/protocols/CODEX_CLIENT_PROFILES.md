@@ -918,6 +918,10 @@ gateway mirrors that contract without inventing a value:
   attempt falls back to HTTP silently and increments
   `declared_limit_fallback_total` without entering fallback cooling, because the
   payload — not the transport — is at fault.
+- The passthrough relay checks the first frame and every following write against
+  the active connection's declaration. HTTP-entry WebSocket forwarding checks
+  the turn before optional prewarm. When adding `generate:false` would exceed
+  the cap for an otherwise admissible turn, the gateway skips prewarm.
 - A known declaration also short-circuits the next attempt: when the first frame
   already exceeds it, the attempt starts on the HTTP bridge instead of dialing a
   socket it must abandon.
@@ -953,10 +957,11 @@ stripped. See `openai_responses_item_id.go`.
 `context_window_id` is a UUIDv7 string when the window was restored from a
 rollout and the display form of an allocated `ModelFacingId` (`window003`) when it
 was not. Turn metadata always carries a string. Tenant isolation keeps that shape:
-the gateway permutes the decimal value inside the same three-digit group width and
-keeps the salt instead of replacing the value with a UUID. A value outside the
-allocation grammar, including a restored UUIDv7 window, keeps its previous
-durable mapping. See `openai_codex_account_identity.go`.
+the gateway applies a deterministic, collision-free permutation within each
+decimal pool for the tenant and credential owner. The salt and width stay the
+same. Restored UUIDv7 windows still use the timestamp-preserving UUIDv7 mapping.
+Other values outside the allocation grammar use the durable opaque mapping.
+See `openai_codex_account_identity.go`.
 
 ### Model catalog and descriptor source
 
@@ -970,9 +975,11 @@ per-model extracts and the synthesized values they could not cover.
 Official values are authoritative for everything the client reads: context and
 maximum windows, reasoning levels and defaults, priorities, truncation policy,
 model messages and instructions, and every field the descriptor struct does not
-model — those pass through unchanged through `MarshalJSON`. A synthesis path
-remains only for models outside the catalog (DeepSeek, Grok, Claude, compatible
-aggregators and administrator aliases).
+model — those pass through unchanged through `MarshalJSON`. Registered effort
+and compact spellings for GPT-6 Sol/Luna, GPT-6.1 and GPT-6.2 keep their configured
+slug and use the published model's descriptor. Other models outside the catalog,
+including compatible providers and administrator aliases, use a synthesized
+descriptor.
 
 Plus layers exactly four policies on top, and never writes them into the
 embedded file:

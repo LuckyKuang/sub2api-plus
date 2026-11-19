@@ -29,8 +29,8 @@ approval enforcement, plugin startup, cloud skills, configuration discovery and
 system/MDM precedence. Relevant entries include `codex-rs/exec/src/lib.rs`,
 `codex-rs/config/src/loader/{mod.rs,macos.rs}` and
 `codex-rs/core/src/client.rs`. Transparent bridge review additionally covers
-[`codex-rs/responses-api-proxy/src/lib.rs`](https://github.com/openai/codex/blob/086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a/codex-rs/responses-api-proxy/src/lib.rs)
-and [`read_api_key.rs`](https://github.com/openai/codex/blob/086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a/codex-rs/responses-api-proxy/src/read_api_key.rs): HTTP-only request forwarding, stdin API-key constraints,
+[`codex-rs/responses-api-proxy/src/lib.rs`](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/responses-api-proxy/src/lib.rs)
+and [`read_api_key.rs`](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/responses-api-proxy/src/read_api_key.rs): HTTP-only request forwarding, stdin API-key constraints,
 startup status, upstream errors and streaming bytes. The gateway uses a random
 loopback nonce for that stdin key, keeping the actual OAuth JWT in its existing
 credential-owner sender. Embedded archive and native-executable digests are owned by
@@ -44,15 +44,16 @@ imply real-account or live-model acceptance. Project bridge owners are
 `backend/internal/service/codex_cli_bridge_transport.go`,
 `openai_plugin_transport.go` and `openai_codex_transport.go`.
 The downstream display review also covers the release source's
-[`codex-rs/tui/src/chatwidget/safety_buffering.rs`](https://github.com/openai/codex/blob/086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a/codex-rs/tui/src/chatwidget/safety_buffering.rs).
+[`codex-rs/tui/src/chatwidget/safety_buffering.rs`](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/chatwidget/safety_buffering.rs).
 `service/TestCodexSafetyBufferingOfficialCLIInteractive` runs the unmodified
 pinned binary with `--no-daemon` in a private PTY through the gateway. It observes
 the notice/actions off, their absence on, normal completion and one generation
 for both OAuth/API Key owners and native/official CLI outbound. The PTY owner is
 `tools/test_codex_safety_buffering_tui.py`; desktop App rendering is not executed.
 The auxiliary title request follows
-[`codex-rs/tui/src/app/thread_title.rs`](https://github.com/openai/codex/blob/086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a/codex-rs/tui/src/app/thread_title.rs)
-and is counted separately from the user's original generation.
+[`codex-rs/tui/src/app/thread_title.rs`](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/app/thread_title.rs)
+and is counted separately from the user's original generation. Codex 0.170.0
+can display the first message as a temporary title while generation runs.
 
 ZCode's selected product version matches the published
 [`v3.17.2` release](https://github.com/zai-org/ZCode/releases/tag/v3.17.2) and

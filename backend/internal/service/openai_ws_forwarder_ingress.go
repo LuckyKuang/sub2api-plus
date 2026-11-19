@@ -1133,11 +1133,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				payloadBytes,
 				openAIWSDeclaredLimitFromError(limitErr),
 			)
-			return nil, NewOpenAIWSClientCloseError(
-				coderws.StatusMessageTooBig,
-				"request exceeds the upstream websocket message limit; retry over HTTP",
-				limitErr,
-			)
+			return nil, newOpenAIWSDeclaredLimitClientClose(limitErr)
 		}
 		if err := lease.WriteJSONWithContextTimeout(ctx, json.RawMessage(payload), s.openAIWSWriteTimeout()); err != nil {
 			return nil, wrapOpenAIWSIngressTurnError(

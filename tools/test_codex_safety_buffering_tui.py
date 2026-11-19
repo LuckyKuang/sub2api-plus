@@ -4,7 +4,7 @@
 The maintained official wire gate calls this through the Go test. Expectations
 come from the reviewed official 0.170.0 TUI, not gateway projection internals:
 codex-rs/tui/src/chatwidget/safety_buffering.rs at
-086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a.
+29eb79e9866b3262a777fdf8195c1b9e63684c91.
 """
 
 from __future__ import annotations

@@ -77,6 +77,29 @@ func TestConfiguredCodexGPT61WindowsFollowOfficialCatalog(t *testing.T) {
 	require.Equal(t, []string{"text", "image"}, newConfiguredCodexModelDescriptor("gpt-6-astra").InputModalities)
 }
 
+func TestConfiguredCodexAliasesUseOfficialModelDescriptor(t *testing.T) {
+	for _, test := range []struct {
+		slug             string
+		contextWindow    int64
+		maxContextWindow int64
+	}{
+		{"gpt-6.1-sol-high", 500_000, 872_000},
+		{"gpt-6.1-terra-openai-compact", 500_000, 872_000},
+		{"gpt-6.2-astra-high", 272_000, 872_000},
+		{"gpt-6.2-sol-openai-compact", 500_000, 872_000},
+	} {
+		t.Run(test.slug, func(t *testing.T) {
+			descriptor := newConfiguredCodexModelDescriptor(test.slug)
+			require.Equal(t, test.slug, descriptor.Slug)
+			require.Equal(t, test.contextWindow, descriptor.ContextWindow)
+			require.Equal(t, test.maxContextWindow, descriptor.MaxContextWindow)
+			require.NotEmpty(t, descriptor.officialMetadata)
+		})
+	}
+	_, ok := openai.CodexModelCatalogMetadata("gpt-6.2-sol-custom")
+	require.False(t, ok)
+}
+
 // The shell tool surface is Plus-owned: adopting the 0.170 shell_command
 // declaration changes the tools the client announces and needs its own
 // security-audit coverage revision.

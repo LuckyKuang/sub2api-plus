@@ -559,11 +559,11 @@ the on case must render none. Both must complete the answer, retain usage, keep
 the client session alive, and make exactly one upstream generation request.
 The pinned TUI also creates an independent structured-output request for the
 session title. The fixture identifies it by the official
-[`thread_title.rs`](https://github.com/openai/codex/blob/086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a/codex-rs/tui/src/app/thread_title.rs)
+[`thread_title.rs`](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/app/thread_title.rs)
 prompt and title schema, serves it separately, and counts it independently;
 the single-generation assertion applies to the user's original turn.
 The pinned client's UI contract follows
-[`safety_buffering.rs`](https://github.com/openai/codex/blob/086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a/codex-rs/tui/src/chatwidget/safety_buffering.rs).
+[`safety_buffering.rs`](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/tui/src/chatwidget/safety_buffering.rs).
 This consumer test does not claim to execute the desktop App UI.
 
 ### Downstream session error wording

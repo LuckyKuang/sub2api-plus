@@ -332,32 +332,12 @@ func mergeAnthropicUsage(dst *ClaudeUsage, src apicompat.AnthropicUsage) {
 	if cacheReadTokens == 0 && src.PromptCacheHitTokens != nil {
 		cacheReadTokens = max(*src.PromptCacheHitTokens, 0)
 	}
-	// An Anthropic usage breakdown is authoritative for cache-write TTL classes:
-	// the flat field can be zero while the classes carry the writes, and billing
-	// prices 5m and 1h writes differently.
-	hasBreakdown := src.CacheCreation != nil &&
-		(src.CacheCreation.Ephemeral5mInputTokens != nil || src.CacheCreation.Ephemeral1hInputTokens != nil)
+	var fiveMinutes, oneHour *int
 	if src.CacheCreation != nil {
-		if src.CacheCreation.Ephemeral5mInputTokens != nil {
-			dst.CacheCreation5mTokens = max(*src.CacheCreation.Ephemeral5mInputTokens, 0)
-		}
-		if src.CacheCreation.Ephemeral1hInputTokens != nil {
-			dst.CacheCreation1hTokens = max(*src.CacheCreation.Ephemeral1hInputTokens, 0)
-		}
+		fiveMinutes = src.CacheCreation.Ephemeral5mInputTokens
+		oneHour = src.CacheCreation.Ephemeral1hInputTokens
 	}
-	// 一个权威的缓存写入量：正数聚合量优先，其次才是 5m/1h 明细之和。
-	// 兼容供应商在后续帧里重复 0 时不能抹掉已经报过的写入。
-	cacheCreationTokens := max(src.CacheCreationInputTokens, 0)
-	creationFromDetails := false
-	if cacheCreationTokens == 0 && hasBreakdown {
-		cacheCreationTokens = max(dst.CacheCreation5mTokens, 0) + max(dst.CacheCreation1hTokens, 0)
-		creationFromDetails = true
-	}
-	if cacheCreationTokens > 0 || dst.CacheCreationInputTokens <= 0 {
-		dst.CacheCreationInputTokens = cacheCreationTokens
-		dst.cacheCreationInputTokensPresent = !creationFromDetails
-		dst.cacheCreationInputTokensFromDetails = creationFromDetails
-	}
+	dst.mergeCacheCreation(src.CacheCreationInputTokens, fiveMinutes, oneHour)
 
 	// Some Anthropic-compatible providers retain OpenAI-style prompt/cache
 	// fields. Prefer those authoritative totals or hit/miss buckets over the

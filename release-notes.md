@@ -20,7 +20,9 @@ Sub2API Plus v0.2.23+custom.001
 - A later `message_delta` that repeated zeroed cache fields erased the write reported by `message_start`, and a partial TTL breakdown left the unclassified remainder unbilled. Both classes are now charged, with the unclassified remainder in the 5m class.
 - A cache-only update no longer leaves the uncached input bucket stale: `input + cache_read + cache_write` is recomputed from the provider's remembered prompt total.
 - Anthropic-native upstreams routed through the OpenAI gateway kept no 5m/1h split, so every write was priced as the cheaper 5m class even when the 1h price was configured.
-- The stream idle deadline followed the ticker phase instead of the last upstream read, so a 1-second interval could take two seconds to fire. It now tracks the last read, and a pre-output stall fails over once instead of walking the whole account pool.
+- WebSocket passthrough and optional prewarm honor the upstream message cap. Context-window IDs remain distinct within each tenant and credential owner, and registered effort or compact aliases receive the official descriptor.
+- Responses-to-Messages streaming uses the same terminal usage for the client response and settlement. Anthropic-compatible streams retain output usage reported only on `message_start`.
+- The stream idle deadline tracks the last upstream byte read, including partial SSE frames. A pre-output stall allows one account switch.
 
 ## Compatibility and migration
 

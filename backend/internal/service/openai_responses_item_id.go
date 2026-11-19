@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/tidwall/gjson"
@@ -86,7 +87,7 @@ func shouldStripOpenAIResponsesInputItemID(itemType, id string) bool {
 func acceptsOpenAIResponsesOfficialItemIDAlias(itemType, id string) bool {
 	switch strings.TrimSpace(itemType) {
 	case "custom_tool_call_output":
-		return strings.HasPrefix(id, "ctco") && isOpenAIResponsesModelFacingItemID(id)
+		return strings.HasPrefix(id, "ctco_") && isOpenAIResponsesModelFacingItemID(id)
 	default:
 		return false
 	}
@@ -107,19 +108,16 @@ func isOpenAIResponsesModelFacingItemID(id string) bool {
 	for digitStart > 0 && body[digitStart-1] >= '0' && body[digitStart-1] <= '9' {
 		digitStart--
 	}
-	if len(body)-digitStart < 3 {
+	digits := body[digitStart:]
+	if len(digits) < 3 || len(digits) > 21 || len(digits)%3 != 0 ||
+		(len(digits) > 3 && digits[:3] == "000") {
 		return false
 	}
-	stem := strings.TrimSuffix(body[:digitStart], "_")
-	if stem == "" {
+	if _, err := strconv.ParseUint(digits, 10, 64); err != nil {
 		return false
 	}
-	for _, part := range strings.Split(stem, "_") {
-		if len(part) < 2 || len(part) > 16 || !isOpenAIResponsesLowerAlpha(part) {
-			return false
-		}
-	}
-	return true
+	kind, salt, ok := strings.Cut(body[:digitStart], "_")
+	return ok && isOpenAIResponsesLowerAlpha(kind) && isOpenAIResponsesLowerAlpha(salt)
 }
 
 func isOpenAIResponsesDecimalDigits(value string) bool {

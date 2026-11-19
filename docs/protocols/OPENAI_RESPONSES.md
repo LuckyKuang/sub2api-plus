@@ -1326,12 +1326,17 @@ under-billed the request, so a zero now only applies when the current value is
 also zero; a positive value always wins. The same rule governs the compat prompt
 normalization path, the passthrough SSE reader and the Antigravity extractor.
 
-The stream state remembers whether its total was declared or derived from the
-breakdown, so a later declared total replaces a derived one while a stale zero
-breakdown cannot drive a declared total back down. `message_start` now also records
-`output_tokens`, which compatible providers sometimes send only there; the
-terminal `message_delta` no longer overwrites a positive output count with zero.
+The generic SSE reader, passthrough SSE reader and Anthropic bridges track whether
+the total came from a positive aggregate or the TTL breakdown. A TTL-only update
+recomputes a derived total. Once the provider sends a positive aggregate, later
+TTL fields update the classes while that aggregate continues to govern the total.
+These readers also retain `message_start.output_tokens` if a later frame repeats
+zero. The Antigravity forwarder carries both parsed TTL classes into settlement.
 See `gateway_cache_snapshot_semantics_test.go`.
+
+For Responses-to-Messages conversion, a terminal frame's `response.usage` governs
+the client message and settlement. The frame's top-level `usage` provides the
+fallback when the nested field is absent.
 
 ### Prompt total reconciliation
 
@@ -1357,4 +1362,3 @@ and the flat cache-write fields, so a response whose writes arrived as a 5m/1h
 breakdown reported `cache_creation_input_tokens: 0` to the client while the
 request was billed for the writes. A stream that reported only cache buckets also
 counts as reported usage, so the guard no longer discards it as "nothing to say".
-

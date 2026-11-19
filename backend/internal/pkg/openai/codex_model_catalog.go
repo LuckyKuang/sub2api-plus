@@ -65,10 +65,9 @@ func loadCodexModelCatalog() (map[string]json.RawMessage, error) {
 }
 
 // CodexModelCatalogMetadata returns the exact official descriptor for a model
-// slug. Callers pass the upstream model ID; aliases and vendor prefixes are
-// canonicalized first so `openai/gpt-6.1-sol` and `gpt6.1sol` resolve to the same
-// descriptor. A model outside the official catalog returns false and keeps the
-// synthesized descriptor.
+// slug. Vendor prefixes and registered effort/compact spellings for GPT-6
+// families resolve to the published descriptor. Models outside the official
+// catalog keep their synthesized descriptor.
 func CodexModelCatalogMetadata(model string) ([]byte, bool) {
 	catalog, err := loadCodexModelCatalog()
 	if err != nil || len(catalog) == 0 {
@@ -79,7 +78,21 @@ func CodexModelCatalogMetadata(model string) ([]byte, bool) {
 		slug = strings.ToLower(strings.TrimSpace(model))
 	}
 	raw, ok := catalog[slug]
-	if !ok || len(raw) == 0 {
+	if !ok {
+		switch {
+		case IsGPT61SolModelSpelling(slug):
+			raw = catalog["gpt-6.1-sol"]
+		case IsGPT61TerraModelSpelling(slug):
+			raw = catalog["gpt-6.1-terra"]
+		default:
+			base := GPT62ModelID(slug)
+			if base == "" {
+				base = GPT6SolOrLunaBaseModel(slug)
+			}
+			raw = catalog[base]
+		}
+	}
+	if len(raw) == 0 {
 		return nil, false
 	}
 	return append([]byte(nil), raw...), true

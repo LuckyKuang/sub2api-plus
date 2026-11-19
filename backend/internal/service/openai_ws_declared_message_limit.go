@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	coderws "github.com/coder/websocket"
 )
 
 // Upstream advertises the largest single WebSocket message it accepts on the
@@ -214,6 +216,14 @@ func (e *openAIWSDeclaredLimitExceededError) Error() string {
 		return "upstream websocket message limit exceeded"
 	}
 	return fmt.Sprintf("request is %d bytes but upstream accepts at most %d bytes per websocket message", e.length, e.limit)
+}
+
+func newOpenAIWSDeclaredLimitClientClose(err error) error {
+	return NewOpenAIWSClientCloseError(
+		coderws.StatusMessageTooBig,
+		"request exceeds the upstream websocket message limit; retry over HTTP",
+		err,
+	)
 }
 
 func isOpenAIWSDeclaredLimitExceeded(err error) bool {

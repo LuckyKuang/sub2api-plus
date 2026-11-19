@@ -680,10 +680,6 @@ type ClaudeUsage struct {
 	ImageOutputTokens        int `json:"image_output_tokens,omitempty"`
 	AudioOutputTokens        int `json:"audio_output_tokens,omitempty"`
 
-	// cacheCreationInputTokensPresent 表示上游显式声明过聚合写入量，
-	// 用来把「显式 0」与「字段缺失」区分开：兼容供应商常在 message_start
-	// 报正数、在 message_delta 只重复 0，后者不能覆盖前者。
-	cacheCreationInputTokensPresent bool
 	// cacheCreationInputTokensFromDetails 表示聚合量是由 5m/1h 明细推导出来的，
 	// 之后上游显式声明的聚合量应当替换它。
 	cacheCreationInputTokensFromDetails bool
@@ -692,6 +688,26 @@ type ClaudeUsage struct {
 	// 记住它才能让后续只更新缓存的帧仍然重算未缓存的输入。
 	promptTotalTokens  int
 	promptTotalPresent bool
+}
+
+// mergeCacheCreation keeps a positive declared total authoritative across TTL
+// updates. When the provider only reports classes, their latest sum is the total.
+func (usage *ClaudeUsage) mergeCacheCreation(aggregate int, fiveMinutes, oneHour *int) {
+	if aggregate > 0 {
+		usage.CacheCreationInputTokens = aggregate
+		usage.cacheCreationInputTokensFromDetails = false
+	}
+	if fiveMinutes != nil {
+		usage.CacheCreation5mTokens = max(*fiveMinutes, 0)
+	}
+	if oneHour != nil {
+		usage.CacheCreation1hTokens = max(*oneHour, 0)
+	}
+	if (fiveMinutes != nil || oneHour != nil) &&
+		(usage.CacheCreationInputTokens <= 0 || usage.cacheCreationInputTokensFromDetails) {
+		usage.CacheCreationInputTokens = usage.CacheCreation5mTokens + usage.CacheCreation1hTokens
+		usage.cacheCreationInputTokensFromDetails = true
+	}
 }
 
 // hasReportedTokens 报告上游是否声明过任何 token 计数。缓冲路径用它判断

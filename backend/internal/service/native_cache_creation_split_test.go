@@ -3,11 +3,50 @@
 package service
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
+
+func TestResponsesTerminalCacheCreationMatchesMessagesUsage(t *testing.T) {
+	const wire = "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_cache\"}}\n\n" +
+		`data: {"type":"response.completed","usage":{"input_tokens":20,"output_tokens":4,"cache_creation_input_tokens":4},"response":{"id":"resp_cache","status":"completed","usage":{"input_tokens":10,"output_tokens":2,"cache_creation_input_tokens":1}}}` + "\n\n"
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	response := &http.Response{
+		StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}},
+		Body: io.NopCloser(strings.NewReader(wire)),
+	}
+	account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+
+	result, err := (&OpenAIGatewayService{}).handleAnthropicStreamingResponse(
+		response, c, account, "gpt-6.2-sol", "gpt-6.2-sol", "gpt-6.2-sol", time.Now(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 10, result.Usage.InputTokens)
+	require.Equal(t, 2, result.Usage.OutputTokens)
+	require.Equal(t, 1, result.Usage.CacheCreationInputTokens)
+
+	for _, line := range strings.Split(rec.Body.String(), "\n") {
+		payload := strings.TrimPrefix(line, "data: ")
+		if gjson.Get(payload, "type").String() == "message_delta" {
+			require.EqualValues(t, 9, gjson.Get(payload, "usage.input_tokens").Int())
+			require.EqualValues(t, 2, gjson.Get(payload, "usage.output_tokens").Int())
+			require.EqualValues(t, 1, gjson.Get(payload, "usage.cache_creation_input_tokens").Int())
+			return
+		}
+	}
+	t.Fatal("missing terminal Messages usage")
+}
 
 // An Anthropic-native upstream reached through the OpenAI gateway keeps its own
 // 5m/1h write split. Flattening it into the aggregate would price every write as

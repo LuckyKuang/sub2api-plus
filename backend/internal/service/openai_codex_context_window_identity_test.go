@@ -5,7 +5,9 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"regexp"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -39,11 +41,33 @@ func TestCodexContextWindowIdentityKeepsDigitWidth(t *testing.T) {
 	ctx := WithOutboundIDStore(context.Background(), newTestOutboundIDStore())
 	account := turnStateAccount(33, "principal-a")
 
-	for _, raw := range []string{"window000012", "window003", "ctx000"} {
+	for _, raw := range []string{"window001012", "window003", "ctx000", "window018446744073709551615"} {
 		mapped, err := resolveCodexAccountIdentityValue(ctx, account, 7, "context-window", raw)
 		require.NoError(t, err)
 		require.Len(t, mapped, len(raw), "width must follow the allocation groups: %s", raw)
 		require.True(t, regexp.MustCompile(`^[a-z]+\d+$`).MatchString(mapped), mapped)
+	}
+}
+
+func TestCodexContextWindowIdentityIsUniqueWithinScope(t *testing.T) {
+	ctx := context.Background()
+	account := turnStateAccount(31, "principal-a")
+	seen := make(map[string]string, 1000)
+	for i := range 1000 {
+		raw := fmt.Sprintf("window%03d", i)
+		mapped, err := resolveCodexAccountIdentityValue(ctx, account, 7, "context-window", raw)
+		require.NoError(t, err)
+		require.NotContains(t, seen, mapped, "input %s collided with %s", raw, seen[mapped])
+		seen[mapped] = raw
+	}
+
+	for _, raw := range []string{"window001000", "window999999"} {
+		mapped, err := resolveCodexAccountIdentityValue(ctx, account, 7, "context-window", raw)
+		require.NoError(t, err)
+		number, err := strconv.Atoi(mapped[len("window"):])
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, number, 1000)
+		require.LessOrEqual(t, number, 999999)
 	}
 }
 

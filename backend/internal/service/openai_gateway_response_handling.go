@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"sort"
@@ -48,6 +49,20 @@ type openaiNonStreamingResult struct {
 	imageCount       int
 	imageOutputSizes []string
 	searchCount      int
+}
+
+type openAIStreamActivityReader struct {
+	io.Reader
+	startedAt time.Time
+	lastRead  atomic.Int64
+}
+
+func (r *openAIStreamActivityReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if n > 0 {
+		r.lastRead.Store(int64(time.Since(r.startedAt)))
+	}
+	return n, err
 }
 
 func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel string) (*openaiStreamingResult, error) {
@@ -184,15 +199,6 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	responseID := ""
 	var firstOutputScanGuard atomic.Bool
 	firstOutputScanGuard.Store(stageFirstOutput)
-	scanner := bufio.NewScanner(resp.Body)
-	scanBuf := getSSEScannerBuf64K()
-	scanner.Buffer(scanBuf[:0], maxLineSize)
-	scanner.Split(newBoundedSSESplit(s.cfg, maxLineSize, nil))
-	if stageFirstOutput {
-		scanner.Split(newBoundedSSESplit(s.cfg, maxLineSize, openAIFirstOutputDynamicScanLines(&firstOutputScanGuard)))
-	}
-	documentScanner := newOpenAISSEJSONDocumentScanner(scanner)
-
 	streamInterval := time.Duration(0)
 	if s.cfg != nil && s.cfg.Gateway.StreamDataIntervalTimeout > 0 {
 		streamInterval = time.Duration(s.cfg.Gateway.StreamDataIntervalTimeout) * time.Second
@@ -210,15 +216,25 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	// 仅监控上游数据间隔超时，不被下游写入阻塞影响。
 	// 用 Timer 而非 Ticker：每次读取都要按“真正的最后读取时刻”重新定时，
 	// 否则周期与读取时刻错位会让超时比配置更早或更晚触发。
+	var upstreamReader io.Reader = resp.Body
+	var activity *openAIStreamActivityReader
+	var intervalCh <-chan time.Time
 	var intervalTimer *time.Timer
 	if streamInterval > 0 {
+		activity = &openAIStreamActivityReader{Reader: resp.Body, startedAt: time.Now()}
+		upstreamReader = activity
 		intervalTimer = time.NewTimer(streamInterval)
 		defer intervalTimer.Stop()
-	}
-	var intervalCh <-chan time.Time
-	if intervalTimer != nil {
 		intervalCh = intervalTimer.C
 	}
+	scanner := bufio.NewScanner(upstreamReader)
+	scanBuf := getSSEScannerBuf64K()
+	scanner.Buffer(scanBuf[:0], maxLineSize)
+	scanner.Split(newBoundedSSESplit(s.cfg, maxLineSize, nil))
+	if stageFirstOutput {
+		scanner.Split(newBoundedSSESplit(s.cfg, maxLineSize, openAIFirstOutputDynamicScanLines(&firstOutputScanGuard)))
+	}
+	documentScanner := newOpenAISSEJSONDocumentScanner(scanner)
 
 	keepaliveInterval := time.Duration(0)
 	if s.cfg != nil && s.cfg.Gateway.StreamKeepaliveInterval > 0 {
@@ -1001,13 +1017,10 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			close(ev.processed)
 		}
 	}
-	var lastReadAt int64
-	atomic.StoreInt64(&lastReadAt, time.Now().UnixNano())
 	go func(scanBuf *sseScannerBuf64K) {
 		defer putSSEScannerBuf64K(scanBuf)
 		defer close(events)
 		for documentScanner.Scan() {
-			atomic.StoreInt64(&lastReadAt, time.Now().UnixNano())
 			if !sendEvent(scanEvent{line: documentScanner.Text()}) {
 				return
 			}
@@ -1055,7 +1068,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			if failureDelivered {
 				return resultWithUsage(), fmt.Errorf("upstream response failed: %s", failedMessage)
 			}
-			lastRead := time.Unix(0, atomic.LoadInt64(&lastReadAt))
+			lastRead := activity.startedAt.Add(time.Duration(activity.lastRead.Load()))
 			if remaining := streamInterval - time.Since(lastRead); remaining > 0 {
 				// 按最后读取时刻重新定时，等待到真正的截止点。
 				intervalTimer.Reset(remaining)

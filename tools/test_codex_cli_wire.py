@@ -283,7 +283,7 @@ def checked_artifact(archive_option: Path | None, root: Path) -> tuple[Path, dic
     require(platform.system() == "Linux" and arch in ARTIFACTS, "unsupported_validation_architecture")
     artifact = ARTIFACTS[arch]
     manifest = (Path(__file__).resolve().parents[1] / "backend/internal/codexcli/manifest.go").read_text()
-    require(re.search(r'const targetVersion = "0\.167\.0"', manifest) is not None, "manifest_version_changed_review_required")
+    require(re.search(rf'const targetVersion = "{re.escape(VERSION)}"', manifest) is not None, "manifest_version_changed_review_required")
     for manifest_arch, expected in ARTIFACTS.items():
         block = re.search(r'"linux/' + manifest_arch + r'":\s*\{([^}]+)\}', manifest)
         require(block is not None, "manifest_artifact_missing")
@@ -735,7 +735,7 @@ def main() -> int:
             version_home.mkdir(mode=0o700)
             version_work.mkdir(mode=0o700)
             process = run_process(binary, ["--version"], version_home, version_work, proxy.server_port)
-            require(process.returncode == 0 and process.stdout.strip() == b"codex-cli 0.170.0", "official_binary_version_mismatch")
+            require(process.returncode == 0 and process.stdout.strip() == f"codex-cli {VERSION}".encode(), "official_binary_version_mismatch")
             require(not proxy.records, "version_probe_external_proxy_attempt")
             cases = [run_case(binary, root, proxy, identity, execution_auth_mode=args.execution_auth_mode) for identity in IDENTITIES]
             cases.append(run_case(binary, root, proxy, IDENTITIES[0], reject=True, execution_auth_mode=args.execution_auth_mode))

@@ -28,7 +28,8 @@ func TestRelayStallsIdleDeadlineTracksLastRead(t *testing.T) {
 	defer func() { _ = pw.Close() }()
 	go func() {
 		time.Sleep(250 * time.Millisecond)
-		_, _ = io.WriteString(pw, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"r\"}}\n\n")
+		// A read refreshes the deadline even before the SSE line is complete.
+		_, _ = io.WriteString(pw, "data: {\"type\":\"response.created\",\"response\":{")
 	}()
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)

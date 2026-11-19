@@ -120,7 +120,8 @@ func TestNativeAnthropicResponseObservationReachesUsage(t *testing.T) {
 			require.Equal(t, 20, result.Usage.InputTokens)
 			wantOutput := 10
 			if tt.partial {
-				wantOutput = 0
+				// The truncated stream still reported one output token in message_start.
+				wantOutput = 1
 			}
 			require.Equal(t, wantOutput, result.Usage.OutputTokens)
 			require.Equal(t, tt.disconnect, result.ClientDisconnect)
@@ -136,6 +137,7 @@ func TestNativeAnthropicResponseObservationReachesUsage(t *testing.T) {
 			}))
 			require.NotNil(t, usageRepo.lastLog)
 			log := usageRepo.lastLog
+			require.Equal(t, wantOutput, log.OutputTokens)
 			require.Equal(t, "k3", *log.UpstreamModel)
 			if tt.wantModel == "" {
 				require.Nil(t, log.UpstreamResponseModel)

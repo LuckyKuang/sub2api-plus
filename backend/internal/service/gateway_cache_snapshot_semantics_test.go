@@ -3,6 +3,7 @@
 package service
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/apicompat"
@@ -62,7 +63,6 @@ func TestMergeSSEUsagePatchDerivesThenAcceptsDeclaredTotal(t *testing.T) {
 	})
 	require.Equal(t, 150, usage.CacheCreationInputTokens)
 	require.False(t, usage.cacheCreationInputTokensFromDetails)
-	require.True(t, usage.cacheCreationInputTokensPresent)
 }
 
 // A declared aggregate survives a later frame whose breakdown reports zeros:
@@ -237,8 +237,49 @@ func TestMergeAnthropicUsageDerivesTotalFromBreakdown(t *testing.T) {
 func TestNormalizeAnthropicCompatiblePromptUsageKeepsCacheBuckets(t *testing.T) {
 	usage := &ClaudeUsage{CacheReadInputTokens: 500, CacheCreationInputTokens: 100}
 	usageNode := gjson.Parse(`{"prompt_tokens":900,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}`)
-	require.True(t, normalizeAnthropicCompatiblePromptUsage(usageNode, usage))
+	mergeAnthropicUsageJSON(usageNode, usage)
 	require.Equal(t, 500, usage.CacheReadInputTokens)
 	require.Equal(t, 100, usage.CacheCreationInputTokens)
 	require.Equal(t, 300, usage.InputTokens)
+}
+
+func TestAnthropicSSEUsageRetainsDeclaredTotalAndUpdatesDerivedTotal(t *testing.T) {
+	frames := []string{
+		`{"type":"message_start","message":{"usage":{"input_tokens":15000,"output_tokens":22,"prompt_tokens":15000,"cache_creation":{"ephemeral_5m_input_tokens":100}}}}`,
+		`{"type":"message_delta","usage":{"cache_creation_input_tokens":0,"output_tokens":0,"cache_creation":{"ephemeral_1h_input_tokens":200}}}`,
+		`{"type":"message_delta","usage":{"cache_creation_input_tokens":11000}}`,
+		`{"type":"message_delta","usage":{"cache_creation_input_tokens":0,"cache_creation":{"ephemeral_1h_input_tokens":3000}}}`,
+	}
+	gateway := &GatewayService{}
+	for name, merge := range map[string]func(*testing.T, string, *ClaudeUsage){
+		"passthrough": func(_ *testing.T, payload string, usage *ClaudeUsage) {
+			parseSSEUsagePassthrough(payload, usage)
+		},
+		"gateway": func(_ *testing.T, payload string, usage *ClaudeUsage) {
+			gateway.parseSSEUsage(payload, usage)
+		},
+		"typed bridge": func(t *testing.T, payload string, usage *ClaudeUsage) {
+			var event apicompat.AnthropicStreamEvent
+			require.NoError(t, json.Unmarshal([]byte(payload), &event))
+			if event.Message != nil {
+				mergeAnthropicUsage(usage, event.Message.Usage)
+			}
+			if event.Usage != nil {
+				mergeAnthropicUsage(usage, *event.Usage)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var usage ClaudeUsage
+			for i, frame := range frames {
+				merge(t, frame, &usage)
+				wantCreation := []int{100, 300, 11000, 11000}[i]
+				require.Equal(t, wantCreation, usage.cacheCreationTotal(), "frame %d", i)
+				require.Equal(t, 15000-wantCreation, usage.InputTokens, "frame %d", i)
+				require.Equal(t, 22, usage.OutputTokens, "frame %d", i)
+			}
+			require.Equal(t, 100, usage.CacheCreation5mTokens)
+			require.Equal(t, 3000, usage.CacheCreation1hTokens)
+		})
+	}
 }

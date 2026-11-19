@@ -77,6 +77,10 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 	}
 	prewarmPayload["generate"] = false
 	prewarmPayloadJSON := payloadAsJSONBytes(prewarmPayload)
+	if limit, ok := openAIWSDeclaredMaxMessageBytesFromLease(lease); ok && len(prewarmPayloadJSON) > limit {
+		logOpenAIWSModeInfo("prewarm_skip account_id=%d conn_id=%s reason=declared_limit", account.ID, connID)
+		return nil
+	}
 
 	if err := lease.WriteJSONWithContextTimeout(ctx, prewarmPayload, s.openAIWSWriteTimeout()); err != nil {
 		lease.MarkBroken()

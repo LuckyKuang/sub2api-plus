@@ -1318,9 +1318,13 @@ func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePat
 		if v, ok := parseSSEUsageInt(usageObj["input_tokens"]); ok {
 			patch.inputTokens = v
 		}
-		patch.hasCacheCreationInput = true
+		if v, ok := parseSSEUsageInt(usageObj["output_tokens"]); ok && v > 0 {
+			patch.outputTokens = v
+			patch.hasOutputTokens = true
+		}
 		if v, ok := parseSSEUsageInt(usageObj["cache_creation_input_tokens"]); ok {
 			patch.cacheCreationInputTokens = v
+			patch.hasCacheCreationInput = true
 		}
 		if v, ok := parseSSEUsageInt(usageObj["cache_read_input_tokens"]); ok {
 			patch.cacheReadInputTokens = max(v, 0)
@@ -1417,17 +1421,6 @@ func mergeSSEUsagePatch(usage *ClaudeUsage, patch *sseUsagePatch) {
 	if patch.hasInputTokens {
 		usage.InputTokens = patch.inputTokens
 	}
-	if patch.hasCacheCreationInput {
-		// A later frame that repeats a zero aggregate must not erase a write the
-		// provider already reported. Compatible providers emit the full usage
-		// object on message_delta with zeroed cache fields; treating those as
-		// authoritative under-bills the request.
-		if patch.cacheCreationInputTokens > 0 || usage.CacheCreationInputTokens <= 0 {
-			usage.CacheCreationInputTokens = patch.cacheCreationInputTokens
-			usage.cacheCreationInputTokensPresent = true
-			usage.cacheCreationInputTokensFromDetails = false
-		}
-	}
 	if patch.hasCacheReadInput {
 		if patch.cacheReadInputTokens > 0 || usage.CacheReadInputTokens <= 0 {
 			usage.CacheReadInputTokens = patch.cacheReadInputTokens
@@ -1436,17 +1429,18 @@ func mergeSSEUsagePatch(usage *ClaudeUsage, patch *sseUsagePatch) {
 	if patch.hasOutputTokens {
 		usage.OutputTokens = patch.outputTokens
 	}
+	var aggregate int
+	if patch.hasCacheCreationInput {
+		aggregate = patch.cacheCreationInputTokens
+	}
+	var fiveMinutes, oneHour *int
 	if patch.hasCacheCreation5m {
-		usage.CacheCreation5mTokens = patch.cacheCreation5mTokens
+		fiveMinutes = &patch.cacheCreation5mTokens
 	}
 	if patch.hasCacheCreation1h {
-		usage.CacheCreation1hTokens = patch.cacheCreation1hTokens
+		oneHour = &patch.cacheCreation1hTokens
 	}
-	if (!usage.cacheCreationInputTokensPresent || usage.cacheCreationInputTokensFromDetails || usage.CacheCreationInputTokens <= 0) &&
-		(patch.hasCacheCreation5m || patch.hasCacheCreation1h) {
-		usage.CacheCreationInputTokens = max(usage.CacheCreation5mTokens, 0) + max(usage.CacheCreation1hTokens, 0)
-		usage.cacheCreationInputTokensFromDetails = true
-	}
+	usage.mergeCacheCreation(aggregate, fiveMinutes, oneHour)
 	// 只更新缓存的帧也要重算未缓存的输入，否则总量与三个桶对不上。
 	normalizeAnthropicPromptTotal(usage, patch.promptTokens, patch.promptCacheMissTokens)
 }
@@ -1522,7 +1516,6 @@ func rewriteCacheCreationJSON(usageObj map[string]any, target string) bool {
 	}
 	if aggregate, present := parseSSEUsageInt(usageObj["cache_creation_input_tokens"]); present {
 		usage.CacheCreationInputTokens = aggregate
-		usage.cacheCreationInputTokensPresent = true
 	}
 	if !applyCacheTTLOverride(&usage, target) {
 		return false
@@ -1570,18 +1563,7 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
 		return nil, fmt.Errorf("parse response: %w", err)
 	}
 
-	// 解析嵌套的 cache_creation 对象中的 5m/1h 明细
 	usageNode := gjson.GetBytes(body, "usage")
-	cc5m := usageNode.Get("cache_creation.ephemeral_5m_input_tokens")
-	cc1h := usageNode.Get("cache_creation.ephemeral_1h_input_tokens")
-	if cc5m.Exists() || cc1h.Exists() {
-		response.Usage.CacheCreation5mTokens = int(cc5m.Int())
-		response.Usage.CacheCreation1hTokens = int(cc1h.Int())
-	}
-	// 非流式响应同样要对账：兼容供应商的 prompt_tokens 是含缓存桶的总量，
-	// 直接采信 input_tokens 会把缓存读取/写入重复计入。
-	normalizeAnthropicCompatiblePromptUsage(usageNode, &response.Usage)
-
 	// 兼容 Kimi cached_tokens → cache_read_input_tokens
 	if response.Usage.CacheReadInputTokens == 0 {
 		cachedTokens := gjson.GetBytes(body, "usage.cached_tokens").Int()
@@ -1592,6 +1574,7 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
 			}
 		}
 	}
+	mergeAnthropicUsageJSON(usageNode, &response.Usage)
 
 	// Cache TTL Override: 重写 non-streaming 响应中的 cache_creation 分类。
 	// 账号级设置优先；全局 1h 请求注入开启时，默认把 usage 计费归回 5m。
