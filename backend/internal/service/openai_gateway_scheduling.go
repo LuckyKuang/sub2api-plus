@@ -1706,35 +1706,37 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 }
 
 func (s *OpenAIGatewayService) listSchedulableAccounts(ctx context.Context, groupID *int64, platform string) ([]Account, error) {
+	accounts, _, err := s.listSchedulableAccountsWithGrokQuotaExclusions(ctx, groupID, platform)
+	return accounts, err
+}
+
+func (s *OpenAIGatewayService) listSchedulableAccountsWithGrokQuotaExclusions(ctx context.Context, groupID *int64, platform string) ([]Account, int, error) {
 	platform = NormalizeOpenAICompatiblePlatform(platform)
-	if s.schedulerSnapshot != nil {
-		accounts, _, err := s.schedulerSnapshot.ListSchedulableAccounts(ctx, groupID, platform, false)
-		if err != nil {
-			return accounts, err
-		}
-		accounts = s.filterOpenAIAccountsBySchedulingThreshold(ctx, accounts)
-		if platform == PlatformGrok {
-			accounts = s.filterGrokFreeQuotaAccountsForOpenAI(ctx, accounts)
-		}
-		return accounts, nil
-	}
 	var accounts []Account
 	var err error
-	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
-		accounts, err = s.accountRepo.ListSchedulableByPlatform(ctx, platform)
-	} else if groupID != nil {
-		accounts, err = s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, *groupID, platform)
+	if s.schedulerSnapshot != nil {
+		accounts, _, err = s.schedulerSnapshot.ListSchedulableAccounts(ctx, groupID, platform, false)
+		if err != nil {
+			return accounts, 0, err
+		}
 	} else {
-		accounts, err = s.accountRepo.ListSchedulableUngroupedByPlatform(ctx, platform)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("query accounts failed: %w", err)
+		if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
+			accounts, err = s.accountRepo.ListSchedulableByPlatform(ctx, platform)
+		} else if groupID != nil {
+			accounts, err = s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, *groupID, platform)
+		} else {
+			accounts, err = s.accountRepo.ListSchedulableUngroupedByPlatform(ctx, platform)
+		}
+		if err != nil {
+			return nil, 0, fmt.Errorf("query accounts failed: %w", err)
+		}
 	}
 	accounts = s.filterOpenAIAccountsBySchedulingThreshold(ctx, accounts)
+	beforeQuota := len(accounts)
 	if platform == PlatformGrok {
 		accounts = s.filterGrokFreeQuotaAccountsForOpenAI(ctx, accounts)
 	}
-	return accounts, nil
+	return accounts, beforeQuota - len(accounts), nil
 }
 
 func (s *OpenAIGatewayService) tryAcquireAccountSlot(ctx context.Context, accountID int64, maxConcurrency int) (*AcquireResult, error) {

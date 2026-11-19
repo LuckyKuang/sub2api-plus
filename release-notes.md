@@ -23,6 +23,7 @@ Sub2API Plus v0.2.23+custom.001
 - WebSocket passthrough and optional prewarm honor the upstream message cap. Context-window IDs remain distinct within each tenant and credential owner, and registered effort or compact aliases receive the official descriptor.
 - Responses-to-Messages streaming uses the same terminal usage for the client response and settlement. Anthropic-compatible streams retain output usage reported only on `message_start`.
 - The stream idle deadline tracks the last upstream byte read, including partial SSE frames. A pre-output stall allows one account switch.
+- Advanced Grok scheduling reports the observed candidate pool and quota exclusions even when the account-list quota cache is warm.
 
 ## Compatibility and migration
 

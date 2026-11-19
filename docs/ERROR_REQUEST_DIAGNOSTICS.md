@@ -55,9 +55,10 @@ they cannot supply or infer a missing selection decision.
   snapshot cannot borrow counts from an earlier result. The error detail displays
   these states separately.
 - `filtered_candidates` counts actual known exclusions, including model,
-  capability, runtime, quota and capacity checks. Compact exclusions and Grok
-  quota gates retain the observed pool and their actual reasons. It is not an estimate of which
-  setting an operator should relax.
+  capability, runtime, quota and capacity checks. Advanced OpenAI-compatible
+  scheduling records the pool before Grok free-quota filtering and counts each
+  exclusion at the gate that removes it, including a hit in the account-list
+  quota cache. A genuine empty list still reports `candidate_pool: 0`.
 - `selection_layer: channel_pricing` with
   `selection_reason: channel_pricing_restricted` means rejection before listing
   accounts; the candidate pool is unknown.
