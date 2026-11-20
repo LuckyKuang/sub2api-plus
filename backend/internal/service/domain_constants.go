@@ -517,6 +517,9 @@ const (
 	// pre-filled when creating a new channel monitor from the admin UI. Range: [15, 3600].
 	SettingKeyChannelMonitorDefaultIntervalSeconds = "channel_monitor_default_interval_seconds"
 
+	SettingKeyChannelMonitorProbeResponseHeaderTimeoutSeconds = "channel_monitor_probe_response_header_timeout_seconds"
+	SettingKeyChannelMonitorProbeTotalTimeoutSeconds          = "channel_monitor_probe_total_timeout_seconds"
+
 	// SettingKeyChannelMonitorHideThroughput hides RPM/TPM (and similar absolute
 	// throughput rates) from non-admin user-facing monitor APIs and UI, so users
 	// cannot reverse-estimate fleet volume from rates × window length.

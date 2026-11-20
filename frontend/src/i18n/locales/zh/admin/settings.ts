@@ -103,6 +103,10 @@ export default {
           modeV3Hint: '基于用户请求自动观测平台可用性和服务事件，不发送主动探测请求。',
           defaultInterval: '默认检测间隔（秒）',
           defaultIntervalHint: '仅 V1 模式使用：新建渠道监控时表单的默认值，可被单个渠道覆盖。范围 15 – 3600 秒。',
+          probeResponseHeaderTimeout: '等待响应头超时（秒）',
+          probeTotalTimeout: '单次探测总超时（秒）',
+          probeTimeoutsHint: '适用于定时探测和立即检测。总超时包含等待响应头和读取完整响应。',
+          probeTimeoutsError: '请输入 1–{max} 的整数秒，且响应头超时不能超过总超时。',
           hideThroughput: '对用户隐藏吞吐速率（RPM / TPM）',
           hideThroughputHint:
             '开启后，用户端渠道监控页面与用户 API 不返回 RPM/TPM，避免用「速率 × 时间窗」反推集群规模。管理员仍可见完整指标；错误率、延迟、缓存率照常展示。',

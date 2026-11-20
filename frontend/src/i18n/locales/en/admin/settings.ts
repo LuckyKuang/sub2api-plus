@@ -103,6 +103,10 @@ export default {
           modeV3Hint: 'Observes platform availability and service incidents from user requests without active probes.',
           defaultInterval: 'Default check interval (seconds)',
           defaultIntervalHint: 'V1 only: default interval for new monitors (overridable per monitor). Range 15 – 3600 seconds.',
+          probeResponseHeaderTimeout: 'Response header timeout (seconds)',
+          probeTotalTimeout: 'Total probe timeout (seconds)',
+          probeTimeoutsHint: 'Applies to scheduled and manual checks. The total includes waiting for response headers and reading the full response.',
+          probeTimeoutsError: 'Enter whole seconds from 1 to {max}. The response header timeout cannot exceed the total.',
           hideThroughput: 'Hide throughput rates from users (RPM / TPM)',
           hideThroughputHint:
             'When on, the user Channel Monitor page and user APIs omit RPM and TPM so fleet volume cannot be reverse-estimated from rates × window. Admins still see full metrics. Error rates, latency, and cache rates remain visible.',

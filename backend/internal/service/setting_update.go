@@ -514,6 +514,15 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	if v := clampChannelMonitorInterval(settings.ChannelMonitorDefaultIntervalSeconds); v > 0 {
 		updates[SettingKeyChannelMonitorDefaultIntervalSeconds] = strconv.Itoa(v)
 	}
+	probeHeaderTimeout := settings.ChannelMonitorProbeResponseHeaderTimeoutSeconds
+	probeTotalTimeout := settings.ChannelMonitorProbeTotalTimeoutSeconds
+	if probeHeaderTimeout != 0 || probeTotalTimeout != 0 {
+		if err := ValidateChannelMonitorProbeTimeouts(probeHeaderTimeout, probeTotalTimeout); err != nil {
+			return nil, err
+		}
+		updates[SettingKeyChannelMonitorProbeResponseHeaderTimeoutSeconds] = strconv.Itoa(probeHeaderTimeout)
+		updates[SettingKeyChannelMonitorProbeTotalTimeoutSeconds] = strconv.Itoa(probeTotalTimeout)
+	}
 	updates[SettingKeyChannelMonitorHideThroughput] = strconv.FormatBool(settings.ChannelMonitorHideThroughput)
 	updates[SettingKeyChannelMonitorV1Enabled] = strconv.FormatBool(settings.ChannelMonitorV1Enabled)
 	updates[SettingKeyChannelMonitorShowQuota] = strconv.FormatBool(settings.ChannelMonitorShowQuota)

@@ -6897,6 +6897,40 @@
                 </p>
               </div>
 
+              <div v-if="showChannelMonitorProbeTimeouts" class="space-y-2">
+                <div class="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label for="channel-monitor-probe-header-timeout" class="input-label">
+                      {{ t('admin.settings.features.channelMonitor.probeResponseHeaderTimeout') }}
+                    </label>
+                    <input
+                      id="channel-monitor-probe-header-timeout"
+                      v-model.number="form.channel_monitor_probe_response_header_timeout_seconds"
+                      type="number"
+                      min="1"
+                      :max="channelMonitorProbeTimeoutMaxSeconds"
+                      class="input"
+                    />
+                  </div>
+                  <div>
+                    <label for="channel-monitor-probe-total-timeout" class="input-label">
+                      {{ t('admin.settings.features.channelMonitor.probeTotalTimeout') }}
+                    </label>
+                    <input
+                      id="channel-monitor-probe-total-timeout"
+                      v-model.number="form.channel_monitor_probe_total_timeout_seconds"
+                      type="number"
+                      min="1"
+                      :max="channelMonitorProbeTimeoutMaxSeconds"
+                      class="input"
+                    />
+                  </div>
+                </div>
+                <p class="text-xs surface-muted">
+                  {{ t('admin.settings.features.channelMonitor.probeTimeoutsHint') }}
+                </p>
+              </div>
+
               <div v-if="form.channel_monitor_mode === 'v2'" class="space-y-4">
                 <div class="flex items-start justify-between gap-4">
                   <div class="min-w-0">
@@ -8900,6 +8934,7 @@ const appStore = useAppStore();
 const settingsStepUp = useStepUp();
 const adminSettingsStore = useAdminSettingsStore();
 const channelMonitorModes = ['v1', 'v2', 'v3'] as const;
+const channelMonitorProbeTimeoutMaxSeconds = 120;
 const isZhLocale = computed(() => locale.value.startsWith("zh"));
 
 // Codex 全局出口时区/国家下拉选项：首项为空值（关闭/不声明）。
@@ -9902,6 +9937,8 @@ const form = reactive<SettingsForm>({
   channel_monitor_enabled: true,
   channel_monitor_mode: 'v1' as 'v1' | 'v2' | 'v3',
   channel_monitor_default_interval_seconds: 60,
+  channel_monitor_probe_response_header_timeout_seconds: 30,
+  channel_monitor_probe_total_timeout_seconds: 45,
   channel_monitor_hide_throughput: false,
   channel_monitor_show_quota: false,
   channel_monitor_v1_enabled: false,
@@ -9934,6 +9971,11 @@ function applyCaptchaSelection(provider: CaptchaProviderSelection | null): void 
   form.tencent_captcha_enabled = provider === "tencent";
   form.aliyun_captcha_enabled = provider === "aliyun";
 }
+
+const showChannelMonitorProbeTimeouts = computed(() => form.channel_monitor_enabled && (
+  form.channel_monitor_mode === 'v1' ||
+  (form.channel_monitor_mode === 'v3' && form.channel_monitor_v1_enabled)
+));
 
 // Keep the settings API representation as user IDs; the selector displays emails.
 const riskControlAllowlistedUserIds = computed<number[]>({
@@ -11186,6 +11228,19 @@ const siteBillingModeHint = computed(() =>
 async function saveSettings() {
   saving.value = true;
   try {
+    const probeHeaderTimeout = Number(form.channel_monitor_probe_response_header_timeout_seconds);
+    const probeTotalTimeout = Number(form.channel_monitor_probe_total_timeout_seconds);
+    if (showChannelMonitorProbeTimeouts.value && (
+      !Number.isInteger(probeHeaderTimeout) || !Number.isInteger(probeTotalTimeout) ||
+      probeHeaderTimeout < 1 || probeTotalTimeout > channelMonitorProbeTimeoutMaxSeconds ||
+      probeHeaderTimeout > probeTotalTimeout
+    )) {
+      appStore.showError(t('admin.settings.features.channelMonitor.probeTimeoutsError', {
+        max: channelMonitorProbeTimeoutMaxSeconds,
+      }));
+      return;
+    }
+
     const normalizedTableDefaultPageSize = Math.floor(
       Number(form.table_default_page_size),
     );
@@ -11664,6 +11719,10 @@ async function saveSettings() {
       channel_monitor_mode: form.channel_monitor_mode,
       channel_monitor_default_interval_seconds:
         Number(form.channel_monitor_default_interval_seconds) || 60,
+      channel_monitor_probe_response_header_timeout_seconds:
+        showChannelMonitorProbeTimeouts.value ? probeHeaderTimeout : undefined,
+      channel_monitor_probe_total_timeout_seconds:
+        showChannelMonitorProbeTimeouts.value ? probeTotalTimeout : undefined,
       channel_monitor_hide_throughput: Boolean(form.channel_monitor_hide_throughput),
       channel_monitor_show_quota: Boolean(form.channel_monitor_show_quota),
       channel_monitor_v1_enabled: Boolean(form.channel_monitor_v1_enabled),

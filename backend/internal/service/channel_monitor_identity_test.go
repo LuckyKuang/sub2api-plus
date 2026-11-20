@@ -78,7 +78,7 @@ func TestChannelMonitorIdentitySnapshotAcrossPingAndModels(t *testing.T) {
 				BodyOverrideMode: MonitorBodyOverrideModeReplace, BodyOverride: map[string]any{"messages": []any{map[string]any{"role": "user", "content": "hello"}}},
 			}
 			for _, version := range []string{"3.9.1", "3.9.2"} {
-				results := (&ChannelMonitorService{}).runChecksConcurrent(ctx, monitor)
+				results := (&ChannelMonitorService{}).runChecksConcurrent(ctx, monitor, readChannelMonitorProbeTimeouts(nil))
 				require.NoError(t, <-updateErrors)
 				require.Len(t, results, 2)
 				for _, result := range results {

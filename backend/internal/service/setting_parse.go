@@ -193,13 +193,15 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyOpsMetricsIntervalSeconds:    "60",
 
 		// Channel monitor defaults (enabled, 60s)
-		SettingKeyChannelMonitorEnabled:                "true",
-		SettingKeyChannelMonitorMode:                   ChannelMonitorModeV1,
-		SettingKeyChannelMonitorDefaultIntervalSeconds: "60",
-		SettingKeyChannelMonitorHideThroughput:         "true",
-		SettingKeyChannelMonitorV1Enabled:              "false",
-		SettingKeyChannelMonitorShowQuota:              "false",
-		SettingKeyChannelMonitorHideUserRanking:        "false",
+		SettingKeyChannelMonitorEnabled:                           "true",
+		SettingKeyChannelMonitorMode:                              ChannelMonitorModeV1,
+		SettingKeyChannelMonitorDefaultIntervalSeconds:            "60",
+		SettingKeyChannelMonitorProbeResponseHeaderTimeoutSeconds: strconv.Itoa(monitorDefaultResponseHeaderTimeoutSeconds),
+		SettingKeyChannelMonitorProbeTotalTimeoutSeconds:          strconv.Itoa(monitorDefaultTotalTimeoutSeconds),
+		SettingKeyChannelMonitorHideThroughput:                    "true",
+		SettingKeyChannelMonitorV1Enabled:                         "false",
+		SettingKeyChannelMonitorShowQuota:                         "false",
+		SettingKeyChannelMonitorHideUserRanking:                   "false",
 
 		// Grok: safe defaults — no cross-vendor model rewrite unless operators enable it.
 		// Keep "false" even though official later flipped the in-tree default
@@ -840,6 +842,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.ChannelMonitorDefaultIntervalSeconds = parseChannelMonitorInterval(
 		settings[SettingKeyChannelMonitorDefaultIntervalSeconds],
 	)
+	probeTimeouts := readChannelMonitorProbeTimeouts(settings)
+	result.ChannelMonitorProbeResponseHeaderTimeoutSeconds = probeTimeouts.responseHeaderSeconds
+	result.ChannelMonitorProbeTotalTimeoutSeconds = probeTimeouts.totalSeconds
 	// 默认隐藏吞吐（迁移 206 的隐私默认）：未配置时必须与 setting_public.go 的
 	// 公开读取路径给出同一个值，否则管理端看到“未隐藏”而用户端实际已隐藏。
 	result.ChannelMonitorHideThroughput = !isFalseSettingValue(settings[SettingKeyChannelMonitorHideThroughput])
