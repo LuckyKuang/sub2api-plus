@@ -457,6 +457,32 @@ post-audit HTTP/WS adapter. `upstream022_audit_contract_test.go` covers the lite
 projection, anchored-output exclusion, OAuth/API-key HTTP/WS blocking before
 side effects and unknown-item pass-through for all three names.
 
+The same shared projection recognizes `agent.ide_context`,
+`agent.untrusted_content` and `agent.proposed_plan`. It keeps IDE text,
+an unnamed context source's string (including an empty string), and
+whitespace-bearing nonempty plan chunks. Null or non-string output and
+anchored tool output retain their existing attribution. Both engines audit
+the projected user text before any HTTP or Responses WS forwarding.
+
+A Kimi Chat system message with named function declarations in `tools` and
+no `content` is tool-definition context. A trailing declaration does not
+replace the current user message or tool result. The bridge may promote the
+definitions only after ingress audit. `upstream024_audit_contract_test.go`
+exercises both real audit engines for these wire shapes and checks that
+blocking precedes billing, credential selection, concurrency and sending
+with either OAuth or API Key candidates.
+
+Gateway duplicate-member checks are basic validation. The HTTP gateway
+rejects repeated JSON members and scalar multipart fields before Composite
+rewrite. Responses WS validates frames before resolving their turn policies.
+JSON Schema and tool-argument key spaces keep distinct case-sensitive keys.
+The model allowlist retains its existing response when it rejects an HTTP
+request or the initial Responses WS frame first. Unknown unique input and
+unknown sibling fields retain the canonical extraction behavior. Streaming
+provider file uploads keep their own bounded multipart validation. Grok
+async image edits validate multipart upload limits before auditing the
+accepted request and before task creation.
+
 Prompt-audit enqueue wakes local workers only after durable enqueue succeeds.
 Workers retain database claims, lease expiry, retry polling and cross-replica
 idempotency; wakeups never run selection or forwarding before the ingress gate.

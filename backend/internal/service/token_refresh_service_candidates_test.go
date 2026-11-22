@@ -72,6 +72,17 @@ func (r *tokenRefreshCandidateRepo) ListOAuthRefreshCandidatePage(_ context.Cont
 	return page, nil
 }
 
+func (r *tokenRefreshCandidateRepo) GetByID(_ context.Context, id int64) (*Account, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.accounts {
+		if r.accounts[i].ID == id {
+			return snapshotOAuthRefreshAccount(&r.accounts[i]), nil
+		}
+	}
+	return nil, errors.New("account not found")
+}
+
 func (r *tokenRefreshCandidateRepo) UpdateCredentials(_ context.Context, id int64, _ map[string]any) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

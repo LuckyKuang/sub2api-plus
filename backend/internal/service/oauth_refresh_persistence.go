@@ -4,10 +4,21 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type OAuthRefreshSuccessRepository interface {
 	UpdateOAuthRefreshCredentialsIfUnchanged(context.Context, *Account, map[string]any) (bool, error)
+}
+
+// A successful OpenAI rotation can consume the old token before optional
+// enrichment reaches its deadline. Finish its exact-owner write independently.
+func (api *OAuthRefreshAPI) persistOpenAIRotation(parent context.Context, cacheKey string, attempted *Account, credentials map[string]any) (*OAuthRefreshResult, error) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), defaultOpenAIRefreshPersistTimeout)
+	defer cancel()
+	credentials = cloneRequestCredentialMap(credentials)
+	credentials["_token_version"] = time.Now().UnixMilli()
+	return api.persistOAuthRefresh(ctx, cacheKey, attempted, credentials)
 }
 
 // Keep only a refresh of the exact attempted grant. A concurrently reauthorized

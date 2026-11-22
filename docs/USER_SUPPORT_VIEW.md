@@ -52,3 +52,11 @@ user field projection and user-error visibility setting. No gateway request is
 created by inspecting a record. Target changes invalidate pending
 responses and remount pages; column preferences include the target ID. Layout
 classification resolves support resource aliases through the personal-route map.
+
+## Defaults for administrator-created users
+
+Creating an ordinary user in the admin console snapshots configured system
+platform limits. Zero counts as an explicit limit. An unlimited platform needs
+no quota row. Signup-source overrides apply to signups, and administrators
+retain their existing quota exemption. A failed default quota write is logged
+and does not cancel user creation.

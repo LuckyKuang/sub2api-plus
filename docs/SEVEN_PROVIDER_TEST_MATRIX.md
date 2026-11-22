@@ -1,5 +1,27 @@
 # Seven-provider business regression matrix
 
+## v0.2.24 import requirements
+
+- OpenAI. The rotation tests cover a completed OAuth rotation followed by a
+  cancellation or enrichment deadline, exact-owner CAS, a concurrent
+  reauthorization and provider containment on failed persistence. Alpha
+  Search tests distinguish search-tool permission from account-access
+  state. Responses WS tests reject duplicate members before sending each
+  invalid frame.
+- xAI. `TestGrokSearchCountFromUsageAcrossEndpoints` covers native Responses
+  JSON/SSE and buffered/streaming Chat and Messages. The upstream success
+  total, including explicit zero, controls the existing search-call meter.
+  Grok edit regressions cover the five-image boundary and local HTTP 400.
+- DeepSeek and Kimi. Native Messages thinking-history repair is scoped to
+  the official DeepSeek endpoint with thinking enabled.
+  `TestKimiChatDynamicToolsAcrossProtocols` covers Kimi conversion and leaves
+  native Chat declarations in place. The shared audit gate covers Kimi
+  trailing system tool declarations and Codex external context.
+- MiniMax, StepFun and Zhipu. The shared ingress and translation code runs
+  the existing OAuth/API Key identity, proxy, failover, streaming and
+  settlement cases. The import does not establish new live-provider
+  entitlements.
+
 ## v0.2.21 import requirements
 
 These regressions supplement the existing business inventory. The unit gate pins

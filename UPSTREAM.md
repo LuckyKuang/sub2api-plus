@@ -6,13 +6,36 @@ publication status. Release naming and procedures live in
 
 ## Integrated Baseline
 
-The current tree integrates official `v0.2.23`, peeled commit
+The current tree integrates official [`v0.2.24`](https://github.com/Wei-Shaw/sub2api/releases/tag/v0.2.24),
+peeled commit `5c2982a81b46e2142d0143d2f83c1ce9c4da1d24`, from Plus main
+`56bec477d64add7e468b97e07a92d0f5d637230d`. The bounded upstream delta starts
+at the previously reviewed v0.2.23 tag and ends at v0.2.24. It adds duplicate
+request-member validation, text-route limits before body inspection, exact-owner
+OpenAI rotation persistence after an enrichment deadline, tool-search 403
+handling, buffered Responses item recovery, xAI search counts and image edit
+limits, DeepSeek thinking-history repair and Kimi dynamic tools in bridges.
+Claude, Gemini, TypeSafe, scheduler snapshots and the management console
+adopt compatible changes from the same tag.
+
+The [seven provider gate](docs/SEVEN_PROVIDER_TEST_MATRIX.md#v024-import-requirements)
+covers the existing official-agent baselines and the applicable import
+regressions. Plus retains provider-owned identities, canonical ingress audit
+and trusted session state, strict proxy binding and frozen billing. Codex
+keeps the pinned official 0.170.0 catalog and manually selected identity.
+Compatible Codex metadata and external context changes layer over those paths.
+Shared ingress, bridge and scheduler changes also apply to MiniMax, StepFun
+and Zhipu while their agent-specific protocols retain the reviewed baselines.
+Search emulation keeps the existing provider set. Upstream's Exa adapter uses
+generic HTTP client declarations and needs a reviewed credential-owner identity
+and wire regression before integration.
+This import needs no SQL migration or dependency pin change.
+
+The previous sync integrated official `v0.2.23`, peeled commit
 `5af9afb588c4b014b3df9db7d4073af1f8ae01b6`, after official `v0.2.22`
-`b0fa9f3e6eeab1968a53e1289b69daa4bb40ca2b`. The sync branch starts at
+`b0fa9f3e6eeab1968a53e1289b69daa4bb40ca2b`. That sync started at
 Plus main `f3f55fd22ce9432544085c7543f12a2d0a3394dd`.
 Plus remains authoritative when upstream behavior conflicts with an intentional
-Plus contract. The current tree carries the `v0.2.23` baseline in `VERSION`;
-its release mapping is recorded once an artifact is published. Integration and
+Plus contract. The previous release mapping remains published. Integration and
 local validation do not publish artifacts.
 Post-tag official main is excluded.
 
@@ -61,7 +84,7 @@ gateway serves the official `rust-v0.170.0`
 `codex-rs/models-manager/models.json` (release commit
 `29eb79e9866b3262a777fdf8195c1b9e63684c91`, catalog change `176cbbe92c`,
 SHA-256 `d50b6749506d97e5f334dbabcb666eb1689f423cf3e88cfabdcf3c536b873068`)
-instead of the 0.169-era descriptors embedded by the current upstream tag. The
+instead of the 0.169-era descriptors embedded by upstream v0.2.23. The
 catalog is embedded byte for byte and pinned by digest; Plus policy is layered
 in code and never written back into it. See
 [Codex client profiles](docs/protocols/CODEX_CLIENT_PROFILES.md) and
@@ -227,9 +250,9 @@ These identifiers describe the current planned source revision. Its tag and
 image are not published; the mapping status below governs publication.
 
 ```text
-Git/GitHub: v0.2.23+custom.001
-Application: 0.2.23+custom.001
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.23-custom.001
+Git/GitHub: v0.2.24+custom.001
+Application: 0.2.24+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.24-custom.001
 ```
 
 ## Release Mapping
@@ -321,6 +344,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.23-custom.001
 | `v0.2.21+custom.002` | `v0.2.21` | `10ba8f9b4dc2e6023d4a9879ab77b21841babd10` | published |
 | `v0.2.22+custom.001` | `v0.2.22` | `b0fa9f3e6eeab1968a53e1289b69daa4bb40ca2b` | published |
 | `v0.2.23+custom.001` | `v0.2.23` | `5af9afb588c4b014b3df9db7d4073af1f8ae01b6` | published |
+| `v0.2.24+custom.001` | `v0.2.24` | `5c2982a81b46e2142d0143d2f83c1ce9c4da1d24` | planned |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains

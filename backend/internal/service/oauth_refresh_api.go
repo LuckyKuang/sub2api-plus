@@ -34,6 +34,9 @@ const (
 	defaultRefreshLockTTL                   = 60 * time.Second
 	defaultRefreshLockReleaseTimeout        = 2 * time.Second
 	defaultRefreshPostPersistCleanupTimeout = 2 * time.Second
+	defaultOpenAIRefreshPersistTimeout      = 10 * time.Second
+	// Repository snapshot propagation uses its own detached timeout after CAS.
+	defaultRefreshRepositorySyncTimeout = 2 * time.Second
 )
 
 var (
@@ -239,6 +242,17 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 			return &OAuthRefreshResult{LockHeld: true}, nil
 		} else {
 			defer api.releaseRefreshLock(ctx, cacheKey)
+			if account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth {
+				// Reserve lease time for the irreversible rotation's detached save,
+				// cache invalidation and lock release, including request-path calls.
+				budget := api.lockTTL - defaultOpenAIRefreshPersistTimeout - defaultRefreshRepositorySyncTimeout - defaultRefreshPostPersistCleanupTimeout - defaultRefreshLockReleaseTimeout - maxTokenRefreshLockSafetyMargin
+				if budget <= 0 {
+					return nil, &providerConfigurationRefreshError{err: errors.New("OpenAI OAuth refresh lock lease is too short for credential persistence")}
+				}
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, budget)
+				defer cancel()
+			}
 		}
 	}
 
@@ -332,6 +346,9 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 		return &OAuthRefreshResult{Account: attemptedAccount, AttemptedAccount: attemptedAccount}, NewProviderCredentialFailure("oauth_refresh_proxy_unavailable", proxyErr)
 	}
 	newCredentials, refreshErr := executor.Refresh(ctx, snapshotOAuthRefreshAccount(attemptedAccount))
+	if refreshErr == nil && quotaOwner == nil && hasOpenAIRefreshCredentials(attemptedAccount, newCredentials) {
+		return api.persistOpenAIRotation(ctx, cacheKey, attemptedAccount, newCredentials)
+	}
 	if ctxErr := oauthRefreshContextError(ctx); ctxErr != nil {
 		// A provider implementation may ignore cancellation and return late
 		// credentials. Never persist them after the attempt/cycle boundary.
@@ -557,6 +574,16 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 		Account:          freshAccount,
 		AttemptedAccount: attemptedAccount,
 	}, nil
+}
+
+func hasOpenAIRefreshCredentials(account *Account, credentials map[string]any) bool {
+	if account == nil || account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth ||
+		account.IsCredentialShadow() || account.IsOpenAIPersonalAccessToken() {
+		return false
+	}
+	accessToken, _ := credentials["access_token"].(string)
+	refreshToken, _ := credentials["refresh_token"].(string)
+	return strings.TrimSpace(accessToken) != "" && strings.TrimSpace(refreshToken) != ""
 }
 
 func (api *OAuthRefreshAPI) releaseRefreshLock(parent context.Context, cacheKey string) {

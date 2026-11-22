@@ -155,3 +155,11 @@ it does not permanently disable the account. Credential-generation CAS still
 authorizes persistent/runtime changes. A failed or stale update cannot block a
 new credential generation. This does not enable broad keyword-based quota
 classification or replace known quota-reset windows.
+
+## Dynamic Chat tool declarations
+
+Native Kimi Chat keeps tool-only system messages in conversation order. A
+bridge to Responses or native Messages promotes their named function
+declarations to the request tool list. The audit treats these declarations
+as tool context and keeps a preceding current user message visible to both
+engines. [Official Kimi agent source](../OFFICIAL_AGENT_BASELINES.md)

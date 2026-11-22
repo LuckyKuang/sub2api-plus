@@ -23,6 +23,7 @@ const Table = {
   template: `<div><section v-for="row in data" :key="row.id" :data-row="row.id">
     <slot name="cell-name" :value="row.name" :row="row" />
     <slot name="cell-address" :row="row" />
+    <span data-account-count>{{ row.account_count }}</span>
     <span data-probe>{{ row.latency_status }} {{ row.country }} {{ row.latency_ms }}</span>
     <span data-quality>{{ row.quality_status }} {{ row.quality_summary }}</span>
     <slot name="cell-actions" :row="row" />
@@ -194,6 +195,7 @@ describe('seven-provider proxy management business chain', () => {
     })
     await bindProxy(31)
     await refresh(view)
+    await vi.waitFor(() => expect(row(view).get('[data-account-count]').text()).toBe('1'))
     await (await menuItem(view, 'common.delete')).trigger('click')
     expect(messages.error).toHaveBeenLastCalledWith('admin.proxies.deleteBlockedInUse')
     expect(calls.filter(call => call.method === 'delete')).toHaveLength(0)
@@ -226,6 +228,7 @@ describe('seven-provider proxy management business chain', () => {
     expect(account.proxy_id).toBe(31)
     await bindProxy(null)
     await refresh(view)
+    await vi.waitFor(() => expect(row(view).get('[data-account-count]').text()).toBe('0'))
     await (await menuItem(view, 'common.delete')).trigger('click')
     await button(view.get('[data-dialog="admin.proxies.deleteProxy"]') as unknown as VueWrapper, 'common.delete').trigger('click')
     await flushPromises()

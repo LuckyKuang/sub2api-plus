@@ -919,7 +919,8 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 			if releaseRate != nil {
 				releaseRate()
 			}
-			if err == nil {
+			openAIRotated := err == nil && hasOpenAIRefreshCredentials(observedBeforeRefresh, newCredentials)
+			if err == nil && !openAIRotated {
 				err = oauthRefreshContextError(attemptCtx)
 			}
 			if err == nil && newCredentials != nil {
@@ -930,7 +931,13 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 					if !ok {
 						err = &providerConfigurationRefreshError{err: errors.New("credential refresh success CAS repository is not configured")}
 					} else {
-						applied, saveErr := conditionalRepo.UpdateOAuthRefreshCredentialsIfUnchanged(attemptCtx, observedBeforeRefresh, newCredentials)
+						persistCtx, cancelPersist := attemptCtx, func() {}
+						if openAIRotated {
+							// OpenAI may have consumed the grant before the attempt expired.
+							persistCtx, cancelPersist = context.WithTimeout(context.WithoutCancel(attemptCtx), defaultOpenAIRefreshPersistTimeout)
+						}
+						applied, saveErr := conditionalRepo.UpdateOAuthRefreshCredentialsIfUnchanged(persistCtx, observedBeforeRefresh, newCredentials)
+						cancelPersist()
 						if saveErr != nil {
 							err = &providerCycleContainmentRefreshError{err: fmt.Errorf("failed to conditionally persist refreshed credentials: %w", saveErr)}
 						} else if !applied {

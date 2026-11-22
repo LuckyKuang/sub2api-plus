@@ -15,7 +15,7 @@ import (
 // NormalizeCodexPageContext preserves the same page-snapshot attribution for
 // HTTP, flat response.create frames and nested Responses envelopes.
 func NormalizeCodexPageContext(body []byte) ([]byte, bool) {
-	if !mayContainCodexCallOutputCandidate(body, "codex_apps_open_page", "codex_apps_selected_page_part_", "browser_info", "goal_objective", "untrusted_context") || !hasUniqueJSONMembers(body) {
+	if !mayContainCodexCallOutputCandidate(body, "codex_apps_open_page", "codex_apps_selected_page_part_", "browser_info", "goal_objective", "untrusted_context", "untrusted_content", "ide_context", "proposed_plan") || !hasUniqueJSONMembers(body) {
 		return body, false
 	}
 	normalized, changed := normalizeCodexPageContextInput(body)
@@ -42,7 +42,7 @@ var codexSelectedPageName = regexp.MustCompile(`^codex_apps_selected_page_part_(
 // untrusted context) as standalone outputs, without a model tool call. Keep them
 // as untrusted user text, including on history replay and mixed bootstrap turns.
 func normalizeCodexPageContextInput(body []byte) ([]byte, bool) {
-	if !mayContainCodexCallOutputCandidate(body, "codex_apps_open_page", "codex_apps_selected_page_part_", "browser_info", "goal_objective", "untrusted_context") || !hasUniqueJSONMembers(body) {
+	if !mayContainCodexCallOutputCandidate(body, "codex_apps_open_page", "codex_apps_selected_page_part_", "browser_info", "goal_objective", "untrusted_context", "untrusted_content", "ide_context", "proposed_plan") || !hasUniqueJSONMembers(body) {
 		return body, false
 	}
 	var request map[string]json.RawMessage
@@ -73,15 +73,16 @@ func normalizeCodexPageContextInput(body []byte) ([]byte, bool) {
 				continue
 			}
 		}
-		name, output := readString("name"), readString("output")
-		if !validCodexUntrustedContext(name, output) {
+		name := readString("name")
+		var output *string
+		if json.Unmarshal(item["output"], &output) != nil || output == nil || !validCodexUntrustedContext(name, *output) {
 			continue
 		}
 		// Page snapshots keep their own line framing; the other external context
 		// wrappers stay inline so the payload is not altered.
-		text := "<external_" + name + ">" + output + "</external_" + name + ">"
-		if validCodexPageContext(name, output) {
-			text = "<external_" + name + ">\n" + output + "\n</external_" + name + ">"
+		text := "<external_" + name + ">" + *output + "</external_" + name + ">"
+		if validCodexPageContext(name, *output) {
+			text = "<external_" + name + ">\n" + *output + "\n</external_" + name + ">"
 		}
 		message := map[string]any{
 			"type": "message",
@@ -115,8 +116,12 @@ func normalizeCodexPageContextInput(body []byte) ([]byte, bool) {
 
 func validCodexUntrustedContext(name, output string) bool {
 	switch name {
-	case "browser_info", "goal_objective", "untrusted_context":
+	case "browser_info", "goal_objective", "untrusted_context", "ide_context":
 		return strings.TrimSpace(output) != ""
+	case "untrusted_content":
+		return true
+	case "proposed_plan":
+		return output != ""
 	default:
 		return validCodexPageContext(name, output)
 	}

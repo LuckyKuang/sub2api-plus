@@ -675,3 +675,8 @@ images, visible control edges, and semantic status colors still apply. The
 authentication brand and footer sit on the canvas around one form card; default,
 compact, and custom home modes keep their original precedence and destinations.
 
+## Account operations
+
+Bulk OpenAI account edits can opt in to writing the passthrough model filter
+independently. The model plaza copy action copies the clicked model's exact
+ID. Manual token refresh uses a frequency hint in the account actions.

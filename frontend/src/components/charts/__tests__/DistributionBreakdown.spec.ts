@@ -30,7 +30,9 @@ const cases = [
 ] as const
 
 describe.each(cases)('$name expanded user columns', ({ component, props, accountCost }) => {
-  beforeEach(() => getUserBreakdown.mockReset())
+  beforeEach(() => {
+    getUserBreakdown.mockReset()
+  })
 
   function mountChart() {
     return mount(component, { attachTo: document.body, props: { ...props, startDate: '2026-10-01', endDate: '2026-10-08' } })
