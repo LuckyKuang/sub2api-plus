@@ -16,6 +16,7 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	coderws "github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
 
@@ -107,8 +108,13 @@ func testCodexCallLessContextRealAuditsBeforeSideEffects(t *testing.T, fixture [
 						observed := supplier.snapshot()
 						require.Len(t, observed, scans)
 						if recognized {
-							require.Contains(t, observed[0], expectedText)
-							require.NotContains(t, observed[0], "Updated tool definition")
+							inputPath := "input"
+							if engine == "prompt" {
+								inputPath = "messages.0.content"
+							}
+							input := gjson.Get(observed[0], inputPath).String()
+							require.Contains(t, input, expectedText)
+							require.NotContains(t, input, "Updated tool definition")
 							assertCodexCLIIngressNoSideEffects(t, boundary)
 						} else {
 							require.Equal(t, int32(1), boundary.userSlots.Load(), "unknown content must pass audit and reach admission")

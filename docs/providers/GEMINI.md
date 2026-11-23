@@ -140,3 +140,12 @@ and a different failover account resolves its own identity.
 The v0.2.21 Messages compatibility path excludes Gemini `thought` text from a
 non-streaming response body. Thought metadata does not become user-visible text;
 existing usage, identity, audit and billing rules are unchanged.
+
+## Tool history and Antigravity quota compatibility
+
+Native Gemini conversion separates trailing content from the final
+tool-result turn so the upstream receives the tool results in their own
+content message. Antigravity streaming retains upstream SSE comments.
+Antigravity quota observations use the same forward endpoint as the
+selected account, and an unclassified 429 can cool at most one account
+during a logical request.

@@ -557,3 +557,18 @@ On upgrade, a versioned Redis namespace rechecks ambiguous legacy `"1"` claims
 through the durable billing request ID. A previously settled task is not charged
 again; an unpaid task can recover at its persisted price. Legacy and unrelated
 cache records are not deleted or migrated.
+
+## Image edit inputs and search usage
+
+Grok image edits accept up to five source images in JSON and multipart,
+including asynchronous edits. Excess source images yield a local 400 error
+in the synchronous response or asynchronous task result. Async multipart
+submission checks image formats, mask dimensions and the existing 40 MiB
+combined upload limit. [xAI multi-image editing](https://docs.x.ai/developers/model-capabilities/images/multi-image-editing)
+
+Native Responses and Chat/Messages bridges use xAI's reported successful web,
+X and document search-call counts when the terminal usage object supplies
+`server_side_tool_usage_details`. The gateway's existing search-call price
+uses that total and falls back to deduplicated output items when the details
+are absent. xAI's own post/profile invoices are separate from this gateway
+meter. [xAI tool usage details](https://docs.x.ai/developers/tools/tool-usage-details)

@@ -97,10 +97,13 @@ A `typesafe` group only speaks System One:
 `ResolveChannelMappingAndRestrict` returns `(mapping, false)`: the second value is
 a boolean, not an error, and the model-restriction decision lives in the
 scheduling stage (`checkChannelPricingRestriction`). A configured channel model
-mapping is recorded in the usage log (requested model, channel-mapped model,
-mapping chain and billing model source) but never rewrites the native payload:
-the upstream protocol only supports `jev-latest`, so the validated body is
-forwarded verbatim.
+mapping supplies the usage log's requested model, channel-mapped model,
+mapping chain and billing model source. Clients submit the public
+`jev-latest` model. The selected account's mapping determines the model sent
+in the native payload. The gateway records any supplier alias alongside the
+channel billing source. With the upstream billing source, an unpriced
+supplier alias uses the configured TypeSafe platform fallback, which defaults
+to the `jev-latest` card.
 
 Usage accounting computes `ChannelUsageFields` synchronously before the
 asynchronous usage task is enqueued. The deferred worker reads only immutable

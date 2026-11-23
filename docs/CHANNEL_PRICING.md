@@ -985,3 +985,11 @@ malformed filter flag retains the default. The opt-in applies to both the
 current and legacy passthrough flags with their existing precedence. The
 catalog projects only those three flags alongside model mappings and never
 loads complete account credentials or extra metadata.
+
+## Search usage counters
+
+For Grok native Responses and its Chat/Messages bridges, the configured
+per-search-call price uses the provider's successful search-call counts
+when the terminal response supplies them. When those counters are
+unavailable, deduplicated search output items provide the compatibility
+count. See [Grok search usage](providers/GROK.md#image-edit-inputs-and-search-usage).

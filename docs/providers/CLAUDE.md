@@ -179,3 +179,12 @@ the count again before opening a new confirmation; the server's durable fence
 still decides whether a subsequent redemption is permitted. Transport and
 idempotency-in-progress failures retain the confirmation key so a retry replays
 the same operation instead of creating another claim.
+
+## Compaction cache and search compatibility
+
+Claude Code compaction keeps matching ephemeral cache breakpoints in the
+5-minute class. The account usage view can estimate OAuth and setup-token
+window cost from recorded demand. In the Claude Messages bridge, a Codex
+model with native search-tool support receives ToolSearch declarations in
+the provider's native format, and web search result blocks carry available
+source links.

@@ -457,6 +457,42 @@ post-audit HTTP/WS adapter. `upstream022_audit_contract_test.go` covers the lite
 projection, anchored-output exclusion, OAuth/API-key HTTP/WS blocking before
 side effects and unknown-item pass-through for all three names.
 
+The same shared projection recognizes `agent.ide_context`,
+`agent.untrusted_content` and `agent.proposed_plan`. It keeps IDE text,
+an unnamed context source's string (including an empty string), and
+whitespace-bearing nonempty plan chunks. Null or non-string output and
+anchored tool output retain their existing attribution. Both engines audit
+the projected user text before any HTTP or Responses WS forwarding.
+
+A Kimi Chat system message with named function declarations in `tools` and
+an absent `content` is tool-definition context. A present null or empty
+`tools` list also leaves the preceding current user message or tool result
+current: the bridge removes these no-op declarations. An absent `tools`,
+explicit `content: null`, content-bearing system message, or malformed tool
+list does not match this rule; explicit null content remains present content
+and is rejected by the bridge. Definitions may be promoted only after ingress
+audit. `chat_tool_declaration_test.go` covers canonical classification, and
+`upstream024_audit_contract_test.go` exercises both real audit engines for
+named/null/empty lists with unknown siblings, across OAuth/API Key candidates
+configured for native Chat, Responses or Messages. Blocking precedes billing,
+credential selection, concurrency and sending. The actual Responses/Messages
+wire cases and explicit-null content rejection are covered by
+`openai_gateway_kimi_dynamic_tools_test.go`.
+
+Gateway duplicate-member checks are basic validation. The HTTP gateway
+rejects repeated JSON members and scalar multipart fields before Composite
+rewrite. Responses WS validates frames before resolving their turn policies.
+JSON Schema and tool-argument key spaces keep distinct case-sensitive keys.
+Arbitrary metadata keys retain the same map semantics; only reserved
+`metadata.user_id` aliases are case-folded to keep typed binding and session
+extraction unambiguous. Exact duplicate keys remain invalid.
+The model allowlist retains its existing response when it rejects an HTTP
+request or the initial Responses WS frame first. Unknown unique input and
+unknown sibling fields retain the canonical extraction behavior. Streaming
+provider file uploads keep their own bounded multipart validation. Grok
+async image edits validate multipart upload limits before auditing the
+accepted request and before task creation.
+
 Prompt-audit enqueue wakes local workers only after durable enqueue succeeds.
 Workers retain database claims, lease expiry, retry polling and cross-replica
 idempotency; wakeups never run selection or forwarding before the ingress gate.

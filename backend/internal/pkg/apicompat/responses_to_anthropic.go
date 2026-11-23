@@ -78,9 +78,14 @@ func responsesToAnthropic(resp *ResponsesResponse, model string, suppressServerS
 				Type:  "tool_use",
 				ID:    fromResponsesCallID(item.CallID),
 				Name:  item.Name,
-				Input: sanitizeAnthropicToolUseInput(item.Name, arguments),
+				Input: anthropicToolUseInput(item.Type, item.Name, arguments),
 			})
+		case "tool_search_call":
+			blocks = append(blocks, toolSearchCallToolUse(item))
 		case "web_search_call":
+			if item.Status != "completed" {
+				continue
+			}
 			toolUseID := "srvtoolu_" + item.ID
 			query := ""
 			if item.Action != nil {
@@ -93,11 +98,10 @@ func responsesToAnthropic(resp *ResponsesResponse, model string, suppressServerS
 				Name:  "web_search",
 				Input: inputJSON,
 			})
-			emptyResults, _ := json.Marshal([]struct{}{})
 			blocks = append(blocks, AnthropicContentBlock{
 				Type:      "web_search_tool_result",
 				ToolUseID: toolUseID,
-				Content:   emptyResults,
+				Content:   webSearchCallResults(&item),
 			})
 		}
 	}
@@ -165,6 +169,26 @@ func containsAnthropicToolUseBlock(blocks []AnthropicContentBlock) bool {
 	return false
 }
 
+// anthropicToolUseInput returns the input of a non-streaming tool_use block,
+// which must be a JSON object. An object is kept as it is. A function_call whose
+// arguments are not an object (truncated by max_output_tokens, or empty) gets {};
+// a custom_tool_call's free-form input is wrapped in the same {"input": ...}
+// shape that downgrades a custom tool to a function tool, so that
+// extractCustomToolCallInput gives the text back; an empty custom input is {} as
+// it is in the streamed tool_use.
+func anthropicToolUseInput(itemType, name, raw string) json.RawMessage {
+	if trimmed := strings.TrimSpace(raw); strings.HasPrefix(trimmed, "{") && json.Valid([]byte(trimmed)) {
+		return sanitizeAnthropicToolUseInput(name, raw)
+	}
+	if itemType == "custom_tool_call" && raw != "" {
+		wrapped, err := json.Marshal(map[string]string{"input": raw})
+		if err == nil {
+			return wrapped
+		}
+	}
+	return json.RawMessage("{}")
+}
+
 func sanitizeAnthropicToolUseInput(name string, raw string) json.RawMessage {
 	if name != "Read" || raw == "" {
 		return json.RawMessage(raw)
@@ -230,6 +254,9 @@ type ResponsesEventToAnthropicState struct {
 	textByPart map[responsesTextPart]*strings.Builder
 	// textDelivered records whether any assistant text reached the client.
 	textDelivered bool
+	// messageIDByOutput anchors later done-only parts to a declared message.
+	// Keep the first binding when a supplier reuses an output index.
+	messageIDByOutput map[int]string
 
 	InputTokens              int
 	OutputTokens             int
@@ -246,6 +273,7 @@ func NewResponsesEventToAnthropicState() *ResponsesEventToAnthropicState {
 	return &ResponsesEventToAnthropicState{
 		OutputIndexToBlockIdx: make(map[int]int),
 		textByPart:            make(map[responsesTextPart]*strings.Builder),
+		messageIDByOutput:     make(map[int]string),
 		Created:               time.Now().Unix(),
 	}
 }
@@ -430,6 +458,9 @@ func resToAnthHandleOutputItemAdded(evt *ResponsesStreamEvent, state *ResponsesE
 		return events
 
 	case "message":
+		if evt.Item.ID != "" && state.messageIDByOutput[evt.OutputIndex] == "" {
+			state.messageIDByOutput[evt.OutputIndex] = evt.Item.ID
+		}
 		return nil
 	}
 
@@ -494,13 +525,20 @@ func resToAnthEmitText(text string, part responsesTextPart, state *ResponsesEven
 // resToAnthRecoverText emits the tail of a finished text payload that never
 // reached the client. Streamed text cannot be recalled, so a payload that does
 // not extend what was already delivered is left alone.
-func resToAnthRecoverText(text string, part responsesTextPart, state *ResponsesEventToAnthropicState) []AnthropicStreamEvent {
+func resToAnthRecoverText(evt *ResponsesStreamEvent, state *ResponsesEventToAnthropicState) []AnthropicStreamEvent {
+	part := resToAnthTextPartOf(evt)
+	messageID := state.messageIDByOutput[part.OutputIndex]
+	if evt.ItemID != "" && messageID != "" && evt.ItemID != messageID {
+		// Conflicting item IDs cannot finish an already declared message,
+		// including when a supplier reuses its output index.
+		return nil
+	}
 	builder, known := state.textByPart[part]
-	if !known && state.textDelivered {
-		// The payload is indexed differently from every delta seen so far, so
-		// which part it finishes cannot be established. Recovering it could
-		// repeat an answer the client already has, which is worse than leaving
-		// a partially delivered one alone.
+	anchored := evt.ItemID != "" && evt.ItemID == messageID
+	if !known && state.textDelivered && !anchored {
+		// Without a declared message identity an unfamiliar index may be an
+		// upstream reindexing of text already delivered. Preserve the existing
+		// duplicate guard for these ambiguous payloads.
 		return nil
 	}
 
@@ -508,6 +546,7 @@ func resToAnthRecoverText(text string, part responsesTextPart, state *ResponsesE
 	if known {
 		delivered = builder.String()
 	}
+	text := evt.Text
 	if text == delivered || !strings.HasPrefix(text, delivered) {
 		return nil
 	}
@@ -524,7 +563,7 @@ func resToAnthHandleTextDone(evt *ResponsesStreamEvent, state *ResponsesEventToA
 		return resToAnthHandleBlockDone(state)
 	}
 
-	events := resToAnthRecoverText(evt.Text, resToAnthTextPartOf(evt), state)
+	events := resToAnthRecoverText(evt, state)
 	return append(events, resToAnthHandleBlockDone(state)...)
 }
 
@@ -657,6 +696,10 @@ func resToAnthHandleOutputItemDone(evt *ResponsesStreamEvent, state *ResponsesEv
 	if evt.Item.Type == "web_search_call" && evt.Item.Status == "completed" {
 		return resToAnthHandleWebSearchDone(evt, state)
 	}
+	// The native tool_search_call carries its arguments only on done.
+	if evt.Item.Type == "tool_search_call" {
+		return resToAnthHandleToolSearchDone(evt, state)
+	}
 
 	// Capture encrypted_content on reasoning item done (often only present here).
 	if evt.Item.Type == "reasoning" {
@@ -704,9 +747,6 @@ func resToAnthHandleWebSearchDone(evt *ResponsesStreamEvent, state *ResponsesEve
 	state.ContentBlockIndex++
 
 	// Emit web_search_tool_result block (start + stop).
-	// Content is empty because OpenAI does not expose individual search results;
-	// the model consumes them internally and produces text output.
-	emptyResults, _ := json.Marshal([]struct{}{})
 	idx2 := state.ContentBlockIndex
 	events = append(events, AnthropicStreamEvent{
 		Type:  "content_block_start",
@@ -714,7 +754,7 @@ func resToAnthHandleWebSearchDone(evt *ResponsesStreamEvent, state *ResponsesEve
 		ContentBlock: &AnthropicContentBlock{
 			Type:      "web_search_tool_result",
 			ToolUseID: toolUseID,
-			Content:   emptyResults,
+			Content:   webSearchCallResults(evt.Item),
 		},
 	})
 	events = append(events, AnthropicStreamEvent{

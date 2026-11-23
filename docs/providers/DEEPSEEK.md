@@ -138,3 +138,12 @@ duplicate IDs retain the first row, following Harness's decoder.
 API-key Chat/Responses/adaptive and custom compatible discovery retain their
 own catalog semantics; they are not filtered to native Messages capabilities.
 No OAuth token is used for API-key discovery.
+
+## Native Messages thinking history
+
+When a thinking-enabled request reaches DeepSeek's official native Messages
+endpoint, the gateway preserves existing thinking or redacted-thinking blocks.
+An assistant history message with tool calls and no such block receives a
+single-space thinking placeholder before its tools. The request still passes
+through the same ingress audit and credential-owner selection before this
+compatibility transform.

@@ -34,6 +34,9 @@ const (
 	defaultRefreshLockTTL                   = 60 * time.Second
 	defaultRefreshLockReleaseTimeout        = 2 * time.Second
 	defaultRefreshPostPersistCleanupTimeout = 2 * time.Second
+	defaultOpenAIRefreshPersistTimeout      = 10 * time.Second
+	// Repository snapshot propagation uses its own detached timeout after CAS.
+	defaultRefreshRepositorySyncTimeout = 2 * time.Second
 )
 
 var (
@@ -239,6 +242,17 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 			return &OAuthRefreshResult{LockHeld: true}, nil
 		} else {
 			defer api.releaseRefreshLock(ctx, cacheKey)
+			if account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth {
+				// Reserve lease time for the irreversible rotation's detached save,
+				// cache invalidation and lock release, including request-path calls.
+				budget := api.lockTTL - defaultOpenAIRefreshPersistTimeout - defaultRefreshRepositorySyncTimeout - defaultRefreshPostPersistCleanupTimeout - defaultRefreshLockReleaseTimeout - maxTokenRefreshLockSafetyMargin
+				if budget <= 0 {
+					return nil, &providerConfigurationRefreshError{err: errors.New("OpenAI OAuth refresh lock lease is too short for credential persistence")}
+				}
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, budget)
+				defer cancel()
+			}
 		}
 	}
 
@@ -332,6 +346,17 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 		return &OAuthRefreshResult{Account: attemptedAccount, AttemptedAccount: attemptedAccount}, NewProviderCredentialFailure("oauth_refresh_proxy_unavailable", proxyErr)
 	}
 	newCredentials, refreshErr := executor.Refresh(ctx, snapshotOAuthRefreshAccount(attemptedAccount))
+	if refreshErr == nil && hasOpenAIRefreshCredentials(attemptedAccount, newCredentials) {
+		if quotaOwner == nil {
+			return api.persistOpenAIRotation(ctx, cacheKey, attemptedAccount, newCredentials)
+		}
+		// WHAM usage/reset retains its stricter complete-owner CAS below. Only
+		// finish the completed rotation locally; the caller's quota operation
+		// keeps its original cancellation and cannot inherit this deadline.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), defaultOpenAIRefreshPersistTimeout)
+		defer cancel()
+	}
 	if ctxErr := oauthRefreshContextError(ctx); ctxErr != nil {
 		// A provider implementation may ignore cancellation and return late
 		// credentials. Never persist them after the attempt/cycle boundary.
@@ -440,9 +465,18 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 			if !applied {
 				return nil, errOpenAIQuotaTokenOwnerChanged
 			}
+			// A committed rotation invalidates the old row-ID cache even if the
+			// caller or persistence budget expired immediately after the CAS.
+			readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultRefreshPostPersistCleanupTimeout)
+			defer cancel()
+			if api.tokenCache != nil {
+				if err := api.tokenCache.DeleteAccessToken(readCtx, cacheKey); err != nil {
+					return nil, fmt.Errorf("%w: quota token cache invalidation failed: %v", errOpenAIQuotaTokenOwnerChanged, err)
+				}
+			}
 			// A successful SQL mutation authorizes exactly its committed token
 			// document, never a newer login returned by a later repository read.
-			durableAccount, readErr := api.accountRepo.GetByID(ctx, attemptedAccount.ID)
+			durableAccount, readErr := api.accountRepo.GetByID(readCtx, attemptedAccount.ID)
 			if readErr != nil || durableAccount == nil {
 				return nil, errOpenAIQuotaTokenOwnerChanged
 			}
@@ -557,6 +591,16 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 		Account:          freshAccount,
 		AttemptedAccount: attemptedAccount,
 	}, nil
+}
+
+func hasOpenAIRefreshCredentials(account *Account, credentials map[string]any) bool {
+	if account == nil || account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth ||
+		account.IsCredentialShadow() || account.IsOpenAIPersonalAccessToken() {
+		return false
+	}
+	accessToken, _ := credentials["access_token"].(string)
+	refreshToken, _ := credentials["refresh_token"].(string)
+	return strings.TrimSpace(accessToken) != "" && strings.TrimSpace(refreshToken) != ""
 }
 
 func (api *OAuthRefreshAPI) releaseRefreshLock(parent context.Context, cacheKey string) {

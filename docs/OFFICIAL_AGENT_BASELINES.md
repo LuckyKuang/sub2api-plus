@@ -415,3 +415,13 @@ Catalog/effort/Bedrock mapping live in `pkg/claude`, conversion in `pkg/apicompa
 and billing/reference cards in `service/billing_service.go` and
 `service/channel_pricing_reference.go`. Provider documentation grants no local
 account entitlement; Mythos access still requires provider approval.
+
+## Sub2API v0.2.24 integration
+
+This upstream import keeps the selected official-agent revisions and identity
+versions above. Codex compatibility changes use the existing owner-scoped
+profile and descriptor catalog. The pinned catalog is preserved byte for byte.
+Grok billing consumes provider response usage, and DeepSeek and Kimi protocol
+bridges use the same account identity and transport as their existing native
+routes. Shared gateway changes cover MiniMax, StepFun and Zhipu through the
+same OAuth and API Key paths. See the [seven-provider test matrix](SEVEN_PROVIDER_TEST_MATRIX.md#v024-import-requirements).

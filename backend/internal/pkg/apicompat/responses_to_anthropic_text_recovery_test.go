@@ -319,9 +319,10 @@ func TestResponsesEventToAnthropicEvents_RecoversTextOnEveryTerminalAlias(t *tes
 	}
 }
 
-// A done payload indexed differently from every delta seen so far cannot be
-// matched to a part. Emitting it anyway would repeat an answer the client
-// already has, which is the failure the terminal guard also exists to prevent.
+// Without a declared message identity, a done payload indexed differently
+// from every delta seen so far cannot be matched to a part. Emitting it anyway
+// could repeat an answer the client already has, which is the failure the
+// terminal guard also exists to prevent.
 func TestResponsesEventToAnthropicEvents_DoesNotDuplicateWhenDoneIsIndexedDifferently(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -355,6 +356,100 @@ func TestResponsesEventToAnthropicEvents_LeavesUnmatchableDoneAloneAfterPartialD
 	)
 
 	assert.Equal(t, "Hello", collectAnthropicText(events))
+	requireAnthropicBlockLifecycle(t, events)
+}
+
+// An explicit message declaration anchors output_index to its item ID. Within
+// that message a new content_index is a distinct part, even when only its done
+// event carries text. Repeated snapshots still finish the same part only once.
+func TestResponsesEventToAnthropicEvents_RecoversDoneOnlyPartOfDeclaredMessage(t *testing.T) {
+	for _, second := range []string{"second", "first complete "} {
+		t.Run(second, func(t *testing.T) {
+			events := feedResponsesEvents(
+				responsesCreated(),
+				&ResponsesStreamEvent{Type: "response.output_item.added", Item: &ResponsesOutput{Type: "message", ID: "msg_1"}},
+				&ResponsesStreamEvent{Type: "response.output_text.delta", ItemID: "msg_1", Delta: "first "},
+				&ResponsesStreamEvent{Type: "response.output_text.done", ItemID: "msg_1", Text: "first complete "},
+				&ResponsesStreamEvent{Type: "response.output_text.done", ItemID: "msg_1", Text: "first complete "},
+				&ResponsesStreamEvent{Type: "response.output_text.done", ItemID: "msg_1", ContentIndex: 1, Text: second},
+				&ResponsesStreamEvent{Type: "response.output_text.done", ItemID: "msg_1", ContentIndex: 1, Text: second},
+				&ResponsesStreamEvent{Type: "response.completed", Response: &ResponsesResponse{Status: "completed"}},
+			)
+
+			assert.Equal(t, "first complete "+second, collectAnthropicText(events))
+			requireAnthropicBlockLifecycle(t, events)
+		})
+	}
+}
+
+func TestResponsesEventToAnthropicEvents_RecoversDoneOnlyDeclaredMessageAfterText(t *testing.T) {
+	events := feedResponsesEvents(
+		responsesCreated(),
+		&ResponsesStreamEvent{Type: "response.output_item.added", Item: &ResponsesOutput{Type: "message", ID: "msg_1"}},
+		&ResponsesStreamEvent{Type: "response.output_text.delta", ItemID: "msg_1", Delta: "same text"},
+		&ResponsesStreamEvent{Type: "response.output_text.done", ItemID: "msg_1", Text: "same text"},
+		&ResponsesStreamEvent{Type: "response.output_item.added", OutputIndex: 1, Item: &ResponsesOutput{Type: "message", ID: "msg_2"}},
+		&ResponsesStreamEvent{Type: "response.output_text.done", OutputIndex: 1, ItemID: "msg_2", Text: "same text"},
+		&ResponsesStreamEvent{Type: "response.completed", Response: &ResponsesResponse{Status: "completed"}},
+	)
+
+	assert.Equal(t, "same textsame text", collectAnthropicText(events))
+	requireAnthropicBlockLifecycle(t, events)
+}
+
+// The new-part recovery needs the declared message identity and output index
+// together. A changed binding or a missing identity retains the conservative
+// behavior for suppliers whose event indices drift.
+func TestResponsesEventToAnthropicEvents_LeavesUnanchoredDoneOnlyPartAlone(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		done *ResponsesStreamEvent
+	}{
+		{"wrong item ID", &ResponsesStreamEvent{Type: "response.output_text.done", ItemID: "msg_other", ContentIndex: 1, Text: "second"}},
+		{"missing item ID", &ResponsesStreamEvent{Type: "response.output_text.done", ContentIndex: 1, Text: "second"}},
+		{"wrong output index", &ResponsesStreamEvent{Type: "response.output_text.done", ItemID: "msg_1", OutputIndex: 1, Text: "first second"}},
+		{"wrong ID on known part", &ResponsesStreamEvent{Type: "response.output_text.done", ItemID: "msg_other", Text: "first second"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			events := feedResponsesEvents(
+				responsesCreated(),
+				&ResponsesStreamEvent{Type: "response.output_item.added", Item: &ResponsesOutput{Type: "message", ID: "msg_1"}},
+				&ResponsesStreamEvent{Type: "response.output_text.delta", ItemID: "msg_1", Delta: "first "},
+				tc.done,
+				&ResponsesStreamEvent{Type: "response.completed", Response: &ResponsesResponse{Status: "completed"}},
+			)
+
+			assert.Equal(t, "first ", collectAnthropicText(events))
+			requireAnthropicBlockLifecycle(t, events)
+		})
+	}
+}
+
+func TestResponsesEventToAnthropicEvents_DoesNotTreatUndeclaredItemIDAsAnchor(t *testing.T) {
+	events := feedResponsesEvents(
+		responsesCreated(),
+		&ResponsesStreamEvent{Type: "response.output_text.delta", ItemID: "msg_1", Delta: "first "},
+		&ResponsesStreamEvent{Type: "response.output_text.done", ItemID: "msg_1", ContentIndex: 1, Text: "second"},
+		&ResponsesStreamEvent{Type: "response.completed", Response: &ResponsesResponse{Status: "completed"}},
+	)
+
+	assert.Equal(t, "first ", collectAnthropicText(events))
+	requireAnthropicBlockLifecycle(t, events)
+}
+
+func TestResponsesEventToAnthropicEvents_DoesNotRebindDeclaredMessageOutputIndex(t *testing.T) {
+	events := feedResponsesEvents(
+		responsesCreated(),
+		&ResponsesStreamEvent{Type: "response.output_item.added", Item: &ResponsesOutput{Type: "message", ID: "msg_1"}},
+		&ResponsesStreamEvent{Type: "response.output_text.delta", ItemID: "msg_1", Delta: "first "},
+		&ResponsesStreamEvent{Type: "response.output_item.added", Item: &ResponsesOutput{Type: "message", ID: "msg_2"}},
+		&ResponsesStreamEvent{Type: "response.output_text.done", ItemID: "msg_2", Text: "first second"},
+		&ResponsesStreamEvent{Type: "response.output_text.done", ItemID: "msg_2", ContentIndex: 1, Text: "second"},
+		&ResponsesStreamEvent{Type: "response.output_text.done", ItemID: "msg_1", ContentIndex: 1, Text: "original"},
+		&ResponsesStreamEvent{Type: "response.completed", Response: &ResponsesResponse{Status: "completed"}},
+	)
+
+	assert.Equal(t, "first original", collectAnthropicText(events))
 	requireAnthropicBlockLifecycle(t, events)
 }
 

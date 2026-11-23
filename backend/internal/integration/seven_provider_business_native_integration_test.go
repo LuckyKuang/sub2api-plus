@@ -496,8 +496,18 @@ func (n *sevenNativeScenario) assertWire(t *testing.T, owner string, turn int, w
 			require.Equal(t, n.callID(), items[2].Get("call_id").String())
 			require.Equal(t, "ready", items[2].Get("output").String())
 		case "anthropic":
-			require.Equal(t, "lookup", items[1].Get("content.0.name").String())
-			require.JSONEq(t, `{"query":"status"}`, items[1].Get("content.0.input").Raw)
+			assistantContent := items[1].Get("content").Array()
+			if n.host == "api.deepseek.com" {
+				require.Len(t, assistantContent, 2)
+				require.JSONEq(t, `{"type":"thinking","thinking":" "}`, assistantContent[0].Raw)
+				assistantContent = assistantContent[1:]
+			}
+			require.Len(t, assistantContent, 1)
+			toolUse := assistantContent[0]
+			require.Equal(t, "tool_use", toolUse.Get("type").String())
+			require.Equal(t, "call_business", toolUse.Get("id").String())
+			require.Equal(t, "lookup", toolUse.Get("name").String())
+			require.JSONEq(t, `{"query":"status"}`, toolUse.Get("input").Raw)
 			require.Equal(t, "tool_result", items[2].Get("content.0.type").String())
 			require.Equal(t, "call_business", items[2].Get("content.0.tool_use_id").String())
 			require.Equal(t, "ready", items[2].Get("content.0.content").String())

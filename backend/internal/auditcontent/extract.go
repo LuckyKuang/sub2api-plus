@@ -233,7 +233,16 @@ func appendChatMessages(document *Document, messagesValue any, messagesExist boo
 		return
 	}
 	currentStart := len(messages) - 1
-	if isChatToolOutput(messages[currentStart]) {
+	// A Kimi system tool declaration changes available tools, not the turn
+	// being answered. Keep the preceding user message or tool output current.
+	for currentStart >= 0 {
+		message, _ := messages[currentStart].(map[string]any)
+		if !isChatToolDeclaration(message) {
+			break
+		}
+		currentStart--
+	}
+	if currentStart >= 0 && isChatToolOutput(messages[currentStart]) {
 		for currentStart > 0 && isChatToolOutput(messages[currentStart-1]) {
 			currentStart--
 		}
@@ -248,8 +257,14 @@ func appendChatMessages(document *Document, messagesValue any, messagesExist boo
 			pop()
 			continue
 		}
+		if isChatToolDeclaration(message) {
+			appendToolDefinitions(document, message["tools"])
+			markUnknownNonEmptyFields(document, message, "role", "tools")
+			pop()
+			continue
+		}
 		role := normalizedRole(message["role"])
-		current := index >= currentStart
+		current := currentStart >= 0 && index >= currentStart
 		if content, exists := message["content"]; exists {
 			markContentBearing(document, content)
 		}
@@ -286,6 +301,37 @@ func appendChatMessages(document *Document, messagesValue any, messagesExist boo
 		markUnknownNonEmptyFields(document, message, "role", "content", "name", "tool_call_id", "tool_calls", "function_call", "refusal", "reasoning_content", "audio")
 		pop()
 	}
+}
+
+func isChatToolDeclaration(message map[string]any) bool {
+	if message["role"] != "system" {
+		return false
+	}
+	if _, exists := message["content"]; exists {
+		return false
+	}
+	value, exists := message["tools"]
+	if !exists {
+		return false
+	}
+	// The Kimi bridge also removes null/empty tool lists. They do not add
+	// definitions, but still cannot replace the preceding current user turn.
+	if value == nil {
+		return true
+	}
+	tools, ok := asSlice(value)
+	if !ok {
+		return false
+	}
+	for _, value := range tools {
+		tool, _ := value.(map[string]any)
+		function, _ := tool["function"].(map[string]any)
+		name, _ := function["name"].(string)
+		if tool["type"] != "function" || strings.TrimSpace(name) == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func isChatToolOutput(value any) bool {

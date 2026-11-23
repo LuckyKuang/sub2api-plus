@@ -53,6 +53,7 @@ func (r *accountRepository) UpdateOAuthRefreshCredentialsIfUnchanged(ctx context
 		WHERE a.id = $2 AND a.deleted_at IS NULL AND a.platform = $3 AND a.type = $4
 			AND a.credentials = $5::jsonb AND a.proxy_id IS NOT DISTINCT FROM $6
 			AND a.status = $7
+			AND a.parent_account_id IS NULL
 		AND `+proxyPredicate+`
 		RETURNING a.id
 		)

@@ -628,11 +628,11 @@ func TestValidateAsyncImageEditUploadLimits(t *testing.T) {
 	}
 
 	contentType, body := makeMultipart(t, asyncImageEditMaxInputImages+1, asyncImageTestPNG)
-	err := validateAsyncImageEditUploadLimits("/v1/images/edits/async", contentType, body)
+	err := validateAsyncImageEditUploadLimits("/v1/images/edits/async", contentType, service.PlatformOpenAI, body)
 	require.ErrorIs(t, err, errAsyncImageEditTooManyInputImages)
 
 	contentType, body = makeMultipart(t, 1, bytes.Repeat([]byte("a"), int(service.OpenAIImageMaxUploadPartBytes)+1))
-	err = validateAsyncImageEditUploadLimits("/v1/images/edits/async", contentType, body)
+	err = validateAsyncImageEditUploadLimits("/v1/images/edits/async", contentType, service.PlatformOpenAI, body)
 	var tooLarge *service.OpenAIImageUploadTooLargeError
 	require.True(t, errors.As(err, &tooLarge))
 	require.Equal(t, service.OpenAIImageMaxUploadPartBytes, tooLarge.Limit)
@@ -648,7 +648,7 @@ func TestValidateAsyncImageEditUploadLimits(t *testing.T) {
 	_, createErr = mask.Write(asyncImageTestPNGWithDimensions(t, 2, 1))
 	require.NoError(t, createErr)
 	require.NoError(t, writer.Close())
-	err = validateAsyncImageEditUploadLimits("/v1/images/edits/async", writer.FormDataContentType(), mismatchedMask.Bytes())
+	err = validateAsyncImageEditUploadLimits("/v1/images/edits/async", writer.FormDataContentType(), service.PlatformOpenAI, mismatchedMask.Bytes())
 	require.ErrorIs(t, err, errAsyncImageEditMaskSizeMismatch)
 }
 

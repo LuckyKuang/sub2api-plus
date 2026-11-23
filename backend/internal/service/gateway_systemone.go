@@ -11,6 +11,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/typesafe"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/sjson"
 )
 
 type SystemOneForwardResult struct {
@@ -43,6 +44,15 @@ func (s *GatewayService) ForwardSystemOne(ctx context.Context, c *gin.Context, a
 	if err != nil {
 		return nil, err
 	}
+	mappedModel := firstNonEmpty(account.GetMappedModel(typesafe.JevLatestModel), typesafe.JevLatestModel)
+	var upstreamModel string
+	if mappedModel != typesafe.JevLatestModel {
+		body, err = sjson.SetBytes(body, "model", mappedModel)
+		if err != nil {
+			return nil, fmt.Errorf("apply TypeSafe account model mapping: %w", err)
+		}
+		upstreamModel = mappedModel
+	}
 	req, err := typesafe.NewSystemOneRequest(ctx, baseURL, key, body)
 	if err != nil {
 		return nil, err
@@ -52,6 +62,7 @@ func (s *GatewayService) ForwardSystemOne(ctx context.Context, c *gin.Context, a
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
+	SetOpsUpstreamModel(c, upstreamModel)
 	// Every provider-bound request resolves its credential owner's trusted
 	// identity through the same preparation boundary as the rest of the gateway;
 	// the native client deliberately renders no provider-specific headers.
@@ -94,6 +105,7 @@ func (s *GatewayService) ForwardSystemOne(ctx context.Context, c *gin.Context, a
 			UpstreamHeaders:       resp.Header.Clone(),
 			Usage:                 ClaudeUsage{InputTokens: decoded.Usage.InputTokens, OutputTokens: decoded.Usage.OutputTokens},
 			Model:                 typesafe.JevLatestModel,
+			UpstreamModel:         upstreamModel,
 			UpstreamResponseModel: decoded.Model,
 			Duration:              time.Since(started),
 		},

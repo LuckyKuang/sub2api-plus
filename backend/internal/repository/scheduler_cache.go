@@ -1348,6 +1348,10 @@ func marshalSchedulerCacheAccount(account service.Account) ([]byte, []byte, erro
 	if account.CredentialGeneration != "" || account.CNQuotaGeneration != "" {
 		return nil, nil, fmt.Errorf("cannot hydrate scheduler cache from a metadata projection")
 	}
+	// Hydration needs account configuration and group membership, not expanded
+	// group objects (also repeated in AccountGroups). Keep the caller's graph intact.
+	account.Groups = nil
+	account.AccountGroups = filterSchedulerAccountGroups(account.AccountGroups)
 	fullPayload, err := json.Marshal(account)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal account: %w", err)

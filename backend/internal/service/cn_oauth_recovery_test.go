@@ -21,6 +21,12 @@ import (
 )
 
 func (r *refreshAPIAccountRepo) UpdateOAuthRefreshCredentialsIfUnchanged(ctx context.Context, expectedOwner *Account, credentials map[string]any) (bool, error) {
+	if expectedOwner.Platform == PlatformOpenAI {
+		r.openAISuccessCASCalls++
+		r.openAIPersistCtxErr = ctx.Err()
+		r.openAIPersistDeadline, _ = ctx.Deadline()
+	}
+
 	id := expectedOwner.ID
 	platform := expectedOwner.Platform
 	expected := expectedOwner.Credentials
