@@ -7,7 +7,21 @@
   reauthorization and provider containment on failed persistence. Alpha
   Search tests distinguish search-tool permission from account-access
   state. Responses WS tests reject duplicate members before sending each
-  invalid frame.
+  invalid frame. `TestOpenAIQuotaRefreshCompletedRotationSurvivesCancellation`
+  and `TestOpenAIQuotaRefreshLateRotationStillFencesOwner` extend the bounded
+  rotation write to WHAM's complete-owner CAS. QueryUsage, ResetCredit and
+  targeted reset retain caller cancellation and send no quota HTTP after that
+  write (`TestOpenAIQuotaRefreshPersistenceDoesNotResumeCanceledOperation`).
+  Incomplete credentials or a failed issuer never authorize detached writes
+  (`TestOpenAIQuotaRefreshIncompleteRotationCannotBypassCancellation`).
+  Completed quota rotations also invalidate stale access-token caches before
+  returning; cancellation cannot strand the next ordinary request on the old
+  cache, and cleanup failures cannot repeat issuer calls.
+  `TestBufferedCompat_PreservesCompletedPartText` preserves completed text,
+  refusal and reasoning parts across buffered Chat/Messages conversion.
+  Messages streaming also restores done-only parts anchored to a declared
+  message ID and output index; mismatched/missing identities, reused indices
+  and repeated completions retain their duplicate protections.
 - xAI. `TestGrokSearchCountFromUsageAcrossEndpoints` covers native Responses
   JSON/SSE and buffered/streaming Chat and Messages. The upstream success
   total, including explicit zero, controls the existing search-call meter.
@@ -16,11 +30,19 @@
   the official DeepSeek endpoint with thinking enabled.
   `TestKimiChatDynamicToolsAcrossProtocols` covers Kimi conversion and leaves
   native Chat declarations in place. The shared audit gate covers Kimi
-  trailing system tool declarations and Codex external context.
+  trailing system tool declarations, including empty/null lists, and Codex
+  external context. Both real audit engines block before side effects for
+  OAuth/API Key candidates across configured Chat, Responses and Messages.
 - MiniMax, StepFun and Zhipu. The shared ingress and translation code runs
   the existing OAuth/API Key identity, proxy, failover, streaming and
   settlement cases. The import does not establish new live-provider
   entitlements.
+
+Shared request validation preserves arbitrary case-sensitive metadata keys
+and rejects reserved `user_id` aliases and exact duplicates
+(`TestConflictingFieldMetadataUsesMapKeySemantics`). Console regressions cover
+stale passive reads, active probes and batches across account/snapshot changes;
+old completions cannot replace current usage, errors, cache entries or busy state.
 
 ## v0.2.21 import requirements
 

@@ -96,6 +96,37 @@ func TestConflictingFieldJSONAcceptsUnambiguousBodies(t *testing.T) {
 	}
 }
 
+func TestConflictingFieldMetadataUsesMapKeySemantics(t *testing.T) {
+	// OpenAI defines metadata as a map with arbitrary string keys, so tag
+	// and Tag are distinct (Responses create API reference, metadata):
+	// https://developers.openai.com/api/reference/resources/responses/methods/create
+	// Keep exact duplicates forbidden, plus user_id aliases because the
+	// Antigravity struct binding and gateway session parser read that field.
+	tests := []struct {
+		name, body, conflictField string
+	}{
+		{name: "distinct case-sensitive tags", body: `{"model":"gpt-5.4","input":"hi","metadata":{"tag":"a","Tag":"b"}}`},
+		{name: "escaped distinct tag", body: `{"metadata":{"tag":"a","\u0054ag":"b"}}`},
+		{name: "reserved user and distinct tags", body: `{"metadata":{"user_id":"u1","tag":"a","Tag":"b"}}`},
+		{name: "exact duplicate", body: `{"metadata":{"tag":"a","tag":"b"}}`, conflictField: "metadata.tag"},
+		{name: "decoded exact duplicate", body: `{"metadata":{"tag":"a","\u0074ag":"b"}}`, conflictField: "metadata.tag"},
+		{name: "reserved user alias", body: `{"metadata":{"user_id":"u1","USER_ID":"u2"}}`, conflictField: "metadata.USER_ID"},
+		{name: "identical reserved user alias", body: `{"metadata":{"user_id":"u1","USER_ID":"u1"}}`, conflictField: "metadata.USER_ID"},
+		{name: "escaped reserved user alias", body: `{"metadata":{"user_id":"u1","\u0055SER_ID":"u2"}}`, conflictField: "metadata.USER_ID"},
+		{name: "Unicode reserved user alias", body: `{"metadata":{"user_id":"u1","uſer_id":"u2"}}`, conflictField: "metadata.uſer_id"},
+		{name: "case variant metadata field", body: `{"Metadata":{"user_id":"u1","USER_ID":"u2"}}`, conflictField: "Metadata.USER_ID"},
+		{name: "metadata field itself remains protected", body: `{"metadata":{"tag":"a"},"METADATA":{"Tag":"b"}}`, conflictField: "METADATA"},
+		{name: "tool argument metadata is client-owned", body: `{"messages":[{"role":"assistant","content":[{"type":"tool_use","input":{"metadata":{"user_id":"a","USER_ID":"b"}}}]}]}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			field, conflict := ConflictingField("application/json", []byte(test.body))
+			require.Equal(t, test.conflictField != "", conflict)
+			require.Equal(t, test.conflictField, field)
+		})
+	}
+}
+
 // 回归：JSON handler 不看 Content-Type，把 JSON 请求体标成 multipart 不能绕过检查。
 func TestConflictingFieldIgnoresMultipartLabelOnJSONBody(t *testing.T) {
 	body := []byte(`{"model":"claude-3-5-haiku-20241022","messages":[],"model":"claude-opus-4-8"}`)

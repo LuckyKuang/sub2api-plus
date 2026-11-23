@@ -310,8 +310,17 @@ func isChatToolDeclaration(message map[string]any) bool {
 	if _, exists := message["content"]; exists {
 		return false
 	}
-	tools, ok := asSlice(message["tools"])
-	if !ok || len(tools) == 0 {
+	value, exists := message["tools"]
+	if !exists {
+		return false
+	}
+	// The Kimi bridge also removes null/empty tool lists. They do not add
+	// definitions, but still cannot replace the preceding current user turn.
+	if value == nil {
+		return true
+	}
+	tools, ok := asSlice(value)
+	if !ok {
 		return false
 	}
 	for _, value := range tools {

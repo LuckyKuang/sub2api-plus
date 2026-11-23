@@ -435,3 +435,55 @@ func TestBufferedCompat_MatchesStreamingPathOnMultiPartItems(t *testing.T) {
 		}
 	}
 }
+
+// Completed part events can supply a suffix omitted from the deltas, or all
+// of a later part. An empty terminal output must preserve both parts even
+// when an earlier delta already created an output slot.
+func TestBufferedCompat_PreservesCompletedPartText(t *testing.T) {
+	for _, tc := range []struct {
+		name, itemType, deltaType, indexKey, shown, completedFirst, completedSecond string
+	}{
+		{"text done", "message", "response.output_text.delta", "content_index", "text",
+			`{"type":"response.output_text.done","content_index":0,"text":"first complete "}`,
+			`{"type":"response.output_text.done","content_index":1,"text":"second"}`},
+		{"text part done", "message", "response.output_text.delta", "content_index", "text",
+			`{"type":"response.content_part.done","content_index":0,"part":{"type":"output_text","text":"first complete "}}`,
+			`{"type":"response.content_part.done","content_index":1,"part":{"type":"output_text","text":"second"}}`},
+		{"refusal done", "message", "response.refusal.delta", "content_index", "refusal",
+			`{"type":"response.refusal.done","content_index":0,"refusal":"first complete "}`,
+			`{"type":"response.refusal.done","content_index":1,"refusal":"second"}`},
+		{"refusal part done", "message", "response.refusal.delta", "content_index", "refusal",
+			`{"type":"response.content_part.done","content_index":0,"part":{"type":"refusal","refusal":"first complete "}}`,
+			`{"type":"response.content_part.done","content_index":1,"part":{"type":"refusal","refusal":"second"}}`},
+		{"reasoning summary done", "reasoning", "response.reasoning_summary_text.delta", "summary_index", "thinking",
+			`{"type":"response.reasoning_summary_text.done","summary_index":0,"text":"first complete "}`,
+			`{"type":"response.reasoning_summary_text.done","summary_index":1,"text":"second"}`},
+		{"reasoning summary part done", "reasoning", "response.reasoning_summary_text.delta", "summary_index", "thinking",
+			`{"type":"response.reasoning_summary_part.done","summary_index":0,"part":{"type":"summary_text","text":"first complete "}}`,
+			`{"type":"response.reasoning_summary_part.done","summary_index":1,"part":{"type":"summary_text","text":"second"}}`},
+	} {
+		for _, entry := range []struct{ name, path, body string }{
+			{"messages", "/v1/messages", bufferedParityMessagesBody},
+			{"chat", "/v1/chat/completions", bufferedParityChatBody},
+		} {
+			if tc.shown == "refusal" && entry.name == "messages" {
+				continue
+			}
+			t.Run(tc.name+" "+entry.name, func(t *testing.T) {
+				sse := bufferedParityStream(`[]`, []string{
+					fmt.Sprintf(`{"type":"response.output_item.added","output_index":0,"item":{"type":%q,"id":"part_item","role":"assistant","summary":[],"content":[]}}`, tc.itemType),
+					fmt.Sprintf(`{"type":%q,"output_index":0,"item_id":"part_item",%q:0,"delta":"first "}`, tc.deltaType, tc.indexKey),
+					strings.TrimSuffix(tc.completedFirst, "}") + `,"output_index":0,"item_id":"part_item"}`,
+					strings.TrimSuffix(tc.completedFirst, "}") + `,"output_index":0,"item_id":"part_item"}`,
+					strings.TrimSuffix(tc.completedSecond, "}") + `,"output_index":0,"item_id":"part_item"}`,
+				})
+				buffered := forwardBufferedParity(t, entry.path, fmt.Sprintf(entry.body, false), sse)
+				require.Equal(t, "first complete second", bufferedPartsVisible(buffered, entry.path, tc.shown), buffered)
+				if tc.name == "text done" {
+					streamed := forwardBufferedParity(t, entry.path, fmt.Sprintf(entry.body, true), sse)
+					require.Equal(t, "first complete second", bufferedParityStreamedText(streamed, entry.path, tc.shown), streamed)
+				}
+			})
+		}
+	}
+}

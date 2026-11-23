@@ -1367,8 +1367,13 @@ counts as reported usage, so the guard no longer discards it as "nothing to say"
 
 Repeated JSON members fail basic validation (HTTP 400 or Responses WebSocket
 policy close). JSON Schema and custom tool-argument key spaces preserve
-distinct case-sensitive names. Requests with unique unknown fields retain
-the existing audit and forwarding rules.
+distinct case-sensitive names. Arbitrary `metadata` keys also remain
+case-sensitive, so `tag` and `Tag` may coexist. The reserved `metadata.user_id`
+field still rejects case-folded aliases such as `user_id` plus `USER_ID`,
+because typed Antigravity binding and gateway session extraction must agree.
+Exact duplicate metadata keys, including equivalent JSON escapes, remain
+invalid. Requests with unique unknown fields retain the existing audit and
+forwarding rules.
 See [security audit coverage](../SECURITY_AUDIT_CONTENT_COVERAGE.md).
 
 Codex external IDE context, unnamed context, and proposed plan chunks use
@@ -1377,9 +1382,26 @@ the same shared post-audit adapter as browser context. The
 reasoning effort for the turn while the top-level request remains stable.
 When a compatible upstream ends an SSE response with empty output, buffered
 Chat and Messages can reconstruct completed items from prior stream events.
+Text, refusal and reasoning parts retain suffixes and later parts supplied
+only by completed text or part events, using each part's own index. Repeated
+completed snapshots do not duplicate content; populated item and terminal
+output remain authoritative, and hosted items retain their ordering.
+Messages streaming also recovers a later done-only text part when its nonempty
+`item_id` and `output_index` match an earlier message item declaration. Parts
+remain distinct by `content_index`, including when their text is identical.
+Repeated done snapshots do not duplicate text. Without that identity anchor,
+unfamiliar indices retain the existing duplicate guard; conflicting item IDs
+cannot replace a declared message's output-index binding.
 
 A tool-level Alpha Search 403 can trigger request failover without affecting
 account scheduling. A verified account or workspace access rejection retains
 its account-level handling. OAuth refresh persists a successful token
 rotation with a bounded exact-owner write even if optional enrichment
-runs out of time.
+runs out of time. WHAM usage and reset token acquisition also completes
+that local write, retaining its complete credential-owner, identity and proxy
+CAS checks. The original canceled caller context still governs quota HTTP
+requests; persisting the new refresh token does not resume a canceled operation.
+After a successful quota rotation CAS, bounded local cleanup invalidates the
+old access-token cache and rereads the committed owner even if the caller was
+canceled. Cleanup failure terminates token acquisition without retrying the
+issuer; a later request cannot be handed a stale cached token as the new grant.

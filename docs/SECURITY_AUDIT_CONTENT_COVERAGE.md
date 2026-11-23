@@ -465,17 +465,27 @@ anchored tool output retain their existing attribution. Both engines audit
 the projected user text before any HTTP or Responses WS forwarding.
 
 A Kimi Chat system message with named function declarations in `tools` and
-no `content` is tool-definition context. A trailing declaration does not
-replace the current user message or tool result. The bridge may promote the
-definitions only after ingress audit. `upstream024_audit_contract_test.go`
-exercises both real audit engines for these wire shapes and checks that
-blocking precedes billing, credential selection, concurrency and sending
-with either OAuth or API Key candidates.
+an absent `content` is tool-definition context. A present null or empty
+`tools` list also leaves the preceding current user message or tool result
+current: the bridge removes these no-op declarations. An absent `tools`,
+explicit `content: null`, content-bearing system message, or malformed tool
+list does not match this rule; explicit null content remains present content
+and is rejected by the bridge. Definitions may be promoted only after ingress
+audit. `chat_tool_declaration_test.go` covers canonical classification, and
+`upstream024_audit_contract_test.go` exercises both real audit engines for
+named/null/empty lists with unknown siblings, across OAuth/API Key candidates
+configured for native Chat, Responses or Messages. Blocking precedes billing,
+credential selection, concurrency and sending. The actual Responses/Messages
+wire cases and explicit-null content rejection are covered by
+`openai_gateway_kimi_dynamic_tools_test.go`.
 
 Gateway duplicate-member checks are basic validation. The HTTP gateway
 rejects repeated JSON members and scalar multipart fields before Composite
 rewrite. Responses WS validates frames before resolving their turn policies.
 JSON Schema and tool-argument key spaces keep distinct case-sensitive keys.
+Arbitrary metadata keys retain the same map semantics; only reserved
+`metadata.user_id` aliases are case-folded to keep typed binding and session
+extraction unambiguous. Exact duplicate keys remain invalid.
 The model allowlist retains its existing response when it rejects an HTTP
 request or the initial Responses WS frame first. Unknown unique input and
 unknown sibling fields retain the canonical extraction behavior. Streaming

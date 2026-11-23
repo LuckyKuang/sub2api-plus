@@ -325,6 +325,7 @@
               :batched-usage-loading="usageBatchLoadingByAccountId[String(row.id)] === true"
               :request-batched-usage="isDesktopViewport ? queueBatchedUsage : null"
               @account-updated="handleAccountUpdated"
+              @usage-loading="supersedeAccountUsageBatch(row.id)"
               @usage-loaded="handleAccountUsageLoaded(row.id, $event)"
             />
           </template>
@@ -784,8 +785,26 @@ const setUsageBatchState = (accountID: number, usage: AccountUsageInfo | null, e
   }
 }
 
+const supersedeAccountUsageBatch = (accountID: number) => {
+  const key = String(accountID)
+  usageBatchRequestTokenByAccountId.value = {
+    ...usageBatchRequestTokenByAccountId.value,
+    [key]: ++usageBatchRequestToken
+  }
+  pendingUsageBatchIds.delete(accountID)
+  setUsageBatchLoading(accountID, false)
+}
+
 const handleAccountUsageLoaded = (accountID: number, usage: AccountUsageInfo) => {
+  // Managed cells echo the batch value they received. Only a new direct read
+  // supersedes pending batch work and publishes a replacement cache entry.
   if (usageBatchByAccountId.value[String(accountID)] === usage) return
+  const account = accounts.value.find(row => row.id === accountID)
+  if (!account) return
+  supersedeAccountUsageBatch(accountID)
+  usageBatchCache.set(accountID, {
+    data: usage, ts: Date.now(), refreshKey: buildAccountUsageRefreshKey(account)
+  })
   setUsageBatchState(accountID, usage, null)
 }
 

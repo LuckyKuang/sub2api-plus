@@ -254,6 +254,9 @@ type ResponsesEventToAnthropicState struct {
 	textByPart map[responsesTextPart]*strings.Builder
 	// textDelivered records whether any assistant text reached the client.
 	textDelivered bool
+	// messageIDByOutput anchors later done-only parts to a declared message.
+	// Keep the first binding when a supplier reuses an output index.
+	messageIDByOutput map[int]string
 
 	InputTokens              int
 	OutputTokens             int
@@ -270,6 +273,7 @@ func NewResponsesEventToAnthropicState() *ResponsesEventToAnthropicState {
 	return &ResponsesEventToAnthropicState{
 		OutputIndexToBlockIdx: make(map[int]int),
 		textByPart:            make(map[responsesTextPart]*strings.Builder),
+		messageIDByOutput:     make(map[int]string),
 		Created:               time.Now().Unix(),
 	}
 }
@@ -454,6 +458,9 @@ func resToAnthHandleOutputItemAdded(evt *ResponsesStreamEvent, state *ResponsesE
 		return events
 
 	case "message":
+		if evt.Item.ID != "" && state.messageIDByOutput[evt.OutputIndex] == "" {
+			state.messageIDByOutput[evt.OutputIndex] = evt.Item.ID
+		}
 		return nil
 	}
 
@@ -518,13 +525,20 @@ func resToAnthEmitText(text string, part responsesTextPart, state *ResponsesEven
 // resToAnthRecoverText emits the tail of a finished text payload that never
 // reached the client. Streamed text cannot be recalled, so a payload that does
 // not extend what was already delivered is left alone.
-func resToAnthRecoverText(text string, part responsesTextPart, state *ResponsesEventToAnthropicState) []AnthropicStreamEvent {
+func resToAnthRecoverText(evt *ResponsesStreamEvent, state *ResponsesEventToAnthropicState) []AnthropicStreamEvent {
+	part := resToAnthTextPartOf(evt)
+	messageID := state.messageIDByOutput[part.OutputIndex]
+	if evt.ItemID != "" && messageID != "" && evt.ItemID != messageID {
+		// Conflicting item IDs cannot finish an already declared message,
+		// including when a supplier reuses its output index.
+		return nil
+	}
 	builder, known := state.textByPart[part]
-	if !known && state.textDelivered {
-		// The payload is indexed differently from every delta seen so far, so
-		// which part it finishes cannot be established. Recovering it could
-		// repeat an answer the client already has, which is worse than leaving
-		// a partially delivered one alone.
+	anchored := evt.ItemID != "" && evt.ItemID == messageID
+	if !known && state.textDelivered && !anchored {
+		// Without a declared message identity an unfamiliar index may be an
+		// upstream reindexing of text already delivered. Preserve the existing
+		// duplicate guard for these ambiguous payloads.
 		return nil
 	}
 
@@ -532,6 +546,7 @@ func resToAnthRecoverText(text string, part responsesTextPart, state *ResponsesE
 	if known {
 		delivered = builder.String()
 	}
+	text := evt.Text
 	if text == delivered || !strings.HasPrefix(text, delivered) {
 		return nil
 	}
@@ -548,7 +563,7 @@ func resToAnthHandleTextDone(evt *ResponsesStreamEvent, state *ResponsesEventToA
 		return resToAnthHandleBlockDone(state)
 	}
 
-	events := resToAnthRecoverText(evt.Text, resToAnthTextPartOf(evt), state)
+	events := resToAnthRecoverText(evt, state)
 	return append(events, resToAnthHandleBlockDone(state)...)
 }
 

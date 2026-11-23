@@ -531,6 +531,10 @@ PROFILES = {
         )),
         RegressionGroup("./internal/pkg/apicompat", (
             "TestResponsesCacheWriteTTLTypedRoundTrip",
+            "TestResponsesEventToAnthropicEvents_RecoversDoneOnlyPartOfDeclaredMessage",
+            "TestResponsesEventToAnthropicEvents_RecoversDoneOnlyDeclaredMessageAfterText",
+            "TestResponsesEventToAnthropicEvents_LeavesUnanchoredDoneOnlyPartAlone",
+            "TestResponsesEventToAnthropicEvents_DoesNotRebindDeclaredMessageOutputIndex",
             "TestDeepSeekCacheUsageProtocolBridges",
             "TestStepFunParallelChatToolsKeepIndependentAnthropicBlockLifecycles",
             "TestStepFunReviewToolStreamKeepsClosedBlocksImmutable",
@@ -564,6 +568,14 @@ PROFILES = {
         RegressionGroup("./internal/pkg/cnmodels", (
             "TestMiniMaxOfficialFlashReleaseCandidate",
         )),
+        RegressionGroup("./internal/pkg/requestmodel", (
+            "TestConflictingFieldMetadataUsesMapKeySemantics",
+        )),
+        RegressionGroup("./internal/auditcontent", (
+            "TestChatToolDeclarationPreservesCurrentUser",
+            "TestChatToolDeclarationDoesNotBroadenOtherSystemMessages",
+            "TestChatToolDeclarationsPreserveCurrentToolResults",
+        )),
         RegressionGroup("./internal/service", (
             "TestClaudeIdentityDefaultUpgradePreservesExplicitPins",
             "TestGetClaudeCodeClientVersionPriority",
@@ -571,6 +583,12 @@ PROFILES = {
             "TestOpenAICacheWriteTTLNativeWSSettlement",
             "TestRefreshIfNeeded_OpenAIEnrichmentTimeoutKeepsRotatedCredentials",
             "TestRefreshIfNeeded_OpenAICASKeepsConcurrentReauthorization",
+            "TestOpenAIQuotaRefreshCompletedRotationSurvivesCancellation",
+            "TestOpenAIQuotaRefreshLateRotationStillFencesOwner",
+            "TestOpenAIQuotaRefreshLateRotationClearsStaleCacheForNextRequest",
+            "TestOpenAIQuotaRefreshCacheDeletionFailureContainsCommittedRotation",
+            "TestOpenAIQuotaRefreshIncompleteRotationCannotBypassCancellation",
+            "TestOpenAIQuotaRefreshPersistenceDoesNotResumeCanceledOperation",
             "TestTokenRefreshService_OpenAIRotationSurvivesAttemptDeadline",
             "TestTokenRefreshService_OpenAIPersistenceFailureDoesNotRetryUpstream",
             "TestForwardAlphaSearchLiteratureSearchForbiddenDoesNotPenalizeAccount",
@@ -580,6 +598,9 @@ PROFILES = {
             "TestGrokSearchCountFromUsageAcrossEndpoints",
             "TestEnsureDeepSeekAnthropicThinkingBlocks",
             "TestKimiChatDynamicToolsAcrossProtocols",
+            "TestKimiChatEmptyDynamicToolsAcrossBridgeProtocols",
+            "TestKimiChatContentNullIsNotToolOnlyDeclaration",
+            "TestBufferedCompat_PreservesCompletedPartText",
             "TestOpenAICacheWriteTTLInvalidDetailsKeepAggregate",
             "TestOpenAICacheWriteTTLPrices",
             "TestOpenAICacheWriteTTLFrozenGroupCard",

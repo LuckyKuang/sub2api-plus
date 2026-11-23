@@ -54,7 +54,8 @@ func LooksLikeJSON(body []byte) bool {
 //     成员名经转义解码（无效 UTF-8 与孤立代理项按 encoding/json 替换为 U+FFFD）
 //     后按 encoding/json 结构体绑定的大小写折叠规则相同。用户自定义键空间
 //     （JSON Schema 的 properties/$defs、工具调用参数、模板变量等，见
-//     isFreeformMember）内只比较精确名字，因为 id 与 ID 在那里是合法的不同键。
+//     isFreeformMember）内只比较精确名字，因为 id 与 ID 在那里是合法的不同键；
+//     metadata 仅对参与结构体绑定的 user_id 保留大小写折叠。
 //     字段路径形如 reasoning.effort、messages[1].role。
 //   - multipart（按 Content-Type 声明）：见 multipartConflictingField。
 //   - 声明为 multipart、请求体又以 JSON 开头且解析出了表单 part：两种解读并存，
@@ -101,9 +102,10 @@ const conflictLinearScanLimit = 32
 var conflictHashSeed = maphash.MakeSeed()
 
 type scanFrame struct {
-	object  bool
-	fold    bool // 是否按大小写折叠比较本对象的成员名
-	wantKey bool // object：下一个字符串是成员名
+	object     bool
+	fold       bool // 是否按大小写折叠比较本对象的成员名
+	foldUserID bool // metadata 对象只折叠保留字段 user_id
+	wantKey    bool // object：下一个字符串是成员名
 	// 当前成员名在请求体中的原始范围（不含引号），用于路径与自由键判定。
 	keyStart, keyEnd int
 	keyEscaped       bool
@@ -176,21 +178,26 @@ func scanDuplicateMember(body []byte) (string, bool) {
 
 func (s *duplicateScanner) push(object bool) {
 	fold := true
+	foldUserID := false
 	if n := len(s.stack); n > 0 {
 		parent := &s.stack[n-1]
 		fold = parent.fold
 		if fold && parent.object {
 			s.names = appendMemberName(s.names[:0], s.body[parent.keyStart:parent.keyEnd], parent.keyEscaped, false)
+			foldUserID = object && bytes.EqualFold(s.names, []byte("metadata"))
 			fold = !isFreeformMember(s.names, n > 1)
 		}
 	}
-	s.stack = append(s.stack, scanFrame{object: object, fold: fold, wantKey: object, hashStart: len(s.hashes)})
+	s.stack = append(s.stack, scanFrame{object: object, fold: fold, foldUserID: foldUserID, wantKey: object, hashStart: len(s.hashes)})
 }
 
 // repeated 登记 top 的当前成员名，返回它是否与本对象中更早的成员重名。
 func (s *duplicateScanner) repeated(top *scanFrame) bool {
 	s.hash.Reset()
 	s.runes = appendMemberName(s.runes[:0], s.body[top.keyStart:top.keyEnd], top.keyEscaped, top.fold)
+	if top.foldUserID && bytes.EqualFold(s.runes, []byte("user_id")) {
+		s.runes = append(s.runes[:0], "user_id"...)
+	}
 	_, _ = s.hash.Write(s.runes)
 	sum := s.hash.Sum64()
 
@@ -238,15 +245,15 @@ func (s *duplicateScanner) path() string {
 
 // freeformMembers 的值是用户自定义键空间：JSON Schema 的属性表与取值、工具调用
 // 参数、提示词模板变量、MCP 请求头、标签。这些子树内的成员名只做精确比较（成员名
-// 解码后不区分大小写地匹配本表）。它们都不在网关计费/策略读取、也不被结构体绑定
-// 的字段路径上；input / response 只在非顶层时算（顶层 input 是 Responses 的输入
-// 列表，顶层 response 是 realtime response.create 的参数）。metadata 不在表内：
-// Antigravity 把 metadata.user_id 绑定到结构体（大小写不敏感），而网关的粘性会话
-// 用 gjson 读它。
+// 解码后不区分大小写地匹配本表）。除 metadata.user_id 外，它们都不在网关计费/策略
+// 读取、也不被结构体绑定的字段路径上；input / response 只在非顶层时算（顶层 input
+// 是 Responses 的输入列表，顶层 response 是 realtime response.create 的参数）。
+// metadata 的任意用户键保持精确比较，仅 user_id 由 foldUserID 折叠：Antigravity
+// 把它绑定到结构体（大小写不敏感），而网关的粘性会话用 gjson 读它。
 var freeformMembers = []string{
 	"properties", "patternProperties", "$defs", "definitions", "dependentSchemas",
 	"dependentRequired", "dependencies", "default", "const", "examples", "enum",
-	"args", "arguments", "variables", "headers", "labels",
+	"args", "arguments", "variables", "headers", "labels", "metadata",
 }
 
 func isFreeformMember(name []byte, nested bool) bool {

@@ -30,6 +30,19 @@ generic HTTP client declarations and needs a reviewed credential-owner identity
 and wire regression before integration.
 This import needs no SQL migration or dependency pin change.
 
+The follow-up review closes compatibility gaps: metadata retains
+case-sensitive user keys while reserved `user_id` aliases remain guarded;
+empty/null Kimi dynamic tool declarations cannot hide the current audit turn;
+buffered response recovery retains completed text, refusal and reasoning parts;
+the review also fixes an existing Messages streaming limitation, recovering
+later done-only text parts anchored to their declared message identity while
+preserving protection against ambiguous duplicates;
+WHAM token acquisition preserves a completed rotation after cancellation without
+resuming the canceled quota operation, and finishes bounded cache invalidation
+and owner readback; and account usage reads/probes reject
+stale results, errors and loading updates across account snapshots and batches.
+Owning protocol, security and UI documents and regressions record these rules.
+
 The previous sync integrated official `v0.2.23`, peeled commit
 `5af9afb588c4b014b3df9db7d4073af1f8ae01b6`, after official `v0.2.22`
 `b0fa9f3e6eeab1968a53e1289b69daa4bb40ca2b`. That sync started at

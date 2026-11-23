@@ -27,6 +27,21 @@ func (p *openAICompatPartText) write(index int64, delta string) {
 	_, _ = p.parts[index].WriteString(delta)
 }
 
+// complete appends only the suffix a completed part adds to its deltas.
+// Repeated snapshots do not duplicate text, and incompatible snapshots leave
+// the already observed content intact, matching the compatibility accumulator.
+func (p *openAICompatPartText) complete(index int64, text string) string {
+	previous := p.at(index)
+	if text == "" || !strings.HasPrefix(text, previous) {
+		return ""
+	}
+	suffix := strings.TrimPrefix(text, previous)
+	if suffix != "" {
+		p.write(index, suffix)
+	}
+	return suffix
+}
+
 func (p *openAICompatPartText) any() bool {
 	return len(p.parts) > 0
 }
@@ -109,6 +124,28 @@ func (o *openAICompatOutputSlots) Observe(payload []byte) {
 		if delta := gjson.GetBytes(payload, "delta").String(); delta != "" {
 			o.slot(payload, "message", gjson.GetBytes(payload, "item_id").String(), "", false, true).refusal.write(gjson.GetBytes(payload, "content_index").Int(), delta)
 		}
+	case "response.output_text.done", "response.refusal.done":
+		kind := "output_text"
+		text := gjson.GetBytes(payload, "text").String()
+		if gjson.GetBytes(payload, "type").String() == "response.refusal.done" {
+			kind = "refusal"
+			if text == "" {
+				text = gjson.GetBytes(payload, "refusal").String()
+			}
+		}
+		if text != "" {
+			o.slot(payload, "message", gjson.GetBytes(payload, "item_id").String(), "", false, true).completePart(kind, gjson.GetBytes(payload, "content_index").Int(), text)
+		}
+	case "response.content_part.added", "response.content_part.done":
+		part := gjson.GetBytes(payload, "part")
+		kind := part.Get("type").String()
+		text := part.Get("text").String()
+		if kind == "refusal" {
+			text = part.Get("refusal").String()
+		}
+		if text != "" && (kind == "output_text" || kind == "refusal") {
+			o.slot(payload, "message", gjson.GetBytes(payload, "item_id").String(), "", false, true).completePart(kind, gjson.GetBytes(payload, "content_index").Int(), text)
+		}
 	case "response.reasoning_summary_text.delta":
 		if delta := gjson.GetBytes(payload, "delta").String(); delta != "" {
 			slot := o.slot(payload, "reasoning", gjson.GetBytes(payload, "item_id").String(), "", false, true)
@@ -120,6 +157,19 @@ func (o *openAICompatOutputSlots) Observe(payload []byte) {
 			slot := o.slot(payload, "reasoning", gjson.GetBytes(payload, "item_id").String(), "", false, true)
 			_, _ = slot.reasoning.WriteString(delta)
 			slot.reasoningText.write(gjson.GetBytes(payload, "content_index").Int(), delta)
+		}
+	case "response.reasoning_summary_text.done", "response.reasoning_text.done":
+		if text := gjson.GetBytes(payload, "text").String(); text != "" {
+			kind, indexKey := "summary_text", "summary_index"
+			if gjson.GetBytes(payload, "type").String() == "response.reasoning_text.done" {
+				kind, indexKey = "reasoning_text", "content_index"
+			}
+			o.slot(payload, "reasoning", gjson.GetBytes(payload, "item_id").String(), "", false, true).completePart(kind, gjson.GetBytes(payload, indexKey).Int(), text)
+		}
+	case "response.reasoning_summary_part.added", "response.reasoning_summary_part.done":
+		part := gjson.GetBytes(payload, "part")
+		if text := part.Get("text").String(); text != "" && part.Get("type").String() == "summary_text" {
+			o.slot(payload, "reasoning", gjson.GetBytes(payload, "item_id").String(), "", false, true).completePart("summary_text", gjson.GetBytes(payload, "summary_index").Int(), text)
 		}
 	case "response.function_call_arguments.delta", "response.custom_tool_call_input.delta":
 		if delta := gjson.GetBytes(payload, "delta").String(); delta != "" {
@@ -139,6 +189,19 @@ func (o *openAICompatOutputSlots) Observe(payload []byte) {
 				slot.argsDone = completed
 			}
 		}
+	}
+}
+
+func (s *openAICompatOutputSlot) completePart(kind string, index int64, text string) {
+	switch kind {
+	case "output_text":
+		s.text.complete(index, text)
+	case "refusal":
+		s.refusal.complete(index, text)
+	case "summary_text":
+		_, _ = s.reasoning.WriteString(s.summaryText.complete(index, text))
+	case "reasoning_text":
+		_, _ = s.reasoning.WriteString(s.reasoningText.complete(index, text))
 	}
 }
 

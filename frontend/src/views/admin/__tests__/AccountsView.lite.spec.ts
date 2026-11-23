@@ -12,6 +12,7 @@ const {
   getById,
   getBatchTodayStats,
   getBatchUsage,
+  getUsage,
   getAllProxies,
   getAllGroups,
   refreshCredentials,
@@ -23,6 +24,7 @@ const {
   getById: vi.fn(),
   getBatchTodayStats: vi.fn(),
   getBatchUsage: vi.fn(),
+  getUsage: vi.fn(),
   getAllProxies: vi.fn(),
   getAllGroups: vi.fn(),
   refreshCredentials: vi.fn(),
@@ -38,6 +40,7 @@ vi.mock('@/api/admin', () => ({
       listWithEtag,
       getBatchTodayStats,
       getBatchUsage,
+      getUsage,
       delete: vi.fn(),
       batchClearError: vi.fn(),
       batchRefresh: vi.fn(),
@@ -166,6 +169,7 @@ describe('admin AccountsView lite account list', () => {
     getById.mockReset().mockResolvedValue(fullAccount)
     getBatchTodayStats.mockReset().mockResolvedValue({ stats: {} })
     getBatchUsage.mockReset().mockResolvedValue({ usage: { '42': { five_hour: { utilization: 21 }, seven_day: { utilization: 31 } } }, errors: {} })
+    getUsage.mockReset()
     getAllProxies.mockReset().mockResolvedValue([])
     getAllGroups.mockReset().mockResolvedValue([{ id: 7, name: 'codex', platform: 'openai' }])
     refreshCredentials.mockReset()
@@ -176,6 +180,70 @@ describe('admin AccountsView lite account list', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+  })
+
+  // UI_INTERACTION.md: a direct active probe publishes the current quota;
+  // an earlier batch must neither overwrite it nor report a stale error.
+  it.each(['success', 'failure'] as const)('retains an active quota read after an older batch %s', async (outcome) => {
+    vi.useFakeTimers()
+    vi.spyOn(window, 'matchMedia').mockImplementation(() => ({
+      matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn()
+    }) as unknown as MediaQueryList)
+    const account = { ...listRow, platform: 'anthropic', type: 'oauth', extra: {} }
+    listAccounts.mockResolvedValue({ items: [account], total: 1, page: 1, page_size: 20, pages: 1 })
+    let resolveBatch!: (value: unknown) => void
+    let rejectBatch!: (error: Error) => void
+    getBatchUsage.mockReturnValueOnce(new Promise((resolve, reject) => { resolveBatch = resolve; rejectBatch = reject }))
+    const wrapper = mountView(true, true)
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(getBatchUsage).toHaveBeenCalledTimes(1)
+    const cell = wrapper.findComponent({ name: 'AccountUsageCell' })
+    const latestUsage = { five_hour: { utilization: 54 } }
+    getUsage.mockResolvedValueOnce(latestUsage)
+    cell.findComponent({ name: 'ClaudeResetCreditsCell' }).vm.$emit('redeemed')
+    await flushPromises()
+    expect(getUsage).toHaveBeenCalledWith(42, 'active', true)
+    expect(cell.props('batchedUsage')).toEqual(latestUsage)
+    if (outcome === 'success') resolveBatch({ usage: { '42': { five_hour: { utilization: 21 } } }, errors: {} })
+    else rejectBatch(new Error('older batch failed'))
+    await flushPromises()
+    expect(cell.props('batchedUsage')).toEqual(latestUsage)
+    expect(cell.props('batchedUsageError')).toBeNull()
+    expect(cell.props('batchedUsageLoading')).toBe(false)
+    cell.props('requestBatchedUsage')(cell.props('account'))
+    await vi.advanceTimersByTimeAsync(1)
+    expect(getBatchUsage).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('ignores an earlier batch that completes during an active probe, including a failed probe', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(window, 'matchMedia').mockImplementation(() => ({
+      matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn()
+    }) as unknown as MediaQueryList)
+    const account = { ...listRow, platform: 'anthropic', type: 'oauth', extra: {} }
+    listAccounts.mockResolvedValue({ items: [account], total: 1, page: 1, page_size: 20, pages: 1 })
+    let resolveBatch!: (value: unknown) => void
+    let rejectActive!: (error: Error) => void
+    getBatchUsage.mockReturnValueOnce(new Promise(resolve => { resolveBatch = resolve }))
+    getUsage.mockReturnValueOnce(new Promise((_, reject) => { rejectActive = reject }))
+    const wrapper = mountView(true, true)
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(1)
+    const cell = wrapper.findComponent({ name: 'AccountUsageCell' })
+    cell.findComponent({ name: 'ClaudeResetCreditsCell' }).vm.$emit('redeemed')
+    await flushPromises()
+    resolveBatch({ usage: { '42': { five_hour: { utilization: 21 } } }, errors: {} })
+    await flushPromises()
+    expect(cell.props('batchedUsage')).toBeNull()
+    expect(cell.attributes('aria-busy')).toBe('true')
+    rejectActive(new Error('active probe failed'))
+    await flushPromises()
+    expect(cell.attributes('aria-busy')).toBe('false')
+    expect(cell.props('batchedUsageLoading')).toBe(false)
+    expect(cell.text()).toContain('common.error')
+    wrapper.unmount()
   })
 
   it.each([
