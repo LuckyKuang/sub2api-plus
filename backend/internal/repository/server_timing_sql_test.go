@@ -17,6 +17,12 @@ import (
 
 const fakeDriverDelay = 2 * time.Millisecond
 
+// The application gap between row reads must dominate the driver spans by a
+// wide margin. Driver spans are wall-clock measurements, so a loaded validation
+// container inflates them with scheduler stalls; a narrow gap turns this
+// attribution assertion into a timing race instead of a contract check.
+const rowProcessingGap = 250 * time.Millisecond
+
 type timingFakeDriver struct{}
 
 func (timingFakeDriver) Open(string) (driver.Conn, error) { return newTimingFakeConn(), nil }
@@ -179,7 +185,7 @@ func TestServerTimingConnectorRecordsDriverCallsWithoutRowLifetime(t *testing.T)
 	}
 
 	// Application work between row reads must remain app time.
-	time.Sleep(30 * time.Millisecond)
+	time.Sleep(rowProcessingGap)
 	if err := rows.Next(values); err != io.EOF {
 		t.Fatalf("rows.Next() = %v, want EOF", err)
 	}
@@ -194,8 +200,12 @@ func TestServerTimingConnectorRecordsDriverCallsWithoutRowLifetime(t *testing.T)
 	if strings.Contains(header, "sensitive") {
 		t.Fatalf("SQL text leaked into header: %q", header)
 	}
-	if app, db := metricDuration(t, header, "app"), metricDuration(t, header, "db"); app <= db {
+	app, db := metricDuration(t, header, "app"), metricDuration(t, header, "db")
+	if app <= db {
 		t.Fatalf("row processing gap was counted as DB time: app=%.1fms db=%.1fms header=%q", app, db, header)
+	}
+	if app < float64(rowProcessingGap.Milliseconds())/2 {
+		t.Fatalf("row processing gap missing from app time: app=%.1fms gap=%s header=%q", app, rowProcessingGap, header)
 	}
 }
 
