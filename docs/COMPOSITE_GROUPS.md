@@ -627,6 +627,12 @@ route domains and model allowlists. Management discovery may refresh metadata;
 gateway admission only reads captured metadata before audit. Temporary account
 exhaustion remains distinct from unsupported capability.
 
+The API-key Test dialog reads this same capability response. Unconfigured keys
+select each model's native `endpoints`; configured keys admit only models whose
+`conversion_endpoints` include the saved default endpoint. The dialog sends one
+fixed short non-streaming request through the public gateway and shows the model
+and elapsed time. Opening it never invokes inference.
+
 The OpenAI SDK Base URL ends in `/v1`; the Anthropic SDK Base URL is the site
 root because that SDK appends `/v1/messages`. Gemini native uses
 `/v1beta/models/{model}:generateContent`; System One uses `/v1/systemone`.

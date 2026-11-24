@@ -68,6 +68,7 @@ const messages: Record<string, string> = {
   'keys.status.expired': 'Expired',
   'keys.status.inactive': 'Inactive',
   'keys.status.quota_exhausted': 'Quota exhausted',
+  'keys.testKey': 'Test',
   'keys.usage': 'Usage',
 }
 
@@ -266,6 +267,7 @@ const mountView = async () => {
         SearchInput: SearchInputStub,
         Icon: IconStub,
         UseKeyModal: true,
+        KeyTestModal: true,
         BulkEditKeysModal: true,
         EndpointPopover: true,
         GroupBadge: true,
@@ -291,6 +293,18 @@ const getButtonByText = (wrapper: VueWrapper, text: string) => {
     throw new Error(`Button not found: ${text}`)
   }
   return button
+}
+
+const openRowMenu = async (wrapper: VueWrapper, index = 0) => {
+  const moreButtons = wrapper.findAll('button').filter((button) => button.text().includes('common.more'))
+  await moreButtons[index]!.trigger('click')
+  await flushPromises()
+}
+
+const clickRowEdit = async (wrapper: VueWrapper, index = 0) => {
+  await openRowMenu(wrapper, index)
+  await getButtonByText(wrapper, 'common.edit').trigger('click')
+  await flushPromises()
 }
 
 describe('user KeysView column settings', () => {
@@ -362,7 +376,7 @@ describe('user KeysView column settings', () => {
     await flushPromises()
     expect(listKeys).toHaveBeenLastCalledWith(1, 20, expect.objectContaining({ status: 'disabled' }), expect.any(Object))
 
-    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    await clickRowEdit(wrapper)
     const status = wrapper.findAllComponents({ name: 'Select' })
       .find(select => select.props('options').length === 2 && select.props('options')[0].value === 'active')!
     expect(status.props('modelValue')).toBe('inactive')
@@ -370,6 +384,29 @@ describe('user KeysView column settings', () => {
     await flushPromises()
     const updates = updateKey.mock.calls[0][1]
     expect(updates).not.toHaveProperty('status')
+    wrapper.unmount()
+  })
+
+  it('shows Test and Use Key before one more menu and opens the row test dialog', async () => {
+    const wrapper = await mountView()
+    const actions = wrapper.get('.table-actions').findAll('button')
+    expect(actions[0]!.text()).toContain('Test')
+    expect(actions[1]!.text()).toContain('keys.useKey')
+    expect(actions[2]!.text()).toContain('common.more')
+
+    await actions[2]!.trigger('click')
+    await flushPromises()
+    const menuItems = wrapper.findAll('[role="menuitem"]')
+    expect(menuItems[0]!.text()).toContain('common.edit')
+    expect(menuItems[1]!.text()).toContain('keys.importToCcSwitch')
+    expect(menuItems[2]!.text()).toContain('keys.disable')
+    expect(menuItems[3]!.text()).toContain('common.delete')
+
+    await getButtonByText(wrapper, 'Test').trigger('click')
+    await flushPromises()
+    const testModal = wrapper.findComponent({ name: 'KeyTestModal' })
+    expect(testModal.props('show')).toBe(true)
+    expect(testModal.props('apiKey')).toMatchObject({ id: 1, key: 'sk-test-key' })
     wrapper.unmount()
   })
 
@@ -389,6 +426,11 @@ describe('user KeysView column settings', () => {
     const guide = wrapper.findComponent({ name: 'UseKeyModal' })
     expect(guide.props('show')).toBe(true)
     expect(guide.props('apiKey')).toBe('sk-test-key')
+    await getButtonByText(wrapper, 'Test').trigger('click')
+    await flushPromises()
+    const testModal = wrapper.findComponent({ name: 'KeyTestModal' })
+    expect(testModal.props('show')).toBe(true)
+    expect(testModal.props('apiKey')).toMatchObject({ id: 1, key: 'sk-test-key' })
     await getButtonByText(wrapper, 'common.edit').trigger('click')
     expect((wrapper.get('[data-tour="key-form-name"]').element as HTMLInputElement).value).toBe('test-key')
     expect(wrapper.get('[data-tour="key-form-name"]').attributes()).toHaveProperty('readonly')
@@ -410,7 +452,7 @@ describe('user KeysView column settings', () => {
     listKeys.mockResolvedValueOnce({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
     updateKey.mockResolvedValue({ ...key, status, quota_used: 0 })
     const wrapper = await mountView()
-    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    await clickRowEdit(wrapper)
     await wrapper.get('[data-tour="key-form-name"]').setValue('Unsaved name')
     const statusSelect = wrapper.findAllComponents({ name: 'Select' })
       .find((select) => select.props('options').length === 2 &&
@@ -731,7 +773,7 @@ describe('user KeysView column settings', () => {
     it('edits aggregate scope without introducing Composite conversion or a single binding', async () => {
       listKeys.mockResolvedValue({ items: [{ ...createApiKey(), group_binding_mode: 'custom', aggregate_group_ids: [1, 2], group_id: null }], total: 1, page: 1, page_size: 20, pages: 1 })
       const wrapper = await mountView()
-      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await clickRowEdit(wrapper)
       await flushPromises()
       expect(wrapper.getComponent(CheckboxDropdown).props('modelValue')).toEqual([1, 2])
       expect(wrapper.findComponent(NativeAccessFields).exists()).toBe(false)
@@ -749,7 +791,7 @@ describe('user KeysView column settings', () => {
       listKeys.mockResolvedValue({ items: [{ ...createApiKey(), group_binding_mode: 'custom', aggregate_group_ids: [1], group_id: null }], total: 1, page: 1, page_size: 20, pages: 1 })
       getKeyById.mockRejectedValue(new Error('temporary read failure'))
       const wrapper = await mountView()
-      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await clickRowEdit(wrapper)
       await flushPromises()
       expect(wrapper.find('#key-form').exists()).toBe(false)
       expect(showError).toHaveBeenCalledWith('keys.failedToLoad')
@@ -763,7 +805,7 @@ describe('user KeysView column settings', () => {
       listKeys.mockResolvedValue({ items: [{ ...createApiKey(), group_binding_mode: 'custom', aggregate_group_ids: [1], group_id: null }], total: 1, page: 1, page_size: 20, pages: 1 })
       getKeyById.mockResolvedValue({ ...createApiKey(), group_binding_mode: 'custom', aggregate_group_ids: [1, 2], group_id: null })
       const wrapper = await mountView()
-      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await clickRowEdit(wrapper)
       await flushPromises()
       expect(wrapper.getComponent(CheckboxDropdown).props('modelValue')).toEqual([1, 2])
       await wrapper.get('[data-tour="key-form-name"]').setValue('Renamed key')
@@ -773,7 +815,7 @@ describe('user KeysView column settings', () => {
       expect(updateKey.mock.calls[0]![1]).not.toHaveProperty('aggregate_group_ids')
       expect(updateKey.mock.calls[0]![1]).not.toHaveProperty('group_binding_mode')
 
-      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await clickRowEdit(wrapper)
       await flushPromises()
       wrapper.getComponent(CheckboxDropdown).vm.$emit('update:modelValue', [1])
       await nextTick()
@@ -791,9 +833,8 @@ describe('user KeysView column settings', () => {
       getKeyById.mockImplementation((id: number) => id === 1 ? pendingFirst : Promise.resolve(second))
       listKeys.mockResolvedValue({ items: [first, second], total: 2, page: 1, page_size: 20, pages: 1 })
       const wrapper = await mountView()
-      const editButtons = wrapper.findAll('button').filter(button => button.text().includes('common.edit'))
-      await editButtons[0]!.trigger('click')
-      await editButtons[1]!.trigger('click')
+      await clickRowEdit(wrapper, 0)
+      await clickRowEdit(wrapper, 1)
       await flushPromises()
       await wrapper.get('[data-tour="key-form-name"]').setValue('Second key draft')
       resolveFirst(first)
@@ -836,7 +877,7 @@ describe('user KeysView column settings', () => {
       { error: {}, expected: 'keys.failedToSave' },
     ])('preserves actionable save errors and falls back only when no message exists: $expected', async ({ error, expected }) => {
       const wrapper = await mountView()
-      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await clickRowEdit(wrapper)
       const select = wrapper.findComponent('[data-tour="key-form-group"]')
       select.vm.$emit('update:modelValue', 2)
       await flushPromises()
@@ -864,7 +905,7 @@ describe('user KeysView column settings', () => {
       listKeys.mockResolvedValue({ items: [{ ...createApiKey(), group_id: 10, group: availableGroups[9], default_client: 'codex', default_endpoint: '/v1/responses' }], total: 1, page: 1, page_size: 20, pages: 1 })
       await wrapper.get('button[title="Refresh"]').trigger('click')
       await flushPromises()
-      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await clickRowEdit(wrapper)
       const edited = wrapper.getComponent(NativeAccessFields)
       expect(edited.props('conversionEnabled')).toBe(false)
       edited.vm.$emit('update:conversionEnabled', true)
@@ -896,7 +937,7 @@ describe('user KeysView column settings', () => {
       listKeys.mockResolvedValue({ items: [{ ...createApiKey(), group_id: 10, group: quoted }], total: 1, page: 1, page_size: 20, pages: 1 })
       await wrapper.get('button[title="Refresh"]').trigger('click')
       await flushPromises()
-      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await clickRowEdit(wrapper)
       expect(wrapper.get('[data-rate-entry="openai:token"]').text()).toContain('×1.2–×1.8')
       wrapper.unmount()
     })
@@ -943,7 +984,7 @@ describe('user KeysView column settings', () => {
       listKeys.mockResolvedValue({ items: [{ ...createApiKey(), group_id: 10, group: quoted }], total: 1, page: 1, page_size: 20, pages: 1 })
       await wrapper.get('button[title="Refresh"]').trigger('click')
       await flushPromises()
-      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await clickRowEdit(wrapper)
       await expectIndependentModelQuotes()
       expect(keysAPI.create).not.toHaveBeenCalled()
       expect(updateKey).not.toHaveBeenCalled()
@@ -1029,7 +1070,7 @@ describe('user KeysView column settings', () => {
       expect(optionIds(wrapper)).toEqual([1])
       expect(groupSelect(wrapper).props('modelValue')).toBeNull()
       await wrapper.get('[data-test="close-dialog"]').trigger('click')
-      await getButtonByText(wrapper, 'common.edit').trigger('click')
+      await clickRowEdit(wrapper)
       expect(wrapper.find('[data-tour="key-form-provider"]').exists()).toBe(false)
       expect(optionIds(wrapper)).toHaveLength(12)
     })
