@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CatalogModelList from '../CatalogModelList.vue'
 import { catalogModels } from '../catalog'
@@ -12,13 +12,20 @@ const global = { stubs: { Icon: true, PlatformIcon: true } }
 // docs/AVAILABLE_CHANNELS.md: both layouts retain all authorized quotes and use
 // the same effective USD prices, with no second application of rate factors.
 describe('available-channel list', () => {
-  it('groups by concrete platform, keeps duplicate names across platforms and copies the actual ID', async () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('renders a unified directory, keeps duplicate names across platforms and copies the actual ID with feedback', async () => {
+    vi.useFakeTimers()
     const models = catalogModels([
       group(1, [offer('Exact-ID'), offer('second')]),
       group(2, [offer('Exact-ID', { platform: 'anthropic' })]),
     ])
     const w = mount(CatalogModelList, { props: { models, rateUnavailable: false }, global })
-    expect(w.findAll('section').map(section => section.attributes('aria-label'))).toEqual(['openai', 'anthropic'])
+    expect(w.findAll('section')).toHaveLength(0)
+    const rows = w.findAll('li.catalog-list-row')
+    expect(rows.map(row => row.attributes('data-platform'))).toEqual(['openai', 'openai', 'anthropic'])
     expect(w.findAll('h3').map(title => title.text())).toEqual(['Exact-ID', 'second', 'Exact-ID'])
     const trigger = w.get('.catalog-list-open')
     expect(trigger.element.tagName).toBe('BUTTON')
@@ -26,9 +33,14 @@ describe('available-channel list', () => {
     expect(trigger.find('button').exists()).toBe(false)
     await trigger.trigger('click')
     expect(w.emitted('details')?.[0]?.[0]).toMatchObject({ name: 'Exact-ID', platform: 'openai', quotes: [{ group: { id: 1 }, offer: { name: 'Exact-ID' } }] })
-    await w.get('.catalog-copy-model').trigger('click')
+
+    const copyBtn = w.get('.catalog-copy-model')
+    await copyBtn.trigger('click')
     expect(copy).toHaveBeenLastCalledWith('Exact-ID')
     expect(w.emitted('details')).toHaveLength(1)
+    expect(copyBtn.classes()).toContain('is-copied')
+    await vi.advanceTimersByTimeAsync(1400)
+    expect(copyBtn.classes()).not.toContain('is-copied')
   })
 
   it('shows independently calculated effective input/output ranges and all condition labels', () => {
@@ -63,6 +75,7 @@ describe('available-channel list', () => {
     expect(rows[1]!.text()).toContain('—')
     expect(rows[1]!.text()).not.toContain('$0')
     expect(rows[1]!.text()).toContain('availableChannels.catalog.reasons.pricing_unavailable')
+    expect(rows[2]!.text()).toContain('availableChannels.catalog.multipleUnits')
     expect(rows[2]!.text()).toContain('availableChannels.catalog.units.token')
     expect(rows[2]!.text()).toContain('availableChannels.catalog.units.image')
     expect(rows[2]!.text()).toContain('$0.25')

@@ -1,59 +1,183 @@
 <template>
   <AppLayout appearance="user" workspace>
-    <div class="catalog-page workspace-page min-w-0 space-y-5">
-      <div class="card workspace-fixed flex items-start justify-between gap-3 p-4" data-testid="catalog-heading">
-        <div>
-          <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ t('availableChannels.title') }}</h1>
-          <p class="mt-1 text-sm surface-muted">{{ t('availableChannels.description') }}</p>
+    <div class="catalog-page workspace-page min-w-0">
+      <h1 class="sr-only">{{ t('availableChannels.title') }}</h1>
+
+      <div class="catalog-toolbar-card workspace-fixed" data-testid="catalog-filters">
+        <div
+          v-if="categoryOptions.length > 1"
+          class="segmented-control self-start"
+          role="tablist"
+          :aria-label="t('availableChannels.catalog.category')"
+        >
+          <button
+            v-for="item in categoryOptions"
+            :key="item.value"
+            type="button"
+            class="segmented-option"
+            role="tab"
+            :aria-selected="category === item.value"
+            @click="selectCategory(item.value)"
+          >
+            {{ t(`availableChannels.catalog.${item.value}Platforms`) }}
+          </button>
         </div>
-        <button ref="refreshButton" class="btn btn-secondary" :disabled="loading" :aria-label="t('common.refresh')" @click="loadCatalog(true)">
-          <Icon name="refresh" size="md" :class="{ 'animate-spin': loading }" />
-        </button>
-      </div>
-      <div class="surface-card workspace-fixed space-y-4 rounded-xl border border-gray-200 p-4 dark:border-dark-700" data-testid="catalog-filters">
-        <div v-if="categoryOptions.length > 1" class="segmented-control" role="tablist" :aria-label="t('availableChannels.catalog.category')">
-          <button v-for="item in categoryOptions" :key="item.value" type="button" class="segmented-option" role="tab" :aria-selected="category === item.value" @click="selectCategory(item.value)">{{ t(`availableChannels.catalog.${item.value}Platforms`) }}</button>
-        </div>
-        <div class="catalog-platforms flex flex-wrap items-center gap-2">
-          <span class="mr-2 text-xs surface-muted">{{ t('modelPlaza.filters.platformLabel') }}</span>
-          <div class="segmented-control" role="group" :aria-label="t('modelPlaza.filters.platformLabel')">
-            <button type="button" class="segmented-option" :aria-pressed="!platform" @click="selectPlatform('')">{{ t('modelPlaza.filters.all') }} <span class="opacity-60">{{ platformTotal }}</span></button>
-            <button v-for="item in platformOptions" :key="item.platform" type="button" class="segmented-option" :aria-pressed="platform === item.platform" @click="selectPlatform(item.platform)">
-              <PlatformIcon :platform="item.platform" size="sm" />{{ item.platform }} <span class="opacity-60">{{ item.count }}</span>
+
+        <div class="catalog-toolbar-row">
+          <label class="catalog-search-field">
+            <span class="sr-only">{{ t('availableChannels.catalog.searchPlaceholder') }}</span>
+            <Icon name="search" size="sm" class="catalog-search-icon" aria-hidden="true" />
+            <input
+              :value="search"
+              class="input catalog-search-input w-full"
+              type="search"
+              :placeholder="t('availableChannels.catalog.searchPlaceholder')"
+              @input="onSearchInput(($event.target as HTMLInputElement).value)"
+            />
+          </label>
+
+          <button
+            type="button"
+            class="btn btn-secondary catalog-reset-btn"
+            :class="{ 'is-idle': !hasActiveFilters }"
+            @click="reset"
+          >
+            {{ t('availableChannels.catalog.reset') }}
+          </button>
+
+          <div class="catalog-toolbar-right">
+            <div class="catalog-meta-pill" aria-live="polite" :aria-busy="detailLoading">
+              <template v-if="!loading && !error">
+                <strong class="catalog-meta-count">{{ t('availableChannels.catalog.modelCount', { count: modelsTotal }) }}</strong>
+                <span class="catalog-meta-dot" aria-hidden="true" />
+              </template>
+              <span>{{ t(catalog.user_rate_status === 'unavailable' ? 'availableChannels.catalog.referenceRange' : 'availableChannels.catalog.effectiveRange') }}</span>
+              <template v-if="detailLoading">
+                <span class="catalog-meta-dot" aria-hidden="true" />
+                <span>{{ t('availableChannels.catalog.detailsLoading') }}</span>
+              </template>
+            </div>
+
+            <div class="catalog-view-switch" role="radiogroup" :aria-label="t('availableChannels.catalog.viewSwitchLabel')">
+              <button
+                type="button"
+                role="radio"
+                class="catalog-view-btn"
+                :aria-checked="activeLayout === 'list'"
+                @click="setLayout('list')"
+              >
+                <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                  <path d="M2.5 4h11M2.5 8h11M2.5 12h11" />
+                </svg>
+                <span>{{ t('availableChannels.catalog.viewList') }}</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                class="catalog-view-btn"
+                :aria-checked="activeLayout === 'card'"
+                @click="setLayout('card')"
+              >
+                <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2.25" y="2.25" width="4.75" height="4.75" rx="1" />
+                  <rect x="9" y="2.25" width="4.75" height="4.75" rx="1" />
+                  <rect x="2.25" y="9" width="4.75" height="4.75" rx="1" />
+                  <rect x="9" y="9" width="4.75" height="4.75" rx="1" />
+                </svg>
+                <span>{{ t('availableChannels.catalog.viewCard') }}</span>
+              </button>
+            </div>
+
+            <button
+              ref="refreshButton"
+              type="button"
+              class="catalog-refresh-btn"
+              :disabled="loading"
+              :aria-label="t('common.refresh')"
+              :title="t('common.refresh')"
+              @click="loadCatalog(true)"
+            >
+              <Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" />
             </button>
           </div>
         </div>
-        <div class="filter-bar border-t border-gray-100 pt-3 dark:border-dark-800">
-          <label class="filter-field filter-field--search relative">
-            <span class="sr-only">{{ t('availableChannels.catalog.searchPlaceholder') }}</span>
-            <Icon name="search" size="md" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input :value="search" class="input w-full pl-10 pr-10" type="search" :placeholder="t('availableChannels.catalog.searchPlaceholder')" @input="onSearchInput(($event.target as HTMLInputElement).value)" />
-          </label>
-          <button class="btn btn-secondary" @click="reset">{{ t('availableChannels.catalog.reset') }}</button>
+
+        <div class="catalog-platforms">
+          <span class="catalog-platforms-label">{{ t('modelPlaza.filters.platformLabel') }}</span>
+          <div class="catalog-platform-chips" role="group" :aria-label="t('modelPlaza.filters.platformLabel')">
+            <button
+              type="button"
+              class="catalog-platform-chip"
+              :aria-pressed="!platform"
+              @click="selectPlatform('')"
+            >
+              <span>{{ t('modelPlaza.filters.all') }}</span>
+              <span class="catalog-chip-count">{{ platformTotal }}</span>
+            </button>
+            <button
+              v-for="item in platformOptions"
+              :key="item.platform"
+              type="button"
+              class="catalog-platform-chip"
+              :aria-pressed="platform === item.platform"
+              @click="selectPlatform(item.platform)"
+            >
+              <PlatformIcon :platform="item.platform" size="sm" />
+              <span>{{ item.platform }}</span>
+              <span class="catalog-chip-count">{{ item.count }}</span>
+            </button>
+          </div>
         </div>
       </div>
-      <div v-if="catalog.user_rate_status === 'unavailable'" role="status" class="workspace-fixed flex flex-wrap items-center gap-3 rounded-lg bg-amber-50/[0.15] p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-        {{ t('availableChannels.catalog.ratesUnavailable') }}<button class="underline surface-control" @click="loadCatalog(true)">{{ t('availableChannels.catalog.retry') }}</button>
+
+      <div
+        v-if="catalog.user_rate_status === 'unavailable'"
+        role="status"
+        class="workspace-fixed flex flex-wrap items-center gap-3 rounded-lg bg-amber-50/[0.15] p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+      >
+        {{ t('availableChannels.catalog.ratesUnavailable') }}
+        <button type="button" class="surface-control underline" @click="loadCatalog(true)">{{ t('availableChannels.catalog.retry') }}</button>
       </div>
-      <p v-if="!loading && !error" class="workspace-fixed text-xs surface-muted" aria-live="polite" :aria-busy="detailLoading">
-        {{ t('availableChannels.catalog.modelCount', { count: modelsTotal }) }}<template v-if="detailLoading"> · {{ t('availableChannels.catalog.detailsLoading') }}</template>
-      </p>
+
       <section class="workspace-shell workspace-scroll" :aria-label="t('availableChannels.title')" data-testid="catalog-results">
-        <div v-if="loading" :class="app.availableChannelsLayout === 'list' ? 'space-y-3' : 'catalog-grid'" aria-busy="true" :aria-label="t('common.loading')">
-          <div v-for="i in PAGE_SIZE" :key="i" class="glass-surface animate-pulse" :class="app.availableChannelsLayout === 'list' ? 'h-16' : 'h-52'" />
+        <div
+          v-if="loading"
+          :class="activeLayout === 'list' ? 'catalog-skeleton-list' : 'catalog-grid'"
+          aria-busy="true"
+          :aria-label="t('common.loading')"
+        >
+          <div
+            v-for="i in PAGE_SIZE"
+            :key="i"
+            class="animate-pulse"
+            :class="activeLayout === 'list' ? 'catalog-skeleton-row' : 'catalog-skeleton-card'"
+          />
         </div>
         <div v-else-if="error" role="alert" class="card py-12 text-center">
-          <p class="text-red-600 dark:text-red-400">{{ error }}</p><button class="btn btn-secondary mt-4" @click="loadCatalog(true)">{{ t('availableChannels.catalog.retry') }}</button>
+          <p class="text-red-600 dark:text-red-400">{{ error }}</p>
+          <button type="button" class="btn btn-secondary mt-4" @click="loadCatalog(true)">{{ t('availableChannels.catalog.retry') }}</button>
         </div>
         <div v-else-if="!models.length" class="card py-12 text-center surface-muted">
           <p>{{ modelsTotal ? t('availableChannels.catalog.noMatches') : t('availableChannels.noModels') }}</p>
-          <button v-if="modelsTotal || search || platform" class="btn btn-secondary mt-4" @click="reset">{{ t('availableChannels.catalog.reset') }}</button>
+          <button v-if="modelsTotal || search || platform" type="button" class="btn btn-secondary mt-4" @click="reset">{{ t('availableChannels.catalog.reset') }}</button>
         </div>
-        <CatalogModelList v-else-if="app.availableChannelsLayout === 'list'" :models="models" :rate-unavailable="catalog.user_rate_status === 'unavailable'" @details="openDetails" />
+        <CatalogModelList
+          v-else-if="activeLayout === 'list'"
+          :models="models"
+          :rate-unavailable="catalog.user_rate_status === 'unavailable'"
+          @details="openDetails"
+        />
         <div v-else class="catalog-grid">
-          <CatalogModelCard v-for="model in models" :key="model.key" :model="model" :rate-unavailable="catalog.user_rate_status === 'unavailable'" @details="openDetails" />
+          <CatalogModelCard
+            v-for="model in models"
+            :key="model.key"
+            :model="model"
+            :rate-unavailable="catalog.user_rate_status === 'unavailable'"
+            @details="openDetails"
+          />
         </div>
       </section>
+
       <Pagination
         v-if="modelsTotal > PAGE_SIZE"
         class="workspace-fixed"
@@ -63,7 +187,12 @@
         :show-page-size-selector="false"
         @update:page="onPageChange"
       />
-      <CatalogPriceDetails :model="selectedModel" :rate-unavailable="catalog.user_rate_status === 'unavailable'" @close="closeDetails" />
+
+      <CatalogPriceDetails
+        :model="selectedModel"
+        :rate-unavailable="catalog.user_rate_status === 'unavailable'"
+        @close="closeDetails"
+      />
     </div>
   </AppLayout>
 </template>
@@ -118,6 +247,18 @@ const selectedKey = ref<string | null>(null)
 const selectedModel = ref<CatalogModel | null>(null)
 const detailLoading = ref(false)
 const refreshButton = ref<HTMLButtonElement>()
+const layoutOverride = ref<'list' | 'card' | null>(null)
+const activeLayout = computed<'list' | 'card'>(() => layoutOverride.value ?? app.availableChannelsLayout)
+const hasActiveFilters = computed(() => Boolean(search.value.trim() || platform.value))
+
+watch(() => app.availableChannelsLayout, () => {
+  layoutOverride.value = null
+})
+
+function setLayout(mode: 'list' | 'card') {
+  layoutOverride.value = mode
+}
+
 let requestId = 0
 let controller: AbortController | undefined
 let detailController: AbortController | undefined
@@ -300,15 +441,332 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.catalog-page { container-type: inline-size; }
-.catalog-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
-.catalog-platforms { align-items: flex-start; flex-wrap: nowrap; }
-.catalog-platforms > span { flex: none; padding-top: 10px; }
-.catalog-platforms .segmented-control { flex: 1 1 0%; justify-content: flex-start; gap: 5px; }
-.catalog-platforms .segmented-option { flex: none; min-height: 30px; padding: 5px 12px; white-space: nowrap; }
-.catalog-grid :deep(.catalog-model-card) { min-height: 300px; padding: 22px; border-radius: var(--surface-radius); }
-.catalog-grid :deep(.catalog-model-card h3) { font-size: 16px; }
-.catalog-grid :deep(.catalog-model-card .font-mono.text-base) { font-size: 20px; }
-@container (min-width: 460px) { .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@container (min-width: 700px) { .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.catalog-page {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.catalog-toolbar-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--surface-radius);
+  background-color: var(--surface-fill);
+  background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
+  border: 1px solid var(--surface-edge);
+  box-shadow: var(--surface-shadow);
+}
+
+.catalog-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.catalog-search-field {
+  position: relative;
+  width: min(320px, 100%);
+  flex: 1 1 220px;
+  max-width: 340px;
+  min-width: 0;
+}
+
+.catalog-search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--surface-muted);
+  pointer-events: none;
+}
+
+.catalog-search-input {
+  height: var(--control-height);
+  padding-left: 36px;
+  padding-right: 12px;
+  font-size: 13px;
+  border-radius: var(--surface-radius-control);
+}
+
+.catalog-reset-btn {
+  height: var(--control-height);
+  padding-inline: 12px;
+  font-size: 12.5px;
+  border-radius: var(--surface-radius-control);
+  white-space: nowrap;
+  transition: opacity 150ms ease, background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.catalog-reset-btn.is-idle {
+  opacity: 0.62;
+}
+
+.catalog-reset-btn.is-idle:hover,
+.catalog-reset-btn.is-idle:focus-visible {
+  opacity: 1;
+}
+
+.catalog-toolbar-right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.catalog-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: var(--control-height);
+  padding: 0 12px;
+  border-radius: var(--surface-radius-control);
+  background: var(--record-card-fill);
+  border: 1px solid color-mix(in srgb, var(--surface-edge) 70%, transparent);
+  font-size: 12px;
+  color: var(--surface-muted);
+  white-space: nowrap;
+}
+
+.catalog-meta-count {
+  font-weight: 600;
+  color: var(--surface-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.catalog-meta-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.45;
+  flex: none;
+}
+
+.catalog-view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--control-height);
+  padding: 3px;
+  border-radius: var(--surface-radius-control);
+  background: var(--record-card-fill);
+  border: 1px solid var(--surface-edge);
+}
+
+.catalog-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: var(--surface-radius-tag);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--surface-muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.catalog-view-btn:hover {
+  color: var(--surface-text);
+}
+
+.catalog-view-btn[aria-checked='true'] {
+  background: var(--surface-field);
+  border-color: var(--surface-edge);
+  color: var(--surface-text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
+}
+
+.catalog-view-btn:focus-visible,
+.catalog-refresh-btn:focus-visible,
+.catalog-platform-chip:focus-visible {
+  outline: 2px solid rgb(var(--console-accent-500, 20 184 166) / 75%);
+  outline-offset: 2px;
+}
+
+.catalog-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  flex: none;
+  border-radius: var(--surface-radius-control);
+  background: var(--surface-field);
+  border: 1px solid var(--surface-edge);
+  color: var(--surface-text);
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.catalog-refresh-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--console-control-hover-edge);
+}
+
+.catalog-refresh-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.catalog-platforms {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-top: 11px;
+  border-top: 1px solid color-mix(in srgb, var(--surface-edge) 55%, transparent);
+}
+
+.catalog-platforms-label {
+  flex: none;
+  padding-top: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--surface-muted);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.catalog-platform-chips {
+  display: flex;
+  flex: 1 1 0%;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.catalog-platform-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 29px;
+  padding: 4px 10px;
+  border-radius: var(--surface-radius-control);
+  background: var(--record-card-fill);
+  border: 1px solid color-mix(in srgb, var(--surface-edge) 75%, transparent);
+  color: var(--surface-muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.catalog-platform-chip:hover {
+  background: var(--surface-hover);
+  border-color: var(--console-control-hover-edge);
+  color: var(--surface-text);
+}
+
+.catalog-platform-chip[aria-pressed='true'] {
+  background: rgb(var(--console-accent-500, 20 184 166) / 16%);
+  border-color: rgb(var(--console-accent-500, 20 184 166) / 55%);
+  color: var(--console-accent-readable, var(--surface-text));
+  font-weight: 600;
+}
+
+.catalog-chip-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.72;
+  padding: 0 4px;
+  border-radius: var(--surface-radius-xs);
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.catalog-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.catalog-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 14px;
+  border-radius: var(--surface-radius);
+  background-color: var(--surface-fill);
+  border: 1px solid var(--surface-edge);
+}
+
+.catalog-skeleton-row {
+  height: 56px;
+  border-radius: var(--surface-radius-item);
+  background: var(--record-card-fill);
+}
+
+.catalog-skeleton-card {
+  height: 196px;
+  border-radius: var(--surface-radius-card);
+  background: var(--surface-fill);
+  border: 1px solid var(--surface-edge);
+}
+
+@container (min-width: 640px) {
+  .catalog-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1020px) {
+  .catalog-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 640px) {
+  .catalog-toolbar-card {
+    padding: 12px;
+  }
+
+  .catalog-search-field {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .catalog-toolbar-right {
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .catalog-meta-pill {
+    height: auto;
+    min-height: var(--control-height);
+    padding: 6px 10px;
+    white-space: normal;
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .catalog-platforms {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .catalog-platforms-label {
+    padding-top: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalog-reset-btn,
+  .catalog-view-btn,
+  .catalog-refresh-btn,
+  .catalog-platform-chip {
+    transition: none;
+  }
+}
 </style>

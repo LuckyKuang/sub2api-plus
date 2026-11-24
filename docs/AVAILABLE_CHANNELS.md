@@ -180,31 +180,44 @@ The setting is available through both public settings JSON and the
 HTML-injected first-paint configuration. It uses
 the existing settings table and requires no migration or environment variable.
 
-The list is a compact menu grouped by concrete platform, with numbered model
-rows, dotted leaders and separate copy-ID buttons. The entire model row,
-including its prices and empty space, opens the same complete quote dialog as
-cards. Hover and keyboard focus show a rounded floating highlight that moves
-between rows without intercepting clicks; reduced-motion preferences disable
-its transitions. Copying never opens details. It uses two columns at a
-results-container width of 900 px or more and one column below it. Names wrap on narrow screens. It
-retains the project theme, category/platform filters, model search and existing
-sort comparison within each platform; platform sections follow the first match
-in the sorted results. Both layouts consume the same authorized catalog,
-aggregation, effective price ranges, units and condition labels. Layout changes
-preserve filters and open details and perform no catalog request. Unlike the
+The list is a unified four-column record-card directory (Model / Platform, Input
+price, Output price, Available quotes) rendered inside a single directory card
+rather than split into per-platform sections. Each model row shows a 34 px
+platform icon badge, monospace `<h3>` model ID, inline copy-ID button with
+temporary checkmark feedback, platform label, billing unit, condition chips,
+right-aligned tabular-nums input/output prices, a quote-count pill, and a
+details cue. The entire model row, including its prices and empty space, opens
+the same complete quote dialog as cards; copying never opens details. Hover and
+keyboard focus highlight the row card directly in CSS without JS measurements;
+reduced-motion preferences disable transitions. Below a 900 px container width
+each row reflows into a stacked mobile card with wrapping model IDs and no
+horizontal overflow. Both layouts consume the same authorized catalog,
+aggregation, effective price ranges, units and condition labels. Users can
+toggle between list and card views for the current session from the toolbar
+without triggering a catalog API request, preserving search text, platform
+filter, page and any open details dialog; changes to the administrator's
+`available_channels_layout` setting reset the session override. Unlike the
 reference menu's raw-price/multiplier presentation, list prices here already
 include the effective rate exactly once. Unknown prices are not free and zero
 prices remain zero. No model descriptions or popularity flags are invented.
 
 Cards fill the content width using container queries: 1/2/3 columns at
-0/460/700 px, with 20 px gaps. Both themes, sidebar width changes,
-long IDs and mobile details are supported; only price tables scroll sideways.
+0/640/1020 px, with 14 px gaps, 12 px card corners, a 34 px platform icon badge,
+and an inset two-row key-value pricing ledger so long price ranges stay aligned
+without mid-number wrapping. Both themes, custom wallpapers, sidebar width
+changes, long IDs and mobile details are supported; only price tables scroll
+sideways.
 
-Search and sorting use the shared 240px search and 200px selection fields from
-[CONTRIBUTING.md](../CONTRIBUTING.md). Below 1024px, fields stack at full width;
-reset stays outside the fields at its natural width. The directory has category
-and platform filters plus model name/ID search, with no group filters, group
-headings or group counts.
+`AppHeader` owns the visible page title and subtitle; the view keeps an
+`sr-only` `<h1>` landmark and consolidates controls into a single pinned top
+toolbar card above the independently scrolling results. The toolbar holds
+optional category tabs, a model search field (up to 340 px wide on desktop,
+36 px tall), a reset button that de-emphasizes when no filters are active, a
+right-aligned `aria-live="polite"` summary and pricing-period pill, a
+`role="radiogroup"` list/card switcher, and a manual refresh button, over a
+borderless wrapping row of platform filter chips with tabular counts. The
+directory has category and platform filters plus model name/ID search, with no
+group filters, group headings or group counts.
 
 The frontend aggregates the authorized response by concrete platform plus
 case-insensitive request model ID. Each identity produces exactly one entry;
@@ -221,19 +234,27 @@ unknown or non-finite base prices are excluded from ranges, with an incomplete-p
 notice; explicit zero remains zero. Failed personal-rate lookup labels ranges as
 default-rate references. Minimum displayed price does not select a routing group.
 
-The card layout adapts from one to at most three columns, with 20px gaps and larger
-cards with 16px corners. Wrapped platform buttons retain their natural width.
 Desktop controls remain fixed above the independently scrolling results.
 
-Details identify the model in the dialog title, offer a copy-ID button and
-immediately show every authorized quote in the group comparison table. Escape,
-the close button and clicking the backdrop close the dialog and restore focus.
-Each group's complete pricing and billing conditions are available through its
-keyboard-focusable disclosure. Quote details and each resolved service tier
-(Fast/priority, Flex and Ultrafast) start collapsed; their price tables are mounted
-only while expanded. Multiple quotes and tiers can stay open; reopening details
-or switching models resets disclosures. Opening details performs no extra API
-request and never truncates the authorized quote list.
+Details identify the model in the `BaseDialog` title without repeating an
+in-body `<h3>` heading. The dialog body starts with a compact top metadata bar
+(platform badge, group quote count and copy-ID button) and a left-accented
+billing notice, followed by a comparison hint row with a "Show all disclosures"
+toggle and the right-aligned tabular-nums group comparison table. Clicking or
+activating any comparison row toggles that group's lazy-mounted
+`details.catalog-quote-disclosure` panel, rotates its row chevron, highlights
+the selected row, and in default focused mode collapses any previously opened
+disclosure while scrolling the revealed detail smoothly into view. Closed
+disclosures carry the native `hidden` attribute by default so they neither form
+a stacked scroll wall nor enter the dialog keyboard Tab loop; toggling "Show all
+disclosures" reveals all disclosure summaries and allows multiple quotes to stay
+open simultaneously. Escape, the close button and clicking the backdrop close
+the dialog and restore focus. Quote details and each resolved service tier
+(Fast/priority, Flex and Ultrafast) start collapsed; their price tables are
+mounted only while expanded. Reopening details or switching models resets both
+expanded quotes/tiers and the "Show all disclosures" toggle. Opening details
+performs one targeted detail request for the selected model and never truncates
+the authorized quote list.
 Collapsed price regions are excluded from the dialog's Tab loop; their summaries
 remain reachable, and expanded price regions rejoin that loop.
 Official reference prices remain expanded inside an opened quote. Small price

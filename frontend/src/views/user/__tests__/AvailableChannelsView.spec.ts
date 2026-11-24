@@ -353,22 +353,92 @@ describe('available channels user page', () => {
     } finally { vi.useRealTimers() }
   })
 
-  it('keeps heading, filters and count outside the independently scrolling channel cards', async () => {
+  it('keeps the consolidated toolbar with live summary outside the independently scrolling channel results', async () => {
     const w = page(); await flushPromises()
     const results = w.get('[data-testid="catalog-results"]')
-    const heading = w.get('[data-testid="catalog-heading"]')
     const filters = w.get('[data-testid="catalog-filters"]')
     expect(w.getComponent({ name: 'AppLayout' }).props('workspace')).toBe(true)
     expect(w.get('.catalog-page').classes()).toContain('workspace-page')
     expect(results.classes()).toContain('workspace-scroll')
     expect(results.findAll('.catalog-model-card')).toHaveLength(3)
-    for (const fixed of [heading, filters, w.get('[aria-live="polite"]')]) {
-      expect(fixed.classes()).toContain('workspace-fixed')
-      expect(fixed.element.parentElement).toBe(results.element.parentElement)
-      expect(results.element.contains(fixed.element)).toBe(false)
-    }
-    expect(heading.find('h1').exists()).toBe(true)
+    expect(w.find('[data-testid="catalog-heading"]').exists()).toBe(false)
+    expect(w.get('h1.sr-only').text()).toBe('availableChannels.title')
+    expect(filters.classes()).toContain('workspace-fixed')
+    expect(filters.element.parentElement).toBe(results.element.parentElement)
+    expect(results.element.contains(filters.element)).toBe(false)
+    expect(filters.find('[aria-live="polite"]').exists()).toBe(true)
+    expect(filters.find('button[aria-label="common.refresh"]').exists()).toBe(true)
+    expect(filters.find('[role="radiogroup"]').exists()).toBe(true)
     expect(filters.find('input[type="search"]').exists()).toBe(true)
+  })
+
+  it('toggles between list and card views in the toolbar without extra API reads and preserves filters and open details', async () => {
+    mocks.getCatalog.mockResolvedValue({ groups: [
+      group(1, [offer('model-a'), offer('model-z')]),
+      group(2, [offer('model-other', { platform: 'anthropic' })])
+    ], user_rate_status: 'loaded', models_total: 3, categories: { group: 3 }, platforms: { openai: 2, anthropic: 1 } })
+    const w = page(); await flushPromises()
+    const filters = w.get('[data-testid="catalog-filters"]')
+    const radios = filters.findAll('[role="radiogroup"] [role="radio"]')
+    expect(radios).toHaveLength(2)
+    expect(radios[0]!.attributes('aria-checked')).toBe('false')
+    expect(radios[1]!.attributes('aria-checked')).toBe('true')
+    expect(w.findAll('.catalog-model-card')).toHaveLength(3)
+
+    await filters.get('input[type="search"]').setValue('model-')
+    await filters.findAll('[role="group"] button[aria-pressed]').find(button => button.text().includes('openai'))!.trigger('click')
+    await flushPromises()
+    await w.findAll('.catalog-model-card')[0]!.findAll('button')[1]!.trigger('click')
+    await flushPromises()
+    const callsBeforeToggle = mocks.getCatalog.mock.calls.length
+    const openedName = w.getComponent(CatalogPriceDetails).props('model').name
+
+    // Switch to list view in session: zero catalog API calls, filters & dialog intact
+    await radios[0]!.trigger('click')
+    expect(radios[0]!.attributes('aria-checked')).toBe('true')
+    expect(radios[1]!.attributes('aria-checked')).toBe('false')
+    expect(w.find('[data-testid="catalog-model-list"]').exists()).toBe(true)
+    expect(w.find('.catalog-model-card').exists()).toBe(false)
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(callsBeforeToggle)
+    expect((filters.get('input[type="search"]').element as HTMLInputElement).value).toBe('model-')
+    expect(filters.get('[aria-pressed="true"]').text()).toContain('openai')
+    expect(w.getComponent(CatalogPriceDetails).props('model').name).toBe(openedName)
+
+    // Switch back to card view
+    await radios[1]!.trigger('click')
+    expect(w.findAll('.catalog-model-card')).toHaveLength(3)
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(callsBeforeToggle)
+    expect(w.getComponent(CatalogPriceDetails).props('model').name).toBe(openedName)
+
+    // Reactive site default change clears session override
+    await radios[0]!.trigger('click')
+    expect(w.find('[data-testid="catalog-model-list"]').exists()).toBe(true)
+    mocks.app.availableChannelsLayout = 'list'
+    await nextTick()
+    mocks.app.availableChannelsLayout = 'card'
+    await nextTick()
+    expect(w.findAll('.catalog-model-card')).toHaveLength(3)
+    expect(radios[1]!.attributes('aria-checked')).toBe('true')
+  })
+
+  it('de-emphasizes the reset button when idle and activates it when filters are present', async () => {
+    mocks.getCatalog.mockResolvedValue({ groups: [
+      group(1, [offer('model-a')]),
+      group(2, [offer('model-b', { platform: 'anthropic' })])
+    ], user_rate_status: 'loaded', models_total: 2, categories: { group: 2 }, platforms: { openai: 1, anthropic: 1 } })
+    const w = page(); await flushPromises()
+    const resetBtn = w.get('.catalog-reset-btn')
+    expect(resetBtn.classes()).toContain('is-idle')
+
+    await w.get('input[type="search"]').setValue('model')
+    expect(resetBtn.classes()).not.toContain('is-idle')
+
+    await resetBtn.trigger('click'); await flushPromises()
+    expect(resetBtn.classes()).toContain('is-idle')
+
+    await w.findAll('[role="group"] button[aria-pressed]').find(button => button.text().includes('anthropic'))!.trigger('click')
+    await flushPromises()
+    expect(resetBtn.classes()).not.toContain('is-idle')
   })
 
   it('preserves the platform and search through refresh in the pinned filter card', async () => {
@@ -533,6 +603,32 @@ describe('available channels user page', () => {
     close.focus()
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
     expect(document.activeElement).toBe(visiblePrice)
+  })
+
+  it('keeps dialog keyboard focus trapped when expanding via comparison row click and restores focus on Escape', async () => {
+    mocks.getCatalog.mockResolvedValue({ groups: [
+      group(1, [offer('shared', { offer_key: 'q-1', service_tier_pricing: [{ name: 'priority', pricing: pricing(6e-6) }] })]),
+      group(2, [offer('shared', { offer_key: 'q-2' })])
+    ], user_rate_status: 'loaded' })
+    const w = page(); await flushPromises()
+    const trigger = w.findAll('.catalog-model-card button')[1]!
+    ;(trigger.element as HTMLElement).focus()
+    await trigger.trigger('click'); await flushPromises()
+    const dialog = document.querySelector('[role="dialog"]')!
+    const close = dialog.querySelector<HTMLButtonElement>('[aria-label="Close modal"]')!
+    const rowToggles = dialog.querySelectorAll<HTMLButtonElement>('.catalog-row-toggle')
+    // Closed disclosures are hidden so Shift+Tab from close lands on the last row toggle
+    close.focus()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
+    expect(document.activeElement).toBe(rowToggles[1])
+    // Expanding row 0 reveals its quote & service tier while keeping row 1's disclosure hidden
+    rowToggles[0]!.click(); await flushPromises()
+    const prioritySummary = Array.from(dialog.querySelectorAll<HTMLElement>('summary')).find(s => s.textContent!.includes('tiers.priority'))!
+    close.focus()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
+    expect(document.activeElement).toBe(prioritySummary)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await flushPromises()
+    expect(document.activeElement).toBe(trigger.element)
   })
   // Approved presentation contract: every newly opened model starts with its
   // tiers collapsed. Exercise clicks through the page instead of assigning
