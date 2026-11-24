@@ -2,7 +2,7 @@
 
 ## 稳定边界
 
-当前宿主只支持 `openai.oauth.outbound_transport.v1`。插件负责建立实际上游 HTTP/TLS 连接，Sub2API 负责账号选择、OAuth Token 生命周期、下游协议、响应解析、SSE、错误映射、用量统计和计费。
+当前宿主支持 `openai.oauth.outbound_transport.v1`（兼容入口）、`outbound.transport.v1`（多平台传输）和 `request.instructions.prepend.v1`（纯声明式请求指令）。传输插件负责建立实际上游 HTTP/TLS 连接，Sub2API 负责账号选择、OAuth Token 生命周期、下游协议、响应解析、SSE、错误映射、用量统计和计费。请求处理插件不启动进程，只由宿主按平台/账号类型和灰度插入静态指令。
 
 插件不应修改 API Key 路径，也不应自行刷新或持久化 OAuth Token。
 

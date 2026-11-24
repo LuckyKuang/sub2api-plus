@@ -160,10 +160,18 @@ func (m *PluginManager) publishRequestRules(installations []*PluginInstallation)
 // RequestInstructionsForAccount returns the ordered, non-empty instruction
 // blocks that apply to this credential. One text is selected per plugin, using
 // exact account override, platform override, then default precedence.
+func pluginAccountType(value string) string {
+	if value == AccountTypeSetupToken {
+		return AccountTypeOAuth
+	}
+	return value
+}
+
 func (m *PluginManager) RequestInstructionsForAccount(account *Account) string {
 	if m == nil || account == nil {
 		return ""
 	}
+	accountType := pluginAccountType(account.Type)
 	rules, _ := m.requestRules.Load().([]pluginRequestRule)
 	if len(rules) == 0 {
 		return ""
@@ -171,7 +179,7 @@ func (m *PluginManager) RequestInstructionsForAccount(account *Account) string {
 	texts := make([]string, 0, len(rules))
 	seen := make(map[string]struct{}, len(rules))
 	for _, rule := range rules {
-		if rule.platform != account.Platform || rule.accountType != account.Type {
+		if rule.platform != account.Platform || rule.accountType != accountType {
 			continue
 		}
 		if rule.rollout <= 0 || int(stablePluginBucket(account.ID)) >= rule.rollout {
@@ -372,7 +380,26 @@ func pluginRequestProtocol(request *http.Request, body []byte) string {
 
 func manifestHasTransportCapability(manifest PluginManifest) bool {
 	for _, capability := range manifest.Capabilities {
-		if capability.ID == PluginCapabilityOpenAIOAuthOutbound {
+		switch capability.ID {
+		case PluginCapabilityOpenAIOAuthOutbound, PluginCapabilityOutboundTransport:
+			return true
+		}
+	}
+	return false
+}
+
+func manifestHasMultiTransportCapability(manifest PluginManifest) bool {
+	for _, capability := range manifest.Capabilities {
+		if capability.ID == PluginCapabilityOutboundTransport {
+			return true
+		}
+	}
+	return false
+}
+
+func hasEnabledMultiTransportBinding(bindings []PluginBinding) bool {
+	for _, binding := range bindings {
+		if binding.Enabled && binding.Capability == PluginCapabilityOutboundTransport {
 			return true
 		}
 	}

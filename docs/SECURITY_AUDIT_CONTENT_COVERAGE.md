@@ -864,7 +864,11 @@ from the original HTTP request or WS turn before these outbound adaptations.
 Unknown metadata/options/items remain pass-through; recognized sibling content
 remains auditable. OAuth Zstd encoding happens at the final HTTP/plugin send
 boundary, after ingress decoding and audit, with no new endpoint or ingress path.
-Models residency adds an outbound declaration only. Real-payload regressions
+Plugin request instructions are an outbound-only adaptation applied after ingress
+audit and before final compression/signing; they add no inbound content. Transport
+plugins receive the same already-audited request and can change only the sender;
+their bytes are not re-ingested by the host audit. Models residency adds an
+outbound declaration only. Real-payload regressions
 cover plain/Lite HTTP and WS shapes, canonical content in both engines, and the
 existing blocked/allowed stage-order gates for both credential types.
 

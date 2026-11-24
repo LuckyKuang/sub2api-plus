@@ -181,7 +181,35 @@ UI 是插件包内的静态页面，不需要修改 Sub2API 前端源码。宿�
 }
 ```
 
-取值优先级为精确平台+账号类型、平台、默认值；同一插件只取一条文本。多个插件的非空文本按稳定的插件/绑定顺序拼接。文本只在最终协议组包点插入，不执行模板、不读取变量、不访问网络。清单声明的平台和账号类型必须具体；纯请求包不能声明可执行载荷或动态 UI。当前传输能力仍只支持 `openai.oauth.outbound_transport.v1`。
+取值优先级为精确平台+账号类型、平台、默认值；同一插件只取一条文本。多个插件的非空文本按稳定的插件/绑定顺序拼接。文本只在最终协议组包点插入，不执行模板、不读取变量、不访问网络。清单声明的平台和账号类型必须具体；纯请求包不能声明可执行载荷或动态 UI。
+
+### 多平台出站传输包（schema v2）
+
+`outbound.transport.v1` 允许同一套传输协议服务项目平台目录中的 OAuth 和 API Key 推理路径。包仍需目标平台运行时、静态 UI 和文件哈希；宿主按本次凭据 owner 的 `platform + account_type` 选择发送者，同一组合最多一个活动传输槽。
+
+```json
+{
+  "schema_version": 2,
+  "id": "example.stepfun.transport",
+  "name": "StepFun transport",
+  "version": "0.1.0",
+  "requires": {
+    "sub2api": ">=0.1.179 <0.2.0",
+    "tested_sub2api_versions": ["0.1.179"],
+    "plugin_protocol": 1,
+    "transport_api": 1,
+    "ui_bridge": 1
+  },
+  "capabilities": [
+    {"id": "outbound.transport.v1", "platform": "stepfun", "account_type": "oauth"}
+  ],
+  "runtimes": {"linux-arm64": {"path": "bin/plugin"}},
+  "ui": {"entrypoint": "ui/index.html"},
+  "files": {}
+}
+```
+
+v1 `openai.oauth.outbound_transport.v1` 继续可用。v2 精确范围优先，未命中时回退 v1；不同平台/账号类型可以分别灰度。原生 Gemini/Antigravity 发送点、WebSocket 传输以及逐平台真实账号矩阵仍需在对应网关和部署环境单独验证，不能由通用 HTTP 单测代替。
 
 ## 7. 生成密钥并签名
 

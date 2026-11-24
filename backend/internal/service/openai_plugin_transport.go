@@ -81,7 +81,7 @@ func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, _
 func (s *OpenAIGatewayService) doOpenAIPreparedTransport(request *http.Request, ownerProxyURL string, owner, selected *Account) (*http.Response, error) {
 	observeOutboundHTTP(request, owner)
 	if s.pluginManager != nil {
-		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, ownerProxyURL, owner)
+		response, handled, err := s.pluginManager.RoundTripTransport(request.Context(), request, ownerProxyURL, owner)
 		if handled {
 			return response, err
 		}
@@ -180,7 +180,7 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 
 func (s *AccountTestService) doOpenAIAccountTestPreparedTransport(request *http.Request, ownerProxyURL string, owner, selected *Account, useTLSFallback bool) (*http.Response, error) {
 	if s.pluginManager != nil {
-		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, ownerProxyURL, owner)
+		response, handled, err := s.pluginManager.RoundTripTransport(request.Context(), request, ownerProxyURL, owner)
 		if handled {
 			return response, err
 		}

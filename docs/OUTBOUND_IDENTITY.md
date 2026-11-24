@@ -751,7 +751,9 @@ with prohibited declarations is rejected without modifying its signed headers;
 clean signatures are preserved byte for byte. `X-Grok-Client-Tool-Cache` has no gateway control semantics or special filter;
 explicit extras follow general policy, including signature preservation. Shared clients and independent HTTP/req clients apply the
 same check to redirected attempts; plugin forwarding checks before opening its
-forward stream. GLM off-peak task IDs use the official `offpeak-<UUID>` shape.
+forward stream. Multi-platform transport bindings reuse the same prepared
+request, so the plugin sees the owner's selected identity headers and cannot
+select a different source; it must preserve them at send time. GLM off-peak task IDs use the official `offpeak-<UUID>` shape.
 
 ## Selection and persistence
 

@@ -40,6 +40,14 @@
 - 宿主在最终协议组包点把文本插入指令槽：Chat 的 system/developer、Responses 的 `instructions`、Anthropic 的 `system`、Gemini 的 `systemInstruction.parts`。
 - 灰度比例按账号 ID 稳定分桶；同一次请求每个插件只取一条文本，多个插件按稳定的插件/绑定顺序拼接。
 
+### `outbound.transport.v1`
+
+- 需要清单 `schema_version: 2`，按具体 `platform + account_type (oauth/apikey)` 声明；需要目标平台运行时、静态 UI 和文件哈希。
+- 按本次尝试的真实凭据 owner 平台和账号类型选择发送者，每次发送最多命中一个传输实现。
+- 同一平台和账号类型的活动传输槽互斥；不同平台/类型可以分别启用，灰度按账号 ID 稳定分桶。
+- v1 `openai.oauth.outbound_transport.v1` 继续兼容；两者同时命中时优先 v2 精确范围，未命中时回退 v1。
+- 传输进程建立真实上游 HTTP/TLS 连接并返回原始响应；宿主继续负责响应解析、错误映射、用量、计费和审计。
+
 ## 宿主服务（HostService）
 
 `HostService` 是宿主经 go-plugin broker 反向暴露给插件的通用能力层，独立于具体插件类型，供有状态插件使用。它通过 `TransportPlugin.InitHostServices` 在运行时协商：宿主启动后把一个 broker 流 id 交给插件，插件用它拨号回宿主并获得 `HostServiceClient`。

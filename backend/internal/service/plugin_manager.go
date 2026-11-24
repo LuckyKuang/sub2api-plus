@@ -55,12 +55,14 @@ type PluginManager struct {
 	operationMu        sync.Mutex
 	mu                 sync.Mutex
 	runtimes           map[int64]*pluginRuntime
+	multiRuntimes      map[int64]*pluginRuntime
 	localInstallations map[int64]*PluginInstallation
 	started            bool
 	reconcileCancel    context.CancelFunc
 	reconcileDone      chan struct{}
 	route              atomic.Pointer[pluginRoute]
 	requestRules       atomic.Value // []pluginRequestRule
+	transportRoutes    atomic.Value // []pluginTransportRoute
 }
 
 func NewPluginManager(repo PluginRepository, encryptor SecretEncryptor, cfg *config.Config, hostInfo PluginHostInfo, kvStore PluginKVStore) *PluginManager {
@@ -72,6 +74,7 @@ func NewPluginManager(repo PluginRepository, encryptor SecretEncryptor, cfg *con
 		installer:          NewPluginPackageInstaller(cfg, hostInfo),
 		kvStore:            kvStore,
 		runtimes:           make(map[int64]*pluginRuntime),
+		multiRuntimes:      make(map[int64]*pluginRuntime),
 		localInstallations: make(map[int64]*PluginInstallation),
 	}
 }
@@ -126,11 +129,17 @@ func (m *PluginManager) Stop() {
 	}
 	m.operationMu.Lock()
 	m.mu.Lock()
-	runtimes := make([]*pluginRuntime, 0, len(m.runtimes))
+	runtimes := make([]*pluginRuntime, 0, len(m.runtimes)+len(m.multiRuntimes))
 	for _, runtime := range m.runtimes {
 		runtimes = append(runtimes, runtime)
 	}
+	for _, runtime := range m.multiRuntimes {
+		runtimes = append(runtimes, runtime)
+	}
 	m.runtimes = make(map[int64]*pluginRuntime)
+	m.multiRuntimes = make(map[int64]*pluginRuntime)
+	m.transportRoutes.Store([]pluginTransportRoute(nil))
+	m.requestRules.Store([]pluginRequestRule(nil))
 	m.route.Store(nil)
 	m.started = false
 	m.mu.Unlock()
@@ -159,7 +168,11 @@ func (m *PluginManager) List(ctx context.Context) ([]*PluginInstallation, error)
 			}
 			continue
 		}
-		if runtime := m.runtimes[installation.ID]; runtime != nil && !runtime.client.Exited() {
+		runtime := m.runtimes[installation.ID]
+		if runtime == nil {
+			runtime = m.multiRuntimes[installation.ID]
+		}
+		if runtime != nil && !runtime.client.Exited() {
 			installation.RuntimeHealthy = true
 			installation.RuntimeMessage = "插件进程运行中"
 		} else if installation.State == PluginStateEnabled {
@@ -189,6 +202,9 @@ func (m *PluginManager) Get(ctx context.Context, id int64) (*PluginInstallation,
 	}
 	m.mu.Lock()
 	runtime := m.runtimes[id]
+	if runtime == nil {
+		runtime = m.multiRuntimes[id]
+	}
 	m.mu.Unlock()
 	installation.RuntimeHealthy = runtime != nil && !runtime.client.Exited()
 	if installation.RuntimeHealthy {
@@ -295,6 +311,7 @@ func (m *PluginManager) reconcileOnce(ctx context.Context) error {
 	}
 	m.cleanupStaleLocalInstallations(installations)
 	m.publishRequestRules(installations)
+	m.reconcileMultiTransport(ctx, installations)
 	var enabled *PluginInstallation
 	for _, installation := range installations {
 		if !hasEnabledOpenAIBinding(installation.Bindings) {
@@ -610,6 +627,9 @@ func (m *PluginManager) Enable(ctx context.Context, id int64, acceptUntested boo
 	if installation.Manifest.IsRequestOnly() {
 		return m.enableRequestOnlyPlugin(ctx, installation, compatibility, rolloutPercent)
 	}
+	if manifestHasMultiTransportCapability(installation.Manifest) {
+		return m.enableMultiTransportPlugin(ctx, installation, compatibility, rolloutPercent)
+	}
 	installation, err = m.ensureLocalInstallation(ctx, installation)
 	if err != nil {
 		return nil, err
@@ -673,11 +693,19 @@ func (m *PluginManager) Disable(ctx context.Context, id int64) (*PluginInstallat
 		return nil, err
 	}
 	runtime := m.removeRuntimeLocked(id)
+	multiRuntime := m.multiRuntimes[id]
+	delete(m.multiRuntimes, id)
 	m.mu.Unlock()
 	if runtime != nil {
 		runtime.drain(10 * time.Second)
 	}
+	if multiRuntime != nil {
+		multiRuntime.drain(10 * time.Second)
+	}
 	m.refreshRequestRules(ctx)
+	if installations, listErr := m.repo.List(ctx); listErr == nil {
+		m.publishMultiTransportRoutes(installations)
+	}
 	return m.Get(ctx, id)
 }
 
@@ -699,11 +727,16 @@ func (m *PluginManager) Delete(ctx context.Context, id int64) error {
 		return err
 	}
 	runtime := m.removeRuntimeLocked(id)
+	multiRuntime := m.multiRuntimes[id]
+	delete(m.multiRuntimes, id)
 	local := m.localInstallations[id]
 	delete(m.localInstallations, id)
 	m.mu.Unlock()
 	if runtime != nil {
 		runtime.drain(10 * time.Second)
+	}
+	if multiRuntime != nil {
+		multiRuntime.drain(10 * time.Second)
 	}
 	cleanupErr := m.cleanupInstallationFiles(installation)
 	if local != nil && (local.InstallPath != installation.InstallPath || local.ArtifactPath != installation.ArtifactPath) {
@@ -764,6 +797,9 @@ func (m *PluginManager) SaveConfig(ctx context.Context, id int64, raw json.RawMe
 	}
 	m.mu.Lock()
 	runtime := m.runtimes[id]
+	if runtime == nil {
+		runtime = m.multiRuntimes[id]
+	}
 	m.mu.Unlock()
 	temporary := false
 	if runtime == nil {
@@ -800,7 +836,12 @@ func (m *PluginManager) SaveConfig(ctx context.Context, id int64, raw json.RawMe
 		return nil, err
 	}
 	if !temporary {
+		m.mu.Lock()
 		runtime.installation.ConfigEncrypted = encrypted
+		if multi := m.multiRuntimes[id]; multi != nil {
+			multi.installation.ConfigEncrypted = encrypted
+		}
+		m.mu.Unlock()
 	}
 	return canonical, nil
 }
@@ -841,6 +882,9 @@ func (m *PluginManager) Test(ctx context.Context, id int64) (*pluginv1.TestConfi
 	}
 	m.mu.Lock()
 	runtime := m.runtimes[id]
+	if runtime == nil {
+		runtime = m.multiRuntimes[id]
+	}
 	m.mu.Unlock()
 	temporary := false
 	if runtime == nil {
@@ -885,6 +929,9 @@ func (m *PluginManager) Status(ctx context.Context, id int64) (*pluginv1.HealthR
 	}
 	m.mu.Lock()
 	runtime := m.runtimes[id]
+	if runtime == nil {
+		runtime = m.multiRuntimes[id]
+	}
 	m.mu.Unlock()
 	if runtime == nil {
 		return &pluginv1.HealthResponse{Healthy: false, Message: "插件未运行"}, nil

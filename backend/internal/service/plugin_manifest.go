@@ -17,6 +17,7 @@ import (
 
 const (
 	PluginCapabilityOpenAIOAuthOutbound = "openai.oauth.outbound_transport.v1"
+	PluginCapabilityOutboundTransport   = "outbound.transport.v1"
 	PluginCapabilityRequestInstructions = "request.instructions.prepend.v1"
 	PluginStateDisabled                 = "disabled"
 	PluginStateStarting                 = "starting"
@@ -180,6 +181,17 @@ func (m PluginManifest) Validate() error {
 				return fmt.Errorf("能力 %s 仅支持 OpenAI OAuth", capability.ID)
 			}
 			hasTransport = true
+		case PluginCapabilityOutboundTransport:
+			if m.SchemaVersion != 2 {
+				return fmt.Errorf("能力 %s 需要插件清单版本 2", capability.ID)
+			}
+			if !domain.IsConcretePlatform(capability.Platform) {
+				return fmt.Errorf("出站传输能力需要具体平台: %s", capability.Platform)
+			}
+			if capability.AccountType != AccountTypeOAuth && capability.AccountType != AccountTypeAPIKey {
+				return fmt.Errorf("出站传输能力仅支持 oauth 或 apikey: %s", capability.AccountType)
+			}
+			hasTransport = true
 		case PluginCapabilityRequestInstructions:
 			if m.SchemaVersion != 2 {
 				return fmt.Errorf("能力 %s 需要插件清单版本 2", capability.ID)
@@ -244,7 +256,7 @@ func (m PluginManifest) IsRequestOnly() bool {
 		switch capability.ID {
 		case PluginCapabilityRequestInstructions:
 			hasRequest = true
-		case PluginCapabilityOpenAIOAuthOutbound:
+		case PluginCapabilityOpenAIOAuthOutbound, PluginCapabilityOutboundTransport:
 			return false
 		}
 	}
