@@ -19,6 +19,17 @@ export const getAdminSteps = (t: (key: string) => string, isSimpleMode = false):
     }
   },
 
+  // ========== 用户端入口 ==========
+  {
+    element: '#sidebar-user-portal',
+    popover: {
+      title: t('onboarding.admin.userPortal.title'),
+      description: t('onboarding.admin.userPortal.description'),
+      side: 'right',
+      align: 'center'
+    }
+  },
+
   // ========== 第一部分：创建分组 ==========
   {
     element: '#sidebar-group-manage',
@@ -172,58 +183,6 @@ export const getAdminSteps = (t: (key: string) => string, isSimpleMode = false):
       showButtons: ['close']
     }
   },
-
-  // ========== 第三部分：创建API密钥 ==========
-  {
-    element: '[data-tour="sidebar-my-keys"]',
-    popover: {
-      title: t('onboarding.admin.keyManage.title'),
-      description: t('onboarding.admin.keyManage.description'),
-      side: 'right',
-      align: 'center',
-      showButtons: ['close']
-    }
-  },
-  {
-    element: '[data-tour="keys-create-btn"]',
-    popover: {
-      title: t('onboarding.admin.createKey.title'),
-      description: t('onboarding.admin.createKey.description'),
-      side: 'bottom',
-      align: 'end',
-      showButtons: ['close']
-    }
-  },
-  {
-    element: '[data-tour="key-form-name"]',
-    popover: {
-      title: t('onboarding.admin.keyName.title'),
-      description: t('onboarding.admin.keyName.description'),
-      side: 'right',
-      align: 'start',
-      showButtons: ['next', 'previous']
-    }
-  },
-  {
-    element: '[data-tour="key-form-group"]',
-    popover: {
-      title: t('onboarding.admin.keyGroup.title'),
-      description: t('onboarding.admin.keyGroup.description'),
-      side: 'right',
-      align: 'start',
-      showButtons: ['next', 'previous']
-    }
-  },
-  {
-    element: '[data-tour="key-form-submit"]',
-    popover: {
-      title: t('onboarding.admin.keySubmit.title'),
-      description: t('onboarding.admin.keySubmit.description'),
-      side: 'left',
-      align: 'center',
-      showButtons: ['close']
-    }
-  }
   ]
 
   // 简易模式下过滤分组相关步骤

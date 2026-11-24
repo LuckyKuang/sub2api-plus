@@ -15,7 +15,6 @@
       <span class="inline-flex flex-shrink-0 items-center rounded-md border border-amber-300 surface-inset px-3 py-1 text-xs font-semibold text-amber-800 dark:border-amber-700 dark:text-amber-200">
         {{ t('admin.support.readOnly') }}
       </span>
-      <button type="button" class="btn btn-secondary btn-sm" @click="exitSupport">{{ t('admin.support.exit') }}</button>
     </div>
   </section>
 </template>
@@ -24,16 +23,9 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
-import { useRouter } from 'vue-router'
-import { setAdminSupportContext } from '@/utils/adminSupportContext'
 import type { AdminSupportUser } from '@/api/admin/supportView'
 
 const props = defineProps<{ target: AdminSupportUser }>()
 const { t } = useI18n()
-const router = useRouter()
-function exitSupport() {
-  setAdminSupportContext(null)
-  void router.push('/admin/users')
-}
 const targetLabel = computed(() => props.target.username?.trim() || props.target.email)
 </script>

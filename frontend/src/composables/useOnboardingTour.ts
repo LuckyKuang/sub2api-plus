@@ -9,6 +9,9 @@ import { getAdminSteps, getUserSteps } from '@/components/Guide/steps'
 export interface OnboardingOptions {
   storageKey?: string
   autoStart?: boolean
+  // The current chrome decides the tour. An administrator browsing the user
+  // portal gets the personal guide, not management steps for absent menus.
+  variant?: 'admin' | 'user'
 }
 
 export function useOnboardingTour(options: OnboardingOptions) {
@@ -93,7 +96,7 @@ export function useOnboardingTour(options: OnboardingOptions) {
 
   const startTour = async (startIndex = 0) => {
     // 动态获取当前用户角色和步骤
-    const isAdmin = userStore.user?.role === 'admin'
+    const isAdmin = options.variant ? options.variant === 'admin' : userStore.user?.role === 'admin'
     const isSimpleMode = userStore.isSimpleMode
     const steps = isAdmin ? getAdminSteps(t, isSimpleMode) : getUserSteps(t)
 

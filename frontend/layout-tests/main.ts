@@ -25,7 +25,8 @@ const appearance = {
 const pinia = createPinia()
 const UserLayoutFixture = defineAsyncComponent(() => import('./UserLayoutFixture.vue'))
 const AdminLayoutFixture = defineAsyncComponent(() => import('./AdminLayoutFixture.vue'))
-const router = createRouter({ history: createWebHistory(), routes: [{ path: '/:pathMatch(.*)*', component: { render: () => null }, meta: { title: 'Review' } }] })
+const isAdminLayout = parameters.get('view') === 'admin-layout'
+const router = createRouter({ history: createWebHistory(), routes: [{ path: '/:pathMatch(.*)*', component: { render: () => null }, meta: { title: 'Review', portalArea: isAdminLayout ? 'admin' : 'user' } }] })
 
 createApp({
   setup() {

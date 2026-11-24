@@ -19,4 +19,17 @@ describe('administrator support account selector', () => {
     expect(source).toContain('description: `${user.email} #${user.id}`')
     expect(source).toContain('loadAccounts().catch(() => undefined)')
   })
+
+  it('locks the old page during a target switch instead of clearing the context early', () => {
+    expect(source).toContain('beginSupportTransition()')
+    expect(source).toContain('endSupportTransition()')
+    expect(source).toContain('requestSupportExit()')
+    expect(source).toContain('clearSupportExit()')
+    expect(source).not.toContain('setAdminSupportContext(null)')
+    expect(source).toContain('returningToSelf')
+  })
+
+  it('identifies the selected account by id so equal display names stay distinct', () => {
+    expect(source).toContain('· #{{ selectedUserId }}')
+  })
 })

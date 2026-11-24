@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  ADMIN_SUPPORT_SAFE_LANDING,
   accountSelectionDestination,
   adminSupportPath,
   parseAdminSupportTargetId,
+  resolveAdminSupportRouteDecision,
   selfPathForSupportResource,
   supportResourceForPersonalPath,
   supportResourceFromPath,
@@ -69,5 +71,34 @@ describe('administrator support route selection', () => {
     expect(accountSelectionDestination('/admin/support/users/42/custom/help', 7, 43)).toBe('/admin/support/users/43/custom/help')
     expect(accountSelectionDestination('/admin/support/users/42/custom/help', 7, 7)).toBe('/custom/help')
     expect(supportPathForPersonalPath(42, '/admin/users')).toBeNull()
+  })
+})
+
+describe('assistance route decisions', () => {
+  it('never falls back to the caller personal page for an invalid target', () => {
+    expect(resolveAdminSupportRouteDecision({
+      resource: 'api-keys', targetUserId: null, actorUserId: 7,
+    })).toEqual({ kind: 'safe-landing', path: ADMIN_SUPPORT_SAFE_LANDING })
+  })
+
+  it('normalizes a valid self target to the personal page', () => {
+    expect(resolveAdminSupportRouteDecision({
+      resource: 'api-keys', targetUserId: 7, actorUserId: 7,
+    })).toEqual({ kind: 'self', path: '/keys' })
+    expect(resolveAdminSupportRouteDecision({
+      resource: 'custom', targetUserId: 7, actorUserId: 7, customId: 'help',
+    })).toEqual({ kind: 'self', path: '/custom/help' })
+    expect(resolveAdminSupportRouteDecision({
+      resource: 'custom', targetUserId: 7, actorUserId: 7,
+    })).toEqual({ kind: 'safe-landing', path: ADMIN_SUPPORT_SAFE_LANDING })
+  })
+
+  it('treats every other account as a read-only support target', () => {
+    expect(resolveAdminSupportRouteDecision({
+      resource: 'api-keys', targetUserId: 8, actorUserId: 7,
+    })).toEqual({ kind: 'support', userId: 8 })
+    expect(resolveAdminSupportRouteDecision({
+      resource: 'api-keys', targetUserId: 8, actorUserId: 7, customId: 'help',
+    })).toEqual({ kind: 'support', userId: 8 })
   })
 })

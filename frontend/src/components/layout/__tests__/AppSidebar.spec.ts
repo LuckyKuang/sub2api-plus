@@ -71,15 +71,41 @@ describe('AppSidebar header styles', () => {
   })
 })
 
-describe('AppSidebar administrator account support mode', () => {
-  it('mounts the account selector and keeps self and target navigation separate', () => {
-    expect(componentSource).toContain('<AdminSupportUserSelector')
-    expect(componentSource).toContain('buildSelfNavItems(false)')
-    expect(componentSource).toContain('finalizeNav(buildSelfNavItems(true))')
-    expect(componentSource).toContain('parseAdminSupportTargetId(route.params.user_id)')
-    expect(componentSource).toContain('supportPathForPersonalPath(id, item.path)')
-    expect(componentSource).toContain('!adminSupportContext.value')
+describe('AppSidebar admin console and user portal separation', () => {
+  it('renders the admin console without personal menus and with a user portal entry', () => {
+    expect(componentSource).toContain("const isAdmin = computed(() => authStore.isAdmin && portalArea.value === 'admin')")
+    expect(componentSource).toContain("const isAdminUserPortal = computed(() => authStore.isAdmin && portalArea.value === 'user')")
+    expect(componentSource).not.toContain('personalNavItems')
+    expect(componentSource).not.toContain('isAdminSupportMode')
+    expect(componentSource).not.toContain('parseAdminSupportTargetId(route.params.user_id)')
+    expect(componentSource).toContain('id="sidebar-user-portal"')
+    expect(componentSource).toContain("t('nav.userPortal')")
     expect(componentSource).not.toContain("label: t('nav.myAccount')")
+  })
+
+  it('mounts the account selector only in the administrator user portal and keeps target navigation scoped', () => {
+    expect(componentSource).toContain('<AdminSupportUserSelector')
+    expect(componentSource).toContain('v-if="isAdminUserPortal"')
+    expect(componentSource).toContain('finalizeNav(buildSelfNavItems())')
+    expect(componentSource).toContain('supportPathForPersonalPath(id, item.path)')
+    expect(componentSource).toContain('adminSupportContext')
+  })
+
+  it('places the portal switch directly above the theme toggle', () => {
+    const portalEntry = componentSource.indexOf('id="sidebar-user-portal"')
+    const backToAdmin = componentSource.indexOf('id="sidebar-back-to-admin"')
+    const themeToggle = componentSource.indexOf('<!-- Theme Toggle -->')
+    expect(portalEntry).toBeGreaterThan(-1)
+    expect(backToAdmin).toBeGreaterThan(portalEntry)
+    expect(themeToggle).toBeGreaterThan(backToAdmin)
+  })
+
+  it('clears assistance when entering the user portal and returns through the admin console', () => {
+    expect(componentSource).toContain('setAdminSupportContext(null)')
+    expect(componentSource).toContain('router.push(USER_PORTAL_HOME)')
+    expect(componentSource).toContain('router.push(ADMIN_PORTAL_HOME)')
+    expect(componentSource).toContain('beginSupportTransition')
+    expect(componentSource).toContain('endSupportTransition')
   })
 })
 
@@ -106,7 +132,8 @@ describe('AppSidebar MCP entry', () => {
     expect(componentSource).toContain("render: () => h(Icon, { name: 'mcp' })")
     expect(componentSource).toContain('const flagMCP = makeSidebarFlag(FeatureFlags.mcp)')
     expect(componentSource).toMatch(/path: '\/settings\/mcp'[^\n]*icon: MCPIcon, featureFlag: flagMCP/)
-    expect(componentSource).toMatch(/if \(flagMCP\(\)\) filtered\.push\(\{ path: '\/settings\/mcp'[^\n]*icon: MCPIcon/)
+    expect(componentSource).not.toMatch(/filtered\.push\(\{ path: '\/keys'/)
+    expect(componentSource).not.toMatch(/if \(flagMCP\(\)\) filtered\.push/)
     expect(componentSource).not.toMatch(/path: '\/settings\/mcp'[^\n]*PluginIcon/)
   })
 })

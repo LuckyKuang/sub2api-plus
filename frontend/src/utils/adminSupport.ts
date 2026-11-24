@@ -91,3 +91,32 @@ export function supportPathForPersonalPath(userId: number, path: string): string
   const resource = entry[0] as AdminSupportResource
   return adminSupportPath(userId, resource) + (resource === 'custom' ? '/' + path.slice('/custom/'.length) : '')
 }
+
+// An invalid target must never fall back to the caller's writable personal
+// pages. Send the administrator to a management page instead.
+export const ADMIN_SUPPORT_SAFE_LANDING = '/admin/users'
+
+export type AdminSupportRouteDecision =
+  | { kind: 'safe-landing'; path: string }
+  | { kind: 'self'; path: string }
+  | { kind: 'support'; userId: number }
+
+export function resolveAdminSupportRouteDecision(input: {
+  resource: AdminSupportResource
+  targetUserId: number | null
+  actorUserId: number
+  customId?: unknown
+}): AdminSupportRouteDecision {
+  if (input.targetUserId === null) {
+    return { kind: 'safe-landing', path: ADMIN_SUPPORT_SAFE_LANDING }
+  }
+  if (input.targetUserId !== input.actorUserId) {
+    return { kind: 'support', userId: input.targetUserId }
+  }
+  if (input.resource === 'custom') {
+    const customId = typeof input.customId === 'string' ? input.customId : ''
+    if (!customId) return { kind: 'safe-landing', path: ADMIN_SUPPORT_SAFE_LANDING }
+    return { kind: 'self', path: `/custom/${customId}` }
+  }
+  return { kind: 'self', path: selfPathForSupportResource(input.resource) }
+}

@@ -13,7 +13,7 @@ vi.mock('@/stores', () => ({ useAppStore: () => ({
     { id: 'old', url: 'md:old' }, { id: 'new', url: 'md:new' },
     { id: 'external', url: 'https://example.com/docs' }
   ] }
-}) }))
+}), useAuthStore: () => ({ isAdmin: false }), useAdminSettingsStore: () => ({ customMenuItems: [] }) }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ isAdmin: false, user: { id: 1 }, token: 'test' }) }))
 vi.mock('@/stores/adminSettings', () => ({ useAdminSettingsStore: () => ({ customMenuItems: [] }) }))
 vi.mock('@/api/client', () => ({ buildApiUrl: (path: string) => `/api/v1${path}` }))

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import { supportReadonly } from '../supportReadonly'
-import { setAdminSupportContext } from '@/utils/adminSupportContext'
+import { beginSupportTransition, endSupportTransition, setAdminSupportContext } from '@/utils/adminSupportContext'
 
 const component = defineComponent({ directives: { supportReadonly }, props: ['mutate', 'copy'], template: '<div><form v-support-readonly @submit.prevent="mutate"><input value="existing configuration"><button type="submit">Save</button></form><button @click="copy">Copy key</button></div>' })
 afterEach(() => setAdminSupportContext(null))
@@ -36,6 +36,26 @@ describe('assistance preserves reading and disables writes', () => {
     expect(mutate).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
+  it('keeps writes locked while a target switch is in flight after the old context clears', async () => {
+    setAdminSupportContext({ actorId: 1, userId: 42 })
+    beginSupportTransition()
+    const mutate = vi.fn()
+    const wrapper = mount(component, { props: { mutate, copy: vi.fn() } })
+    setAdminSupportContext(null)
+    await nextTick()
+    expect(wrapper.get('input').attributes()).toHaveProperty('readonly')
+    expect(wrapper.get('button[type=submit]').attributes()).toHaveProperty('disabled')
+    await wrapper.get('form').trigger('submit')
+    expect(mutate).not.toHaveBeenCalled()
+
+    endSupportTransition()
+    await nextTick()
+    expect(wrapper.get('input').attributes()).not.toHaveProperty('readonly')
+    await wrapper.get('form').trigger('submit')
+    expect(mutate).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
   it('keeps normal-user mutation behavior', async () => {
     const mutate = vi.fn()
     const wrapper = mount(component, { props: { mutate, copy: vi.fn() } })

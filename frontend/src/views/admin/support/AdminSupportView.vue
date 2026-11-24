@@ -1,6 +1,6 @@
 <template>
   <component :is="page" v-if="target && !loading" :key="`${userId}:${resource}:${route.params.id || ''}`" />
-  <AppLayout v-else>
+  <AppLayout v-else appearance="user">
     <div class="card workspace-shell flex min-h-64 flex-col items-center justify-center gap-4 p-6">
       <LoadingSpinner v-if="loading" />
       <template v-else>

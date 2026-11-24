@@ -189,6 +189,8 @@ export default {
     promoCodes: 'Promo Codes',
     settings: 'Settings',
     myAccount: 'My Account',
+    userPortal: 'User Portal',
+    backToAdmin: 'Back to Admin',
     lightMode: 'Light Mode',
     darkMode: 'Dark Mode',
     collapse: 'Collapse',

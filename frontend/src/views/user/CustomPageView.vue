@@ -1,5 +1,5 @@
 <template>
-  <AppLayout appearance="user">
+  <AppLayout :appearance="portalArea === 'admin' ? 'admin' : 'user'">
     <div class="custom-page-layout">
       <div class="card workspace-shell flex-1 min-h-0 overflow-hidden">
         <div v-if="loading" class="flex h-full items-center justify-center py-12">
@@ -132,6 +132,7 @@ import { useResizeObserver } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores'
 import { useUserView as useAuthStore } from '@/composables/useUserView'
+import { usePortalArea } from '@/composables/usePortalArea'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -151,6 +152,7 @@ const route = useRoute()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const adminSettingsStore = useAdminSettingsStore()
+const portalArea = usePortalArea()
 
 const loading = ref(false)
 const pageTheme = ref<'light' | 'dark'>('light')
@@ -223,11 +225,12 @@ const menuItemId = computed(() => route.params.id as string)
 
 const menuItem = computed(() => {
   const id = menuItemId.value
-  const publicItems = appStore.cachedPublicSettings?.custom_menu_items ?? []
-  const found = publicItems.find((item) => item.id === id) ?? null
+  const userItems = (appStore.cachedPublicSettings?.custom_menu_items ?? [])
+    .filter((item) => item.visibility !== 'admin')
+  const found = userItems.find((item) => item.id === id) ?? null
   if (found) return found
-  if (authStore.isAdmin) {
-    return adminSettingsStore.customMenuItems.find((item) => item.id === id) ?? null
+  if (portalArea.value === 'admin') {
+    return adminSettingsStore.customMenuItems.find((item) => item.id === id && item.visibility === 'admin') ?? null
   }
   return null
 })

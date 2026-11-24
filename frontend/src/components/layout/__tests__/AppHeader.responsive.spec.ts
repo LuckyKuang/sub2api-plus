@@ -4,12 +4,13 @@ import { nextTick, ref } from 'vue'
 import AppHeader from '../AppHeader.vue'
 
 const width = ref(1200)
+const state = vi.hoisted(() => ({ isAdmin: false, path: '/dashboard' }))
 vi.mock('@vueuse/core', () => ({ useElementSize: () => ({ width }) }))
 vi.mock('vue-i18n', async importOriginal => ({
   ...await importOriginal<typeof import('vue-i18n')>(),
   useI18n: () => ({ t: (key: string) => key })
 }))
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: () => ({ path: '/dashboard', meta: {}, params: {} }) }))
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: () => ({ path: state.path, meta: {}, params: {} }) }))
 vi.mock('@/router/title', () => ({ resolveRouteMetaKeys: () => ({ titleKey: 'dashboard.title' }) }))
 vi.mock('@/utils/featureFlags', async importOriginal => ({
   ...await importOriginal<typeof import('@/utils/featureFlags')>(),
@@ -17,15 +18,17 @@ vi.mock('@/utils/featureFlags', async importOriginal => ({
 }))
 vi.mock('@/composables/useUserView', () => ({ useUserView: () => ({ user: { role: 'user', username: 'Reviewer', email: 'review@example.test', balance: 2, frozen_balance: 1 } }) }))
 vi.mock('@/stores', () => ({
-  useAppStore: () => ({ publicSettingsLoaded: true, siteLogo: '', docUrl: 'https://example.test/docs', cachedPublicSettings: {}, toggleMobileSidebar: vi.fn() }),
-  useAuthStore: () => ({ logout: vi.fn() }), useOnboardingStore: () => ({ replay: vi.fn() })
+  useAppStore: () => ({ publicSettingsLoaded: true, siteLogo: '', docUrl: 'https://example.test/docs', cachedPublicSettings: { custom_menu_items: [] }, toggleMobileSidebar: vi.fn() }),
+  useAuthStore: () => ({ isAdmin: state.isAdmin, isSimpleMode: false, logout: vi.fn() }),
+  useOnboardingStore: () => ({ replay: vi.fn() }),
+  useAdminSettingsStore: () => ({ customMenuItems: [] })
 }))
 vi.mock('@/stores/adminSettings', () => ({ useAdminSettingsStore: () => ({ customMenuItems: [] }) }))
 
 enableAutoUnmount(afterEach)
 function render() {
   return mount(AppHeader, { attachTo: document.body, global: { stubs: {
-    Icon: true, AnnouncementBell: true, RouterLink: { template: '<a><slot /></a>' },
+    Icon: true, AnnouncementBell: { template: '<div data-feature="announcements" />' }, RouterLink: { template: '<a><slot /></a>' },
     LocaleSwitcher: { template: '<select data-feature="locale"><option>EN</option></select>' },
     SubscriptionProgressMini: { props: { inline: Boolean }, template: '<div data-feature="subscription" :data-inline="inline" />' }
   } } })
@@ -33,7 +36,7 @@ function render() {
 // Approved contract: compact based on available header width, preserving every
 // tool through the user menu with one mounted subscription component at a time.
 describe('header tools in the fluid workspace', () => {
-  beforeEach(() => { width.value = 1200 })
+  beforeEach(() => { width.value = 1200; state.isAdmin = false; state.path = '/dashboard' })
   it.each([1200, 600])('Escape closes the user menu while focus remains on its trigger at width %s', async availableWidth => {
     width.value = availableWidth
     const wrapper = render()
@@ -74,5 +77,24 @@ describe('header tools in the fluid workspace', () => {
     await nextTick()
     expect(wrapper.findAll('[data-feature="locale"]')).toHaveLength(1)
     expect(wrapper.findAll('[data-feature="subscription"]')).toHaveLength(1)
+  })
+
+  it('keeps shared tools and logout in the admin console without personal widgets', async () => {
+    state.isAdmin = true
+    state.path = '/admin/dashboard'
+    const wrapper = render()
+
+    expect(wrapper.find('[data-feature="announcements"]').exists()).toBe(false)
+    expect(wrapper.find('[data-feature="subscription"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('$2.00')
+    expect(wrapper.find('a[href="https://example.test/docs"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-feature="locale"]')).toHaveLength(1)
+
+    await wrapper.get('button[aria-label="common.userMenu"]').trigger('click')
+    const menu = wrapper.get('.header-user-dropdown')
+    expect(menu.find('a[href="/profile"]').exists()).toBe(false)
+    expect(menu.find('a[href="/keys"]').exists()).toBe(false)
+    expect(menu.text()).toContain('nav.logout')
+    expect(wrapper.text()).toContain('nav.modelPlaza')
   })
 })
