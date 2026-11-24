@@ -417,9 +417,11 @@ may park only the already mapped model when its status and error fields match;
 output text, request metadata, and model names cannot trigger that rule. The
 no-retry rule applies whether or not a model cooldown matches.
 
-When the error is forwarded, `server_is_overloaded` / `slow_down` are rewritten
-to `server_error` so Codex CLI does not treat them as a fatal session-ending
-code. The original message is preserved. Rate-limit codes are not rewritten.
+When forwarding these capacity events, Plus uses `server_error` for both
+`server_is_overloaded` and `slow_down`, preserving the original message.
+The pinned Codex SSE parser classifies the original `slow_down` as a rate
+limit and `server_is_overloaded` as overload. Plus keeps
+`rate_limit_exceeded` intact. [Codex SSE error parser](https://github.com/openai/codex/blob/29eb79e9866b3262a777fdf8195c1b9e63684c91/codex-rs/codex-api/src/sse/responses_error.rs#L82-L98)
 Codex WebSocket HTTP-bridge and native WS turns deliver that rewritten event
 on the current connection instead of switching accounts or closing with a
 generic proxy failure.
@@ -1173,6 +1175,11 @@ a failure on that final write marks the client disconnected while retaining
 collected usage and any existing upstream error.
 
 ## Downstream session error wording
+
+The following section describes the current three-code contract in this codebase.
+For the planned OAuth/API Key public error catalog, editable defaults, reset
+semantics, output coverage and acceptance criteria, use the
+[implementation specification](CODEX_PUBLIC_ERRORS.md).
 
 The independent administrator setting `openai_error_messages_normalized`
 (“统一会话错误文案”) defaults to `false` and is persisted in system settings.
