@@ -568,18 +568,20 @@ This consumer test does not claim to execute the desktop App UI.
 
 ### Downstream session error wording
 
-`openai_error_messages_normalized` is a separate default-off live switch. The
+OpenAI-owned calls always use the public error catalog; `openai_error_messages_normalized`
+now selects whether saved custom messages override the built-in defaults. The
 [Responses contract](protocols/OPENAI_RESPONSES.md#downstream-session-error-wording)
-lists its three exact codes and Chinese messages. Native/official CLI outbound,
-OAuth/API Key and HTTP/SSE/WS share the final output boundary; upstream diagnostic
-observers and original failure/replay behavior stay intact.
+and [public error contract](protocols/CODEX_PUBLIC_ERRORS.md) own the catalog and
+projection rules. Native/official CLI outbound, OAuth/API Key and HTTP/SSE/WS
+share the final output boundary; upstream diagnostic observers and original
+failure/replay behavior stay intact.
 `TestOpenAIErrorMessagesOfficialCLI` runs the independently verified pinned CLI
-as a real downstream consumer, with OFF positive controls and ON expected text
-for all three codes and both account/outbound types. It requires a failed CLI
+as a real downstream consumer and verifies the platform default text for the
+three original codes and both account/outbound types. It requires a failed CLI
 turn, collected billing usage and one provider request. The same gate exercises
-sanitized HTTP 400 errors before any answer, with OFF requiring the existing
-sanitized text and ON requiring the selected source-code message. These rejected
-requests must also fail normally with one provider send and no CLI replay.
+sanitized HTTP 400 errors before any answer and requires the selected public
+message. These rejected requests must also fail normally with one provider send
+and no CLI replay.
 The matrix additionally exercises
 WS-to-HTTP through the real outbound bridge. It uses isolated temporary homes,
 synthetic credentials and local upstream fixtures; it does not exercise the

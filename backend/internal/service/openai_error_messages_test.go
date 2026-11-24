@@ -28,37 +28,44 @@ func saveErrorMessages(t *testing.T, s *SettingService, enabled bool) {
 // Expectations come from the three requested error codes and protocol shapes;
 // compare the entire document so a lost code, usage or opaque field fails.
 func TestOpenAIErrorMessagesProtocolContract(t *testing.T) {
-	for _, tc := range []struct{ code, message string }{
-		{"upstream_response_interrupted", "响应已中断，请输入「继续」重新提交。"},
-		{"upstream_unavailable", "响应已中断，请输入「继续」重新提交。"},
-		{"session_account_lost", "当前会话可能无法恢复，请新开会话继续。"},
+	for _, tc := range []struct{ code, message, publicCode, errorType string }{
+		{"upstream_response_interrupted", "本次响应已中断。请先检查已收到的内容，再决定是否继续。", "upstream_response_interrupted", "server_error"},
+		{"upstream_unavailable", "服务暂时不可用，请稍后再试。", "upstream_unavailable", "service_unavailable_error"},
+		{"session_account_lost", "当前会话可能无法恢复，请新开会话继续。", "session_account_lost", "server_error"},
+		{"insufficient_quota", "当前服务额度不可用，请联系管理员。", "service_capacity_unavailable", "service_unavailable_error"},
 	} {
-		for _, envelope := range []string{
-			`{"error":{"code":"%s","message":"%s","type":"upstream_error","param":"input","opaque":7}}`,
-			`{"type":"error","sequence_number":9,"error":{"code":"%s","message":"%s","type":"upstream_error"}}`,
-			`{"type":"error","code":"%s","message":"%s","sequence_number":9}`,
-			`{"type":"response.failed","response":{"id":"resp_1","status":"failed","error":{"code":"%s","message":"%s","type":"upstream_error"},"usage":{"input_tokens":12,"output_tokens":3}},"opaque":true}`,
-			`{"type":"response.failed","error":{"code":"%s","message":"%s","type":"upstream_error"},"opaque":true}`,
+		for _, envelope := range []struct{ input, want string }{
+			{`{"error":{"code":"%s","message":"original","type":"upstream_error","param":"input","opaque":7}}`, `{"error":{"code":"%s","message":"%s","type":"%s"}}`},
+			{`{"type":"error","sequence_number":9,"error":{"code":"%s","message":"original","type":"upstream_error"}}`, `{"type":"error","sequence_number":9,"error":{"code":"%s","message":"%s","type":"%s"}}`},
+			{`{"type":"error","code":"%s","message":"original","sequence_number":9}`, `{"type":"error","code":"%s","message":"%s","sequence_number":9}`},
+			{`{"type":"response.failed","response":{"id":"resp_1","status":"failed","error":{"code":"%s","message":"original","type":"upstream_error"},"usage":{"input_tokens":12,"output_tokens":3}},"opaque":true}`, `{"type":"response.failed","response":{"id":"resp_1","status":"failed","error":{"code":"%s","message":"%s","type":"%s"},"usage":{"input_tokens":12,"output_tokens":3}},"opaque":true}`},
+			{`{"type":"response.failed","error":{"code":"%s","message":"original","type":"upstream_error"},"opaque":true}`, `{"type":"response.failed","error":{"code":"%s","message":"%s","type":"%s"},"opaque":true}`},
 		} {
-			input := fmt.Sprintf(envelope, tc.code, "original diagnostic")
-			want := fmt.Sprintf(envelope, tc.code, tc.message)
+			input := fmt.Sprintf(envelope.input, tc.code)
+			args := []any{tc.publicCode, tc.message, tc.errorType}
+			want := fmt.Sprintf(envelope.want, args[:strings.Count(envelope.want, "%s")]...)
 			require.JSONEq(t, want, string(normalizeOpenAIErrorMessage([]byte(input), openAIErrorMessageSource{})))
 		}
+	}
+	for _, input := range []string{
+		`{"type":"future","error":{"code":"session_account_lost","message":"original"}}`,
+		`{"type":"response.completed","response":{"error":{"code":"session_account_lost","message":"original"}}}`,
+		`[{"error":{"code":"upstream_unavailable","message":"original"}}]`,
+		`{"error":`, `[DONE]`,
+	} {
+		require.Equal(t, input, string(normalizeOpenAIErrorMessage([]byte(input), openAIErrorMessageSource{})))
 	}
 	for _, input := range []string{
 		`{"error":{"code":"upstream_stream_read_error","message":"original"}}`,
 		`{"error":{"code":"UPSTREAM_UNAVAILABLE","message":"original"}}`,
 		`{"error":{"code":"upstream_unavailable_extra","message":"original"}}`,
-		`{"type":"response.output_item.done","item":{"error":{"code":"upstream_unavailable","message":"original"}}}`,
-		`{"type":"future","error":{"code":"session_account_lost","message":"original"}}`,
-		`{"type":"response.completed","response":{"error":{"code":"session_account_lost","message":"original"}}}`,
 		`{"error":{"code":"upstream_unavailable","message":null}}`,
 		`{"error":{"code":"upstream_unavailable"}}`,
 		`{"error":{"code":42,"message":"original"}}`,
-		`[{"error":{"code":"upstream_unavailable","message":"original"}}]`,
-		`{"error":`, `[DONE]`,
 	} {
-		require.Equal(t, input, string(normalizeOpenAIErrorMessage([]byte(input), openAIErrorMessageSource{})))
+		got := string(normalizeOpenAIErrorMessage([]byte(input), openAIErrorMessageSource{}))
+		require.NotContains(t, got, "original")
+		require.Contains(t, got, "message")
 	}
 }
 
@@ -67,41 +74,36 @@ func TestOpenAIErrorMessagesLiveHTTPBoundary(t *testing.T) {
 		for _, platform := range []string{PlatformOpenAI, PlatformAnthropic, PlatformGrok, ""} {
 			t.Run(protocol+"/"+platform, func(t *testing.T) {
 				svc, _ := safetyBufferingTestService(t)
-				for _, initiallyEnabled := range []bool{false, true} {
-					saveErrorMessages(t, svc.settingService, initiallyEnabled)
-					rec := httptest.NewRecorder()
-					c, _ := gin.CreateTestContext(rec)
-					c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
-					OpenAIErrorMessageOutput(svc.settingService, func(c *gin.Context) {
-						// Selection happens after middleware installation.
-						c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.Platform, platform))
-						c.Set(string(ctxkey.Platform), platform)
-						payload := `{"error":{"code":"upstream_unavailable","message":"original","type":"upstream_error"}}`
-						contentType := "application/json"
-						if protocol != "json" {
-							contentType = "text/event-stream"
-							payload = "id: 42\nevent: error\ndata: " + payload
-							if protocol == "sse" {
-								payload += "\n\n"
-							}
+				rec := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(rec)
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+				OpenAIErrorMessageOutput(svc.settingService, func(c *gin.Context) {
+					c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.Platform, platform))
+					c.Set(string(ctxkey.Platform), platform)
+					payload := `{"error":{"code":"upstream_unavailable","message":"original","type":"upstream_error"}}`
+					contentType := "application/json"
+					if protocol != "json" {
+						contentType = "text/event-stream"
+						payload = "id: 42\nevent: error\ndata: " + payload
+						if protocol == "sse" {
+							payload += "\n\n"
 						}
-						c.Header("Content-Type", contentType)
-						c.Status(http.StatusBadGateway)
-						middle := len(payload) / 2
-						_, err := c.Writer.WriteString(payload[:middle])
-						require.NoError(t, err)
-						saveErrorMessages(t, svc.settingService, !initiallyEnabled)
-						_, err = c.Writer.WriteString(payload[middle:])
-						require.NoError(t, err)
-					})(c)
-					require.Equal(t, http.StatusBadGateway, rec.Code)
-					if platform == PlatformOpenAI && !initiallyEnabled {
-						require.Contains(t, rec.Body.String(), "响应已中断，请输入「继续」重新提交。")
-						require.NotContains(t, rec.Body.String(), "original")
-					} else {
-						require.Contains(t, rec.Body.String(), "original")
 					}
+					c.Header("Content-Type", contentType)
+					c.Status(http.StatusBadGateway)
+					middle := len(payload) / 2
+					_, err := c.Writer.WriteString(payload[:middle])
+					require.NoError(t, err)
+					_, err = c.Writer.WriteString(payload[middle:])
+					require.NoError(t, err)
+				})(c)
+				require.Equal(t, http.StatusBadGateway, rec.Code)
+				if platform == PlatformOpenAI {
+					require.Contains(t, rec.Body.String(), "服务暂时不可用，请稍后再试。")
+					require.NotContains(t, rec.Body.String(), "original")
 					require.Contains(t, rec.Body.String(), `"code":"upstream_unavailable"`)
+				} else {
+					require.Contains(t, rec.Body.String(), "original")
 				}
 			})
 		}
@@ -156,38 +158,31 @@ func TestOpenAIErrorMessagesSettingsPersistenceAndReplicas(t *testing.T) {
 func TestOpenAIErrorMessagesLargeEventAndContentBoundaries(t *testing.T) {
 	opaque := strings.Repeat("x", 5*1024*1024)
 	for _, contentType := range []string{"application/json", "text/event-stream"} {
-		for _, enabled := range []bool{false, true} {
-			t.Run(contentType+"/enabled="+strconvBool(enabled), func(t *testing.T) {
-				svc, _ := safetyBufferingTestService(t)
-				saveErrorMessages(t, svc.settingService, enabled)
-				rec := httptest.NewRecorder()
-				c, _ := gin.CreateTestContext(rec)
-				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
-				c.Set(string(ctxkey.Platform), PlatformOpenAI)
-				payload := `{"error":{"code":"upstream_unavailable","type":"upstream_error","message":"original diagnostic"},"opaque":"` + opaque + `","item":{"error":{"code":"session_account_lost","message":"keep tool content"}}}`
-				wire := payload
-				if contentType == "text/event-stream" {
-					wire = "id: 42\nevent: error\ndata: " + payload + "\n\n"
+		t.Run(contentType, func(t *testing.T) {
+			svc, _ := safetyBufferingTestService(t)
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			c.Set(string(ctxkey.Platform), PlatformOpenAI)
+			payload := `{"error":{"code":"upstream_unavailable","type":"upstream_error","message":"original diagnostic"},"opaque":"` + opaque + `","item":{"error":{"code":"session_account_lost","message":"keep tool content"}}}`
+			wire := payload
+			if contentType == "text/event-stream" {
+				wire = "id: 42\nevent: error\ndata: " + payload + "\n\n"
+			}
+			OpenAIErrorMessageOutput(svc.settingService, func(c *gin.Context) {
+				c.Header("Content-Type", contentType)
+				c.Status(http.StatusBadGateway)
+				for start := 0; start < len(wire); start += 32768 {
+					_, err := c.Writer.WriteString(wire[start:min(start+32768, len(wire))])
+					require.NoError(t, err)
 				}
-				OpenAIErrorMessageOutput(svc.settingService, func(c *gin.Context) {
-					c.Header("Content-Type", contentType)
-					c.Status(http.StatusBadGateway)
-					for start := 0; start < len(wire); start += 32768 {
-						_, err := c.Writer.WriteString(wire[start:min(start+32768, len(wire))])
-						require.NoError(t, err)
-					}
-				})(c)
-				if !enabled {
-					require.Equal(t, wire, rec.Body.String())
-					return
-				}
-				body := strings.TrimSpace(strings.TrimPrefix(rec.Body.String(), "id: 42\nevent: error\ndata: "))
-				require.Equal(t, "响应已中断，请输入「继续」重新提交。", gjson.Get(body, "error.message").String())
-				require.Equal(t, opaque, gjson.Get(body, "opaque").String())
-				require.Equal(t, "keep tool content", gjson.Get(body, "item.error.message").String())
-				require.Equal(t, http.StatusBadGateway, rec.Code)
-			})
-		}
+			})(c)
+			body := strings.TrimSpace(strings.TrimPrefix(rec.Body.String(), "id: 42\nevent: error\ndata: "))
+			require.Equal(t, "服务暂时不可用，请稍后再试。", gjson.Get(body, "error.message").String())
+			require.Equal(t, opaque, gjson.Get(body, "opaque").String())
+			require.Equal(t, "keep tool content", gjson.Get(body, "item.error.message").String())
+			require.Equal(t, http.StatusBadGateway, rec.Code)
+		})
 	}
 }
 
@@ -229,46 +224,43 @@ func TestOpenAIErrorMessagesEOFFailureRetainsUsage(t *testing.T) {
 func TestOpenAIErrorMessagesGatewayAccountAndCLIMatrix(t *testing.T) {
 	for _, kind := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
 		for _, cli := range []bool{false, true} {
-			for _, enabled := range []bool{false, true} {
-				t.Run(kind+"/cli="+strconvBool(cli)+"/enabled="+strconvBool(enabled), func(t *testing.T) {
-					var sends atomic.Int32
-					upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
-						sends.Add(1)
-						return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader("data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial answer\"}\n\ndata: {\"type\":\"response.failed\",\"response\":{\"id\":\"resp_error\",\"status\":\"failed\",\"error\":{\"code\":\"upstream_unavailable\",\"message\":\"original diagnostic\"},\"usage\":{\"input_tokens\":12,\"output_tokens\":3}}}\n\n"))}, nil
-					}}
-					svc, owner, bridges := safetyBufferingGatewayFixture(t, kind, cli, nil, upstream)
-					saveSafetyBuffering(t, svc.settingService, false)
-					saveErrorMessages(t, svc.settingService, enabled)
-					rec := httptest.NewRecorder()
-					c, _ := gin.CreateTestContext(rec)
-					body := `{"model":"gpt-5.1","input":"hello","stream":true}`
-					c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
-					c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.Platform, PlatformOpenAI))
-					OpenAIErrorMessageOutput(svc.settingService, func(c *gin.Context) {
-						result, err := svc.Forward(t.Context(), c, owner, []byte(body))
-						require.Error(t, err)
-						require.Contains(t, err.Error(), "original diagnostic", "internal error must retain the upstream diagnostic")
-						require.NotNil(t, result)
-						require.Equal(t, 12, result.Usage.InputTokens)
-						require.Equal(t, 3, result.Usage.OutputTokens)
-					})(c)
-					require.Contains(t, rec.Body.String(), "partial answer")
-					require.Contains(t, rec.Body.String(), `"status":"failed"`)
-					require.Contains(t, rec.Body.String(), `"code":"upstream_unavailable"`)
-					if enabled {
-						require.Contains(t, rec.Body.String(), "响应已中断，请输入「继续」重新提交。")
-						require.NotContains(t, rec.Body.String(), "original diagnostic")
-					} else {
-						require.Contains(t, rec.Body.String(), "original diagnostic")
-					}
-					require.Equal(t, int32(1), sends.Load(), "error display must not replay upstream work")
-					wantBridges := int32(0)
-					if cli {
-						wantBridges = 1
-					}
-					require.Equal(t, wantBridges, bridges.Load())
-				})
-			}
+			t.Run(kind+"/cli="+strconvBool(cli), func(t *testing.T) {
+				var sends atomic.Int32
+				upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+					sends.Add(1)
+					return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(`data: {"type":"response.output_text.delta","delta":"partial answer"}
+
+data: {"type":"response.failed","response":{"id":"resp_error","status":"failed","error":{"code":"upstream_unavailable","message":"original diagnostic"},"usage":{"input_tokens":12,"output_tokens":3}}}
+
+`))}, nil
+				}}
+				svc, owner, bridges := safetyBufferingGatewayFixture(t, kind, cli, nil, upstream)
+				saveSafetyBuffering(t, svc.settingService, false)
+				rec := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(rec)
+				body := `{"model":"gpt-5.1","input":"hello","stream":true}`
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+				c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.Platform, PlatformOpenAI))
+				OpenAIErrorMessageOutput(svc.settingService, func(c *gin.Context) {
+					result, err := svc.Forward(t.Context(), c, owner, []byte(body))
+					require.Error(t, err)
+					require.Contains(t, err.Error(), "original diagnostic", "internal error must retain the upstream diagnostic")
+					require.NotNil(t, result)
+					require.Equal(t, 12, result.Usage.InputTokens)
+					require.Equal(t, 3, result.Usage.OutputTokens)
+				})(c)
+				require.Contains(t, rec.Body.String(), "partial answer")
+				require.Contains(t, rec.Body.String(), `"status":"failed"`)
+				require.Contains(t, rec.Body.String(), `"code":"upstream_unavailable"`)
+				require.Contains(t, rec.Body.String(), "服务暂时不可用，请稍后再试。")
+				require.NotContains(t, rec.Body.String(), "original diagnostic")
+				require.Equal(t, int32(1), sends.Load(), "error display must not replay upstream work")
+				wantBridges := int32(0)
+				if cli {
+					wantBridges = 1
+				}
+				require.Equal(t, wantBridges, bridges.Load())
+			})
 		}
 	}
 }
@@ -276,38 +268,56 @@ func TestOpenAIErrorMessagesGatewayAccountAndCLIMatrix(t *testing.T) {
 func TestOpenAIErrorMessagesHTTPClientErrorAccountMatrix(t *testing.T) {
 	for _, kind := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
 		for _, cli := range []bool{false, true} {
-			for _, enabled := range []bool{false, true} {
-				t.Run(kind+"/cli="+strconvBool(cli)+"/enabled="+strconvBool(enabled), func(t *testing.T) {
-					var sends atomic.Int32
-					upstream := &codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
-						sends.Add(1)
-						return &http.Response{StatusCode: http.StatusBadRequest, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"session_account_lost","type":"invalid_request_error","message":"original session diagnostic","param":"input"}}`))}, nil
-					}}
-					svc, owner, bridges := safetyBufferingGatewayFixture(t, kind, cli, nil, upstream)
-					saveErrorMessages(t, svc.settingService, enabled)
-					rec := httptest.NewRecorder()
-					c, _ := gin.CreateTestContext(rec)
-					body := `{"model":"gpt-5.1","input":"hello","stream":false}`
-					c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
-					c.Set(string(ctxkey.Platform), PlatformOpenAI)
-					OpenAIErrorMessageOutput(svc.settingService, func(c *gin.Context) {
-						_, err := svc.Forward(t.Context(), c, owner, []byte(body))
-						require.Error(t, err)
-					})(c)
-					want := "original session diagnostic"
-					if enabled {
-						want = "当前会话可能无法恢复，请新开会话继续。"
-					}
-					require.Equal(t, http.StatusBadRequest, rec.Code)
-					require.JSONEq(t, `{"error":{"code":"session_account_lost","type":"invalid_request_error","param":"input","message":"`+want+`"}}`, rec.Body.String())
-					require.Equal(t, int32(1), sends.Load())
-					wantBridges := int32(0)
-					if cli {
-						wantBridges = 1
-					}
-					require.Equal(t, wantBridges, bridges.Load())
-				})
-			}
+			t.Run(kind+"/cli="+strconvBool(cli), func(t *testing.T) {
+				var sends atomic.Int32
+				upstream := &codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+					sends.Add(1)
+					return &http.Response{StatusCode: http.StatusBadRequest, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"session_account_lost","type":"invalid_request_error","message":"original session diagnostic","param":"input"}}`))}, nil
+				}}
+				svc, owner, bridges := safetyBufferingGatewayFixture(t, kind, cli, nil, upstream)
+				rec := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(rec)
+				body := `{"model":"gpt-5.1","input":"hello","stream":false}`
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+				c.Set(string(ctxkey.Platform), PlatformOpenAI)
+				OpenAIErrorMessageOutput(svc.settingService, func(c *gin.Context) {
+					_, err := svc.Forward(t.Context(), c, owner, []byte(body))
+					require.Error(t, err)
+				})(c)
+				require.Equal(t, http.StatusBadRequest, rec.Code)
+				require.JSONEq(t, `{"error":{"code":"session_account_lost","type":"server_error","message":"当前会话可能无法恢复，请新开会话继续。"}}`, rec.Body.String())
+				require.Equal(t, int32(1), sends.Load())
+				wantBridges := int32(0)
+				if cli {
+					wantBridges = 1
+				}
+				require.Equal(t, wantBridges, bridges.Load())
+			})
 		}
 	}
+}
+
+func TestOpenAIErrorMessagesStripsDiagnosticHeaders(t *testing.T) {
+	svc, _ := safetyBufferingTestService(t)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Set(string(ctxkey.Platform), PlatformOpenAI)
+	OpenAIErrorMessageOutput(svc.settingService, func(c *gin.Context) {
+		c.Header("Content-Type", "application/json")
+		c.Header("WWW-Authenticate", "Bearer realm=secret")
+		c.Header("Location", "https://upstream.example/secret")
+		c.Header("Server-Timing", "secret")
+		c.Header("Retry-After", "7")
+		c.Status(http.StatusTooManyRequests)
+		_, err := c.Writer.WriteString(`{"error":{"code":"rate_limit_exceeded","message":"secret"}}`)
+		require.NoError(t, err)
+	})(c)
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+	for _, header := range []string{"Www-Authenticate", "Location", "Server-Timing"} {
+		require.Empty(t, rec.Header().Get(header), header)
+	}
+	require.Equal(t, "7", rec.Header().Get("Retry-After"))
+	require.NotContains(t, rec.Body.String(), "secret")
+	require.Contains(t, rec.Body.String(), "当前请求受到频率限制，请稍后再试。")
 }

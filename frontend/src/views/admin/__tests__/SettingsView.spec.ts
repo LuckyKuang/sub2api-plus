@@ -28,6 +28,26 @@ vi.mock("@/api/admin/groups", async (original) => ({
   getAllIncludingInactive: vi.fn().mockResolvedValue([]),
 }));
 
+const { getCodexErrorMessages, patchCodexErrorMessages } = vi.hoisted(() => {
+  const fixture = {
+    revision: "r1",
+    custom_enabled: false,
+    items: [
+      { key: "rate_limit_exceeded", group: "service", public_code: "rate_limit_exceeded", default_message: "当前请求受到频率限制，请稍后再试。", custom_message: null, effective_message: "当前请求受到频率限制，请稍后再试。" },
+      { key: "output_length_limit", group: "media", public_code: null, default_message: "输出已达到长度上限，可缩小请求范围或调整输出上限。", custom_message: null, effective_message: "输出已达到长度上限，可缩小请求范围或调整输出上限。" },
+    ],
+  };
+  return {
+    getCodexErrorMessages: vi.fn().mockResolvedValue(fixture),
+    patchCodexErrorMessages: vi.fn(),
+  };
+});
+vi.mock("@/api/admin/settings", async (original) => ({
+  ...await original<typeof import("@/api/admin/settings")>(),
+  getCodexErrorMessages,
+  patchCodexErrorMessages,
+}));
+
 const { getOutboundIdentity, updateOutboundIdentity } = vi.hoisted(() => ({
   getOutboundIdentity: vi.fn(), updateOutboundIdentity: vi.fn(),
 }));
@@ -926,26 +946,26 @@ describe("admin SettingsView payment visible method controls", () => {
     } finally { wrapper.unmount(); }
   });
 
-  it("loads and saves the session error message switch independently of the Codex transport switches", async () => {
-    getSettings.mockResolvedValue({ ...baseSettingsResponse, openai_error_messages_normalized: true });
+  it("loads the upstream error message catalog and saves its custom-mode switch through the dedicated API", async () => {
     const wrapper = mountView();
     try {
       await flushPromises();
       await openIdentityTab(wrapper);
-      const suppression = wrapper.get('[data-testid="openai-error-messages-normalized"]');
-      expect((suppression.element as HTMLInputElement).checked).toBe(true);
-      await suppression.setValue(false);
+      expect(getCodexErrorMessages).toHaveBeenCalled();
+      const panel = wrapper.get('[data-testid="codex-error-messages-panel"]');
+      expect(panel.text()).toContain("当前请求受到频率限制，请稍后再试。");
+      const toggle = wrapper.get('[data-testid="codex-error-messages-custom-enabled"]');
+      await toggle.setValue(true);
+      await wrapper.get('[data-testid="codex-error-messages-save"]').trigger("click");
+      await flushPromises();
+      expect(patchCodexErrorMessages).toHaveBeenCalledWith({
+        revision: "r1",
+        custom_enabled: true,
+        changes: {},
+      });
       await wrapper.find("form").trigger("submit.prevent");
       await flushPromises();
-      expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({
-        openai_error_messages_normalized: false,
-        openai_codex_ws_enabled: true,
-        openai_codex_http_ws_enabled: false,
-      }));
-      await suppression.setValue(true);
-      await wrapper.find("form").trigger("submit.prevent");
-      await flushPromises();
-      expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ openai_error_messages_normalized: true }));
+      expect(updateSettings.mock.calls.at(-1)![0]).not.toHaveProperty("openai_error_messages_normalized");
     } finally { wrapper.unmount(); }
   });
 

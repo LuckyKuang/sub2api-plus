@@ -1111,25 +1111,29 @@ observes client rendering without changing ingress audit or client binaries.
 
 ### Downstream session error wording projection
 
-`openai_error_messages_normalized` changes only messages for three exact error
-codes at the final OpenAI HTTP/SSE/WS output boundary. It introduces no request
-extraction, tool-field, endpoint, identity, account-selection or ingress audit
-changes. Both audit engines consume the same original canonical request and
-retain their existing admission/side-effect ordering. Errors remain failures;
-other providers, unknown events, user content and policy codes pass through.
-HTTP ops capture is inside the final projection boundary, and WS observers see
-original frames, so diagnostic persistence remains original. The independently
+OpenAI-owned calls always project the public error catalog at the final
+HTTP/SSE/WS output boundary; custom mode only selects saved overrides over the
+built-in defaults. The projection introduces no request extraction, tool-field,
+endpoint, identity, account-selection or ingress audit changes. Both audit
+engines consume the same original canonical request and retain their existing
+admission/side-effect ordering. Errors remain failures; other providers, unknown
+events, user content and policy codes pass through. HTTP ops capture is inside
+the final projection boundary, and WS observers see original frames, so
+diagnostic persistence remains original. Diagnostic response headers are
+removed before commit; Retry-After remains. User error history rebuilds the
+public body, while administrator Ops keeps the original record. The independently
 derived `TestOpenAIErrorMessages*` regressions cover precise protocol carriers,
-forbidden field changes, ON/OFF at final release, account/outbound/socket matrices,
+forbidden field changes, default/custom release, account/outbound/socket matrices,
 settings persistence and reconciliation. Handler
 `TestOpenAIErrorMessagesPreserveOpsDiagnostics` observes actual queued original
 error records and downstream replacement, including handler-produced SSE and EOF.
 The dedicated official CLI consumer matrix provides client display evidence.
-Sanitized final errors retain only an exact recognized source code as display
-metadata; retry candidates cannot set it, and each HTTP-bridged WS turn clears
-it. Regressions exercise actual account recovery versus exhaustion, unknown
-final failures, HTTP/WS rejection sanitization and raw ops capture. Real HTTP
-socket checks also cover fixed-length headers committed before live toggles.
+Sanitized final errors retain only an exact recognized source code or trusted
+status fallback as display metadata; retry candidates cannot set it, and each
+HTTP-bridged WS turn clears it. Regressions exercise actual account recovery
+versus exhaustion, unknown final failures, HTTP/WS rejection sanitization and raw
+ops capture. Real HTTP socket checks also cover fixed-length headers committed
+before the final error write.
 These changes stay after request admission and do not alter either audit engine.
 `TestOpenAIErrorMessagesNonStreamingFailure` covers native/passthrough SSE-to-JSON
 rejections and compact failures after keepalive; the original terminal/error

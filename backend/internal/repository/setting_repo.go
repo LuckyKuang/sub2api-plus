@@ -262,3 +262,58 @@ func (r *settingRepository) Delete(ctx context.Context, key string) error {
 	_, err := r.client.Setting.Delete().Where(setting.KeyEQ(key)).Exec(ctx)
 	return err
 }
+
+// CompareAndSetSettings atomically replaces the provided keys only when every
+// expected value still matches. Missing rows match an expected empty string.
+// The row lock also protects writers on other service instances that share the
+// same database, so a stale administration draft cannot overwrite newer text.
+func (r *settingRepository) CompareAndSetSettings(ctx context.Context, expected, updates map[string]string) (bool, error) {
+	if len(updates) == 0 {
+		return true, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	keySet := make(map[string]struct{}, len(expected)+len(updates))
+	for key := range expected {
+		keySet[key] = struct{}{}
+	}
+	for key := range updates {
+		keySet[key] = struct{}{}
+	}
+	keys := make([]string, 0, len(keySet))
+	for key := range keySet {
+		keys = append(keys, key)
+	}
+	rows, err := tx.Setting.Query().Where(setting.KeyIn(keys...)).ForUpdate().All(ctx)
+	if err != nil {
+		return false, err
+	}
+	current := make(map[string]string, len(rows))
+	for _, row := range rows {
+		current[row.Key] = row.Value
+	}
+	for key, want := range expected {
+		if current[key] != want {
+			return false, nil
+		}
+	}
+
+	now := time.Now()
+	builders := make([]*ent.SettingCreate, 0, len(updates))
+	for key, value := range updates {
+		builders = append(builders, tx.Setting.Create().SetKey(key).SetValue(value).SetUpdatedAt(now))
+	}
+	if err := tx.Setting.CreateBulk(builders...).OnConflictColumns(setting.FieldKey).UpdateNewValues().Exec(ctx); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}

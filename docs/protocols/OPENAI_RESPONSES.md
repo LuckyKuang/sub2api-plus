@@ -1176,63 +1176,31 @@ collected usage and any existing upstream error.
 
 ## Downstream session error wording
 
-The following section describes the current three-code contract in this codebase.
-For the planned OAuth/API Key public error catalog, editable defaults, reset
-semantics, output coverage and acceptance criteria, use the
-[implementation specification](CODEX_PUBLIC_ERRORS.md).
+OpenAI-owned calls (OAuth, setup-token, API Key and custom API-key addresses) are
+always classified at the failure source and return platform-generated text.
+`openai_error_messages_normalized` is now the "use custom messages" mode; it
+does not enable classification. On first start and with custom mode off, every
+entry uses its built-in default. With custom mode on, saved overrides apply and
+all other entries keep their defaults. The complete 76-key catalog, defaults,
+groups, admin API and conflict semantics are owned by
+[the public error contract](CODEX_PUBLIC_ERRORS.md).
 
-The independent administrator setting `openai_error_messages_normalized`
-(“统一会话错误文案”) defaults to `false` and is persisted in system settings.
-It applies to OpenAI OAuth and API Key owners, native sends and official Codex
-CLI outbound bridging. It does not depend on safety buffering suppression.
-When enabled, only `message` in a recognized protocol error carrier is changed:
+The downstream projection keeps only the platform-generated `type`, `code`,
+`message`, bounded correlation fields and the protocol's terminal shape. It
+drops upstream `detail`, `innererror`, `param`, extensions, URLs, account or
+plan text and diagnostic headers (`WWW-Authenticate`, `Location`,
+proxy/debug/tracing headers); `Retry-After` remains. HTTP status, retry and
+failover, billing, usage and security audit keep their original behavior.
+WebSocket close reasons use the same effective text and are truncated on UTF-8
+boundaries. User error history rebuilds the same safe projection; administrator
+Ops retains its original diagnostics.
 
-| Exact error code | Downstream message |
-| --- | --- |
-| `upstream_response_interrupted` | 响应已中断，请输入「继续」重新提交。 |
-| `upstream_unavailable` | 响应已中断，请输入「继续」重新提交。 |
-| `session_account_lost` | 当前会话可能无法恢复，请新开会话继续。 |
-
-Recognized carriers are HTTP JSON `error`, SSE/WS `type: error` (nested `error`
-or root code/message), and `response.failed` (`response.error` or root `error`).
-Matching is exact and case-sensitive; missing/non-string messages, unknown
-codes/events, ordinary content, tools and opaque nested objects pass through.
-Non-OpenAI responses retain their original bytes and write boundaries.
-When an existing HTTP sanitizer, administrator error rule, exhausted failover,
-or WS-to-HTTP rejection rebuilds an error without a code, its final failure's
-recognized source code still selects the message. Only that code is retained
-as internal display metadata; the private upstream body is not restored, and
-no code is added to the sanitized downstream envelope. Explicit downstream
-codes take precedence, except a generic terminal code explicitly marked as
-locally synthesized while rendering this same final failure. Stream failover
-retains its source code on the attempt's error, even if its stored response body
-is sanitized earlier. Recovered/retried attempts cannot supply this metadata
-to later errors, and the HTTP bridge clears it for each WebSocket turn.
-This also covers a non-streaming request receiving an SSE failure upstream and
-remote compact failures after a keepalive has committed HTTP 200: the existing
-JSON error or `response.failed` terminal retains its shape and code.
-An exhausted uncommitted SSE attempt returns a JSON error with JSON content
-type; headers prepared by an abandoned attempt cannot label it as SSE.
-HTTP status, error code/type, terminal failure, retry/failover policy and usage
-processing retain existing behavior. The existing Responses failure sanitizer
-may omit wire usage and other response details; internal billing usage is still
-collected before downstream projection. This switch does not synthesize success,
-automatically retry a request, or promise that submitting “继续” restores a session.
-
-HTTP projection sits beneath ops capture, including handler errors emitted after
-`Forward` returns. WS projection runs after upstream observers at the final client
-frame write. Admin error records keep original diagnostics; historical rows are
-not rewritten. Accepted fragmented JSON/SSE is staged per event using the existing
-anonymous spool, with EOF cleanup and transport failure propagation.
-Eligible HTTP writers remove fixed `Content-Length` before an early header
-commit, including while disabled, because a later live toggle can change the
-byte length. HTTP framing then owns the actual length; error bodies are never
-truncated or rejected because of a stale upstream length.
-Current-instance settings are read at event release, so ON/OFF affects subsequent
-unsent errors during an ongoing generation. Already delivered messages cannot be
-changed. Both downstream settings share the existing invalidation channel and
-one-second reconciliation worker. Replica changes are eventually consistent;
-read failures retain each last valid setting, and failed writes do not change it.
+The three previously handled codes remain in the catalog: A12
+`session_account_lost`, C03 `upstream_response_interrupted` and C04
+`upstream_unavailable`. C03 and C04 no longer share one sentence. Non-OpenAI
+providers are untouched. Admin text is plain single-line text of 1-500 Unicode
+code points; blank, control-character, unknown-key and stale-revision writes are
+rejected with 400 or 409.
 
 ## v0.2.20 protocol corrections
 

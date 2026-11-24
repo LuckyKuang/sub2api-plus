@@ -8571,17 +8571,7 @@
                 </div>
                 <Toggle id="codex-safety-buffering-suppressed" v-model="form.openai_codex_safety_buffering_suppressed" data-testid="codex-safety-buffering-suppressed" />
               </div>
-              <div class="flex items-start justify-between gap-4">
-                <div>
-                  <label class="text-sm font-medium surface-muted" for="openai-error-messages-normalized">
-                    {{ t('admin.settings.gatewayForwarding.openaiErrorMessagesNormalized') }}
-                  </label>
-                  <p class="mt-1 text-xs surface-muted">
-                    {{ t('admin.settings.gatewayForwarding.openaiErrorMessagesNormalizedHint') }}
-                  </p>
-                </div>
-                <Toggle id="openai-error-messages-normalized" v-model="form.openai_error_messages_normalized" data-testid="openai-error-messages-normalized" />
-              </div>
+              <CodexErrorMessagesPanel />
               <!-- OpenAI Codex UA -->
               <div>
                 <label
@@ -8850,6 +8840,7 @@ import Toggle from "@/components/common/Toggle.vue";
 import ProxySelector from "@/components/common/ProxySelector.vue";
 import ImageUpload from "@/components/common/ImageUpload.vue";
 import AppearanceSettingsCard from "@/components/admin/settings/AppearanceSettingsCard.vue";
+import CodexErrorMessagesPanel from "@/components/admin/settings/CodexErrorMessagesPanel.vue";
 import BackupSettings from "@/views/admin/BackupView.vue";
 import ImageTaskSettings from "@/components/admin/ImageTaskSettings.vue";
 import EmailTemplateEditor from "@/views/admin/settings/EmailTemplateEditor.vue";
@@ -11544,7 +11535,6 @@ async function saveSettings() {
       openai_codex_ws_enabled: form.openai_codex_ws_enabled,
       openai_codex_http_ws_enabled: form.openai_codex_http_ws_enabled,
       openai_codex_safety_buffering_suppressed: form.openai_codex_safety_buffering_suppressed,
-      openai_error_messages_normalized: form.openai_error_messages_normalized,
       codex_residency: form.codex_residency === "us" ? "us" : "off",
       codex_legacy_client_profile_compatibility_enabled:
         form.codex_legacy_client_profile_compatibility_enabled,

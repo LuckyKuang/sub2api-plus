@@ -1,6 +1,6 @@
 # Codex 上游错误提示实施规格
 
-**交付状态：待实现。** 本文是实现和验收的目标契约，包含完整默认文案和配置标识。当前版本的运行行为见[现行 Responses 协议](OPENAI_RESPONSES.md#downstream-session-error-wording)。范围按最终使用的 OpenAI 凭据归属判定，覆盖 OAuth（含复用 OAuth 路径的 setup-token）、API Key 和自定义 API Key 地址。表内来源包括仓库已识别的信号、官方客户端和 API 声明的信号，以及建议补上的兜底。兼容地址可以返回任意字节，因此“全量覆盖”的验收标准是每个已确认的失败都有安全出口。
+**交付状态：已实现（2026-11-24）。** 本文是运行契约，包含完整默认文案和配置标识。范围按最终使用的 OpenAI 凭据归属判定，覆盖 OAuth（含复用 OAuth 路径的 setup-token）、API Key 和自定义 API Key 地址。表内来源包括仓库已识别的信号、官方客户端和 API 声明的信号，以及兜底。兼容地址可以返回任意字节，因此“全量覆盖”的验收标准是每个已确认的失败都有安全出口。
 
 ## 实施顺序
 
@@ -11,7 +11,7 @@
 
 ## 现行行为与目标
 
-- 现有设置默认关闭。打开后只认 `upstream_response_interrupted`、`upstream_unavailable`、`session_account_lost` 三个码，前两个共用“输入「继续」”提示。未知码、非字符串码、缺少字符串 message、非 JSON 输入等会从文案转换函数原样退出，之后用户看到什么取决于其他路径是否已经做过清洗。[文案实现](../../backend/internal/service/openai_error_messages.go#L20) · [现有协议](OPENAI_RESPONSES.md#downstream-session-error-wording)
+- 当前网关对 OpenAI 归属的调用始终按下表分类，未开启自定义时使用各项内置默认；开启后已保存的覆盖项生效。旧设置 `openai_error_messages_normalized` 仅表示“使用自定义提示”，不再承担“是否统一”的开关。未知码、非字符串码、缺少字符串 message、非 JSON 输入等进入 C09 兜底；可解析的错误对象会重建为平台生成的公开 type/code/message。[文案实现](../../backend/internal/service/openai_error_messages.go) · [目录](../../backend/internal/service/codex_public_error_catalog.go) · [现行协议](OPENAI_RESPONSES.md#downstream-session-error-wording)
 - 确定性 400 会取清洗过的上游 message，并保留上游 type、code、param。模型不可用最终分支可以使用上游文字。管理员透传规则也能提取上游消息。容量耗尽的 WS 分支单独写帧和关闭原因，Live sideband 直接写上游帧。这些出口均需纳入。[400 写出](../../backend/internal/service/openai_upstream_client_error.go#L38) · [故障转移耗尽](../../backend/internal/handler/openai_gateway_handler.go#L3890) · [WS 写出](../../backend/internal/handler/openai_gateway_handler.go#L4430) · [Live 转发](../../backend/internal/service/openai_live.go#L868)
 - 用户错误请求页是独立的读取出口。打开该页的访问权限后，列表取 Ops 记录的 `message`，详情还取记录的 `error_body` 和 `upstream_status_code`。即使生成接口已经显示统一提示，用户仍可能从这里看到归一化之前的诊断。建议对归属 OpenAI 的记录复用同一公开分类，历史记录证据不足时走安全兜底。详情可保留既有 `error_body` 结构来承载重建的公开错误，只显示公开状态。管理员 Ops 详情继续按现有脱敏和权限供排查。[用户字段映射](../../backend/internal/service/ops_user_error.go#L97) · [用户错误详情入口](../../backend/internal/handler/usage_handler.go#L356)
 - 设置项命名为「上游错误提示」，由系统设置管理员为全站配置。网关始终按下表分类。旧开关升级为「使用自定义提示」。关闭时每项使用自己的内置默认文案。开启时，已配置的项使用自定义文案，其余项取内置默认。升级时已有开关取值可沿用，两种状态在尚无自定义内容时都立即获得整套分类默认提示。旧版本关闭时可能透传原文，这一升级行为需在设置说明和发布说明中写明。

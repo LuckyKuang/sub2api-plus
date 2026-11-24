@@ -15,17 +15,8 @@ import (
 type openAIErrorMessageSource struct {
 	code          string
 	generatedCode string
-}
-
-func openAIErrorMessage(code string) string {
-	switch code {
-	case "upstream_response_interrupted", "upstream_unavailable":
-		return "响应已中断，请输入「继续」重新提交。"
-	case "session_account_lost":
-		return "当前会话可能无法恢复，请新开会话继续。"
-	default:
-		return ""
-	}
+	key           string
+	status        int
 }
 
 // SetOpenAIErrorMessageSource keeps only the code needed for display, never the
@@ -36,15 +27,40 @@ func SetOpenAIErrorMessageSource(c *gin.Context, payload []byte) {
 	if c == nil {
 		return
 	}
-	c.Set("openai_error_message_source", openAIErrorMessageSource{code: openAIErrorMessageCode(payload)})
+	status := c.Writer.Status()
+	if status < 400 {
+		status = 0
+	}
+	source := openAIErrorMessageSource{status: status}
+	if code := openAIErrorMessageCode(payload); code != "" {
+		source.code = code
+		if key, ok := codexPublicErrorKeyFromCode(code); ok {
+			source.key = key
+		}
+	}
+	c.Set("openai_error_message_source", source)
+}
+
+// SetCodexPublicErrorKey records the trusted failure classification before any
+// downstream text is rewritten. It takes precedence over a wire code that may
+// be ambiguous or shared by several catalog entries.
+func SetCodexPublicErrorKey(c *gin.Context, key string) {
+	if c == nil {
+		return
+	}
+	source := getOpenAIErrorMessageSource(c)
+	if definition, ok := codexPublicErrorByKey(key); ok {
+		source.key = definition.Key
+	}
+	c.Set("openai_error_message_source", source)
 }
 
 func openAIErrorMessageCode(payload []byte) string {
 	if json.Valid(payload) {
 		_, object := openAIProtocolError(gjson.ParseBytes(payload))
 		candidate := object.Get("code")
-		if candidate.Type == gjson.String && object.Get("message").Type == gjson.String && openAIErrorMessage(candidate.String()) != "" {
-			return candidate.String()
+		if candidate.Type == gjson.String {
+			return strings.TrimSpace(candidate.String())
 		}
 	}
 	return ""
@@ -78,9 +94,17 @@ func (e *UpstreamFailoverError) SetOpenAIErrorMessageSource(c *gin.Context) {
 		return
 	}
 	SetOpenAIErrorMessageSource(c, e.ResponseBody)
-	if e.openAIErrorMessageCode != "" {
-		c.Set("openai_error_message_source", openAIErrorMessageSource{code: e.openAIErrorMessageCode})
+	source := getOpenAIErrorMessageSource(c)
+	if e.StatusCode >= 400 {
+		source.status = e.StatusCode
 	}
+	if e.openAIErrorMessageCode != "" {
+		source.code = e.openAIErrorMessageCode
+		if key, ok := codexPublicErrorKeyFromCode(e.openAIErrorMessageCode); ok {
+			source.key = key
+		}
+	}
+	c.Set("openai_error_message_source", source)
 }
 
 func openAIProtocolError(root gjson.Result) (string, gjson.Result) {
@@ -110,33 +134,85 @@ func openAIProtocolError(root gjson.Result) (string, gjson.Result) {
 }
 
 func normalizeOpenAIErrorMessage(payload []byte, source openAIErrorMessageSource) []byte {
+	return normalizeOpenAIErrorMessageWithResolver(payload, source, func(key string) string {
+		definition, ok := codexPublicErrorByKey(key)
+		if !ok {
+			return ""
+		}
+		return definition.DefaultMessage
+	})
+}
+
+func normalizeOpenAIErrorMessageWithResolver(payload []byte, source openAIErrorMessageSource, resolve func(string) string) []byte {
 	if !json.Valid(payload) {
 		return payload
 	}
 	path, errorObject := openAIProtocolError(gjson.ParseBytes(payload))
-	if !errorObject.IsObject() || errorObject.Get("message").Type != gjson.String {
+	if !errorObject.IsObject() {
 		return payload
 	}
-	code := errorObject.Get("code")
-	sourceCode := source.code
-	if code.Exists() {
-		// Only an explicitly marked locally generated code may use the source;
-		// other explicit unknown/non-string downstream codes take precedence.
-		if code.Type != gjson.String {
+	key := strings.TrimSpace(source.key)
+	if _, ok := codexPublicErrorByKey(key); !ok {
+		key = ""
+	}
+	if key == "" {
+		if code := strings.TrimSpace(errorObject.Get("code").String()); code != "" {
+			if resolved, ok := codexPublicErrorKeyFromCode(code); ok {
+				key = resolved
+			}
+		}
+	}
+	if key == "" {
+		key = codexPublicErrorFallbackKey(source.status)
+	}
+	definition, ok := codexPublicErrorByKey(key)
+	if !ok || definition.PublicCode == "" {
+		return payload
+	}
+	message := ""
+	if resolve != nil {
+		message = strings.TrimSpace(resolve(key))
+	}
+	if message == "" {
+		message = definition.DefaultMessage
+	}
+	replacement := []byte("{}")
+	var err error
+	if replacement, err = sjson.SetBytes(replacement, "message", message); err != nil {
+		return payload
+	}
+	if definition.PublicCode != "" {
+		if replacement, err = sjson.SetBytes(replacement, "code", definition.PublicCode); err != nil {
 			return payload
 		}
-		if sourceCode == "" || source.generatedCode == "" || code.String() != source.generatedCode {
-			sourceCode = code.String()
+	}
+	if definition.ErrorType != "" {
+		if replacement, err = sjson.SetBytes(replacement, "type", definition.ErrorType); err != nil {
+			return payload
 		}
 	}
-	message := openAIErrorMessage(sourceCode)
-	if message == "" {
-		return payload
+	if path == "" {
+		root := gjson.ParseBytes(payload)
+		if strings.EqualFold(root.Get("type").String(), "error") {
+			// Error events keep their protocol envelope. Only the message and
+			// public code are replaced; sequence/status stay for the client's
+			// correlation and terminal handling.
+			event := []byte("{}")
+			event, _ = sjson.SetBytes(event, "type", "error")
+			event, _ = sjson.SetBytes(event, "message", message)
+			if definition.PublicCode != "" {
+				event, _ = sjson.SetBytes(event, "code", definition.PublicCode)
+			}
+			for _, field := range []string{"sequence_number", "status"} {
+				if value := root.Get(field); value.Exists() && value.Type != gjson.Null {
+					event, _ = sjson.SetRawBytes(event, field, []byte(value.Raw))
+				}
+			}
+			return event
+		}
+		return replacement
 	}
-	if path != "" {
-		path += "."
-	}
-	result, err := sjson.SetBytes(payload, path+"message", message)
+	result, err := sjson.SetRawBytes(payload, path, replacement)
 	if err != nil {
 		return payload
 	}
@@ -158,9 +234,8 @@ func OpenAIErrorMessageOutput(settings *SettingService, next gin.HandlerFunc) gi
 		if platform, ok := ctx.Value(ctxkey.Platform).(string); ok {
 			c.Set(string(ctxkey.Platform), platform)
 		}
-		settings.OpenAIErrorMessagesNormalized(ctx)
 		enabled := func() bool {
-			return c.GetString(string(ctxkey.Platform)) == PlatformOpenAI && settings.OpenAIErrorMessagesNormalized(ctx)
+			return c.GetString(string(ctxkey.Platform)) == PlatformOpenAI
 		}
 		w := &codexSafetyBufferingHTTPWriter{
 			ResponseWriter: c.Writer, ctx: ctx, c: c,
@@ -171,10 +246,13 @@ func OpenAIErrorMessageOutput(settings *SettingService, next gin.HandlerFunc) gi
 			},
 			projectPayload: func(payload []byte, _ string) []byte {
 				if enabled() {
-					return normalizeOpenAIErrorMessage(payload, getOpenAIErrorMessageSource(c))
+					return normalizeOpenAIErrorMessageWithResolver(payload, getOpenAIErrorMessageSource(c), func(key string) string {
+						return settings.CodexPublicErrorMessage(ctx, key)
+					})
 				}
 				return payload
 			},
+			stripDiagnosticHeaders: true,
 		}
 		c.Writer = w
 		c.Set("openai_error_message_output_writer", w)
@@ -189,10 +267,28 @@ func OpenAIErrorMessageOutput(settings *SettingService, next gin.HandlerFunc) gi
 	}
 }
 
+func (s *OpenAIGatewayService) projectCodexPublicErrorPayload(ctx context.Context, payload []byte) []byte {
+	if s == nil || s.settingService == nil {
+		return payload
+	}
+	source := openAIErrorMessageSource{}
+	if code := openAIErrorMessageCode(payload); code != "" {
+		source.code = code
+		if key, ok := codexPublicErrorKeyFromCode(code); ok {
+			source.key = key
+		}
+	}
+	return normalizeOpenAIErrorMessageWithResolver(payload, source, func(key string) string {
+		return s.settingService.CodexPublicErrorMessage(ctx, key)
+	})
+}
+
 func (s *OpenAIGatewayService) projectOpenAIWebSocketOutput(ctx context.Context, c *gin.Context, account *Account, payload []byte) []byte {
 	payload = s.projectCodexSafetyBufferingOutput(ctx, c, account, payload, "websocket")
-	if account != nil && account.Platform == PlatformOpenAI && s.settingService.OpenAIErrorMessagesNormalized(ctx) {
-		return normalizeOpenAIErrorMessage(payload, getOpenAIErrorMessageSource(c))
+	if account != nil && account.Platform == PlatformOpenAI && s.settingService != nil {
+		return normalizeOpenAIErrorMessageWithResolver(payload, getOpenAIErrorMessageSource(c), func(key string) string {
+			return s.settingService.CodexPublicErrorMessage(ctx, key)
+		})
 	}
 	return payload
 }

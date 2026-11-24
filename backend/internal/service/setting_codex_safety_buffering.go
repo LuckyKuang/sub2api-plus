@@ -12,19 +12,24 @@ const SettingKeyOpenAICodexSafetyBufferingSuppressed = "openai_codex_safety_buff
 
 const SettingKeyOpenAIErrorMessagesNormalized = "openai_error_messages_normalized"
 
+// SettingKeyOpenAIErrorMessageOverrides stores only the keys an administrator
+// explicitly overrode. A missing value means an empty object.
+const SettingKeyOpenAIErrorMessageOverrides = "openai_error_message_overrides"
+
 const codexSafetyBufferingRefreshInterval = time.Second
 
 // Reads on the output path are atomic. The mutex orders database refreshes
 // against successful writes so an older refresh cannot overwrite a new save.
 type codexSafetyBufferingRuntime struct {
-	mu            sync.Mutex
-	enabled       atomic.Bool
-	errorMessages atomic.Bool
-	initialized   atomic.Bool
-	start         sync.Once
-	bus           InvalidationBus
-	cancel        context.CancelFunc
-	workers       sync.WaitGroup
+	mu             sync.Mutex
+	enabled        atomic.Bool
+	errorMessages  atomic.Bool
+	errorOverrides atomic.Value // map[string]string
+	initialized    atomic.Bool
+	start          sync.Once
+	bus            InvalidationBus
+	cancel         context.CancelFunc
+	workers        sync.WaitGroup
 }
 
 func (s *SettingService) CodexSafetyBufferingSuppressed(ctx context.Context) bool {
@@ -65,7 +70,7 @@ func (s *SettingService) refreshCodexSafetyBuffering(ctx context.Context) {
 	}
 	readCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	values, err := s.settingRepo.GetMultiple(readCtx, []string{SettingKeyOpenAICodexSafetyBufferingSuppressed, SettingKeyOpenAIErrorMessagesNormalized})
+	values, err := s.settingRepo.GetMultiple(readCtx, []string{SettingKeyOpenAICodexSafetyBufferingSuppressed, SettingKeyOpenAIErrorMessagesNormalized, SettingKeyOpenAIErrorMessageOverrides})
 	if err != nil {
 		if ctx.Err() != nil {
 			return
@@ -87,6 +92,12 @@ func (s *SettingService) refreshCodexSafetyBuffering(ctx context.Context) {
 			continue
 		}
 		target.Store(raw == "true")
+	}
+	overrides, parseErr := parseCodexPublicErrorOverrides(values[SettingKeyOpenAIErrorMessageOverrides])
+	if parseErr != nil {
+		slog.Warn("invalid OpenAI error message overrides", "stage", "settings_refresh", "code", "openai_error_message_overrides_invalid")
+	} else {
+		runtime.errorOverrides.Store(overrides)
 	}
 }
 
@@ -172,6 +183,12 @@ func (s *SettingService) persistSystemSettingsWithCodexSafetyBuffering(ctx conte
 		} {
 			if value, ok := updates[key]; ok {
 				target.Store(value == "true")
+				changed = true
+			}
+		}
+		if raw, ok := updates[SettingKeyOpenAIErrorMessageOverrides]; ok {
+			if overrides, parseErr := parseCodexPublicErrorOverrides(raw); parseErr == nil {
+				runtime.errorOverrides.Store(overrides)
 				changed = true
 			}
 		}
