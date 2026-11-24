@@ -258,7 +258,7 @@ func aggregateDefaultAccountModels(account *Account) []string {
 		}
 		return ids
 	default:
-		return cnmodels.DefaultModelIDs(account.Platform)
+		return FilterStaticCatalogModels(account, cnmodels.DefaultModelIDs(account.Platform))
 	}
 }
 

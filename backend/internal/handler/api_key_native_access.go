@@ -183,7 +183,7 @@ func nativeAccessCandidates(group *service.Group, accounts []service.Account, ca
 		if len(mapping) == 0 {
 			defaults := defaultModelIDsForPlatform(account.Platform)
 			if service.IsMultiProtocolAPIKeyProvider(account.Platform) {
-				defaults = cnmodels.DefaultModelIDs(account.Platform)
+				defaults = service.FilterStaticCatalogModels(account, cnmodels.DefaultModelIDs(account.Platform))
 			}
 			if snapshot := account.GetUpstreamModelMetadataSnapshot(); snapshot != nil {
 				defaults = nil

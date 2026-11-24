@@ -1936,7 +1936,7 @@ func NormalizeGLMOpenAIReasoningEffort(body []byte, mappedModel string) ([]byte,
 	}
 
 	mapped := normalizeGLMOpenAIReasoningEffort(raw)
-	if isGLM53Model(mappedModel) && mapped == "high" && normalizeEffortToken(raw) == "low" {
+	if isGLM53Or54Model(mappedModel) && mapped == "high" && normalizeEffortToken(raw) == "low" {
 		mapped = "low"
 	}
 	if mapped == "" || mapped == raw {
@@ -1955,8 +1955,16 @@ func normalizeEffortToken(raw string) string {
 	return strings.NewReplacer("-", "", "_", "", " ", "").Replace(value)
 }
 
-func isGLM53Model(model string) bool {
-	return strings.EqualFold(strings.TrimSpace(model), "glm-5.3")
+// isGLM53Or54Model covers the GLM models whose reviewed native reasoning
+// scale accepts low in addition to high/max. Other GLM models keep the
+// historical low-to-high promotion.
+func isGLM53Or54Model(model string) bool {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "glm-5.3", "glm-5.4":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeGLMOpenAIReasoningEffort(raw string) string {
@@ -1975,11 +1983,12 @@ func normalizeGLMOpenAIReasoningEffort(raw string) string {
 	}
 }
 
-// NormalizeGLM53AnthropicThinking maps explicit client thinking effort onto the
-// GLM-5.3 Anthropic-compatible scale. Requests without an effort or thinking
-// preference are left unchanged so the upstream default remains in effect.
-func NormalizeGLM53AnthropicThinking(body []byte, mappedModel string) ([]byte, bool) {
-	if !isGLM53Model(mappedModel) {
+// NormalizeGLMAnthropicThinking maps explicit client thinking effort onto the
+// GLM-5.3/5.4 Anthropic-compatible scale. Requests without an effort or
+// thinking preference are left unchanged so the upstream default remains in
+// effect.
+func NormalizeGLMAnthropicThinking(body []byte, mappedModel string) ([]byte, bool) {
+	if !isGLM53Or54Model(mappedModel) {
 		return body, false
 	}
 

@@ -2535,3 +2535,13 @@ func TestGPT6CacheWriteMissingAndNullStillDerivePremium(t *testing.T) {
 		}
 	}
 }
+
+// GLM-5.4 has no published pay-as-you-go card in the compiled catalog. The
+// legacy glm-5 substring fallback must not price it as an older SKU.
+func TestGetModelPricing_GLM54DoesNotUseLegacyGLM5Price(t *testing.T) {
+	svc := newTestBillingService()
+
+	pricing, err := svc.GetModelPricing("glm-5.4")
+	require.ErrorIs(t, err, ErrModelPricingUnavailable)
+	require.Nil(t, pricing)
+}

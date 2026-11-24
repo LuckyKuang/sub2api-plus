@@ -83,6 +83,11 @@ All concrete platforms in the shared registry have an independent entry:
 | `cline` | `deepseek-v4.1-flash` |
 
 These defaults name existing price cards and introduce no new price numbers.
+`glm-5.4` has no compiled same-model card: a Zhipu request resolves through
+the configured platform fallback (`glm-5.3` by default) when that fallback is
+enabled, and pricing admission fails when it is disabled. The legacy `glm-5`
+family match is deliberately excluded, and no price may be derived from a
+Coding Plan quota multiplier.
 Saved explicit model choices and disabled entries remain overrides after a
 default update; resetting the setting with `{}` adopts the current defaults.
 `composite` is not a concrete supplier: its request uses the resolved target

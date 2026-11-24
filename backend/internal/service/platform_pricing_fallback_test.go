@@ -369,3 +369,39 @@ func TestPlatformPricingFallback_SettingsFailureCannotBecomeAnInventedFreeCard(t
 	_, err = ExportBillingPricingSnapshot(ctx, "gpt-6.1-terra-unpublished-sku")
 	require.Error(t, err)
 }
+
+func TestPlatformPricingFallback_ZhipuGLM54UsesConfiguredFallbackSKU(t *testing.T) {
+	billing := platformFallbackTestBilling(nil)
+	price, err := billing.GetModelPricingForPlatform(context.Background(), PlatformZhipu, "glm-5.4")
+	require.NoError(t, err)
+	requirePlatformFallbackRates(t, price, 1.4e-6, 4.4e-6)
+	require.Equal(t, "glm-5.3", price.FallbackModel)
+	require.Equal(t, PlatformZhipu, price.FallbackPlatform)
+
+	// Disabling the platform fallback leaves GLM-5.4 without a price instead of
+	// borrowing the legacy glm-5 family card.
+	billing.pricingFallbackModels = func(context.Context) (map[string]string, error) {
+		return map[string]string{}, nil
+	}
+	price, err = billing.GetModelPricingForPlatform(context.Background(), PlatformZhipu, "glm-5.4")
+	require.ErrorIs(t, err, ErrModelPricingUnavailable)
+	require.Nil(t, price)
+}
+
+func TestPlatformPricingFallback_ZhipuGLM54ExplicitPriceWins(t *testing.T) {
+	catalog := newStubPricingServiceFromJSON(t, `{
+		"glm-5.4": {"litellm_provider":"zhipu", "input_cost_per_token":0.000002, "output_cost_per_token":0.000006},
+		"glm-5.4-free": {"litellm_provider":"zhipu", "input_cost_per_token":0, "output_cost_per_token":0}
+	}`)
+	billing := platformFallbackTestBilling(catalog)
+
+	price, err := billing.GetModelPricingForPlatform(context.Background(), PlatformZhipu, "glm-5.4")
+	require.NoError(t, err)
+	requirePlatformFallbackRates(t, price, 2e-6, 6e-6)
+	require.Empty(t, price.FallbackModel)
+
+	price, err = billing.GetModelPricingForPlatform(context.Background(), PlatformZhipu, "glm-5.4-free")
+	require.NoError(t, err)
+	requirePlatformFallbackRates(t, price, 0, 0)
+	require.Empty(t, price.FallbackModel)
+}
