@@ -41,20 +41,62 @@ func TestResolveBillingServiceTier(t *testing.T) {
 	}
 }
 
+func TestResolveOpenAIServiceTierBilling(t *testing.T) {
+	tests := []struct {
+		name       string
+		account    *Account
+		requested  string
+		observed   string
+		billing    string
+		downgraded bool
+	}{
+		{name: "api key fast default echo", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, requested: "priority", observed: "default", billing: "priority"},
+		{name: "api key fast alias default echo", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, requested: "fast", observed: "default", billing: "fast"},
+		{name: "oauth fast default echo", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}, requested: "priority", observed: "default", billing: "priority"},
+		{name: "setup token fast default echo", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeSetupToken}, requested: "priority", observed: "default", billing: "priority"},
+		{name: "oauth ultrafast default echo keeps existing behaviour", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}, requested: "ultrafast", observed: "default", billing: "ultrafast"},
+		{name: "api key ultrafast explicit default still downgrades", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, requested: "ultrafast", observed: "default", billing: "default", downgraded: true},
+		{name: "api key explicit flex downgrade", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, requested: "priority", observed: "flex", billing: "flex", downgraded: true},
+		{name: "filtered fast is settled at the sent tier", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, requested: "", observed: "default", billing: ""},
+		{name: "missing response keeps the sent tier", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, requested: "priority", billing: "priority"},
+		{name: "response cannot raise an untiered request", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, requested: "", observed: "priority", billing: ""},
+		{name: "unknown response leaves the sent tier", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, requested: "priority", observed: "turbo", billing: "priority"},
+		{name: "non-openai fast default echo keeps the generic contract", account: &Account{Platform: PlatformGrok, Type: AccountTypeOAuth}, requested: "priority", observed: "default", billing: "default", downgraded: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResolveOpenAIServiceTierBilling(tt.account, tt.requested, tt.observed)
+			require.Equal(t, tt.billing, got.Billing)
+			require.Equal(t, tt.downgraded, got.Downgraded)
+			require.Equal(t, normalizeBillingServiceTier(tt.requested), got.Requested)
+			require.Equal(t, normalizeBillingServiceTier(tt.observed), got.Observed)
+		})
+	}
+}
+
 func TestApplyServiceTierBillingResolutionOnlyRewritesDowngrades(t *testing.T) {
-	t.Run("codex exception only covers OpenAI default", func(t *testing.T) {
-		require.True(t, codexOAuthResponseTierIsNonAuthoritative("default"))
-		require.False(t, codexOAuthResponseTierIsNonAuthoritative("standard"))
-		require.False(t, codexOAuthResponseTierIsNonAuthoritative("flex"))
+	t.Run("default echo is the only non-authoritative response tier", func(t *testing.T) {
+		require.True(t, openAIResponseDefaultTierIsNonAuthoritative("default"))
+		require.False(t, openAIResponseDefaultTierIsNonAuthoritative("standard"))
+		require.False(t, openAIResponseDefaultTierIsNonAuthoritative("flex"))
 	})
 
-	t.Run("openai downgrade rewrites tier", func(t *testing.T) {
+	t.Run("openai api key default echo keeps fast tier", func(t *testing.T) {
 		requested := "priority"
 		result := &OpenAIForwardResult{ServiceTier: &requested, UpstreamResponseServiceTier: "default"}
 		resolution := ApplyOpenAIServiceTierBillingResolution(&Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, result)
+		require.False(t, resolution.Downgraded)
+		require.Equal(t, "priority", resolution.Billing)
+		require.Same(t, &requested, result.ServiceTier)
+	})
+
+	t.Run("openai api key explicit flex downgrade rewrites tier", func(t *testing.T) {
+		requested := "priority"
+		result := &OpenAIForwardResult{ServiceTier: &requested, UpstreamResponseServiceTier: "flex"}
+		resolution := ApplyOpenAIServiceTierBillingResolution(&Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, result)
 		require.True(t, resolution.Downgraded)
 		require.NotNil(t, result.ServiceTier)
-		require.Equal(t, "default", *result.ServiceTier)
+		require.Equal(t, "flex", *result.ServiceTier)
 	})
 
 	t.Run("openai honoured tier keeps pointer", func(t *testing.T) {

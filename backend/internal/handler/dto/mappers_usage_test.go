@@ -152,15 +152,22 @@ func TestUsageLogFromService_ServiceTiersAreAdminOnly(t *testing.T) {
 	userDTO := UsageLogFromService(log)
 	adminDTO := UsageLogFromServiceAdmin(log)
 
-	// Raw tiers stay admin-only; users receive only the final request Fast state.
+	// Raw tiers stay admin-only; users receive the normalized billable tier and
+	// the final request Fast state.
 	userJSON, err := json.Marshal(userDTO)
 	require.NoError(t, err)
-	require.NotContains(t, string(userJSON), "service_tier")
-	require.Contains(t, string(userJSON), `"request_fast_enabled":true`)
+	var userBody map[string]any
+	require.NoError(t, json.Unmarshal(userJSON, &userBody))
+	require.Equal(t, "fast", userBody["billing_service_tier"])
+	require.Equal(t, true, userBody["request_fast_enabled"])
+	for _, raw := range []string{"service_tier", "requested_service_tier", "response_service_tier"} {
+		require.NotContains(t, userBody, raw)
+	}
 	adminJSON, err := json.Marshal(adminDTO)
 	require.NoError(t, err)
 	require.Contains(t, string(adminJSON), `"requested_service_tier":"priority"`)
 	require.Contains(t, string(adminJSON), `"response_service_tier":"default"`)
+	require.Contains(t, string(adminJSON), `"billing_service_tier":"fast"`)
 	require.NotNil(t, userDTO.InboundEndpoint)
 	require.Equal(t, inboundEndpoint, *userDTO.InboundEndpoint)
 	require.Nil(t, userDTO.UpstreamEndpoint)
@@ -221,6 +228,45 @@ func TestUsageLogFromService_RequestFastEnabledContract(t *testing.T) {
 				for _, private := range []string{"service_tier", "requested_service_tier", "response_service_tier", "account", "account_rate_multiplier"} {
 					require.NotContains(t, userBody, private)
 				}
+			}
+		})
+	}
+}
+
+// docs/protocols/OPENAI_RESPONSES.md: both user and admin cost details expose
+// the normalized billable tier, never an inferred or raw provider value.
+func TestUsageLogFromService_BillingServiceTierContract(t *testing.T) {
+	t.Parallel()
+	str := func(value string) *string { return &value }
+	cases := []struct {
+		name string
+		tier *string
+		want any
+	}{
+		{name: "historical absence", want: nil},
+		{name: "captured empty", tier: str(""), want: nil},
+		{name: "whitespace", tier: str(" \t "), want: nil},
+		{name: "priority", tier: str("priority"), want: "fast"},
+		{name: "fast normalized", tier: str(" FAST "), want: "fast"},
+		{name: "default", tier: str("default"), want: "standard"},
+		{name: "standard", tier: str("Standard"), want: "standard"},
+		{name: "auto", tier: str("AUTO"), want: "standard"},
+		{name: "scale", tier: str("scale"), want: "standard"},
+		{name: "flex", tier: str("flex"), want: "flex"},
+		{name: "ultrafast", tier: str("ultrafast"), want: "ultrafast"},
+		{name: "unrecognized provider value", tier: str("provider-tier"), want: nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			log := &service.UsageLog{Model: "gpt-5.4", ServiceTier: tc.tier}
+			for _, result := range []any{UsageLogFromService(log), UsageLogFromServiceAdmin(log)} {
+				raw, err := json.Marshal(result)
+				require.NoError(t, err)
+				var body map[string]any
+				require.NoError(t, json.Unmarshal(raw, &body))
+				value, present := body["billing_service_tier"]
+				require.True(t, present, "missing billing tier must be explicit JSON null")
+				require.Equal(t, tc.want, value)
 			}
 		})
 	}
@@ -447,7 +493,10 @@ func TestUsageLogServiceTierJSONDistinguishesHistoryAndAbsence(t *testing.T) {
 		require.Contains(t, string(adminJSON), tc.response)
 		userJSON, err := json.Marshal(UsageLogFromService(log))
 		require.NoError(t, err)
-		require.NotContains(t, string(userJSON), "service_tier")
+		for _, raw := range []string{"service_tier", "requested_service_tier", "response_service_tier"} {
+			require.NotContains(t, string(userJSON), `"`+raw+`"`)
+		}
+		require.Contains(t, string(userJSON), `"billing_service_tier":null`)
 	}
 }
 

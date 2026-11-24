@@ -730,6 +730,25 @@ bound-group selector and opens that group's same model-factor editor; it never
 writes one customer factor into all bound groups. Account cost-statistics cards
 do not expose or apply these customer selling-factor controls.
 
+### OpenAI Fast/default settlement
+
+OpenAI OAuth, setup-token and API-key credentials use one retail rule: when the
+final prepared outbound body carries `priority` or `fast` and the upstream
+response declares `default`, the request is billed with the Fast card. This
+applies to official direct connections and compatible relays; the outbound
+observation, not the response echo, decides the request side. Only that
+combination changes. An explicit `flex` declaration still lowers the bill, a
+policy-filtered Fast request is billed at the actual sent tier (Standard when no
+tier remains), and a response cannot raise an untiered request or an API-key
+Ultra Fast request. OAuth Ultra Fast keeps its existing behavior. Free Fast keeps
+the Fast original cost and charges Standard, unchanged by this rule. Historical
+usage rows retain their stored amount and tier.
+
+Both administrator and user cost details display the normalized billable tier
+(`fast`, `standard`, `flex` or `ultrafast`) recorded at settlement. A missing or
+unrecognized historical value is omitted; it is never inferred from the model,
+the request Fast flag, the amount or the current group configuration.
+
 ## Inflight balance reservations
 
 When `billing.inflight_reservation.enabled` is enabled, admission estimates the
@@ -747,7 +766,7 @@ Group-forced OpenAI Ultrafast reservations follow the final channel/account
 wire model: supported Astra/Sol models use Ultrafast before the global tier
 policy; unsupported models retain the client tier or the independent Fast
 override. Preselection keeps the highest reachable charge, while reconciliation
-uses only the selected account. Free Fast discounts priority only.
+uses only the selected account. Free Fast discounts Fast/priority only.
 
 After selecting and revalidating the account, supported synchronous inference
 handlers reconcile the estimate before forwarding. The selected account's actual

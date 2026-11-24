@@ -382,6 +382,9 @@ func TestUserUsageListOmitsServiceTierDiagnostics(t *testing.T) {
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/usage", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `"model":"gpt-5.5"`)
-	require.NotContains(t, rec.Body.String(), "service_tier")
+	require.NotContains(t, rec.Body.String(), `"service_tier"`)
+	require.NotContains(t, rec.Body.String(), `"requested_service_tier"`)
+	require.NotContains(t, rec.Body.String(), `"response_service_tier"`)
+	require.Contains(t, rec.Body.String(), `"billing_service_tier":"standard"`)
 	require.Contains(t, rec.Body.String(), `"request_fast_enabled":true`)
 }

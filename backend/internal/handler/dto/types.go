@@ -645,6 +645,11 @@ type UsageLog struct {
 	// RequestFastEnabled describes only the recorded final outbound request tier.
 	// Nil means absent, unspecified, or unrecognized; it is not a billing verdict.
 	RequestFastEnabled *bool `json:"request_fast_enabled"`
+	// BillingServiceTier is the normalized tier used to price this record:
+	// "fast", "standard", "flex" or "ultrafast". Nil means a historical record,
+	// a captured absence, or an unrecognized value; it is never inferred from
+	// the model, the request Fast state, cost, or current configuration.
+	BillingServiceTier *string `json:"billing_service_tier"`
 	// InboundEndpoint is the client-facing API endpoint path, e.g. /v1/chat/completions.
 	InboundEndpoint *string `json:"inbound_endpoint,omitempty"`
 	// UpstreamEndpoint is the normalized upstream endpoint path, e.g. /v1/responses.

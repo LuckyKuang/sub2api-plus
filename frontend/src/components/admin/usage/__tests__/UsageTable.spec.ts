@@ -42,6 +42,11 @@ const messages: Record<string, string> = {
   'usage.fastStateHint': 'Final request Fast state; not response tier or billing.',
   'admin.usage.userDeletedBadge': 'Deleted',
   'usage.costDetails': 'Cost Breakdown',
+  'usage.billingServiceTier': 'Service tier',
+  'usage.billingServiceTierFast': 'Fast',
+  'usage.billingServiceTierStandard': 'Standard',
+  'usage.billingServiceTierFlex': 'Flex',
+  'usage.billingServiceTierUltrafast': 'Ultra Fast',
   'admin.usage.inputCost': 'Input Cost',
   'admin.usage.outputCost': 'Output Cost',
   'admin.usage.cacheCreationCost': 'Cache Creation Cost',
@@ -261,6 +266,49 @@ describe('admin UsageTable tooltip', () => {
       expect(text).toContain('2,390')
       expect(text).not.toContain('5m')
       expect(text).not.toMatch(/\b1h\b/)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it.each([
+    ['fast', 'Fast'],
+    ['standard', 'Standard'],
+    ['flex', 'Flex'],
+    ['ultrafast', 'Ultra Fast'],
+  ])('shows billing service tier %s beside the rate', async (billingServiceTier, label) => {
+    const row = { ...baseImageRow, image_count: 0, billing_mode: 'token', billing_service_tier: billingServiceTier }
+    const wrapper = mount(UsageTable, {
+      props: { data: [row], loading: false, columns: [] },
+      global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
+    })
+    try {
+      await wrapper.get('[data-testid="cost-details-trigger"]').trigger('mouseenter')
+      await nextTick()
+      const line = wrapper.get('[data-testid="billing-service-tier"]')
+      expect(line.text()).toContain('Service tier')
+      expect(line.text()).toContain(label)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('omits the billing service tier for historical values', async () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [
+          { ...baseImageRow, request_id: 'history', billing_mode: 'token', billing_service_tier: null },
+          { ...baseImageRow, request_id: 'absent', billing_mode: 'token' },
+        ],
+        loading: false,
+        columns: [],
+      },
+      global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
+    })
+    try {
+      await wrapper.get('[data-testid="cost-details-trigger"]').trigger('mouseenter')
+      await nextTick()
+      expect(wrapper.find('[data-testid="billing-service-tier"]').exists()).toBe(false)
     } finally {
       wrapper.unmount()
     }

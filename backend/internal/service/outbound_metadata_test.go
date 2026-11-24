@@ -66,7 +66,7 @@ func TestOutboundMetadataFinalFastRequestAcrossNativeAndCLIBridge(t *testing.T) 
 				require.Empty(t, result.Outbound.CLIVersion)
 			}
 			resolution := ApplyOpenAIServiceTierBillingResolution(owner, result)
-			require.Equal(t, "default", resolution.Billing, "public API default remains a lower bill")
+			require.Equal(t, "priority", resolution.Billing, "the final outbound Fast tier stays billable when the response echoes default")
 		})
 	}
 }

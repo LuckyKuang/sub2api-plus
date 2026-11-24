@@ -60,6 +60,16 @@ model set and tier multipliers use the shared OpenAI policy in forwarding,
 reservation and settlement. Group duplication and API-key authentication-cache
 snapshots retain both flags.
 
+OpenAI Fast/default settlement uses the final outbound tier. A request whose last
+prepared body carries `priority` or `fast` is billed at the Fast card when the
+upstream response declares `default`; this covers OAuth, setup-token and API-key
+credentials, including official direct and compatible relay connections. The rule
+applies only to that combination. An explicit `flex` declaration still
+downgrades, a policy-filtered Fast request is billed at the tier actually sent,
+and a response cannot raise an untiered request or an API-key Ultra Fast request.
+Request, response and billing diagnostics remain separate, and historical usage
+rows keep the amounts and tier stored at settlement.
+
 OAuth requests replaying `web_search_call` history declare a cached-only
 `web_search` tool (`external_web_access=false`) when absent. Standard Responses
 uses `tools`; Responses Lite uses an `additional_tools` input item and preserves
@@ -968,7 +978,7 @@ returned normally. See [error diagnostics](../ERROR_REQUEST_DIAGNOSTICS.md).
 
 The administrator usage table has a default-visible **Service tier** column,
 which can be hidden through column settings. It shows request, response and billing lines, for example
-`Request Fast`, `Response default` and `Billing default`, for both OAuth and API-key accounts.
+`Request Fast`, `Response default` and `Billing Fast`, for OAuth, setup-token and API-key accounts.
 `requested_service_tier` records the final outbound tier after pass/filter/force
 policy, before billing resolution; `priority` and `fast` display as `Fast`.
 `response_service_tier` independently records the upstream declaration, preserving
@@ -981,10 +991,13 @@ without a terminal declaration do not establish a response tier.
 Migration 284 adds nullable snapshots without backfilling: historical NULL values
 mean **Not recorded**, a newly captured empty request means **Unspecified**, and
 an empty response means **Not returned** (no unambiguous declaration). The
-existing billable `service_tier` and cost calculations remain unchanged and are
-not used to infer either diagnostic value. A `default` response alone does not
-prove that Fast was disabled, especially through Codex OAuth or compatible
-providers with their own reporting behavior.
+billable `service_tier` follows the Fast/default settlement rule above: a final
+outbound Fast tier is billed as Fast when the response echoes `default`, while
+an explicit `flex` response or a filtered Fast request is billed at the actual
+sent tier. Diagnostic request and response fields are never rewritten from the
+billable value, and a `default` response alone does not prove that Fast was
+disabled, especially through Codex OAuth or compatible providers with their own
+reporting behavior.
 
 Anthropic Messages conversion applies the same OpenAI Fast policy whether the
 selected OpenAI account uses Responses or Chat Completions. The exact
@@ -1000,9 +1013,15 @@ nullable boolean `request_fast_enabled` describes the recorded final request:
 trimmed, case-insensitive `priority`/`fast` mean true, `default`/`auto`/`flex` mean
 false, and missing, empty or unrecognized values mean null. It is derived only
 from `requested_service_tier`, never the upstream response, billable tier, model,
-cost or current configuration. The user table places this state and reasoning
-effort below the requested model; raw tiers remain absent from user column
-settings, cost tooltips and exports. This display does not change pricing.
+cost or current configuration. The user and administrator cost tooltips also
+show the nullable `billing_service_tier`, normalized from the stored billable
+tier to `fast`, `standard`, `flex` or `ultrafast`; null means a historical record,
+captured absence or unrecognized value and is omitted instead of being inferred.
+Free Fast keeps the Fast raw card and charges Standard, so the field remains
+`fast` while the original and actual amounts differ. The user table places the
+request Fast state and reasoning effort below the requested model; raw tiers
+remain absent from user column settings and exports. This display does not
+change pricing.
 
 
 ## Codex transport and active probe timing

@@ -1776,6 +1776,8 @@ export interface UsageLog {
   reasoning_effort?: string | null
   /** Final recorded request Fast state; absent/unknown is not disabled. */
   request_fast_enabled?: boolean | null
+  /** Normalized tier used to price this record; absent/unknown is not standard. */
+  billing_service_tier?: 'fast' | 'standard' | 'flex' | 'ultrafast' | null
   inbound_endpoint?: string | null
   upstream_endpoint?: string | null
 

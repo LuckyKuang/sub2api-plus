@@ -13,3 +13,24 @@ export function formatResponseServiceTier(tier: string | null | undefined, t: Tr
   if (tier == null) return t('admin.usage.serviceTierUnrecorded')
   return tier.trim() || t('admin.usage.serviceTierNotReturned')
 }
+
+// NULL/undefined/empty/unrecognized billing tiers are omitted from cost
+// details: history and provider-specific values cannot prove a tier.
+export function formatBillingServiceTier(tier: string | null | undefined, t: Translate): string | null {
+  switch (tier?.trim().toLowerCase()) {
+    case 'priority':
+    case 'fast':
+      return t('usage.billingServiceTierFast')
+    case 'default':
+    case 'standard':
+    case 'auto':
+    case 'scale':
+      return t('usage.billingServiceTierStandard')
+    case 'flex':
+      return t('usage.billingServiceTierFlex')
+    case 'ultrafast':
+      return t('usage.billingServiceTierUltrafast')
+    default:
+      return null
+  }
+}

@@ -58,13 +58,8 @@ func TestRecordUsageUsesDispatchedTierAndPreservesBillingContracts(t *testing.T)
 			require.NoError(t, svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{Result: result, APIKey: &APIKey{ID: 2}, User: &User{ID: 1}, Account: &Account{ID: 3, Platform: PlatformOpenAI, Type: kind}}))
 			require.Equal(t, "priority", *logs.lastLog.RequestedServiceTier)
 			require.Equal(t, "default", *logs.lastLog.ResponseServiceTier)
-			if kind == AccountTypeAPIKey {
-				require.Equal(t, "default", *logs.lastLog.ServiceTier)
-				require.InDelta(t, 2.2, logs.lastLog.ActualCost, 1e-12)
-			} else {
-				require.Equal(t, "priority", *logs.lastLog.ServiceTier)
-				require.InDelta(t, 4.4, logs.lastLog.ActualCost, 1e-12)
-			}
+			require.Equal(t, "priority", *logs.lastLog.ServiceTier)
+			require.InDelta(t, 4.4, logs.lastLog.ActualCost, 1e-12)
 		})
 	}
 }

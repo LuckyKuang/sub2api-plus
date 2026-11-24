@@ -13,4 +13,15 @@ describe('admin service tier locale keys', () => {
       serviceTierUnrecorded: 'Not recorded', serviceTierUnspecified: 'Unspecified', serviceTierNotReturned: 'Not returned',
     })
   })
+
+  it('labels the normalized billable tier in both cost tooltips', () => {
+    expect(zh.usage).toMatchObject({
+      billingServiceTier: '服务档位', billingServiceTierFast: 'Fast', billingServiceTierStandard: 'Standard',
+      billingServiceTierFlex: 'Flex', billingServiceTierUltrafast: 'Ultra Fast',
+    })
+    expect(en.usage).toMatchObject({
+      billingServiceTier: 'Service tier', billingServiceTierFast: 'Fast', billingServiceTierStandard: 'Standard',
+      billingServiceTierFlex: 'Flex', billingServiceTierUltrafast: 'Ultra Fast',
+    })
+  })
 })

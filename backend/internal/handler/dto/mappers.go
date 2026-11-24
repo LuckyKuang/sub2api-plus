@@ -743,6 +743,7 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		Model:                     requestedModel,
 		ReasoningEffort:           userFacingReasoningEffort(l),
 		RequestFastEnabled:        requestFastEnabled(l.RequestedServiceTier),
+		BillingServiceTier:        billingServiceTierForDisplay(l.ServiceTier),
 		InboundEndpoint:           l.InboundEndpoint,
 		GroupID:                   l.GroupID,
 		SubscriptionID:            l.SubscriptionID,
@@ -820,6 +821,29 @@ func requestFastEnabled(requestedTier *string) *bool {
 		return nil
 	}
 	return &enabled
+}
+
+// billingServiceTierForDisplay normalizes the persisted billable tier into the
+// provider-neutral values shown to users. Missing, empty, and unrecognized raw
+// values return nil so the console can omit the line instead of guessing a tier.
+func billingServiceTierForDisplay(tier *string) *string {
+	if tier == nil {
+		return nil
+	}
+	var normalized string
+	switch strings.ToLower(strings.TrimSpace(*tier)) {
+	case "priority", "fast":
+		normalized = "fast"
+	case "default", "standard", "auto", "scale":
+		normalized = "standard"
+	case "flex":
+		normalized = "flex"
+	case "ultrafast":
+		normalized = "ultrafast"
+	default:
+		return nil
+	}
+	return &normalized
 }
 
 // Stored evidence is internal data. Only the documented scalar selling-rate
