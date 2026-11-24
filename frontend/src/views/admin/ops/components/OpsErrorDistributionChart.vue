@@ -109,7 +109,7 @@ const options = computed(() => ({
 </script>
 
 <template>
-  <div class="glass-surface flex h-full flex-col p-6 ring-1 ring-gray-900/5 dark:ring-dark-700">
+  <div data-testid="ops-error-distribution-chart" class="glass-surface flex flex-col p-6 ring-1 ring-gray-900/5 md:h-full dark:ring-dark-700">
     <div class="mb-4 flex items-center justify-between">
       <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
         <svg class="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -134,9 +134,9 @@ const options = computed(() => ({
       </button>
     </div>
 
-    <div class="relative min-h-0 flex-1">
-      <div v-if="state === 'ready' && chartData" class="flex h-full flex-col">
-        <div class="flex-1">
+    <div class="relative md:flex-1 md:min-h-0">
+      <div v-if="state === 'ready' && chartData" class="flex flex-col md:h-full">
+        <div data-testid="ops-error-distribution-plot" class="ops-chart-plot md:flex-1 md:min-h-0">
           <Doughnut :data="chartData" :options="{ ...options, cutout: '65%' }" />
         </div>
         <div class="mt-4 flex flex-col items-center gap-2">
@@ -152,10 +152,29 @@ const options = computed(() => ({
         </div>
       </div>
 
-      <div v-else class="flex h-full items-center justify-center">
+      <div v-else class="flex min-h-[200px] items-center justify-center md:h-full md:min-h-0">
         <div v-if="state === 'loading'" class="animate-pulse text-sm text-gray-400">{{ t('common.loading') }}</div>
         <EmptyState v-else :title="t('common.noData')" :description="t('admin.ops.charts.emptyError')" />
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Phone: the plot owns a definite height so Chart.js cannot resize the page
+   from inside a content-sized card. Legend rows keep their natural height. */
+@media (max-width: 767.98px) {
+  .ops-chart-plot {
+    position: relative;
+    height: 200px;
+    flex: none;
+    min-width: 0;
+  }
+  .ops-chart-plot :deep(canvas) {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+  }
+}
+</style>

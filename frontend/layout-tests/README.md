@@ -72,6 +72,17 @@ Mobile subscription and payment-result cases at 320px and 390px check long
 unbroken names and order references inside their cards, including renewal and
 navigation action hit targets and real click destinations.
 
+The real administrator Ops Dashboard runs against intercepted ops APIs at
+428×745. It checks that the phone overview's health hover region ends inside
+its card and before the concurrency card, that the latency, error-distribution
+and error-trend charts each draw inside a 200 CSS px plot region whose canvas
+and document heights stay stable for twelve seconds (first with latency-only
+data, then after a refresh adds error data), and that the last chart card is
+reachable after reload, landscape rotation and return to portrait. Wide and
+fullscreen 1440px workspaces keep the three-up chart grid and error-detail
+actions. The plot height is the verified design value; total page height and
+hover geometry are read from the rendered elements rather than hard-coded.
+
 The motion projects use a separately production-built entrypoint through the
 application's PostCSS/Tailwind pipeline. Real dialog, drawer, announcement,
 header, subscription, version, select, checkbox, refresh and calendar controls
