@@ -294,7 +294,33 @@
         width="full"
         @close="closeConfiguration"
       >
+        <div v-if="isRequestOnlyPlugin(configPlugin)" class="space-y-3">
+          <p class="text-xs surface-muted">
+            {{ t("admin.plugins.requestConfigHint") }}
+          </p>
+          <textarea
+            v-model="requestConfigText"
+            class="input min-h-[420px] w-full font-mono text-xs"
+            spellcheck="false"
+            data-testid="plugin-request-config"
+          />
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn btn-secondary" @click="closeConfiguration">
+              {{ t("common.cancel") }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              :disabled="requestConfigSaving"
+              data-testid="plugin-request-config-save"
+              @click="saveRequestConfig"
+            >
+              {{ requestConfigSaving ? t("common.saving") : t("common.save") }}
+            </button>
+          </div>
+        </div>
         <div
+          v-else
           class="relative min-h-[520px] overflow-hidden surface-inset"
           :style="{ height: `${iframeHeight}px` }"
         >
@@ -376,6 +402,8 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const rolloutValues = ref<Record<number, number>>({});
 const configPlugin = ref<PluginInstallation | null>(null);
 const uiSession = ref<PluginUISession | null>(null);
+const requestConfigText = ref("");
+const requestConfigSaving = ref(false);
 const pluginFrame = ref<HTMLIFrameElement | null>(null);
 const uiLoading = ref(false);
 const uiError = ref("");
@@ -525,8 +553,30 @@ async function testPlugin(plugin: PluginInstallation): Promise<void> {
   }
 }
 
+function isRequestOnlyPlugin(plugin: PluginInstallation | null): boolean {
+  if (!plugin) return false;
+  const capabilities = plugin.manifest.capabilities || [];
+  return (
+    capabilities.some((capability) => capability.id === "request.instructions.prepend.v1") &&
+    !capabilities.some((capability) => capability.id === "openai.oauth.outbound_transport.v1")
+  );
+}
+
 async function openConfiguration(plugin: PluginInstallation): Promise<void> {
-  const version = ++uiSessionVersion;
+  if (isRequestOnlyPlugin(plugin)) {
+    configPlugin.value = plugin;
+    uiSession.value = null;
+    uiError.value = "";
+    requestConfigText.value = "";
+    try {
+      const config = await adminAPI.plugins.getConfig(plugin.id);
+      requestConfigText.value = JSON.stringify(config || {}, null, 2);
+    } catch (error: unknown) {
+      uiError.value = errorMessage(error);
+    }
+    return;
+  }
+	const version = ++uiSessionVersion;
   configPlugin.value = plugin;
   uiSession.value = null;
   pluginFrameLoaded.value = false;
@@ -545,8 +595,26 @@ async function openConfiguration(plugin: PluginInstallation): Promise<void> {
   }
 }
 
+async function saveRequestConfig(): Promise<void> {
+  if (!configPlugin.value) return;
+  requestConfigSaving.value = true;
+  try {
+    const parsed = JSON.parse(requestConfigText.value || "{}");
+    await pluginStepUp.run(() =>
+      adminAPI.plugins.saveConfig(configPlugin.value!.id, parsed),
+    );
+    appStore.showSuccess(t("admin.plugins.requestConfigSaved"));
+    closeConfiguration();
+    await loadPlugins();
+  } catch (error: unknown) {
+    reportSensitiveActionError(error);
+  } finally {
+    requestConfigSaving.value = false;
+  }
+}
+
 function closeConfiguration(): void {
-  uiSessionVersion++;
+	uiSessionVersion++;
   clearPendingBridgeRequests();
   pluginFrameLoaded.value = false;
   configPlugin.value = null;

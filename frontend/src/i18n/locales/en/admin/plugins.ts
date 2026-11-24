@@ -32,6 +32,8 @@ export default {
     error: 'Error',
     starting: 'Starting',
     configTitle: '{name} configuration',
+    requestConfigHint: 'This plugin provides only declarative request instructions. Edit the JSON rules below: default_text, platform_overrides and account_overrides. Text is injected before the caller instructions; no external process runs.',
+    requestConfigSaved: 'Request instruction rules saved',
     loadingUI: 'Loading plugin configuration UI...',
     uiUnavailable: 'Unable to load the plugin configuration UI',
     uploadSuccess: 'Plugin installed and kept disabled',

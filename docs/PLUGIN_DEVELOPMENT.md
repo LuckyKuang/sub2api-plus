@@ -140,7 +140,48 @@ UI 是插件包内的静态页面，不需要修改 Sub2API 前端源码。宿�
 }
 ```
 
-打包器会自动填充目标平台运行时、UI 和运行时文件的 SHA-256。清单中的 `requires.sub2api` 是硬兼容范围；`tested_sub2api_versions` 应只填写真实验证过的版本；`recommended_sub2api_version` 用于管理页面展示。当前宿主仅处理 `openai.oauth.outbound_transport.v1`，声明其他能力不会自动产生新路由。后续增加 Provider 支持时，会在协议、能力清单和宿主路由完成适配后，再补充对应的清单示例。
+打包器会自动填充目标平台运行时、UI 和运行时文件的 SHA-256。清单中的 `requires.sub2api` 是硬兼容范围；`tested_sub2api_versions` 应只填写真实验证过的版本；`recommended_sub2api_version` 用于管理页面展示。
+
+### 纯请求处理包（schema v2）
+
+声明式前置提示词使用 `schema_version: 2` 和 `request.instructions.prepend.v1`。纯请求包不包含运行时、UI 或文件哈希，宿主只解析签名清单并保存加密配置：
+
+```json
+{
+  "schema_version": 2,
+  "id": "example.prompt.stepfun",
+  "name": "StepFun prompt",
+  "version": "0.1.0",
+  "requires": {
+    "sub2api": ">=0.1.179 <0.2.0",
+    "tested_sub2api_versions": ["0.1.179"],
+    "plugin_protocol": 1,
+    "transport_api": 1,
+    "ui_bridge": 1
+  },
+  "capabilities": [
+    {
+      "id": "request.instructions.prepend.v1",
+      "platform": "stepfun",
+      "account_type": "oauth"
+    }
+  ]
+}
+```
+
+管理页对这类插件使用宿主 JSON 表单，配置格式为：
+
+```json
+{
+  "default_text": "默认使用中文回答。",
+  "platform_overrides": {"stepfun": "默认使用中文，保留产品英文名。"},
+  "account_overrides": [
+    {"platform": "stepfun", "account_type": "oauth", "text": "默认使用中文，保留 Step Plan 产品名。"}
+  ]
+}
+```
+
+取值优先级为精确平台+账号类型、平台、默认值；同一插件只取一条文本。多个插件的非空文本按稳定的插件/绑定顺序拼接。文本只在最终协议组包点插入，不执行模板、不读取变量、不访问网络。清单声明的平台和账号类型必须具体；纯请求包不能声明可执行载荷或动态 UI。当前传输能力仍只支持 `openai.oauth.outbound_transport.v1`。
 
 ## 7. 生成密钥并签名
 

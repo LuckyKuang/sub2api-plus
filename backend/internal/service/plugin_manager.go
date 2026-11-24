@@ -60,6 +60,7 @@ type PluginManager struct {
 	reconcileCancel    context.CancelFunc
 	reconcileDone      chan struct{}
 	route              atomic.Pointer[pluginRoute]
+	requestRules       atomic.Value // []pluginRequestRule
 }
 
 func NewPluginManager(repo PluginRepository, encryptor SecretEncryptor, cfg *config.Config, hostInfo PluginHostInfo, kvStore PluginKVStore) *PluginManager {
@@ -149,6 +150,15 @@ func (m *PluginManager) List(ctx context.Context) ([]*PluginInstallation, error)
 	route := m.route.Load()
 	for _, installation := range plugins {
 		installation.Compatibility = EvaluatePluginCompatibility(installation.Manifest, m.hostInfo)
+		if installation.Manifest.IsRequestOnly() {
+			installation.RuntimeHealthy = installation.State == PluginStateEnabled
+			if installation.RuntimeHealthy {
+				installation.RuntimeMessage = "声明式规则已启用"
+			} else {
+				installation.RuntimeMessage = "声明式规则未启用"
+			}
+			continue
+		}
 		if runtime := m.runtimes[installation.ID]; runtime != nil && !runtime.client.Exited() {
 			installation.RuntimeHealthy = true
 			installation.RuntimeMessage = "插件进程运行中"
@@ -168,6 +178,15 @@ func (m *PluginManager) Get(ctx context.Context, id int64) (*PluginInstallation,
 		return nil, err
 	}
 	installation.Compatibility = EvaluatePluginCompatibility(installation.Manifest, m.hostInfo)
+	if installation.Manifest.IsRequestOnly() {
+		installation.RuntimeHealthy = installation.State == PluginStateEnabled
+		if installation.RuntimeHealthy {
+			installation.RuntimeMessage = "声明式规则已启用"
+		} else {
+			installation.RuntimeMessage = "声明式规则未启用"
+		}
+		return installation, nil
+	}
 	m.mu.Lock()
 	runtime := m.runtimes[id]
 	m.mu.Unlock()
@@ -275,6 +294,7 @@ func (m *PluginManager) reconcileOnce(ctx context.Context) error {
 		return fmt.Errorf("读取插件启用状态: %w", err)
 	}
 	m.cleanupStaleLocalInstallations(installations)
+	m.publishRequestRules(installations)
 	var enabled *PluginInstallation
 	for _, installation := range installations {
 		if !hasEnabledOpenAIBinding(installation.Bindings) {
@@ -564,8 +584,10 @@ func (m *PluginManager) Enable(ctx context.Context, id int64, acceptUntested boo
 	if err != nil {
 		return nil, err
 	}
-	if active := m.route.Load(); active != nil && active.pluginID != id {
-		return nil, errors.New("OpenAI OAuth 出站能力已有启用插件，请先停用当前插件")
+	if manifestHasTransportCapability(installation.Manifest) {
+		if active := m.route.Load(); active != nil && active.pluginID != id {
+			return nil, errors.New("OpenAI OAuth 出站能力已有启用插件，请先停用当前插件")
+		}
 	}
 	if installation.State == PluginStateEnabled && hasEnabledOpenAIBinding(installation.Bindings) {
 		installation.Compatibility = EvaluatePluginCompatibility(installation.Manifest, m.hostInfo)
@@ -584,6 +606,9 @@ func (m *PluginManager) Enable(ctx context.Context, id int64, acceptUntested boo
 	}
 	if !compatibility.Tested && !acceptUntested {
 		return nil, errors.New("插件未声明已测试当前 Sub2API Plus 版本，需要管理员确认后启用")
+	}
+	if installation.Manifest.IsRequestOnly() {
+		return m.enableRequestOnlyPlugin(ctx, installation, compatibility, rolloutPercent)
 	}
 	installation, err = m.ensureLocalInstallation(ctx, installation)
 	if err != nil {
@@ -652,6 +677,7 @@ func (m *PluginManager) Disable(ctx context.Context, id int64) (*PluginInstallat
 	if runtime != nil {
 		runtime.drain(10 * time.Second)
 	}
+	m.refreshRequestRules(ctx)
 	return m.Get(ctx, id)
 }
 
@@ -721,6 +747,20 @@ func (m *PluginManager) SaveConfig(ctx context.Context, id int64, raw json.RawMe
 	canonical, err := json.Marshal(normalized)
 	if err != nil {
 		return nil, err
+	}
+	if installation.Manifest.IsRequestOnly() {
+		if _, err := validatePluginRequestInstructionConfig(canonical); err != nil {
+			return nil, err
+		}
+		encrypted, err := m.encryptor.Encrypt(string(canonical))
+		if err != nil {
+			return nil, fmt.Errorf("加密插件配置: %w", err)
+		}
+		if err := m.repo.UpdateConfig(ctx, id, encrypted, installation.BinarySHA256); err != nil {
+			return nil, err
+		}
+		m.refreshRequestRules(ctx)
+		return canonical, nil
 	}
 	m.mu.Lock()
 	runtime := m.runtimes[id]
@@ -793,6 +833,12 @@ func (m *PluginManager) Test(ctx context.Context, id int64) (*pluginv1.TestConfi
 	if err != nil {
 		return nil, err
 	}
+	if installation.Manifest.IsRequestOnly() {
+		if _, err := validatePluginRequestInstructionConfig(configJSON); err != nil {
+			return nil, err
+		}
+		return &pluginv1.TestConfigResponse{Success: true, Message: "声明式请求规则配置有效"}, nil
+	}
 	m.mu.Lock()
 	runtime := m.runtimes[id]
 	m.mu.Unlock()
@@ -825,8 +871,17 @@ func (m *PluginManager) Test(ctx context.Context, id int64) (*pluginv1.TestConfi
 // running simply reports "not running" with no status blob. This makes it safe to
 // serve from a lightweight, ungated, read-only endpoint used for status polling.
 func (m *PluginManager) Status(ctx context.Context, id int64) (*pluginv1.HealthResponse, error) {
-	if _, err := m.repo.GetByID(ctx, id); err != nil {
+	installation, err := m.repo.GetByID(ctx, id)
+	if err != nil {
 		return nil, err
+	}
+	if installation.Manifest.IsRequestOnly() {
+		healthy := installation.State == PluginStateEnabled
+		message := "声明式规则未启用"
+		if healthy {
+			message = "声明式规则已启用"
+		}
+		return &pluginv1.HealthResponse{Healthy: healthy, Message: message}, nil
 	}
 	m.mu.Lock()
 	runtime := m.runtimes[id]

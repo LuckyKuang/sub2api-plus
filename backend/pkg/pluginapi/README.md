@@ -19,9 +19,11 @@
 
 独立进程是代码和发布边界，不是操作系统安全沙箱。插件拥有 Sub2API 服务用户所拥有的文件和网络权限，因此只应安装可信发布者的签名包。闭源二进制可提高源码分发门槛，但不能承诺无法反编译。
 
-## 初期能力边界
+## 能力边界
 
-当前只接受 `openai.oauth.outbound_transport.v1`：
+当前接受两种能力：
+
+### `openai.oauth.outbound_transport.v1`
 
 - 仅匹配 `platform=openai` 且 `account_type=oauth` 的上游 HTTP 请求。
 - API Key 账号、其他 provider、OAuth 登录与 Token 刷新流程不进入插件。
@@ -29,6 +31,14 @@
 - 命中插件的 OAuth WebSocket 账号会使用 Sub2API 现有 HTTP Bridge，不直接建立上游 WebSocket，避免绕过 v1 HTTP 插件协议。
 - Sub2API 继续负责响应状态处理、SSE 解析、错误映射、用量统计、计费和下游输出。
 - 灰度比例以账号 ID 稳定分桶，未命中的 OAuth 账号继续使用原有内置路径。
+
+### `request.instructions.prepend.v1`
+
+- 需要清单 `schema_version: 2`，按 `platform + account_type (oauth/apikey)` 声明。
+- 纯请求包只包含签名清单，不包含运行时、UI 或可执行文件；宿主不会启动外部进程。
+- 规则保存在插件加密配置中：`default_text`、`platform_overrides`、`account_overrides`，取值优先级为精确账号类型 > 平台 > 默认。
+- 宿主在最终协议组包点把文本插入指令槽：Chat 的 system/developer、Responses 的 `instructions`、Anthropic 的 `system`、Gemini 的 `systemInstruction.parts`。
+- 灰度比例按账号 ID 稳定分桶；同一次请求每个插件只取一条文本，多个插件按稳定的插件/绑定顺序拼接。
 
 ## 宿主服务（HostService）
 

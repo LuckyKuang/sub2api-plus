@@ -32,6 +32,8 @@ export default {
     error: '异常',
     starting: '启动中',
     configTitle: '{name} 配置',
+    requestConfigHint: '该插件只提供声明式请求指令。请编辑下方 JSON：default_text、platform_overrides 和 account_overrides。文本会插在调用方指令之前，不会启动外部进程。',
+    requestConfigSaved: '请求指令规则已保存',
     loadingUI: '正在加载插件配置界面...',
     uiUnavailable: '无法加载插件配置界面',
     uploadSuccess: '插件安装成功，当前保持停用',

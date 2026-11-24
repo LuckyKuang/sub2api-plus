@@ -11,11 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/LuckyKuang/sub2api-plus/internal/domain"
 	pluginv1 "github.com/LuckyKuang/sub2api-plus/pkg/pluginapi/v1"
 )
 
 const (
 	PluginCapabilityOpenAIOAuthOutbound = "openai.oauth.outbound_transport.v1"
+	PluginCapabilityRequestInstructions = "request.instructions.prepend.v1"
 	PluginStateDisabled                 = "disabled"
 	PluginStateStarting                 = "starting"
 	PluginStateEnabled                  = "enabled"
@@ -145,7 +147,7 @@ func (m PluginManifest) RuntimeKey() string {
 }
 
 func (m PluginManifest) Validate() error {
-	if m.SchemaVersion != 1 {
+	if m.SchemaVersion != 1 && m.SchemaVersion != 2 {
 		return fmt.Errorf("不支持的插件清单版本: %d", m.SchemaVersion)
 	}
 	if !pluginIDPattern.MatchString(m.ID) || len(m.ID) > 160 {
@@ -168,10 +170,41 @@ func (m PluginManifest) Validate() error {
 	if len(m.Capabilities) == 0 {
 		return errors.New("插件必须声明至少一个能力")
 	}
+	hasTransport := false
+	hasRequest := false
+	seenRequestScopes := make(map[string]struct{}, len(m.Capabilities))
 	for _, capability := range m.Capabilities {
-		if capability.ID != PluginCapabilityOpenAIOAuthOutbound || capability.Platform != PlatformOpenAI || capability.AccountType != AccountTypeOAuth {
-			return fmt.Errorf("初期仅支持能力 %s", PluginCapabilityOpenAIOAuthOutbound)
+		switch capability.ID {
+		case PluginCapabilityOpenAIOAuthOutbound:
+			if capability.Platform != PlatformOpenAI || capability.AccountType != AccountTypeOAuth {
+				return fmt.Errorf("能力 %s 仅支持 OpenAI OAuth", capability.ID)
+			}
+			hasTransport = true
+		case PluginCapabilityRequestInstructions:
+			if m.SchemaVersion != 2 {
+				return fmt.Errorf("能力 %s 需要插件清单版本 2", capability.ID)
+			}
+			if !domain.IsConcretePlatform(capability.Platform) {
+				return fmt.Errorf("请求处理能力需要具体平台: %s", capability.Platform)
+			}
+			if capability.AccountType != AccountTypeOAuth && capability.AccountType != AccountTypeAPIKey {
+				return fmt.Errorf("请求处理能力仅支持 oauth 或 apikey: %s", capability.AccountType)
+			}
+			scope := capability.Platform + "/" + capability.AccountType
+			if _, exists := seenRequestScopes[scope]; exists {
+				return fmt.Errorf("请求处理能力重复声明: %s/%s", capability.Platform, capability.AccountType)
+			}
+			seenRequestScopes[scope] = struct{}{}
+			hasRequest = true
+		default:
+			return fmt.Errorf("不支持的能力: %s", capability.ID)
 		}
+	}
+	if hasRequest && !hasTransport {
+		if len(m.Runtimes) > 0 || strings.TrimSpace(m.UI.Entrypoint) != "" || len(m.Files) > 0 {
+			return errors.New("纯请求处理插件不能包含运行时、UI 或可执行文件")
+		}
+		return nil
 	}
 	runtimeEntry, ok := m.Runtimes[m.RuntimeKey()]
 	if !ok || !safePluginRelativePath(runtimeEntry.Path) {
@@ -201,6 +234,32 @@ func safePluginRelativePath(path string) bool {
 	cleaned := strings.ReplaceAll(strings.TrimSpace(path), "\\", "/")
 	return cleaned != "" && cleaned != "." && !strings.HasPrefix(cleaned, "/") &&
 		!strings.HasPrefix(cleaned, "../") && !strings.Contains(cleaned, "/../") && cleaned == strings.TrimPrefix(cleaned, "./")
+}
+
+// IsRequestOnly reports whether the package provides only declarative request
+// instructions and therefore never starts an external runtime.
+func (m PluginManifest) IsRequestOnly() bool {
+	hasRequest := false
+	for _, capability := range m.Capabilities {
+		switch capability.ID {
+		case PluginCapabilityRequestInstructions:
+			hasRequest = true
+		case PluginCapabilityOpenAIOAuthOutbound:
+			return false
+		}
+	}
+	return hasRequest && len(m.Runtimes) == 0 && strings.TrimSpace(m.UI.Entrypoint) == ""
+}
+
+// HasRequestInstructions reports whether the package declares the request
+// instruction capability for any platform or account type.
+func (m PluginManifest) HasRequestInstructions() bool {
+	for _, capability := range m.Capabilities {
+		if capability.ID == PluginCapabilityRequestInstructions {
+			return true
+		}
+	}
+	return false
 }
 
 func (m PluginManifest) MarshalJSONBytes() ([]byte, error) {
