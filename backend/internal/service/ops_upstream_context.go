@@ -501,6 +501,12 @@ type OpsUpstreamErrorEvent struct {
 	TimeToFirstTokenMs      *int64 `json:"time_to_first_token_ms,omitempty"`
 	AtUnixMs                int64  `json:"at_unix_ms,omitempty"`
 
+	// ReportedHeaders are the request headers this attempt sent upstream that
+	// were produced by header-override variables ({{user_id}} etc.), keyed by
+	// lowercase header name. Only variable-driven headers are captured: static
+	// override values may hold relay secrets and must never be logged here.
+	ReportedHeaders map[string]string `json:"reported_headers,omitempty"`
+
 	// Passthrough 表示本次请求是否命中“原样透传（仅替换认证）”分支。
 	// 该字段用于排障与灰度评估；存入 JSON，不涉及 DB schema 变更。
 	Passthrough bool `json:"passthrough,omitempty"`
@@ -578,6 +584,9 @@ func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
 	ev.Detail = strings.TrimSpace(ev.Detail)
 	if ev.Message != "" {
 		ev.Message = sanitizeUpstreamErrorMessage(ev.Message)
+	}
+	if ev.ReportedHeaders == nil && c.Request != nil {
+		ev.ReportedHeaders = headerOverrideReportedHeaders(c.Request.Context(), ev.AccountID)
 	}
 
 	var existing []*OpsUpstreamErrorEvent

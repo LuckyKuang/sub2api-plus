@@ -2515,7 +2515,7 @@ func TestNormalizeOpenAIWSHandshakeCompatibilityUsesFinalStableCarriers(t *testi
 	headers.Set("x-client-request-id", "owner-thread")
 	headers.Set("x-codex-window-id", "owner-thread:0")
 
-	compatibility := normalizeOpenAIWSHandshakeCompatibility(headers)
+	compatibility := normalizeOpenAIWSHandshakeCompatibility(nil, headers)
 	require.Equal(t, "plus-cache-session", compatibility.sessionIdentity)
 	require.Equal(t, "owner-installation", compatibility.codexInstallationID)
 	require.Equal(t, "owner-thread", compatibility.threadID)
@@ -2524,13 +2524,13 @@ func TestNormalizeOpenAIWSHandshakeCompatibilityUsesFinalStableCarriers(t *testi
 
 	legacySessionAlias := headers.Clone()
 	legacySessionAlias.Del("session-id")
-	require.Equal(t, compatibility, normalizeOpenAIWSHandshakeCompatibility(legacySessionAlias))
+	require.Equal(t, compatibility, normalizeOpenAIWSHandshakeCompatibility(nil, legacySessionAlias))
 
 	changedThread := headers.Clone()
 	changedThread.Set("thread-id", "another-client-thread")
-	require.NotEqual(t, compatibility, normalizeOpenAIWSHandshakeCompatibility(changedThread))
+	require.NotEqual(t, compatibility, normalizeOpenAIWSHandshakeCompatibility(nil, changedThread))
 
 	changedInstallation := headers.Clone()
 	changedInstallation.Set("x-codex-installation-id", "another-client-installation")
-	require.NotEqual(t, compatibility, normalizeOpenAIWSHandshakeCompatibility(changedInstallation))
+	require.NotEqual(t, compatibility, normalizeOpenAIWSHandshakeCompatibility(nil, changedInstallation))
 }

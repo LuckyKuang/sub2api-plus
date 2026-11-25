@@ -269,7 +269,8 @@ func modelProtocolCatalogHeaders(ctx context.Context, account *Account) http.Hea
 	if apiKey := strings.TrimSpace(account.GetOpenAIProtocolAPIKey()); apiKey != "" {
 		headers.Set("Authorization", "Bearer "+apiKey)
 	}
-	account.ApplyHeaderOverrides(headers)
+	// 目录是账号级共享缓存，由后台刷新：不携带任何用户身份，含变量的覆写头不发送。
+	account.ApplyHeaderOverrides(context.Background(), headers)
 	ApplyAccountOutboundHeaders(ctx, account, headers)
 	return headers
 }

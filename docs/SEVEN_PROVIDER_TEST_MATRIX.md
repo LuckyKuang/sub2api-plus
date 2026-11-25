@@ -1,5 +1,40 @@
 # Seven-provider business regression matrix
 
+## v0.2.25 import requirements
+
+- OpenAI. `TestAnthropicUpstreamBuildersReportIdentity` drives the production
+  Anthropic forward and API-key passthrough builders from a middleware-created
+  scope and verifies the expanded headers, the removal of forged client headers
+  and the no-scope drop. `TestOpenAIWSHandshakeCompatibilitySeparatesReportedIdentity`
+  proves that two users never reuse one pooled handshake and that identity-less
+  prewarms are not reused for a user. Ops capture is pinned by
+  `TestAppendOpsUpstreamErrorCapturesReportedHeaders`, which also proves static
+  override values never enter the log; `TestHeaderOverrideReportedHeadersRedactLiterals`
+  covers mixed templates and `TestHeaderOverrideRequestIDIsClientControlledAndSanitized`
+  covers client-supplied request IDs. Passthrough client errors keep the audited
+  catalog while redacting the configured base-URL host and API key
+  (`TestSanitizeOpenAIPassthroughClientErrorTextRedactsAccountSecrets`), bound
+  `type`/`code`/`param` to scalars
+  (`TestOpenAIPassthroughClientErrorFieldRejectsNonScalarsAndOversizedValues`),
+  and return `invalid_encrypted_content` through the catalog
+  (`TestIsOpenAIInvalidEncryptedContentError`,
+  `TestWriteOpenAIUpstreamClientErrorKeepsEnvelopeScalar`).
+- xAI. Grok API-key and OAuth accounts keep their existing override eligibility;
+  only API-key accounts resolve variables, so OAuth subscription traffic never
+  receives gateway user identity. Grok media, audio and quota builders pass the
+  request context unchanged.
+- DeepSeek and Kimi. Shared header-override and passthrough paths run the same
+  cases; their protocol adapters and canonical ingress audit order are unchanged.
+  The admin save path rejects variable templates for every non-API-key type,
+  including a type-only update that carries no credentials.
+- MiniMax, StepFun and Zhipu. Shared ingress, override and error paths run the
+  existing identity, proxy, failover, streaming and settlement cases. The import
+  establishes no new live-provider entitlement.
+- Rejected cluster. The upstream-group synchronization and billing-probe commits
+  are excluded because Plus retired that capability; the gate must continue to
+  show no `/v1/sub2api/billing` route and no probe write-back into
+  `accounts.rate_multiplier`.
+
 ## v0.2.24 import requirements
 
 - OpenAI. The rotation tests cover a completed OAuth rotation followed by a

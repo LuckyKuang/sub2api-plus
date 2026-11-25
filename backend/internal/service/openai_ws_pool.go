@@ -99,6 +99,9 @@ type openAIWSHandshakeCompatibilityKey struct {
 	threadID             string
 	clientRequestID      string
 	codexWindowID        string
+	// reportedIdentity 是握手头中由请求头覆写变量（{{user_id}} 等）生成的部分。
+	// 握手头建连后不可变，上报身份不同的请求绝不能共用连接，否则用户会被张冠李戴。
+	reportedIdentity string
 }
 
 type openAIWSConnLease struct {
@@ -2395,7 +2398,7 @@ func sameOpenAIWSPrewarmTarget(a, b openAIWSAcquireRequest) bool {
 }
 
 func (req openAIWSAcquireRequest) handshakeCompatibility() openAIWSHandshakeCompatibilityKey {
-	key := normalizeOpenAIWSHandshakeCompatibility(req.Headers)
+	key := normalizeOpenAIWSHandshakeCompatibility(req.Account, req.Headers)
 	key.credentialGeneration = req.credentialGeneration
 	return key
 }
@@ -2425,13 +2428,14 @@ func normalizeOpenAIWSBetaFeatures(headers http.Header) string {
 	return strings.Join(normalized, ",")
 }
 
-func normalizeOpenAIWSHandshakeCompatibility(headers http.Header) openAIWSHandshakeCompatibilityKey {
+func normalizeOpenAIWSHandshakeCompatibility(account *Account, headers http.Header) openAIWSHandshakeCompatibilityKey {
 	key := openAIWSHandshakeCompatibilityKey{
-		betaFeatures:    normalizeOpenAIWSBetaFeatures(headers),
-		sessionIdentity: normalizeOpenAIWSSessionIdentity(headers),
-		userAgent:       firstOpenAIWSHeaderValue(headers, "User-Agent"),
-		originator:      firstOpenAIWSHeaderValue(headers, "Originator"),
-		version:         firstOpenAIWSHeaderValue(headers, "Version"),
+		betaFeatures:     normalizeOpenAIWSBetaFeatures(headers),
+		reportedIdentity: account.headerOverrideReportedIdentity(headers),
+		sessionIdentity:  normalizeOpenAIWSSessionIdentity(headers),
+		userAgent:        firstOpenAIWSHeaderValue(headers, "User-Agent"),
+		originator:       firstOpenAIWSHeaderValue(headers, "Originator"),
+		version:          firstOpenAIWSHeaderValue(headers, "Version"),
 	}
 	// Compare stable values from the final handshake. In off/device mode the
 	// remaining values are client-owned, but a pooled connection still cannot
