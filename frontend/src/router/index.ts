@@ -1003,16 +1003,9 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
-  const context = requiresAdmin && authStore.isAdmin && supportResource && supportTarget !== null
-    ? { userId: supportTarget, actorId: authStore.user!.id } : null
-  if (context?.userId !== adminSupportContext.value?.userId || context?.actorId !== adminSupportContext.value?.actorId) {
-    setAdminSupportContext(context)
-    useSubscriptionStore().clear()
-    useAdminSupportViewStore().clearTarget()
-  }
-  if (context && useAdminSupportViewStore().target?.id !== context.userId) {
-    try { await useAdminSupportViewStore().loadTarget(context.userId) } catch { /* The shared view renders the read error and retry. */ }
-  }
+  // The support context is committed only after this navigation is confirmed.
+  // A cancelled, failed or superseded navigation must keep the previous route's
+  // read identity; see the afterEach commit below.
 
   if (requiresAdmin && authStore.isAdmin) {
     const adminComplianceStore = useAdminComplianceStore()
@@ -1129,6 +1122,23 @@ router.beforeEach(async (to, _from, next) => {
  * Navigation guard: End loading and trigger prefetch
  */
 router.afterEach((to) => {
+  // Commit the assistance scope only for the confirmed route. Candidate reads
+  // start after this point and cannot leak into a superseded page.
+  const authStore = useAuthStore()
+  const supportResource = to.meta.adminSupportResource as AdminSupportResource | undefined
+  const targetUserId = supportResource ? parseAdminSupportTargetId(to.params.user_id) : null
+  const actorId = authStore.user?.id
+  const context = authStore.isAdmin && supportResource && targetUserId !== null && actorId !== undefined && targetUserId !== actorId
+    ? { userId: targetUserId, actorId }
+    : null
+  if (context?.userId !== adminSupportContext.value?.userId || context?.actorId !== adminSupportContext.value?.actorId) {
+    setAdminSupportContext(context)
+    useSubscriptionStore().clear()
+    useAdminSupportViewStore().clearTarget()
+  }
+  if (context && useAdminSupportViewStore().target?.id !== context.userId) {
+    void useAdminSupportViewStore().loadTarget(context.userId).catch(() => undefined)
+  }
   // 结束导航加载状态
   navigationLoading.endNavigation()
 

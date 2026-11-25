@@ -5,7 +5,7 @@ import { catalogModels } from '../catalog'
 import { group, offer, pricing } from './catalogFixtures'
 
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string, params?: object) => key + (params ? JSON.stringify(params) : '') }) }))
-const copy = vi.hoisted(() => vi.fn())
+const copy = vi.hoisted(() => vi.fn().mockResolvedValue(true))
 vi.mock('@/composables/useClipboard', () => ({ useClipboard: () => ({ copyToClipboard: copy }) }))
 const stubs = { BaseDialog: { props: ['title'], template: '<div :aria-label="title"><slot /></div>' }, PlatformIcon: true, Icon: true }
 

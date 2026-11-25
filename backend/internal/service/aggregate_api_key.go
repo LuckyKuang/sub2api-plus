@@ -160,7 +160,7 @@ func (s *APIKeyService) BindAggregateGroup(ctx context.Context, key *APIKey, mod
 			if routing := group.GetRoutingAccountIDs(model); len(routing) > 0 && !slices.Contains(routing, account.ID) {
 				continue
 			}
-			if model != "" && !aggregateAccountModelAllowed(account, mapped) {
+			if model != "" && !aggregateAccountModelAllowed(ctx, account, mapped) {
 				continue
 			}
 			if protocol != "" && !slices.Contains(account.NativeProtocols(account.GetMappedModel(mapped)), protocol) {
@@ -199,7 +199,7 @@ func (s *APIKeyService) aggregateCandidates(ctx context.Context, group *Group) (
 	}), nil
 }
 
-func aggregateAccountModelAllowed(account *Account, model string) bool {
+func aggregateAccountModelAllowed(ctx context.Context, account *Account, model string) bool {
 	if !account.IsModelSupported(model) {
 		return false
 	}
@@ -210,12 +210,28 @@ func aggregateAccountModelAllowed(account *Account, model string) bool {
 		_, ok := snapshot.Models[model]
 		return ok
 	}
+	normalized := normalizeRequestedModelForLookup(account.Platform, model)
+	if account.Platform == PlatformZhipu {
+		// A current Start-plan observation proves the same model on this
+		// account; expired or identity-mismatched observations do not.
+		for _, id := range startPlanPublicModelIDs(ctx, account) {
+			if strings.EqualFold(strings.TrimSpace(id), normalized) {
+				return true
+			}
+		}
+	}
 	// Empty mappings are permissive inside a group; cross-group routing needs
 	// positive catalog evidence instead of sending every alias to the first pool.
-	return slices.Contains(aggregateAccountModels(account), normalizeRequestedModelForLookup(account.Platform, model))
+	return slices.Contains(aggregateAccountModels(ctx, account), normalized)
 }
 
-func aggregateAccountModels(account *Account) []string {
+// AccountModelEvidenceAllows exposes the same per-account evidence rule to
+// capability discovery, where a commercial catalog entry alone is not proof.
+func AccountModelEvidenceAllows(ctx context.Context, account *Account, model string) bool {
+	return aggregateAccountModelAllowed(ctx, account, model)
+}
+
+func aggregateAccountModels(ctx context.Context, account *Account) []string {
 	if mapping := account.GetModelMapping(); len(mapping) > 0 {
 		var ids []string
 		wildcard := false
@@ -227,14 +243,14 @@ func aggregateAccountModels(account *Account) []string {
 			}
 		}
 		if wildcard {
-			ids = append(ids, aggregateDefaultAccountModels(account)...)
+			ids = append(ids, aggregateDefaultAccountModels(ctx, account)...)
 		}
 		return ids
 	}
-	return aggregateDefaultAccountModels(account)
+	return aggregateDefaultAccountModels(ctx, account)
 }
 
-func aggregateDefaultAccountModels(account *Account) []string {
+func aggregateDefaultAccountModels(ctx context.Context, account *Account) []string {
 	if snapshot := account.GetUpstreamModelMetadataSnapshot(); snapshot != nil {
 		var ids []string
 		for id := range snapshot.Models {
@@ -282,7 +298,7 @@ func (s *APIKeyService) AggregateNativeModels(ctx context.Context, key *APIKey) 
 		}
 		for j := range accounts {
 			account := &accounts[j]
-			models := aggregateAccountModels(account)
+			models := aggregateAccountModels(ctx, account)
 			if cache := key.aggregateChannelCache; cache != nil {
 				if channel := cache.channelByGroupID[group.ID]; channel != nil {
 					for model := range channel.ModelMapping[group.Platform] {
@@ -294,7 +310,7 @@ func (s *APIKeyService) AggregateNativeModels(ctx context.Context, key *APIKey) 
 			}
 			for _, model := range models {
 				mapped, restricted := aggregateMappedModel(key, group, model)
-				if restricted || !group.ModelAllowlist.Allows(model) || !aggregateAccountModelAllowed(account, mapped) {
+				if restricted || !group.ModelAllowlist.Allows(model) || !aggregateAccountModelAllowed(ctx, account, mapped) {
 					continue
 				}
 				if routing := group.GetRoutingAccountIDs(model); len(routing) > 0 && !slices.Contains(routing, account.ID) {

@@ -1,4 +1,5 @@
 import { apiClient } from './client'
+import { buildGatewayUrl } from './url'
 import type { ApiKey } from '@/types'
 
 export type KeyTestProtocol = 'responses' | 'chat' | 'messages' | 'gemini'
@@ -67,8 +68,11 @@ export const KEY_TEST_MAX_TOKENS = 128
 export const KEY_TEST_TIMEOUT_MS = 60_000
 
 export function normalizeGatewayRoot(baseUrl: string): string {
-  const fallback = typeof window !== 'undefined' ? window.location.origin : ''
-  return (baseUrl || fallback)
+  // An explicit public gateway wins. Without one, resolve the gateway origin
+  // from the configured API backend origin, not from the console's origin.
+  const explicit = (baseUrl || '').trim()
+  const fallback = buildGatewayUrl('/')
+  return (explicit || fallback)
     .trim()
     .replace(/\/+$/, '')
     .replace(/\/(?:v1|v1beta)$/i, '')

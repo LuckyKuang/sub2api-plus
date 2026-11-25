@@ -21,15 +21,24 @@ const codexSafetyBufferingRefreshInterval = time.Second
 // Reads on the output path are atomic. The mutex orders database refreshes
 // against successful writes so an older refresh cannot overwrite a new save.
 type codexSafetyBufferingRuntime struct {
-	mu             sync.Mutex
-	enabled        atomic.Bool
-	errorMessages  atomic.Bool
-	errorOverrides atomic.Value // map[string]string
-	initialized    atomic.Bool
-	start          sync.Once
-	bus            InvalidationBus
-	cancel         context.CancelFunc
-	workers        sync.WaitGroup
+	mu      sync.Mutex
+	enabled atomic.Bool
+	// publicErrors stores one immutable codexPublicErrorSettings. Mode and
+	// overrides are always replaced together so readers cannot observe fields
+	// from two revisions.
+	publicErrors atomic.Value
+	initialized  atomic.Bool
+	start        sync.Once
+	bus          InvalidationBus
+	cancel       context.CancelFunc
+	workers      sync.WaitGroup
+}
+
+func defaultCodexPublicErrorSettings() codexPublicErrorSettings {
+	return codexPublicErrorSettings{
+		overrides: map[string]string{},
+		revision:  codexPublicErrorRevision(false, nil),
+	}
 }
 
 func (s *SettingService) CodexSafetyBufferingSuppressed(ctx context.Context) bool {
@@ -46,10 +55,7 @@ func (s *SettingService) OpenAIErrorMessagesNormalized(ctx context.Context) bool
 	if s == nil {
 		return false
 	}
-	if !s.codexSafetyBuffering.initialized.Load() {
-		s.refreshCodexSafetyBuffering(ctx)
-	}
-	return s.codexSafetyBuffering.errorMessages.Load()
+	return s.codexPublicErrorSettings(ctx).customEnabled
 }
 
 func (s *SettingService) refreshCodexSafetyBuffering(ctx context.Context) {
@@ -65,6 +71,31 @@ func (s *SettingService) refreshCodexSafetyBuffering(ctx context.Context) {
 	if s.settingRepo == nil {
 		return
 	}
+	next, ok := s.readCodexPublicErrorSettingsLocked(ctx)
+	if !ok {
+		return
+	}
+	values := next.values
+	if raw := values[SettingKeyOpenAICodexSafetyBufferingSuppressed]; raw != "" && raw != "true" && raw != "false" {
+		slog.Warn("invalid OpenAI output setting", "stage", "settings_refresh", "code", "codex_safety_buffering_setting_invalid", "setting", SettingKeyOpenAICodexSafetyBufferingSuppressed)
+	} else {
+		runtime.enabled.Store(raw == "true")
+	}
+	runtime.publicErrors.Store(next.settings)
+}
+
+type codexPublicErrorReadResult struct {
+	settings codexPublicErrorSettings
+	values   map[string]string
+}
+
+// readCodexPublicErrorSettingsLocked reads mode and overrides as one snapshot.
+// Malformed storage retains the last complete valid snapshot instead of mixing
+// a new mode with old overrides.
+func (s *SettingService) readCodexPublicErrorSettingsLocked(ctx context.Context) (codexPublicErrorReadResult, bool) {
+	if s == nil || s.settingRepo == nil {
+		return codexPublicErrorReadResult{}, false
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -72,33 +103,22 @@ func (s *SettingService) refreshCodexSafetyBuffering(ctx context.Context) {
 	defer cancel()
 	values, err := s.settingRepo.GetMultiple(readCtx, []string{SettingKeyOpenAICodexSafetyBufferingSuppressed, SettingKeyOpenAIErrorMessagesNormalized, SettingKeyOpenAIErrorMessageOverrides})
 	if err != nil {
-		if ctx.Err() != nil {
-			return
+		if ctx.Err() == nil {
+			slog.Warn("codex safety buffering setting refresh failed", "stage", "settings_refresh", "code", "codex_safety_buffering_setting_read_failed")
 		}
-		slog.Warn("codex safety buffering setting refresh failed", "stage", "settings_refresh", "code", "codex_safety_buffering_setting_read_failed")
-		return
+		return codexPublicErrorReadResult{}, false
 	}
-	for key, target := range map[string]*atomic.Bool{
-		SettingKeyOpenAICodexSafetyBufferingSuppressed: &runtime.enabled,
-		SettingKeyOpenAIErrorMessagesNormalized:        &runtime.errorMessages,
-	} {
-		raw := values[key]
-		if raw != "" && raw != "true" && raw != "false" {
-			code := "codex_safety_buffering_setting_invalid"
-			if key == SettingKeyOpenAIErrorMessagesNormalized {
-				code = "openai_error_message_setting_invalid"
-			}
-			slog.Warn("invalid OpenAI output setting", "stage", "settings_refresh", "code", code, "setting", key)
-			continue
-		}
-		target.Store(raw == "true")
+	rawMode := values[SettingKeyOpenAIErrorMessagesNormalized]
+	if rawMode != "" && rawMode != "true" && rawMode != "false" {
+		slog.Warn("invalid OpenAI output setting", "stage", "settings_refresh", "code", "openai_error_message_setting_invalid", "setting", SettingKeyOpenAIErrorMessagesNormalized)
+		return codexPublicErrorReadResult{}, false
 	}
-	overrides, parseErr := parseCodexPublicErrorOverrides(values[SettingKeyOpenAIErrorMessageOverrides])
-	if parseErr != nil {
+	settings, err := codexPublicErrorSettingsFromValues(values)
+	if err != nil {
 		slog.Warn("invalid OpenAI error message overrides", "stage", "settings_refresh", "code", "openai_error_message_overrides_invalid")
-	} else {
-		runtime.errorOverrides.Store(overrides)
+		return codexPublicErrorReadResult{}, false
 	}
+	return codexPublicErrorReadResult{settings: settings, values: values}, true
 }
 
 // StartCodexSafetyBufferingRuntime reuses the host invalidation bus. Periodic
@@ -176,20 +196,33 @@ func (s *SettingService) persistSystemSettingsWithCodexSafetyBuffering(ctx conte
 	runtime.mu.Lock()
 	err := s.persistSystemSettingsUpdates(ctx, settings, updates)
 	changed := false
+	refreshPublicErrors := false
 	if err == nil {
-		for key, target := range map[string]*atomic.Bool{
-			SettingKeyOpenAICodexSafetyBufferingSuppressed: &runtime.enabled,
-			SettingKeyOpenAIErrorMessagesNormalized:        &runtime.errorMessages,
-		} {
-			if value, ok := updates[key]; ok {
-				target.Store(value == "true")
-				changed = true
+		current, _ := runtime.publicErrors.Load().(codexPublicErrorSettings)
+		if raw, ok := updates[SettingKeyOpenAICodexSafetyBufferingSuppressed]; ok {
+			changed = true
+			if raw == "" || raw == "true" || raw == "false" {
+				runtime.enabled.Store(raw == "true")
 			}
 		}
-		if raw, ok := updates[SettingKeyOpenAIErrorMessageOverrides]; ok {
-			if overrides, parseErr := parseCodexPublicErrorOverrides(raw); parseErr == nil {
-				runtime.errorOverrides.Store(overrides)
-				changed = true
+		if raw, ok := updates[SettingKeyOpenAIErrorMessagesNormalized]; ok {
+			changed = true
+			// The generic form always submits the legacy boolean. Only an actual
+			// mode change needs the full re-read; the dedicated UI omits it.
+			if (raw == "true") != current.customEnabled {
+				refreshPublicErrors = true
+			}
+		}
+		if _, ok := updates[SettingKeyOpenAIErrorMessageOverrides]; ok {
+			changed = true
+			refreshPublicErrors = true
+		}
+		if refreshPublicErrors {
+			// The generic settings form shares the same runtime snapshot as the
+			// dedicated endpoint. Re-read all fields together so a legacy mode
+			// write cannot pair with stale overrides.
+			if !s.storeCodexPublicErrorSnapshotLocked(ctx) {
+				slog.Warn("codex safety buffering runtime refresh after write failed", "stage", "settings_publish", "code", "codex_safety_buffering_setting_refresh_failed")
 			}
 		}
 	}

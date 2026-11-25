@@ -45,6 +45,18 @@
             "additionalProperties": false,
             "required": ["id", "platform", "account_type"],
             "properties": {
+              "id": { "const": "outbound.transport.v1" },
+              "platform": {
+                "enum": ["anthropic", "openai", "gemini", "antigravity", "grok", "kimi", "zhipu", "deepseek", "minimax", "stepfun", "opencode_go", "typesafe", "command_code", "cline"]
+              },
+              "account_type": { "enum": ["oauth", "apikey"] }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "platform", "account_type"],
+            "properties": {
               "id": { "const": "request.instructions.prepend.v1" },
               "platform": {
                 "enum": ["anthropic", "openai", "gemini", "antigravity", "grok", "kimi", "zhipu", "deepseek", "minimax", "stepfun", "opencode_go", "typesafe", "command_code", "cline"]

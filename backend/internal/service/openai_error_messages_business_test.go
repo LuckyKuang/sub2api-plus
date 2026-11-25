@@ -27,14 +27,14 @@ func TestOpenAIErrorMessagesSanitizedHTTP(t *testing.T) {
 		for _, cli := range []bool{false, true} {
 			for _, failure := range []struct {
 				name, code, publicCode, errorType, want string
-				status                                  int
+				status, wantStatus                      int
 			}{
-				{"session", "session_account_lost", "session_account_lost", "server_error", "当前会话可能无法恢复，请新开会话继续。", 400},
-				{"interrupted", "upstream_response_interrupted", "upstream_response_interrupted", "server_error", "本次响应已中断。请先检查已收到的内容，再决定是否继续。", 400},
-				{"unavailable", "upstream_unavailable", "upstream_unavailable", "service_unavailable_error", "服务暂时不可用，请稍后再试。", 400},
-				{"unknown", "other_error", "service_error", "server_error", "本次请求未能完成，请稍后再试。", 400},
-				{"case-sensitive", "UPSTREAM_UNAVAILABLE", "upstream_unavailable", "service_unavailable_error", "服务暂时不可用，请稍后再试。", 400},
-				{"oauth-server-unavailable", "upstream_unavailable", "upstream_unavailable", "service_unavailable_error", "服务暂时不可用，请稍后再试。", 503},
+				{"session", "session_account_lost", "session_account_lost", "server_error", "当前会话可能无法恢复，请新开会话继续。", 400, 400},
+				{"interrupted", "upstream_response_interrupted", "upstream_response_interrupted", "server_error", "本次响应已中断。请先检查已收到的内容，再决定是否继续。", 400, 502},
+				{"unavailable", "upstream_unavailable", "upstream_unavailable", "service_unavailable_error", "服务暂时不可用，请稍后再试。", 400, 503},
+				{"unknown", "other_error", "request_rejected", "invalid_request_error", "本次请求未被接受，请检查请求内容。", 400, 400},
+				{"case-sensitive", "UPSTREAM_UNAVAILABLE", "request_rejected", "invalid_request_error", "本次请求未被接受，请检查请求内容。", 400, 400},
+				{"oauth-server-unavailable", "upstream_unavailable", "upstream_unavailable", "service_unavailable_error", "服务暂时不可用，请稍后再试。", 503, 503},
 			} {
 				if kind == AccountTypeAPIKey && failure.status == 503 {
 					continue // API-key server failures belong to handler failover tests.
@@ -58,7 +58,7 @@ func TestOpenAIErrorMessagesSanitizedHTTP(t *testing.T) {
 						_, err := svc.Forward(t.Context(), c, owner, []byte(body))
 						require.Error(t, err)
 					})(c)
-					require.Equal(t, failure.status, rec.Code)
+					require.Equal(t, failure.wantStatus, rec.Code)
 					require.JSONEq(t, `{"error":{"code":"`+failure.publicCode+`","type":"`+failure.errorType+`","message":"`+failure.want+`"}}`, rec.Body.String())
 					require.NotContains(t, rec.Body.String(), "must not escape")
 					require.Equal(t, int32(1), sends.Load(), "display policy must not replay the request")
@@ -156,7 +156,8 @@ func TestOpenAIErrorMessagesSanitizedPendingToggle(t *testing.T) {
 		err := svc.handleErrorResponsePassthrough(t.Context(), &http.Response{StatusCode: 400, Header: make(http.Header)}, c, &Account{ID: 7, Platform: PlatformOpenAI, Type: AccountTypeOAuth}, nil, body)
 		require.Error(t, err)
 	})(c)
-	require.Equal(t, 400, rec.Code)
+	// C04 publishes 503 even when the upstream passthrough used 400.
+	require.Equal(t, 503, rec.Code)
 	require.JSONEq(t, `{"error":{"code":"upstream_unavailable","type":"service_unavailable_error","message":"服务暂时不可用，请稍后再试。"}}`, rec.Body.String())
 }
 

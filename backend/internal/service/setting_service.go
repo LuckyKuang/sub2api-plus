@@ -324,10 +324,12 @@ const (
 
 // NewSettingService 创建系统设置服务实例
 func NewSettingService(settingRepo SettingRepository, cfg *config.Config) *SettingService {
-	return &SettingService{
+	service := &SettingService{
 		settingRepo: settingRepo,
 		cfg:         cfg,
 	}
+	service.codexSafetyBuffering.publicErrors.Store(defaultCodexPublicErrorSettings())
+	return service
 }
 
 // SetDefaultSubscriptionGroupReader injects an optional group reader for default subscription validation.

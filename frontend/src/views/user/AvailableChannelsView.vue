@@ -58,12 +58,11 @@
               </template>
             </div>
 
-            <div class="catalog-view-switch" role="radiogroup" :aria-label="t('availableChannels.catalog.viewSwitchLabel')">
+            <div class="segmented-control" :aria-label="t('availableChannels.catalog.viewSwitchLabel')">
               <button
                 type="button"
-                role="radio"
-                class="catalog-view-btn"
-                :aria-checked="activeLayout === 'list'"
+                class="segmented-option"
+                :aria-pressed="activeLayout === 'list'"
                 @click="setLayout('list')"
               >
                 <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
@@ -73,9 +72,8 @@
               </button>
               <button
                 type="button"
-                role="radio"
-                class="catalog-view-btn"
-                :aria-checked="activeLayout === 'card'"
+                class="segmented-option"
+                :aria-pressed="activeLayout === 'card'"
                 @click="setLayout('card')"
               >
                 <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true">
@@ -211,6 +209,7 @@ import CatalogPriceDetails from '@/components/channels/CatalogPriceDetails.vue'
 import { catalogModels, type CatalogModel } from '@/components/channels/catalog'
 import userChannelsAPI, { type ChannelCatalog } from '@/api/channels'
 import { useUserView } from '@/composables/useUserView'
+import { useAvailableChannelsLayoutSession } from '@/composables/useAvailableChannelsLayout'
 import { useAuthStore } from '@/stores/auth'
 import { getLocale } from '@/i18n'
 import { adminSupportContext } from '@/utils/adminSupportContext'
@@ -247,16 +246,20 @@ const selectedKey = ref<string | null>(null)
 const selectedModel = ref<CatalogModel | null>(null)
 const detailLoading = ref(false)
 const refreshButton = ref<HTMLButtonElement>()
-const layoutOverride = ref<'list' | 'card' | null>(null)
-const activeLayout = computed<'list' | 'card'>(() => layoutOverride.value ?? app.availableChannelsLayout)
+const layoutSession = useAvailableChannelsLayoutSession()
+const activeLayout = computed<'list' | 'card'>(() => {
+  const entry = layoutSession.sessionLayout.value
+  if (entry && entry.adminDefault === app.availableChannelsLayout) return entry.mode
+  return app.availableChannelsLayout
+})
 const hasActiveFilters = computed(() => Boolean(search.value.trim() || platform.value))
 
 watch(() => app.availableChannelsLayout, () => {
-  layoutOverride.value = null
+  layoutSession.reset()
 })
 
 function setLayout(mode: 'list' | 'card') {
-  layoutOverride.value = mode
+  layoutSession.choose(mode, app.availableChannelsLayout)
 }
 
 let requestId = 0

@@ -131,8 +131,10 @@ const { copyToClipboard } = useClipboard()
 const copied = ref(false)
 let copiedTimer: ReturnType<typeof setTimeout> | undefined
 
-function onCopy() {
-  void copyToClipboard(props.model.name)
+async function onCopy() {
+  const name = props.model.name
+  const ok = await copyToClipboard(name)
+  if (!ok || props.model.name !== name) return
   copied.value = true
   if (copiedTimer) clearTimeout(copiedTimer)
   copiedTimer = setTimeout(() => {

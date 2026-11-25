@@ -67,7 +67,9 @@ export default defineConfig({
     cwd: frontend,
     command: 'pnpm exec vite --config layout-tests/vite.config.ts',
     url: 'http://127.0.0.1:18193/layout-tests/index.html',
-    timeout: 30_000,
+    // A cold Vite transform of the full AppLayout graph on a WSL bind mount
+    // can exceed 30s after a dependency reinstall.
+    timeout: 120_000,
     reuseExistingServer: false,
   }, {
     cwd: frontend,

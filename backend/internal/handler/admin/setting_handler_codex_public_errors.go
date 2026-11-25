@@ -51,18 +51,29 @@ func (h *SettingHandler) PatchCodexErrorMessages(c *gin.Context) {
 		}
 		return
 	}
-	changed := make([]string, 0, len(request.Changes))
-	for key := range request.Changes {
-		changed = append(changed, key)
+	// The request-body audit is size-limited, so a large mixed batch needs its
+	// own per-key action record. Values are never logged, only key and action.
+	setKeys := make([]string, 0, len(request.Changes))
+	restoredKeys := make([]string, 0, len(request.Changes))
+	for key, value := range request.Changes {
+		if value == nil {
+			restoredKeys = append(restoredKeys, key)
+		} else {
+			setKeys = append(setKeys, key)
+		}
 	}
-	sort.Strings(changed)
+	sort.Strings(setKeys)
+	sort.Strings(restoredKeys)
 	subject, _ := middleware.GetAuthSubjectFromContext(c)
 	role, _ := middleware.GetUserRoleFromContext(c)
+	modeChanged := request.CustomEnabled != nil
 	slog.Info("codex public error messages updated",
 		"audit", true,
 		"user_id", subject.UserID,
 		"role", role,
-		"changed", changed,
+		"set", setKeys,
+		"restored", restoredKeys,
+		"mode_changed", modeChanged,
 		"custom_enabled", snapshot.CustomEnabled,
 	)
 	response.Success(c, snapshot)

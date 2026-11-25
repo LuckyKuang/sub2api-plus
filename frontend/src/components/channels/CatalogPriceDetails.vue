@@ -41,7 +41,7 @@
           type="button"
           class="catalog-toggle-all-btn focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           :aria-pressed="showAllDisclosures"
-          @click="showAllDisclosures = !showAllDisclosures"
+          @click="toggleAllDisclosures"
         >
           {{ showAllDisclosures
             ? t('availableChannels.catalog.showSelectedOnly')
@@ -184,13 +184,25 @@ function prefersReducedMotion() {
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-function onCopyModel(name: string) {
-  void copyToClipboard(name)
+async function onCopyModel(name: string) {
+  const modelKey = props.model?.key
+  const ok = await copyToClipboard(name)
+  if (!ok || props.model?.key !== modelKey) return
   copied.value = true
   if (copiedTimer) clearTimeout(copiedTimer)
   copiedTimer = setTimeout(() => {
     copied.value = false
   }, 1400)
+}
+
+function toggleAllDisclosures() {
+  if (showAllDisclosures.value) {
+    // Leaving show-all keeps at most one expanded comparison. Every other
+    // disclosure is collapsed and its controls leave the dialog's focus loop.
+    const first = openQuotes.value.values().next().value
+    openQuotes.value = first ? new Set([first]) : new Set()
+  }
+  showAllDisclosures.value = !showAllDisclosures.value
 }
 
 function toggleQuote(key: string) {

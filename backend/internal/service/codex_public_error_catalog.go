@@ -1,6 +1,9 @@
 package service
 
-import "strings"
+import (
+	"net/http"
+	"strings"
+)
 
 // codexPublicErrorDefinition is the single source of truth for the public
 // Codex-facing error catalog. Keys are stable across releases; default text is
@@ -212,15 +215,21 @@ var codexPublicErrorCatalog = []codexPublicErrorDefinition{
 		Group:          "service",
 		PublicCode:     "service_unavailable",
 		DefaultMessage: "服务暂不可用，请稍后再试。若持续出现，请联系管理员。",
-		Aliases:        []string{"invalid_grant"},
-		ErrorType:      "service_unavailable_error",
+		Aliases: []string{
+			"invalid_grant", "invalid_api_key", "api_key_disabled", "unauthorized",
+			"authentication_error", "authentication_failed", "unauthorized_error",
+			"invalid_token", "access_token_invalid", "token_revoked", "token_invalidated",
+			"invalid_credentials", "credential_invalid", "token_expired",
+			"refresh_token_expired", "refresh_token_reused", "refresh_token_invalidated",
+		},
+		ErrorType: "service_unavailable_error",
 	},
 	{
 		Key:            "account_access_unavailable",
 		Group:          "service",
 		PublicCode:     "service_unavailable",
 		DefaultMessage: "服务暂不可用，请稍后再试。若持续出现，请联系管理员。",
-		Aliases:        []string{"deactivated_workspace"},
+		Aliases:        []string{"deactivated_workspace", "insufficient_scope", "missing_scope"},
 		ErrorType:      "service_unavailable_error",
 	},
 	{
@@ -266,7 +275,7 @@ var codexPublicErrorCatalog = []codexPublicErrorDefinition{
 	{
 		Key:            "policy_capacity_unavailable",
 		Group:          "service",
-		PublicCode:     "service_unavailable_error",
+		PublicCode:     "policy_capacity_unavailable",
 		DefaultMessage: "当前请求所需的服务容量暂不可用，请稍后再试。",
 		Aliases:        []string{"policy_capacity_unavailable"},
 		ErrorType:      "service_unavailable_error",
@@ -656,33 +665,236 @@ var codexPublicErrorIndex = func() codexPublicErrorIndexes {
 	return index
 }()
 
+// codexPublicErrorByKey resolves an administrative catalog key. Setting keys
+// are normalized by the settings API, so key lookup remains case-insensitive.
 func codexPublicErrorByKey(key string) (codexPublicErrorDefinition, bool) {
 	definition, ok := codexPublicErrorIndex.byKey[strings.ToLower(strings.TrimSpace(key))]
 	return definition, ok
 }
 
-// codexPublicErrorKeyFromCode resolves an upstream or gateway code to the stable
-// catalog key. Exact catalog keys take precedence over shared aliases.
+// codexPublicErrorKeyFromCode resolves a provider wire code to the stable
+// catalog key. Wire codes are matched exactly as the protocol table lists them:
+// a case variant, an unapproved suffix or a prefix is not promoted to a known
+// reason. Only the documented *_spend_limit_exceeded pattern is accepted.
 func codexPublicErrorKeyFromCode(code string) (string, bool) {
-	code = strings.ToLower(strings.TrimSpace(code))
+	code = strings.TrimSpace(code)
 	if code == "" {
 		return "", false
 	}
-	if definition, ok := codexPublicErrorByKey(code); ok {
-		return definition.Key, true
+	if _, ok := codexPublicErrorIndex.byKey[code]; ok {
+		return code, true
 	}
-	key, ok := codexPublicErrorIndex.byCode[code]
-	return key, ok
+	if key, ok := codexPublicErrorIndex.byCode[code]; ok {
+		return key, true
+	}
+	if len(code) > len("_spend_limit_exceeded") && strings.HasSuffix(code, "_spend_limit_exceeded") {
+		return "service_capacity_unavailable", true
+	}
+	return "", false
+}
+
+// codexPublicErrorStatusContract records the public HTTP statuses the protocol
+// table allows for each catalog key. An absent entry keeps the terminal's own
+// status (normal protocol terminals and session-bound failures).
+var codexPublicErrorStatusContract = map[string][]int{
+	"missing_required_parameter":         {http.StatusBadRequest},
+	"invalid_parameter":                  {http.StatusBadRequest, http.StatusUnprocessableEntity},
+	"unsupported_parameter":              {http.StatusBadRequest},
+	"invalid_prompt":                     {http.StatusBadRequest},
+	"context_length_exceeded":            {http.StatusBadRequest},
+	"request_too_large":                  {http.StatusRequestEntityTooLarge},
+	"budget_reached":                     {http.StatusBadRequest},
+	"model_not_found":                    {http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound},
+	"invalid_access_program":             {http.StatusBadRequest, http.StatusForbidden},
+	"unsupported_access_program":         {http.StatusBadRequest, http.StatusForbidden},
+	"access_program_not_enabled":         {http.StatusBadRequest, http.StatusForbidden},
+	"service_tier_unavailable":           {http.StatusBadRequest, http.StatusForbidden},
+	"resource_not_found":                 {http.StatusNotFound},
+	"previous_response_not_found":        {http.StatusBadRequest},
+	"invalid_encrypted_content":          {http.StatusBadRequest},
+	"invalid_tool_history":               {http.StatusBadRequest},
+	"request_conflict":                   {http.StatusConflict},
+	"invalid_stream_id":                  {http.StatusBadRequest},
+	"websocket_stream_limit_reached":     {http.StatusBadRequest},
+	"websocket_connection_limit_reached": {http.StatusBadRequest},
+	"transport_unavailable":              {http.StatusServiceUnavailable},
+	"unsupported_media_type":             {http.StatusUnsupportedMediaType},
+	"continuation_unsupported":           {http.StatusBadRequest},
+	"credential_unavailable":             {http.StatusServiceUnavailable},
+	"account_access_unavailable":         {http.StatusServiceUnavailable},
+	"service_capacity_unavailable":       {http.StatusServiceUnavailable},
+	"feature_unavailable":                {http.StatusServiceUnavailable},
+	"service_configuration_unavailable":  {http.StatusServiceUnavailable},
+	"rate_limit_exceeded":                {http.StatusTooManyRequests},
+	"model_overloaded":                   {http.StatusServiceUnavailable},
+	"policy_capacity_unavailable":        {http.StatusServiceUnavailable},
+	"flex_unavailable":                   {http.StatusTooManyRequests},
+	"content_policy_violation":           {http.StatusBadRequest, http.StatusForbidden},
+	"image_content_policy_violation":     {http.StatusBadRequest, http.StatusForbidden},
+	"cyber_policy":                       {http.StatusBadRequest, http.StatusForbidden},
+	"bio_policy":                         {http.StatusBadRequest, http.StatusForbidden},
+	"misalignment_policy_violation":      {http.StatusBadRequest, http.StatusForbidden},
+	"inference_hook_denied":              {http.StatusForbidden},
+	"request_policy_denied":              {http.StatusForbidden},
+	"service_usage_limit_reached":        {http.StatusTooManyRequests},
+	"service_connection_failed":          {http.StatusBadGateway},
+	"upstream_response_interrupted":      {http.StatusBadGateway},
+	"request_outcome_unknown":            {http.StatusBadGateway},
+	"response_timeout":                   {http.StatusGatewayTimeout, http.StatusRequestTimeout},
+	"vector_store_timeout":               {http.StatusGatewayTimeout, http.StatusRequestTimeout},
+	"upstream_unavailable":               {http.StatusServiceUnavailable},
+	"invalid_service_response":           {http.StatusBadGateway},
+	"empty_response":                     {http.StatusBadGateway},
+	"server_error":                       {http.StatusBadGateway},
+	"request_rejected":                   {http.StatusBadRequest, http.StatusUnprocessableEntity},
+	"service_error":                      {http.StatusBadGateway},
+	"invalid_image":                      {http.StatusBadRequest},
+	"invalid_base64_image":               {http.StatusBadRequest},
+	"image_parse_error":                  {http.StatusBadRequest},
+	"invalid_image_format":               {http.StatusBadRequest, http.StatusUnsupportedMediaType},
+	"invalid_image_mode":                 {http.StatusBadRequest, http.StatusUnsupportedMediaType},
+	"unsupported_image_media_type":       {http.StatusBadRequest, http.StatusUnsupportedMediaType},
+	"image_too_large":                    {http.StatusBadRequest, http.StatusRequestEntityTooLarge},
+	"image_file_too_large":               {http.StatusBadRequest, http.StatusRequestEntityTooLarge},
+	"image_too_small":                    {http.StatusBadRequest},
+	"empty_image_file":                   {http.StatusBadRequest},
+	"invalid_image_url":                  {http.StatusBadRequest},
+	"failed_to_download_image":           {http.StatusBadRequest},
+	"image_file_not_found":               {http.StatusBadRequest, http.StatusNotFound},
+	"audio_too_large":                    {http.StatusBadRequest},
+	"audio_too_short":                    {http.StatusBadRequest},
+	"invalid_audio":                      {http.StatusBadRequest},
+	"invalid_audio_data":                 {http.StatusBadRequest},
+	"invalid_audio_format":               {http.StatusBadRequest},
+	"missing_audio_sample_rate":          {http.StatusBadRequest},
+	"image_generation_unavailable":       {http.StatusBadGateway},
+}
+
+// codexPublicErrorPublicStatus chooses the status this gateway may publish for
+// a catalog key. A status already allowed by the row is preserved.
+func codexPublicErrorPublicStatus(key string, current int) int {
+	allowed := codexPublicErrorStatusContract[key]
+	if len(allowed) == 0 {
+		if current >= 400 {
+			return current
+		}
+		return http.StatusBadGateway
+	}
+	if current >= 400 {
+		for _, status := range allowed {
+			if status == current {
+				return current
+			}
+		}
+	}
+	return allowed[0]
+}
+
+// codexPublicErrorCodeConflicts reports whether a real credential, throttling
+// or server status contradicts a request-level catalog code. The protocol
+// keeps the authoritative endpoint status instead of turning a server failure
+// into a 400 input terminal.
+func codexPublicErrorCodeConflicts(key string, status int) bool {
+	if status < 400 || status >= 600 {
+		return false
+	}
+	allowed := codexPublicErrorStatusContract[key]
+	if len(allowed) == 0 {
+		return false
+	}
+	for _, candidate := range allowed {
+		if candidate == status {
+			return false
+		}
+	}
+	// A real credential or access status always wins over a request-level code.
+	if status == http.StatusUnauthorized || status == http.StatusForbidden {
+		return true
+	}
+	// Throttling and server failures only override request-shaped codes. A
+	// service or transport code keeps its meaning and has its status remapped.
+	if status != http.StatusTooManyRequests && status < 500 {
+		return false
+	}
+	definition, ok := codexPublicErrorByKey(key)
+	if !ok {
+		return false
+	}
+	if definition.Group == "request" {
+		return true
+	}
+	if definition.Group == "media" {
+		switch key {
+		case "image_generation_unavailable", "output_length_limit", "output_content_filtered", "response_cancelled", "response_incomplete":
+			return false
+		}
+		return true
+	}
+	switch key {
+	case "policy_capacity_unavailable",
+		"content_policy_violation", "image_content_policy_violation",
+		"cyber_policy", "bio_policy", "misalignment_policy_violation",
+		"inference_hook_denied", "request_policy_denied":
+		return true
+	}
+	return false
+}
+
+// ClassifyCodexPublicFailure derives the stable catalog key and public HTTP
+// status for a final OpenAI-owned failure. The caller supplies the real final
+// upstream status; a recovered attempt must never reach this function.
+func ClassifyCodexPublicFailure(status int, payload []byte) (string, int) {
+	key := ""
+	if code := openAIErrorMessageCode(payload); code != "" {
+		if resolved, ok := codexPublicErrorKeyFromCode(code); ok && !codexPublicErrorCodeConflicts(resolved, status) {
+			key = resolved
+		}
+	}
+	if key == "" {
+		key = codexPublicErrorFallbackKey(status)
+	}
+	return key, codexPublicErrorPublicStatus(key, status)
+}
+
+// ClassifyCodexPublicFailureKey maps an already trusted internal classification
+// to its public status without reinterpreting the wire code.
+func ClassifyCodexPublicFailureKey(status int, key string) (string, int) {
+	if definition, ok := codexPublicErrorByKey(key); ok {
+		key = definition.Key
+	} else {
+		key = codexPublicErrorFallbackKey(status)
+	}
+	return key, codexPublicErrorPublicStatus(key, status)
+}
+
+// CodexPublicErrorWireFields returns the protocol type/code for a catalog key.
+func CodexPublicErrorWireFields(key string) (errorType, publicCode string, ok bool) {
+	definition, ok := codexPublicErrorByKey(key)
+	if !ok {
+		return "", "", false
+	}
+	return definition.ErrorType, definition.PublicCode, true
+}
+
+// CodexPublicErrorDefaultMessage returns the built-in text for a catalog key.
+func CodexPublicErrorDefaultMessage(key string) string {
+	definition, ok := codexPublicErrorByKey(key)
+	if !ok {
+		return ""
+	}
+	return definition.DefaultMessage
 }
 
 // codexPublicErrorFallbackKey implements the C09 status fallback. It is used
-// only when no trusted internal classification or recognized code exists.
+// only when no trusted internal classification or recognized exact code exists.
 func codexPublicErrorFallbackKey(status int) string {
 	switch status {
 	case 400, 422:
 		return "request_rejected"
-	case 401, 403:
+	case 401:
 		return "credential_unavailable"
+	case 403:
+		return "account_access_unavailable"
 	case 402:
 		return "service_capacity_unavailable"
 	case 407:

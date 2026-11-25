@@ -205,11 +205,23 @@ UI 是插件包内的静态页面，不需要修改 Sub2API 前端源码。宿�
   ],
   "runtimes": {"linux-arm64": {"path": "bin/plugin"}},
   "ui": {"entrypoint": "ui/index.html"},
-  "files": {}
+  "files": {
+    "bin/plugin": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "ui/index.html": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  }
 }
 ```
 
-v1 `openai.oauth.outbound_transport.v1` 继续可用。v2 精确范围优先，未命中时回退 v1；不同平台/账号类型可以分别灰度。原生 Gemini/Antigravity 发送点、WebSocket 传输以及逐平台真实账号矩阵仍需在对应网关和部署环境单独验证，不能由通用 HTTP 单测代替。
+哈希值必须是包内实际文件的 SHA-256；上面的十六进制只是形状示例，不能直接发布。v1 `openai.oauth.outbound_transport.v1` 继续可用。v2 精确范围优先，未命中时回退 v1；不同平台/账号类型可以分别灰度。原生 Gemini/Antigravity 发送点、WebSocket 传输以及逐平台真实账号矩阵仍需在对应网关和部署环境单独验证，不能由通用 HTTP 单测代替。
+
+### 混合包：传输 + 请求指令
+
+同一 schema v2 清单可以同时声明 `outbound.transport.v1`（或 v1）与 `request.instructions.prepend.v1`。配置所有权是固定的：
+
+- 运行时拥有除 `request_instructions` 之外的所有字段；宿主在把配置交给插件校验或应用前会移除该节。
+- 宿主拥有 `request_instructions`，其结构与纯请求包相同：`default_text`、`platform_overrides`、`account_overrides`。宿主在保存前校验该节，并与运行时字段一起持久化。
+- 启用混合包会同时启用已声明的传输和指令绑定；配置保存成功后，新请求立即使用新的指令文本，传输继续使用同一份持久化配置。
+- 迁移 `317_plugin_bindings_transport_exclusive.sql` 只让传输能力占用每个 `capability + platform + account_type` 的唯一槽位；多个纯指令包可以在同一范围共存，并按稳定的插件 ID/绑定顺序拼接。
 
 ## 7. 生成密钥并签名
 

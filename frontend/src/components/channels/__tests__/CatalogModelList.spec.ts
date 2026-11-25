@@ -4,7 +4,7 @@ import CatalogModelList from '../CatalogModelList.vue'
 import { catalogModels } from '../catalog'
 import { group, offer, pricing, rateQuote } from './catalogFixtures'
 
-const copy = vi.hoisted(() => vi.fn())
+const copy = vi.hoisted(() => vi.fn().mockResolvedValue(true))
 vi.mock('@/composables/useClipboard', () => ({ useClipboard: () => ({ copyToClipboard: copy }) }))
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 const global = { stubs: { Icon: true, PlatformIcon: true } }
@@ -40,6 +40,11 @@ describe('available-channel list', () => {
     expect(w.emitted('details')).toHaveLength(1)
     expect(copyBtn.classes()).toContain('is-copied')
     await vi.advanceTimersByTimeAsync(1400)
+    expect(copyBtn.classes()).not.toContain('is-copied')
+
+    copy.mockResolvedValueOnce(false)
+    await copyBtn.trigger('click')
+    await vi.advanceTimersByTimeAsync(0)
     expect(copyBtn.classes()).not.toContain('is-copied')
   })
 

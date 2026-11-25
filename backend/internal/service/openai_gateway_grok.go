@@ -1607,6 +1607,10 @@ func (s *OpenAIGatewayService) buildGrokResponsesRequest(ctx context.Context, c 
 	if err != nil {
 		return nil, err
 	}
+	// Instructions are part of the final JSON and must precede the negotiated
+	// request compression below.
+	body = s.applyPluginInstructionsToBody(body, account, APIProtocolResponses)
+	ctx = withPluginInstructionsApplied(ctx)
 	targetURL, err := buildGrokResponsesURL(account, cfg, settings...)
 	if err != nil {
 		return nil, err

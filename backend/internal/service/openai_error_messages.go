@@ -17,28 +17,91 @@ type openAIErrorMessageSource struct {
 	generatedCode string
 	key           string
 	status        int
+	// recorded marks a confirmed final failure observed at its real exit. It
+	// is never set for a retry candidate or a local denial.
+	recorded bool
 }
 
-// SetOpenAIErrorMessageSource keeps only the code needed for display, never the
-// private upstream body. Call only when committing a final error, not while
-// classifying retry candidates:
-// a recovered account must not supply the source for a later failure.
-func SetOpenAIErrorMessageSource(c *gin.Context, payload []byte) {
+const openAIErrorMessageLocalKey = "openai_error_message_local"
+
+// MarkLocalOpenAIError protects a locally produced user/account error from the
+// public upstream projection even after an OpenAI account was selected.
+func MarkLocalOpenAIError(c *gin.Context) {
 	if c == nil {
 		return
 	}
-	status := c.Writer.Status()
-	if status < 400 {
-		status = 0
+	c.Set(openAIErrorMessageLocalKey, true)
+}
+
+func isLocalOpenAIError(c *gin.Context) bool {
+	if c == nil {
+		return false
 	}
-	source := openAIErrorMessageSource{status: status}
+	value, ok := c.Get(openAIErrorMessageLocalKey)
+	marked, _ := value.(bool)
+	return ok && marked
+}
+
+// SetOpenAIErrorMessageSource keeps only the trusted classification needed for
+// display, never the private upstream body. Call only when committing a final
+// error, not while classifying retry candidates: a recovered account must not
+// supply the source for a later failure. status is the real final upstream
+// status, not the downstream writer's not-yet-committed status.
+func SetOpenAIErrorMessageSource(c *gin.Context, status int, payload []byte) {
+	if c == nil {
+		return
+	}
+	key, _ := ClassifyCodexPublicFailure(status, payload)
+	source := openAIErrorMessageSource{status: status, recorded: true, key: key}
 	if code := openAIErrorMessageCode(payload); code != "" {
 		source.code = code
-		if key, ok := codexPublicErrorKeyFromCode(code); ok {
-			source.key = key
-		}
 	}
 	c.Set("openai_error_message_source", source)
+}
+
+// CodexPublicErrorFinalFields exposes the trusted final classification for a
+// direct writer that does not sit under the output middleware.
+func CodexPublicErrorFinalFields(c *gin.Context) (errorType, publicCode, message string, ok bool) {
+	source := getOpenAIErrorMessageSource(c)
+	if !source.recorded {
+		return "", "", "", false
+	}
+	key := source.key
+	if key == "" {
+		key, _ = ClassifyCodexPublicFailure(source.status, nil)
+	}
+	definition, ok := codexPublicErrorByKey(key)
+	if !ok {
+		return "", "", "", false
+	}
+	return definition.ErrorType, definition.PublicCode, definition.DefaultMessage, true
+}
+
+// CodexPublicErrorFinalStatus returns the public HTTP status for a recorded
+// final failure. It is used by fallback writers that do not re-classify.
+func CodexPublicErrorFinalStatus(c *gin.Context) (int, bool) {
+	source := getOpenAIErrorMessageSource(c)
+	if !source.recorded {
+		return 0, false
+	}
+	key := source.key
+	if key == "" {
+		key, _ = ClassifyCodexPublicFailure(source.status, nil)
+	}
+	if _, ok := codexPublicErrorByKey(key); !ok {
+		return 0, false
+	}
+	return codexPublicErrorPublicStatus(key, source.status), true
+}
+
+// ResetOpenAIErrorMessageSource clears a previous turn's classification. WS
+// connections reuse one gin context across turns, so a new turn must not
+// inherit the last turn's final failure.
+func ResetOpenAIErrorMessageSource(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	c.Set("openai_error_message_source", openAIErrorMessageSource{})
 }
 
 // SetCodexPublicErrorKey records the trusted failure classification before any
@@ -51,7 +114,25 @@ func SetCodexPublicErrorKey(c *gin.Context, key string) {
 	source := getOpenAIErrorMessageSource(c)
 	if definition, ok := codexPublicErrorByKey(key); ok {
 		source.key = definition.Key
+		source.recorded = true
 	}
+	c.Set("openai_error_message_source", source)
+}
+
+// SetCodexPublicErrorFinal records a final trusted classification and its
+// public status.
+func SetCodexPublicErrorFinal(c *gin.Context, key string, status int) {
+	if c == nil {
+		return
+	}
+	definition, ok := codexPublicErrorByKey(key)
+	if !ok {
+		return
+	}
+	source := getOpenAIErrorMessageSource(c)
+	source.key = definition.Key
+	source.status = status
+	source.recorded = true
 	c.Set("openai_error_message_source", source)
 }
 
@@ -84,6 +165,7 @@ func SetOpenAIErrorMessageGeneratedCode(c *gin.Context, code string) {
 	}
 	source := getOpenAIErrorMessageSource(c)
 	source.generatedCode = code
+	source.recorded = true
 	c.Set("openai_error_message_source", source)
 }
 
@@ -93,16 +175,19 @@ func (e *UpstreamFailoverError) SetOpenAIErrorMessageSource(c *gin.Context) {
 	if e == nil || c == nil {
 		return
 	}
-	SetOpenAIErrorMessageSource(c, e.ResponseBody)
-	source := getOpenAIErrorMessageSource(c)
-	if e.StatusCode >= 400 {
-		source.status = e.StatusCode
+	status := e.StatusCode
+	key := ""
+	if e.openAIErrorMessageCode != "" {
+		if resolved, ok := codexPublicErrorKeyFromCode(e.openAIErrorMessageCode); ok && !codexPublicErrorCodeConflicts(resolved, status) {
+			key = resolved
+		}
 	}
+	if key == "" {
+		key, _ = ClassifyCodexPublicFailure(status, e.ResponseBody)
+	}
+	source := openAIErrorMessageSource{status: status, recorded: true, key: key}
 	if e.openAIErrorMessageCode != "" {
 		source.code = e.openAIErrorMessageCode
-		if key, ok := codexPublicErrorKeyFromCode(e.openAIErrorMessageCode); ok {
-			source.key = key
-		}
 	}
 	c.Set("openai_error_message_source", source)
 }
@@ -143,12 +228,25 @@ func normalizeOpenAIErrorMessage(payload []byte, source openAIErrorMessageSource
 	})
 }
 
-func normalizeOpenAIErrorMessageWithResolver(payload []byte, source openAIErrorMessageSource, resolve func(string) string) []byte {
-	if !json.Valid(payload) {
-		return payload
+// codexPublicErrorParamAllowed keeps only platform-level request field names.
+// Nested provider paths and free text never become a public error side channel.
+func codexPublicErrorParamAllowed(param string) bool {
+	switch param {
+	case "model", "input", "tools", "instructions", "previous_response_id", "service_tier", "stream", "messages", "system", "systemInstruction":
+		return true
 	}
-	path, errorObject := openAIProtocolError(gjson.ParseBytes(payload))
-	if !errorObject.IsObject() {
+	return false
+}
+
+func normalizeOpenAIErrorMessageWithResolver(payload []byte, source openAIErrorMessageSource, resolve func(string) string) []byte {
+	recognized := false
+	if json.Valid(payload) {
+		_, errorObject := openAIProtocolError(gjson.ParseBytes(payload))
+		recognized = errorObject.IsObject()
+	}
+	if !recognized && !source.recorded {
+		// Ordinary content such as text deltas, tool results and unknown valid
+		// events keep their original bytes.
 		return payload
 	}
 	key := strings.TrimSpace(source.key)
@@ -156,8 +254,8 @@ func normalizeOpenAIErrorMessageWithResolver(payload []byte, source openAIErrorM
 		key = ""
 	}
 	if key == "" {
-		if code := strings.TrimSpace(errorObject.Get("code").String()); code != "" {
-			if resolved, ok := codexPublicErrorKeyFromCode(code); ok {
+		if code := openAIErrorMessageCode(payload); code != "" {
+			if resolved, ok := codexPublicErrorKeyFromCode(code); ok && !codexPublicErrorCodeConflicts(resolved, source.status) {
 				key = resolved
 			}
 		}
@@ -167,56 +265,105 @@ func normalizeOpenAIErrorMessageWithResolver(payload []byte, source openAIErrorM
 	}
 	definition, ok := codexPublicErrorByKey(key)
 	if !ok || definition.PublicCode == "" {
+		// Normal protocol terminals (D13-D16) and unrecognized non-failure
+		// documents keep their original representation.
 		return payload
 	}
 	message := ""
 	if resolve != nil {
-		message = strings.TrimSpace(resolve(key))
+		message = strings.TrimSpace(resolve(definition.Key))
 	}
 	if message == "" {
 		message = definition.DefaultMessage
 	}
-	replacement := []byte("{}")
-	var err error
-	if replacement, err = sjson.SetBytes(replacement, "message", message); err != nil {
-		return payload
-	}
-	if definition.PublicCode != "" {
-		if replacement, err = sjson.SetBytes(replacement, "code", definition.PublicCode); err != nil {
-			return payload
+	param := ""
+	if json.Valid(payload) {
+		_, errorObject := openAIProtocolError(gjson.ParseBytes(payload))
+		if candidate := strings.TrimSpace(errorObject.Get("param").String()); codexPublicErrorParamAllowed(candidate) {
+			param = candidate
 		}
+	}
+	return rebuildCodexPublicErrorEnvelope(payload, definition, message, param)
+}
+
+// rebuildCodexPublicErrorEnvelope constructs a fresh protocol envelope from
+// approved fields. Provider extensions, nested diagnostics and unapproved
+// headers never survive a confirmed failure.
+func rebuildCodexPublicErrorEnvelope(payload []byte, definition codexPublicErrorDefinition, message, param string) []byte {
+	errorObject := []byte("{}")
+	errorObject, _ = sjson.SetBytes(errorObject, "message", message)
+	if definition.PublicCode != "" {
+		errorObject, _ = sjson.SetBytes(errorObject, "code", definition.PublicCode)
 	}
 	if definition.ErrorType != "" {
-		if replacement, err = sjson.SetBytes(replacement, "type", definition.ErrorType); err != nil {
-			return payload
-		}
+		errorObject, _ = sjson.SetBytes(errorObject, "type", definition.ErrorType)
 	}
-	if path == "" {
-		root := gjson.ParseBytes(payload)
-		if strings.EqualFold(root.Get("type").String(), "error") {
-			// Error events keep their protocol envelope. Only the message and
-			// public code are replaced; sequence/status stay for the client's
-			// correlation and terminal handling.
-			event := []byte("{}")
-			event, _ = sjson.SetBytes(event, "type", "error")
-			event, _ = sjson.SetBytes(event, "message", message)
-			if definition.PublicCode != "" {
-				event, _ = sjson.SetBytes(event, "code", definition.PublicCode)
-			}
-			for _, field := range []string{"sequence_number", "status"} {
-				if value := root.Get(field); value.Exists() && value.Type != gjson.Null {
-					event, _ = sjson.SetRawBytes(event, field, []byte(value.Raw))
-				}
-			}
+	if param != "" {
+		errorObject, _ = sjson.SetBytes(errorObject, "param", param)
+	}
+	if !json.Valid(payload) {
+		return []byte(`{"error":` + string(errorObject) + `}`)
+	}
+	root := gjson.ParseBytes(payload)
+	if !root.IsObject() {
+		return []byte(`{"error":` + string(errorObject) + `}`)
+	}
+	switch root.Get("type").String() {
+	case "response.failed":
+		return rebuildCodexPublicErrorFailedEnvelope(root, errorObject)
+	case "error":
+		if root.Get("error").IsObject() {
+			event := []byte(`{"type":"error"}`)
+			event, _ = sjson.SetRawBytes(event, "error", errorObject)
+			event = copyCodexPublicEventFields(root, event, "sequence_number", "status")
 			return event
 		}
-		return replacement
+		// Top-level error event carriers use message/code directly.
+		event := []byte(`{"type":"error"}`)
+		if definition.ErrorType != "" {
+			event, _ = sjson.SetBytes(event, "type", "error")
+		}
+		event, _ = sjson.SetBytes(event, "message", message)
+		if definition.PublicCode != "" {
+			event, _ = sjson.SetBytes(event, "code", definition.PublicCode)
+		}
+		if param != "" {
+			event, _ = sjson.SetBytes(event, "param", param)
+		}
+		event = copyCodexPublicEventFields(root, event, "sequence_number", "status")
+		return event
+	default:
+		return []byte(`{"error":` + string(errorObject) + `}`)
 	}
-	result, err := sjson.SetRawBytes(payload, path, replacement)
-	if err != nil {
-		return payload
+}
+
+func rebuildCodexPublicErrorFailedEnvelope(root gjson.Result, errorObject []byte) []byte {
+	out := []byte(`{"type":"response.failed"}`)
+	if response := root.Get("response"); response.IsObject() {
+		rebuilt := []byte("{}")
+		for _, field := range []string{"id", "object", "created_at", "status", "model"} {
+			if value := response.Get(field); value.Exists() && value.Type != gjson.Null {
+				rebuilt, _ = sjson.SetRawBytes(rebuilt, field, []byte(value.Raw))
+			}
+		}
+		rebuilt, _ = sjson.SetRawBytes(rebuilt, "error", errorObject)
+		if usage := response.Get("usage"); usage.IsObject() {
+			rebuilt, _ = sjson.SetRawBytes(rebuilt, "usage", []byte(usage.Raw))
+		}
+		out, _ = sjson.SetRawBytes(out, "response", rebuilt)
+	} else {
+		out, _ = sjson.SetRawBytes(out, "error", errorObject)
 	}
-	return result
+	return copyCodexPublicEventFields(root, out, "sequence_number")
+}
+
+func copyCodexPublicEventFields(root gjson.Result, out []byte, fields ...string) []byte {
+	for _, field := range fields {
+		if value := root.Get(field); value.Exists() && value.Type != gjson.Null {
+			out, _ = sjson.SetRawBytes(out, field, []byte(value.Raw))
+		}
+	}
+	return out
 }
 
 // Install beneath the ops capture writer: diagnostics see the original error,
@@ -235,22 +382,36 @@ func OpenAIErrorMessageOutput(settings *SettingService, next gin.HandlerFunc) gi
 			c.Set(string(ctxkey.Platform), platform)
 		}
 		enabled := func() bool {
-			return c.GetString(string(ctxkey.Platform)) == PlatformOpenAI
+			return c.GetString(string(ctxkey.Platform)) == PlatformOpenAI && !isLocalOpenAIError(c)
 		}
 		w := &codexSafetyBufferingHTTPWriter{
 			ResponseWriter: c.Writer, ctx: ctx, c: c,
 			projectionEnabled: enabled,
 			bypassProjection: func() bool {
+				if c.GetString(string(ctxkey.Platform)) != PlatformOpenAI || isLocalOpenAIError(c) {
+					return true
+				}
+				// A confirmed final failure is projected regardless of the
+				// upstream MIME type or body shape (C07).
+				if getOpenAIErrorMessageSource(c).recorded {
+					return false
+				}
 				contentType := strings.ToLower(headers.Get("Content-Type"))
-				return c.GetString(string(ctxkey.Platform)) != PlatformOpenAI || (!strings.HasPrefix(contentType, "application/json") && !isEventStreamResponse(headers))
+				return !strings.HasPrefix(contentType, "application/json") && !isEventStreamResponse(headers)
 			},
 			projectPayload: func(payload []byte, _ string) []byte {
-				if enabled() {
-					return normalizeOpenAIErrorMessageWithResolver(payload, getOpenAIErrorMessageSource(c), func(key string) string {
-						return settings.CodexPublicErrorMessage(ctx, key)
-					})
+				if !enabled() {
+					return payload
 				}
-				return payload
+				source := getOpenAIErrorMessageSource(c)
+				if !source.recorded && !hasOpenAIProtocolError(payload) {
+					// Ordinary content and unknown valid events keep their
+					// original bytes unless a final failure was recorded.
+					return payload
+				}
+				return normalizeOpenAIErrorMessageWithResolver(payload, source, func(key string) string {
+					return settings.CodexPublicErrorMessage(ctx, key)
+				})
 			},
 			stripDiagnosticHeaders: true,
 		}
@@ -267,13 +428,46 @@ func OpenAIErrorMessageOutput(settings *SettingService, next gin.HandlerFunc) gi
 	}
 }
 
+func hasOpenAIProtocolError(payload []byte) bool {
+	if !json.Valid(payload) {
+		return false
+	}
+	root := gjson.ParseBytes(payload)
+	if !root.IsObject() {
+		return false
+	}
+	switch root.Get("type").String() {
+	case "error", "response.failed":
+		return true
+	}
+	return root.Get("error").IsObject()
+}
+
+// CodexPublicErrorMessage exposes the effective catalog text to read-side
+// projections such as user history and async task views.
+func (s *OpenAIGatewayService) CodexPublicErrorMessage(ctx context.Context, key string) string {
+	return s.codexPublicErrorMessage(ctx, key)
+}
+
+// codexPublicErrorMessage returns the effective catalog text for a key.
+func (s *OpenAIGatewayService) codexPublicErrorMessage(ctx context.Context, key string) string {
+	if s != nil && s.settingService != nil {
+		if message := strings.TrimSpace(s.settingService.CodexPublicErrorMessage(ctx, key)); message != "" {
+			return message
+		}
+	}
+	if definition, ok := codexPublicErrorByKey(key); ok {
+		return definition.DefaultMessage
+	}
+	return ""
+}
+
 func (s *OpenAIGatewayService) projectCodexPublicErrorPayload(ctx context.Context, payload []byte) []byte {
 	if s == nil || s.settingService == nil {
 		return payload
 	}
 	source := openAIErrorMessageSource{}
 	if code := openAIErrorMessageCode(payload); code != "" {
-		source.code = code
 		if key, ok := codexPublicErrorKeyFromCode(code); ok {
 			source.key = key
 		}
@@ -285,7 +479,7 @@ func (s *OpenAIGatewayService) projectCodexPublicErrorPayload(ctx context.Contex
 
 func (s *OpenAIGatewayService) projectOpenAIWebSocketOutput(ctx context.Context, c *gin.Context, account *Account, payload []byte) []byte {
 	payload = s.projectCodexSafetyBufferingOutput(ctx, c, account, payload, "websocket")
-	if account != nil && account.Platform == PlatformOpenAI && s.settingService != nil {
+	if account != nil && account.Platform == PlatformOpenAI && s.settingService != nil && !isLocalOpenAIError(c) {
 		return normalizeOpenAIErrorMessageWithResolver(payload, getOpenAIErrorMessageSource(c), func(key string) string {
 			return s.settingService.CodexPublicErrorMessage(ctx, key)
 		})

@@ -74,6 +74,50 @@ func (s *SettingRepoSuite) TestGetMultiple_Subset() {
 	s.Require().False(exists, "nonexistent key should not be in map")
 }
 
+func (s *SettingRepoSuite) TestCompareAndSetSettingsMissingRowsSerialize() {
+	// Two independent clients, so the placeholder rows serialize the two
+	// first-write transactions on an upgraded database.
+	repoA := NewSettingRepository(testEntClient(s.T())).(*settingRepository)
+	repoB := NewSettingRepository(testEntClient(s.T())).(*settingRepository)
+	keyA := "cas_missing_first_a"
+	keyB := "cas_missing_first_b"
+	cleanup := func() {
+		_ = repoA.SetMultiple(context.Background(), map[string]string{keyA: "", keyB: ""})
+	}
+	defer cleanup()
+	cleanup()
+
+	expected := map[string]string{keyA: "", keyB: ""}
+	type result struct {
+		applied bool
+		err     error
+	}
+	start := make(chan struct{})
+	results := make(chan result, 2)
+	for _, repo := range []*settingRepository{repoA, repoB} {
+		go func(repo *settingRepository) {
+			<-start
+			applied, err := repo.CompareAndSetSettings(context.Background(), expected, map[string]string{keyA: "A", keyB: "B"})
+			results <- result{applied: applied, err: err}
+		}(repo)
+	}
+	close(start)
+	first, second := <-results, <-results
+	require.NoError(s.T(), first.err)
+	require.NoError(s.T(), second.err)
+	applied := 0
+	if first.applied {
+		applied++
+	}
+	if second.applied {
+		applied++
+	}
+	require.Equal(s.T(), 1, applied, "exactly one first write must commit")
+	values, err := repoA.GetMultiple(context.Background(), []string{keyA, keyB})
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), map[string]string{keyA: "A", keyB: "B"}, values)
+}
+
 func (s *SettingRepoSuite) TestGetAll() {
 	s.Require().NoError(s.repo.SetMultiple(s.ctx, map[string]string{"x": "1", "y": "2"}))
 	all, err := s.repo.GetAll(s.ctx)

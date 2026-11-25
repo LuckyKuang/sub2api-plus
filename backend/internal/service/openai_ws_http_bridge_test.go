@@ -1224,7 +1224,8 @@ func TestProxyOpenAIWSHTTPBridgeTurnHTTPCapacityShedWritesClientErrorWithoutFail
 	require.Len(t, writes, 1)
 	require.Contains(t, string(writes[0]), `"code":"server_error"`)
 	require.NotContains(t, string(writes[0]), "server_is_overloaded")
-	require.Contains(t, string(writes[0]), message)
+	require.NotContains(t, string(writes[0]), message, "provider free text must not reach the WS client")
+	require.Contains(t, string(writes[0]), "当前模型繁忙，请稍后再试或更换模型。")
 }
 
 func TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataBeforeCapacityFailover(t *testing.T) {

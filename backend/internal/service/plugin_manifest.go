@@ -42,9 +42,9 @@ type PluginManifest struct {
 	Author        string                   `json:"author,omitempty"`
 	Requires      PluginRequirements       `json:"requires"`
 	Capabilities  []PluginCapability       `json:"capabilities"`
-	Runtimes      map[string]PluginRuntime `json:"runtimes"`
-	UI            PluginUIManifest         `json:"ui"`
-	Files         map[string]string        `json:"files"`
+	Runtimes      map[string]PluginRuntime `json:"runtimes,omitempty"`
+	UI            *PluginUIManifest        `json:"ui,omitempty"`
+	Files         map[string]string        `json:"files,omitempty"`
 }
 
 type PluginRequirements struct {
@@ -213,7 +213,7 @@ func (m PluginManifest) Validate() error {
 		}
 	}
 	if hasRequest && !hasTransport {
-		if len(m.Runtimes) > 0 || strings.TrimSpace(m.UI.Entrypoint) != "" || len(m.Files) > 0 {
+		if len(m.Runtimes) > 0 || (m.UI != nil && strings.TrimSpace(m.UI.Entrypoint) != "") || len(m.Files) > 0 {
 			return errors.New("纯请求处理插件不能包含运行时、UI 或可执行文件")
 		}
 		return nil
@@ -222,7 +222,7 @@ func (m PluginManifest) Validate() error {
 	if !ok || !safePluginRelativePath(runtimeEntry.Path) {
 		return fmt.Errorf("插件不支持当前运行平台 %s", m.RuntimeKey())
 	}
-	if !safePluginRelativePath(m.UI.Entrypoint) || !strings.HasPrefix(m.UI.Entrypoint, "ui/") {
+	if m.UI == nil || !safePluginRelativePath(m.UI.Entrypoint) || !strings.HasPrefix(m.UI.Entrypoint, "ui/") {
 		return errors.New("插件 UI 入口必须位于 ui/ 目录")
 	}
 	if len(m.Files) == 0 {
@@ -260,7 +260,7 @@ func (m PluginManifest) IsRequestOnly() bool {
 			return false
 		}
 	}
-	return hasRequest && len(m.Runtimes) == 0 && strings.TrimSpace(m.UI.Entrypoint) == ""
+	return hasRequest && len(m.Runtimes) == 0 && (m.UI == nil || strings.TrimSpace(m.UI.Entrypoint) == "")
 }
 
 // HasRequestInstructions reports whether the package declares the request

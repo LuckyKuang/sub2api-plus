@@ -254,7 +254,10 @@ func (w *codexSafetyBufferingHTTPWriter) prepareHeaders() {
 	if isEventStreamResponse(w.Header()) {
 		w.removeFixedContentLength()
 	}
-	if w.stripDiagnosticHeaders && !w.Written() {
+	// Diagnostic headers belong to confirmed failures. A successful response,
+	// including an async image submission whose Location is its polling
+	// address, keeps its own protocol headers.
+	if w.stripDiagnosticHeaders && !w.Written() && w.Status() >= http.StatusBadRequest {
 		for _, name := range codexPublicErrorUnsafeHeaders {
 			w.Header().Del(name)
 		}
@@ -328,6 +331,11 @@ func (w *codexSafetyBufferingHTTPWriter) Write(p []byte) (int, error) {
 		projected := w.project(p, "http")
 		if !bytes.Equal(projected, p) && !w.Written() {
 			w.Header().Del("Content-Length")
+			if !isEventStreamResponse(w.Header()) && !strings.HasPrefix(strings.ToLower(w.Header().Get("Content-Type")), "application/json") {
+				// A confirmed failure may arrive as HTML, text or binary. Its
+				// replacement is always the approved JSON envelope.
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			}
 		}
 		if err := w.writeRaw(projected); err != nil {
 			return 0, err
@@ -466,6 +474,9 @@ func (w *codexSafetyBufferingHTTPWriter) finish() error {
 		payload := w.project(original, "http")
 		if !bytes.Equal(payload, original) && !w.Written() {
 			w.Header().Del("Content-Length")
+			if !isEventStreamResponse(w.Header()) && !strings.HasPrefix(strings.ToLower(w.Header().Get("Content-Type")), "application/json") {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			}
 		}
 		return w.writeRaw(payload)
 	}

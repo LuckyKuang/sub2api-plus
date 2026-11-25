@@ -3,6 +3,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -75,16 +76,16 @@ func TestFilterStaticCatalogModelsHidesGLM54WithoutCodingPlan(t *testing.T) {
 
 func TestAggregateAccountModelAllowedRequiresCodingPlanEvidenceForGLM54(t *testing.T) {
 	payg := &Account{Platform: PlatformZhipu, Type: AccountTypeAPIKey, Credentials: map[string]any{"account_mode": AccountModePayG}}
-	require.True(t, aggregateAccountModelAllowed(payg, "glm-5.3"))
-	require.False(t, aggregateAccountModelAllowed(payg, "glm-5.4"))
+	require.True(t, aggregateAccountModelAllowed(context.Background(), payg, "glm-5.3"))
+	require.False(t, aggregateAccountModelAllowed(context.Background(), payg, "glm-5.4"))
 
 	coding := &Account{Platform: PlatformZhipu, Type: AccountTypeAPIKey, Credentials: map[string]any{"account_mode": AccountModeCoding}}
-	require.True(t, aggregateAccountModelAllowed(coding, "glm-5.4"))
+	require.True(t, aggregateAccountModelAllowed(context.Background(), coding, "glm-5.4"))
 
 	// A live snapshot is positive evidence even on a pay-as-you-go account.
 	observed := &Account{Platform: PlatformZhipu, Type: AccountTypeAPIKey, Credentials: map[string]any{"account_mode": AccountModePayG}}
 	observed.SetUpstreamModelMetadataSnapshot(UpstreamModelMetadataSnapshot{
 		Models: map[string]UpstreamModelMetadata{"glm-5.4": {ID: "glm-5.4"}},
 	})
-	require.True(t, aggregateAccountModelAllowed(observed, "glm-5.4"))
+	require.True(t, aggregateAccountModelAllowed(context.Background(), observed, "glm-5.4"))
 }

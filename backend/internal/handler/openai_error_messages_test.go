@@ -71,12 +71,15 @@ func TestOpenAIErrorMessagesPreserveOpsDiagnostics(t *testing.T) {
 func TestOpenAIErrorMessagesFailoverExhausted(t *testing.T) {
 	for _, platform := range []string{service.PlatformOpenAI, service.PlatformGrok} {
 		for _, streaming := range []bool{false, true} {
-			for _, failure := range []struct{ code, want, publicCode, errorType string }{
-				{"upstream_unavailable", "服务暂时不可用，请稍后再试。", "upstream_unavailable", "service_unavailable_error"},
-				{"upstream_response_interrupted", "本次响应已中断。请先检查已收到的内容，再决定是否继续。", "upstream_response_interrupted", "server_error"},
-				{"session_account_lost", "当前会话可能无法恢复，请新开会话继续。", "session_account_lost", "server_error"},
-				{"other_error", "服务暂时不可用，请稍后再试。", "upstream_unavailable", "service_unavailable_error"},
-				{"UPSTREAM_UNAVAILABLE", "服务暂时不可用，请稍后再试。", "upstream_unavailable", "service_unavailable_error"},
+			for _, failure := range []struct {
+				code, want, publicCode, errorType string
+				wantStatus                        int
+			}{
+				{"upstream_unavailable", "服务暂时不可用，请稍后再试。", "upstream_unavailable", "service_unavailable_error", 503},
+				{"upstream_response_interrupted", "本次响应已中断。请先检查已收到的内容，再决定是否继续。", "upstream_response_interrupted", "server_error", 502},
+				{"session_account_lost", "当前会话可能无法恢复，请新开会话继续。", "session_account_lost", "server_error", 503},
+				{"other_error", "服务暂时不可用，请稍后再试。", "upstream_unavailable", "service_unavailable_error", 503},
+				{"UPSTREAM_UNAVAILABLE", "服务暂时不可用，请稍后再试。", "upstream_unavailable", "service_unavailable_error", 503},
 			} {
 				t.Run(fmt.Sprintf("%s/stream=%t/%s", platform, streaming, failure.code), func(t *testing.T) {
 					setupOpsErrorLogTestQueue(t, 1)
@@ -107,7 +110,11 @@ func TestOpenAIErrorMessagesFailoverExhausted(t *testing.T) {
 						require.Contains(t, rec.Body.String(), `"type":"response.failed"`)
 						require.Contains(t, rec.Body.String(), want)
 					} else {
-						require.Equal(t, 502, rec.Code)
+						wantStatus := 502
+						if platform == service.PlatformOpenAI {
+							wantStatus = failure.wantStatus
+						}
+						require.Equal(t, wantStatus, rec.Code)
 						if platform == service.PlatformOpenAI {
 							require.JSONEq(t, `{"error":{"code":"`+failure.publicCode+`","type":"`+failure.errorType+`","message":"`+want+`"}}`, rec.Body.String())
 						} else {

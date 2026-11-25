@@ -63,7 +63,7 @@ func localProcessPluginPackage(t *testing.T) (archive []byte, publicKey string, 
 		Runtimes: map[string]PluginRuntime{
 			runtime.GOOS + "-" + runtime.GOARCH: {Path: binaryPath},
 		},
-		UI:    PluginUIManifest{Entrypoint: "ui/index.html"},
+		UI:    &PluginUIManifest{Entrypoint: "ui/index.html"},
 		Files: hashes,
 	}
 	manifestRaw, err := json.Marshal(manifest)

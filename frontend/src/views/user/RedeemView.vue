@@ -503,12 +503,14 @@ const handleRedeem = async () => {
   } catch (error: any) {
     // A network failure or timeout cannot tell us whether the server committed
     // the redemption, so never claim it failed outright.
-    errorMessage.value =
-      error?.status === 0
-        ? t('redeem.uncertainResult')
-        : extractI18nErrorMessage(error, t, 'redeem.errors', t('redeem.failedToRedeem'))
-
-    appStore.showError(t('redeem.redeemFailed'))
+    if (error?.status === 0) {
+      errorMessage.value = t('redeem.uncertainResult')
+      // An unknown outcome is not a confirmed failure. Do not claim it failed.
+      appStore.showWarning(t('redeem.uncertainResult'))
+    } else {
+      errorMessage.value = extractI18nErrorMessage(error, t, 'redeem.errors', t('redeem.failedToRedeem'))
+      appStore.showError(t('redeem.redeemFailed'))
+    }
   } finally {
     submitting.value = false
   }

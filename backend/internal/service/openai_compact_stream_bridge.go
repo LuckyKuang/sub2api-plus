@@ -98,6 +98,8 @@ func writeOpenAICompactSSEFailure(c *gin.Context, statusCode int, errorBody []by
 	if len(errorBody) > 0 {
 		message = sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(errorBody)))
 	}
+	key, publicStatus := ClassifyCodexPublicFailure(statusCode, errorBody)
+	SetCodexPublicErrorFinal(c, key, publicStatus)
 	if message == "" {
 		message = "Upstream compact request failed with HTTP " + strconv.Itoa(statusCode)
 	}
@@ -112,7 +114,14 @@ func writeOpenAICompactSSEFailureMessage(c *gin.Context, statusCode int, errType
 	if c == nil {
 		return
 	}
-	SetOpenAIErrorMessageGeneratedCode(c, errType)
+	publicCode := errType
+	publicType := errType
+	if definition, ok := codexPublicErrorByKey(getOpenAIErrorMessageSource(c).key); ok {
+		publicCode = definition.PublicCode
+		publicType = definition.ErrorType
+		message = definition.DefaultMessage
+		errType = definition.ErrorType
+	}
 	MarkOpsStreamError(c, errType, message, statusCode)
 	payload, err := json.Marshal(map[string]any{
 		"type":            "response.failed",
@@ -126,7 +135,8 @@ func writeOpenAICompactSSEFailureMessage(c *gin.Context, statusCode int, errType
 			"status":     "failed",
 			"output":     []any{},
 			"error": map[string]any{
-				"code":    errType,
+				"code":    publicCode,
+				"type":    publicType,
 				"message": message,
 			},
 		},

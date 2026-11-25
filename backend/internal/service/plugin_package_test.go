@@ -192,7 +192,7 @@ func testPluginManifest(files map[string][]byte) PluginManifest {
 		Runtimes: map[string]PluginRuntime{
 			PluginManifest{}.RuntimeKey(): {Path: "bin/plugin"},
 		},
-		UI:    PluginUIManifest{Entrypoint: "ui/index.html"},
+		UI:    &PluginUIManifest{Entrypoint: "ui/index.html"},
 		Files: hashes,
 	}
 }
@@ -261,7 +261,9 @@ func TestPluginPackageInstallerInstallsRequestOnlyPackage(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, installation.Manifest.IsRequestOnly())
 	require.Equal(t, PluginStateDisabled, installation.State)
-	require.Empty(t, installation.BinarySHA256)
+	// A request-only package has no executable, so its artifact digest is the
+	// comparable generation used by all mutation guards.
+	require.Len(t, installation.BinarySHA256, 64)
 	require.FileExists(t, installation.ArtifactPath)
 	require.DirExists(t, installation.InstallPath)
 	require.Len(t, installation.Manifest.Capabilities, 1)

@@ -54,6 +54,23 @@ volumes:
   redis_data:
 ```
 
+## WSL2 Availability
+
+If the published port stops responding after deployment, run
+`wsl.exe --list --verbose` from PowerShell. WSL can stop an idle distribution
+after the last attached command exits. Docker and the published port go offline
+with the distribution. See [Microsoft's WSL service documentation](https://learn.microsoft.com/en-us/windows/wsl/systemd#how-does-enabling-systemd-affect-wsl-architecture).
+
+For a twelve-hour audit window, keep this command open in a dedicated
+PowerShell terminal. Substitute your deployment's distribution name for
+`ubuntu`. Press Ctrl+C to end the session early.
+
+```powershell
+wsl.exe --distribution ubuntu --exec /usr/bin/sleep 12h
+```
+
+Once Docker is running, check `/health` on the configured published port again.
+
 ## Startup and Database Recovery
 
 `concurrency.ping_interval` defaults to 10 seconds and accepts 0 or 5–30.

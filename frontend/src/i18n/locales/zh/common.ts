@@ -18,6 +18,7 @@ export default {
     required: '必填',
     sending: '发送中...',
     tryAgain: '请重试',
+    retry: '重试',
     update: '更新',
     confirm: '确认',
     reset: '重置',

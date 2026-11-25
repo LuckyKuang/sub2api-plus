@@ -115,11 +115,15 @@ func TestOpenAIErrorMessagesRealAccountFailover(t *testing.T) {
 						}
 						require.NotContains(t, rec.Body.String(), "响应已中断")
 					} else {
-						require.Equal(t, 502, rec.Code)
-						require.Contains(t, rec.Header().Get("Content-Type"), "application/json", "an uncommitted SSE attempt must not label the final JSON error as an event stream")
+						wantStatus := 503
 						if final == "other_error" && wire == "sse" {
 							// A failed SSE event has no error HTTP status; the unknown code
 							// reaches the generic server-error fallback.
+							wantStatus = 502
+						}
+						require.Equal(t, wantStatus, rec.Code)
+						require.Contains(t, rec.Header().Get("Content-Type"), "application/json", "an uncommitted SSE attempt must not label the final JSON error as an event stream")
+						if final == "other_error" && wire == "sse" {
 							require.JSONEq(t, `{"error":{"code":"server_error","type":"server_error","message":"服务处理请求时出错，请稍后再试。"}}`, rec.Body.String())
 						} else {
 							require.JSONEq(t, `{"error":{"code":"upstream_unavailable","type":"service_unavailable_error","message":"服务暂时不可用，请稍后再试。"}}`, rec.Body.String())

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,11 +9,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/domain"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 const (
@@ -106,11 +110,62 @@ func validatePluginInstructionText(text string, allowEmpty bool) error {
 	return nil
 }
 
+// mixedPluginInstructionSection is the host-owned config section in a package
+// that also declares a transport. The runtime owns every other field.
+const mixedPluginInstructionSection = "request_instructions"
+
+// pluginRequestInstructionConfigFromManifest selects the instruction-owned
+// config for a package. Pure declarative packages keep the legacy top-level
+// shape; mixed packages use the dedicated section.
+func pluginRequestInstructionConfigFromManifest(manifest PluginManifest, raw []byte) (pluginRequestInstructionConfig, error) {
+	if !manifest.HasRequestInstructions() {
+		return pluginRequestInstructionConfig{}, nil
+	}
+	if manifest.IsRequestOnly() {
+		return validatePluginRequestInstructionConfig(raw)
+	}
+	section := gjson.GetBytes(raw, mixedPluginInstructionSection)
+	if !section.Exists() || section.Type == gjson.Null {
+		return pluginRequestInstructionConfig{}, nil
+	}
+	if !section.IsObject() {
+		return pluginRequestInstructionConfig{}, errors.New("request_instructions 必须是 JSON 对象")
+	}
+	return validatePluginRequestInstructionConfig([]byte(section.Raw))
+}
+
+// splitMixedPluginConfig removes the host-owned instruction section before the
+// runtime validates or applies its own configuration.
+func splitMixedPluginConfig(manifest PluginManifest, raw []byte) (runtimeConfig []byte, instructionConfig []byte, err error) {
+	if !manifest.HasRequestInstructions() || manifest.IsRequestOnly() || !manifestHasTransportCapability(manifest) {
+		return raw, nil, nil
+	}
+	if len(raw) == 0 || !json.Valid(raw) {
+		return raw, nil, nil
+	}
+	section := gjson.GetBytes(raw, mixedPluginInstructionSection)
+	if !section.Exists() || section.Type == gjson.Null {
+		return raw, nil, nil
+	}
+	if !section.IsObject() {
+		return nil, nil, errors.New("request_instructions 必须是 JSON 对象")
+	}
+	if _, err := validatePluginRequestInstructionConfig([]byte(section.Raw)); err != nil {
+		return nil, nil, err
+	}
+	runtimeConfig, err = sjson.DeleteBytes(raw, mixedPluginInstructionSection)
+	if err != nil {
+		return nil, nil, err
+	}
+	return runtimeConfig, []byte(section.Raw), nil
+}
+
 func (c pluginRequestInstructionConfig) resolve(platform, accountType string) string {
 	platform = strings.TrimSpace(platform)
 	accountType = strings.TrimSpace(accountType)
+	accountType = pluginAccountType(accountType)
 	for _, override := range c.AccountOverrides {
-		if override.Platform == platform && override.AccountType == accountType {
+		if override.Platform == platform && pluginAccountType(override.AccountType) == accountType {
 			return strings.TrimSpace(override.Text)
 		}
 	}
@@ -138,7 +193,7 @@ func (m *PluginManager) publishRequestRules(installations []*PluginInstallation)
 				slog.Warn("plugin_request_config_decrypt_failed", "plugin_id", installation.ID, "error", err)
 				continue
 			}
-			config, err := validatePluginRequestInstructionConfig(raw)
+			config, err := pluginRequestInstructionConfigFromManifest(installation.Manifest, raw)
 			if err != nil {
 				slog.Warn("plugin_request_config_invalid", "plugin_id", installation.ID, "error", err)
 				continue
@@ -154,12 +209,18 @@ func (m *PluginManager) publishRequestRules(installations []*PluginInstallation)
 			})
 		}
 	}
+	// Stable plugin ID and binding order make the composed text deterministic
+	// across reloads and map iteration.
+	sort.SliceStable(rules, func(i, j int) bool {
+		if rules[i].pluginID != rules[j].pluginID {
+			return rules[i].pluginID < rules[j].pluginID
+		}
+		return rules[i].bindingID < rules[j].bindingID
+	})
 	m.requestRules.Store(rules)
 }
 
-// RequestInstructionsForAccount returns the ordered, non-empty instruction
-// blocks that apply to this credential. One text is selected per plugin, using
-// exact account override, platform override, then default precedence.
+// pluginAccountType maps a setup-token credential onto its OAuth binding scope.
 func pluginAccountType(value string) string {
 	if value == AccountTypeSetupToken {
 		return AccountTypeOAuth
@@ -177,7 +238,6 @@ func (m *PluginManager) RequestInstructionsForAccount(account *Account) string {
 		return ""
 	}
 	texts := make([]string, 0, len(rules))
-	seen := make(map[string]struct{}, len(rules))
 	for _, rule := range rules {
 		if rule.platform != account.Platform || rule.accountType != accountType {
 			continue
@@ -189,10 +249,8 @@ func (m *PluginManager) RequestInstructionsForAccount(account *Account) string {
 		if text == "" {
 			continue
 		}
-		if _, exists := seen[text]; exists {
-			continue
-		}
-		seen[text] = struct{}{}
+		// Every plugin contributes its own block, even when two plugins
+		// happen to use identical text.
 		texts = append(texts, text)
 	}
 	return strings.Join(texts, "\n\n")
@@ -219,79 +277,106 @@ func ApplyPluginRequestInstructions(body []byte, protocol, text string) ([]byte,
 	}
 }
 
+type pluginInstructionBody struct {
+	io.Reader
+	io.Closer
+}
+
+func jsonStringValue(value string) string {
+	encoded, _ := json.Marshal(value)
+	return string(encoded)
+}
+
 func prependChatInstruction(body []byte, text string) ([]byte, bool) {
-	var root map[string]any
-	if err := json.Unmarshal(body, &root); err != nil {
-		return body, false
+	messages := gjson.GetBytes(body, "messages")
+	if !messages.IsArray() {
+		updated, err := sjson.SetRawBytes(body, "messages", []byte(`[{"role":"system","content":`+jsonStringValue(text)+`}]`))
+		return updated, err == nil
 	}
-	messages, _ := root["messages"].([]any)
-	if len(messages) > 0 {
-		if first, ok := messages[0].(map[string]any); ok {
-			role, _ := first["role"].(string)
-			if role == "system" || role == "developer" {
-				switch content := first["content"].(type) {
-				case string:
-					first["content"] = text + "\n\n" + content
-				case []any:
-					first["content"] = append([]any{map[string]any{"type": "text", "text": text}}, content...)
-				default:
-					first["content"] = text
-				}
-				return mustMarshal(root), true
+	if first := messages.Get("0"); first.IsObject() {
+		role := first.Get("role").String()
+		if role == "system" || role == "developer" {
+			content := first.Get("content")
+			switch {
+			case content.Type == gjson.String:
+				updated, err := sjson.SetBytes(body, "messages.0.content", text+"\n\n"+content.String())
+				return updated, err == nil
+			case content.IsArray():
+				parts := make([]string, 0, 1)
+				parts = append(parts, `{"type":"text","text":`+jsonStringValue(text)+`}`)
+				content.ForEach(func(_, part gjson.Result) bool {
+					parts = append(parts, part.Raw)
+					return true
+				})
+				updated, err := sjson.SetRawBytes(body, "messages.0.content", []byte("["+strings.Join(parts, ",")+"]"))
+				return updated, err == nil
+			default:
+				updated, err := sjson.SetBytes(body, "messages.0.content", text)
+				return updated, err == nil
 			}
 		}
 	}
-	root["messages"] = append([]any{map[string]any{"role": "system", "content": text}}, messages...)
-	return mustMarshal(root), true
+	parts := make([]string, 0, 1)
+	parts = append(parts, `{"role":"system","content":`+jsonStringValue(text)+`}`)
+	messages.ForEach(func(_, message gjson.Result) bool {
+		parts = append(parts, message.Raw)
+		return true
+	})
+	updated, err := sjson.SetRawBytes(body, "messages", []byte("["+strings.Join(parts, ",")+"]"))
+	return updated, err == nil
 }
 
 func prependResponsesInstruction(body []byte, text string) ([]byte, bool) {
-	var root map[string]any
-	if err := json.Unmarshal(body, &root); err != nil {
-		return body, false
+	instructions := gjson.GetBytes(body, "instructions")
+	value := text
+	if instructions.Type == gjson.String {
+		if existing := strings.TrimSpace(instructions.String()); existing != "" {
+			value = text + "\n\n" + existing
+		}
 	}
-	existing, _ := root["instructions"].(string)
-	if strings.TrimSpace(existing) == "" {
-		root["instructions"] = text
-	} else {
-		root["instructions"] = text + "\n\n" + existing
-	}
-	return mustMarshal(root), true
+	updated, err := sjson.SetBytes(body, "instructions", value)
+	return updated, err == nil
 }
 
 func prependAnthropicInstruction(body []byte, text string) ([]byte, bool) {
-	var root map[string]any
-	if err := json.Unmarshal(body, &root); err != nil {
-		return body, false
-	}
-	switch system := root["system"].(type) {
-	case string:
-		if strings.TrimSpace(system) == "" {
-			root["system"] = text
-		} else {
-			root["system"] = text + "\n\n" + system
+	system := gjson.GetBytes(body, "system")
+	switch {
+	case system.Type == gjson.String:
+		value := text
+		if existing := strings.TrimSpace(system.String()); existing != "" {
+			value = text + "\n\n" + existing
 		}
-	case []any:
-		root["system"] = append([]any{map[string]any{"type": "text", "text": text}}, system...)
+		updated, err := sjson.SetBytes(body, "system", value)
+		return updated, err == nil
+	case system.IsArray():
+		parts := make([]string, 0, 1)
+		parts = append(parts, `{"type":"text","text":`+jsonStringValue(text)+`}`)
+		system.ForEach(func(_, part gjson.Result) bool {
+			parts = append(parts, part.Raw)
+			return true
+		})
+		updated, err := sjson.SetRawBytes(body, "system", []byte("["+strings.Join(parts, ",")+"]"))
+		return updated, err == nil
 	default:
-		root["system"] = text
+		updated, err := sjson.SetBytes(body, "system", text)
+		return updated, err == nil
 	}
-	return mustMarshal(root), true
 }
 
 func prependGeminiInstruction(body []byte, text string) ([]byte, bool) {
-	var root map[string]any
-	if err := json.Unmarshal(body, &root); err != nil {
-		return body, false
+	parts := gjson.GetBytes(body, "systemInstruction.parts")
+	if !parts.IsArray() {
+		updated, err := sjson.SetRawBytes(body, "systemInstruction", []byte(`{"parts":[{"text":`+jsonStringValue(text)+`}]}`))
+		return updated, err == nil
 	}
-	instruction, _ := root["systemInstruction"].(map[string]any)
-	if instruction == nil {
-		instruction = map[string]any{}
-	}
-	parts, _ := instruction["parts"].([]any)
-	instruction["parts"] = append([]any{map[string]any{"text": text}}, parts...)
-	root["systemInstruction"] = instruction
-	return mustMarshal(root), true
+	values := make([]string, 0, 1)
+	values = append(values, `{"text":`+jsonStringValue(text)+`}`)
+	parts.ForEach(func(_, part gjson.Result) bool {
+		values = append(values, part.Raw)
+		return true
+	})
+	updated, err := sjson.SetRawBytes(body, "systemInstruction.parts", []byte("["+strings.Join(values, ",")+"]"))
+	return updated, err == nil
 }
 
 func mustMarshal(value any) []byte {
@@ -302,18 +387,51 @@ func mustMarshal(value any) []byte {
 	return encoded
 }
 
-// applyPluginRequestInstructions is the OpenAI-service choke point used by
-// native Chat, Responses, Anthropic-compatible Messages and OpenAI-compatible
-// providers. The final account identity and protocol are already selected.
+// pluginInstructionsAppliedKey marks a body that already passed the
+// instruction transform before wire encoding (for example Grok compression).
+type pluginInstructionsAppliedKey struct{}
+
+func withPluginInstructionsApplied(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, pluginInstructionsAppliedKey{}, true)
+}
+
+func pluginInstructionsApplied(ctx context.Context) bool {
+	applied, _ := ctx.Value(pluginInstructionsAppliedKey{}).(bool)
+	return applied
+}
+
+// applyPluginInstructionsToBody applies the configured blocks to a protocol
+// body. Callers that encode or compress the body before the transport hook must
+// use this first and mark the request context.
+func (s *OpenAIGatewayService) applyPluginInstructionsToBody(body []byte, account *Account, protocol string) []byte {
+	if s == nil || s.pluginManager == nil || account == nil || len(body) == 0 {
+		return body
+	}
+	text := s.pluginManager.RequestInstructionsForAccount(account)
+	if text == "" || len(body) > pluginRequestInstructionMaxBodyBytes {
+		return body
+	}
+	modified, changed := ApplyPluginRequestInstructions(body, protocol, text)
+	if !changed {
+		return body
+	}
+	return modified
+}
+
+// applyPluginRequestInstructions is the final pre-signing choke point. It runs
+// after the credential owner is resolved and uses that owner's binding scope.
 func (s *OpenAIGatewayService) applyPluginRequestInstructions(request *http.Request, account *Account) (*http.Request, error) {
-	if s == nil {
+	if s == nil || request == nil || pluginInstructionsApplied(request.Context()) {
 		return request, nil
 	}
 	return applyPluginRequestInstructionsWithManager(s.pluginManager, request, account)
 }
 
 func (s *AccountTestService) applyPluginRequestInstructions(request *http.Request, account *Account) (*http.Request, error) {
-	if s == nil {
+	if s == nil || request == nil || pluginInstructionsApplied(request.Context()) {
 		return request, nil
 	}
 	return applyPluginRequestInstructionsWithManager(s.pluginManager, request, account)
@@ -330,15 +448,20 @@ func applyPluginRequestInstructionsWithManager(manager *PluginManager, request *
 	if request.ContentLength > pluginRequestInstructionMaxBodyBytes {
 		return request, nil
 	}
-	body, err := io.ReadAll(io.LimitReader(request.Body, pluginRequestInstructionMaxBodyBytes+1))
+	original := request.Body
+	body, err := io.ReadAll(io.LimitReader(original, pluginRequestInstructionMaxBodyBytes+1))
 	if err != nil {
+		_ = original.Close()
 		return nil, err
 	}
-	_ = request.Body.Close()
 	if len(body) > pluginRequestInstructionMaxBodyBytes {
-		request.Body = io.NopCloser(strings.NewReader(string(body)))
+		// An unknown-length stream can exceed the transform limit. Preserve
+		// every byte: the already-read prefix stays in front of the unread
+		// remainder of the original stream.
+		request.Body = pluginInstructionBody{Reader: io.MultiReader(bytes.NewReader(body), original), Closer: original}
 		return request, nil
 	}
+	_ = original.Close()
 	protocol := pluginRequestProtocol(request, body)
 	modified, changed := ApplyPluginRequestInstructions(body, protocol, text)
 	if !changed {
@@ -353,8 +476,35 @@ func applyPluginRequestInstructionsWithManager(manager *PluginManager, request *
 	return request, nil
 }
 
+// pluginRequestOperationKey declares the final wire operation when the path
+// alone cannot identify it (for example a compatible base path containing
+// another protocol's name).
+type pluginRequestOperationKey struct{}
+
+func WithPluginRequestOperation(ctx context.Context, operation string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, pluginRequestOperationKey{}, strings.ToLower(strings.TrimSpace(operation)))
+}
+
 func pluginRequestProtocol(request *http.Request, body []byte) string {
 	path := strings.ToLower(request.URL.Path)
+	if operation, _ := request.Context().Value(pluginRequestOperationKey{}).(string); operation != "" {
+		switch operation {
+		case "embeddings", "images", "models", "count_tokens", "moderations":
+			return ""
+		case APIProtocolAnthropic, APIProtocolResponses, APIProtocolChatCompletions, "gemini":
+			return operation
+		}
+	}
+	// Endpoints without an instruction slot must never be inferred from a
+	// body field such as embeddings' "input".
+	for _, unsupported := range []string{"/embeddings", "/images", "/models", "/count_tokens", "/moderations"} {
+		if strings.Contains(path, unsupported) {
+			return ""
+		}
+	}
 	switch {
 	case strings.Contains(path, "/messages"):
 		return APIProtocolAnthropic
@@ -376,6 +526,15 @@ func pluginRequestProtocol(request *http.Request, body []byte) string {
 		}
 	}
 	return ""
+}
+
+func manifestHasOpenAIOAuthCapability(manifest PluginManifest) bool {
+	for _, capability := range manifest.Capabilities {
+		if capability.ID == PluginCapabilityOpenAIOAuthOutbound {
+			return true
+		}
+	}
+	return false
 }
 
 func manifestHasTransportCapability(manifest PluginManifest) bool {

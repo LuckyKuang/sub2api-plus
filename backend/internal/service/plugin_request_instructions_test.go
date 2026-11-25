@@ -58,7 +58,7 @@ func TestPluginManifestV2RequestOnly(t *testing.T) {
 		ID: PluginCapabilityOpenAIOAuthOutbound, Platform: PlatformAnthropic, AccountType: AccountTypeOAuth,
 	}}
 	transportOtherPlatform.Runtimes = map[string]PluginRuntime{"darwin-arm64": {Path: "bin/plugin"}}
-	transportOtherPlatform.UI = PluginUIManifest{Entrypoint: "ui/index.html"}
+	transportOtherPlatform.UI = &PluginUIManifest{Entrypoint: "ui/index.html"}
 	transportOtherPlatform.Files = map[string]string{"bin/plugin": strings.Repeat("a", 64), "ui/index.html": strings.Repeat("b", 64)}
 	require.ErrorContains(t, transportOtherPlatform.Validate(), "仅支持 OpenAI OAuth")
 }

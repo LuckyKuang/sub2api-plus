@@ -172,7 +172,7 @@ func TestOpenAIGatewayHandlerResponses_AstraProBoth403NoDowngrade(t *testing.T) 
 	assertAstraProWire(t, urls, bodies)
 	assertAstraProAccountSwitch(t, accountIDs)
 	require.NotEqual(t, http.StatusOK, rec.Code, "all-403 must never surface a 200 to the client")
-	require.Equal(t, http.StatusBadGateway, rec.Code)
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	require.Equal(t, "upstream_error", gjson.GetBytes(rec.Body.Bytes(), "error.type").String())
 }
 

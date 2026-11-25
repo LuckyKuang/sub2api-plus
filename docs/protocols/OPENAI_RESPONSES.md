@@ -1185,12 +1185,18 @@ all other entries keep their defaults. The complete 76-key catalog, defaults,
 groups, admin API and conflict semantics are owned by
 [the public error contract](CODEX_PUBLIC_ERRORS.md).
 
-The downstream projection keeps only the platform-generated `type`, `code`,
-`message`, bounded correlation fields and the protocol's terminal shape. It
-drops upstream `detail`, `innererror`, `param`, extensions, URLs, account or
-plan text and diagnostic headers (`WWW-Authenticate`, `Location`,
-proxy/debug/tracing headers); `Retry-After` remains. HTTP status, retry and
-failover, billing, usage and security audit keep their original behavior.
+The downstream projection rebuilds every confirmed failure from the platform-
+generated `type`, `code` and `message`, bounded correlation fields and the
+protocol's terminal shape. Only the approved platform-level `param` values
+(`model`, `input`, `tools`, `instructions`, `previous_response_id`,
+`service_tier`, `stream`, `messages`, `system`) survive. It drops upstream
+`detail`, `innererror`, nested field paths, extensions, URLs, account or plan
+text and diagnostic headers (`WWW-Authenticate`, `Location`,
+proxy/debug/tracing headers); `Retry-After` remains. HTTP status is normalized
+to the catalog row (B01–B05/B08 → 503, B06/B09/B13 → 429, B07 → 503,
+C03/C05 → 502); retry and failover, billing, usage and security audit keep
+their original behavior. Local authentication, balance, quota, audit and
+assistance errors keep their local contracts.
 WebSocket close reasons use the same effective text and are truncated on UTF-8
 boundaries. User error history rebuilds the same safe projection; administrator
 Ops retains its original diagnostics.

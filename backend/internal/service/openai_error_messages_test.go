@@ -35,11 +35,11 @@ func TestOpenAIErrorMessagesProtocolContract(t *testing.T) {
 		{"insufficient_quota", "当前服务额度不可用，请联系管理员。", "service_capacity_unavailable", "service_unavailable_error"},
 	} {
 		for _, envelope := range []struct{ input, want string }{
-			{`{"error":{"code":"%s","message":"original","type":"upstream_error","param":"input","opaque":7}}`, `{"error":{"code":"%s","message":"%s","type":"%s"}}`},
+			{`{"error":{"code":"%s","message":"original","type":"upstream_error","param":"input","opaque":7}}`, `{"error":{"code":"%s","message":"%s","type":"%s","param":"input"}}`},
 			{`{"type":"error","sequence_number":9,"error":{"code":"%s","message":"original","type":"upstream_error"}}`, `{"type":"error","sequence_number":9,"error":{"code":"%s","message":"%s","type":"%s"}}`},
 			{`{"type":"error","code":"%s","message":"original","sequence_number":9}`, `{"type":"error","code":"%s","message":"%s","sequence_number":9}`},
-			{`{"type":"response.failed","response":{"id":"resp_1","status":"failed","error":{"code":"%s","message":"original","type":"upstream_error"},"usage":{"input_tokens":12,"output_tokens":3}},"opaque":true}`, `{"type":"response.failed","response":{"id":"resp_1","status":"failed","error":{"code":"%s","message":"%s","type":"%s"},"usage":{"input_tokens":12,"output_tokens":3}},"opaque":true}`},
-			{`{"type":"response.failed","error":{"code":"%s","message":"original","type":"upstream_error"},"opaque":true}`, `{"type":"response.failed","error":{"code":"%s","message":"%s","type":"%s"},"opaque":true}`},
+			{`{"type":"response.failed","response":{"id":"resp_1","status":"failed","error":{"code":"%s","message":"original","type":"upstream_error"},"usage":{"input_tokens":12,"output_tokens":3}},"opaque":true}`, `{"type":"response.failed","response":{"id":"resp_1","status":"failed","error":{"code":"%s","message":"%s","type":"%s"},"usage":{"input_tokens":12,"output_tokens":3}}}`},
+			{`{"type":"response.failed","error":{"code":"%s","message":"original","type":"upstream_error"},"opaque":true}`, `{"type":"response.failed","error":{"code":"%s","message":"%s","type":"%s"}}`},
 		} {
 			input := fmt.Sprintf(envelope.input, tc.code)
 			args := []any{tc.publicCode, tc.message, tc.errorType}
@@ -179,8 +179,8 @@ func TestOpenAIErrorMessagesLargeEventAndContentBoundaries(t *testing.T) {
 			})(c)
 			body := strings.TrimSpace(strings.TrimPrefix(rec.Body.String(), "id: 42\nevent: error\ndata: "))
 			require.Equal(t, "服务暂时不可用，请稍后再试。", gjson.Get(body, "error.message").String())
-			require.Equal(t, opaque, gjson.Get(body, "opaque").String())
-			require.Equal(t, "keep tool content", gjson.Get(body, "item.error.message").String())
+			require.NotContains(t, body, opaque[:1024], "unapproved opaque extension must be removed")
+			require.False(t, gjson.Get(body, "item").Exists(), "failure envelope keeps only approved fields")
 			require.Equal(t, http.StatusBadGateway, rec.Code)
 		})
 	}
@@ -285,7 +285,7 @@ func TestOpenAIErrorMessagesHTTPClientErrorAccountMatrix(t *testing.T) {
 					require.Error(t, err)
 				})(c)
 				require.Equal(t, http.StatusBadRequest, rec.Code)
-				require.JSONEq(t, `{"error":{"code":"session_account_lost","type":"server_error","message":"当前会话可能无法恢复，请新开会话继续。"}}`, rec.Body.String())
+				require.JSONEq(t, `{"error":{"code":"session_account_lost","type":"server_error","message":"当前会话可能无法恢复，请新开会话继续。","param":"input"}}`, rec.Body.String())
 				require.Equal(t, int32(1), sends.Load())
 				wantBridges := int32(0)
 				if cli {

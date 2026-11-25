@@ -44,9 +44,14 @@
 
 - 需要清单 `schema_version: 2`，按具体 `platform + account_type (oauth/apikey)` 声明；需要目标平台运行时、静态 UI 和文件哈希。
 - 按本次尝试的真实凭据 owner 平台和账号类型选择发送者，每次发送最多命中一个传输实现。
-- 同一平台和账号类型的活动传输槽互斥；不同平台/类型可以分别启用，灰度按账号 ID 稳定分桶。
+- 同一能力、平台和账号类型的活动传输槽互斥；v1 与 v2 可以分别启用，不同平台/类型可以分别启用，灰度按账号 ID 稳定分桶。
 - v1 `openai.oauth.outbound_transport.v1` 继续兼容；两者同时命中时优先 v2 精确范围，未命中时回退 v1。
 - 传输进程建立真实上游 HTTP/TLS 连接并返回原始响应；宿主继续负责响应解析、错误映射、用量、计费和审计。
+- 普通 Anthropic 转发、Anthropic API Key 直通、账号测试和原生 Gemini 请求共享同一凭据 owner 的指令/传输选择；Gemini 原生与反重力 HTTP 桥仍需按部署矩阵单独验证。
+
+### 混合包配置
+
+同时声明传输与 `request.instructions.prepend.v1` 的 schema v2 包把指令配置放在顶层 `request_instructions` 对象中，其余字段归运行时所有。宿主在把配置交给运行时校验或应用前移除该节，保存时再合并回同一份加密配置；运行时与指令各自校验自己的字段，列表发布和重载使用同一份快照。迁移 `317_plugin_bindings_transport_exclusive.sql` 只保留传输槽位的唯一约束，多个纯指令包可在同一范围共存。
 
 ## 宿主服务（HostService）
 

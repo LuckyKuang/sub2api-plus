@@ -22,6 +22,7 @@ import (
 
 	"github.com/LuckyKuang/sub2api-plus/internal/config"
 	pluginv1 "github.com/LuckyKuang/sub2api-plus/pkg/pluginapi/v1"
+	"github.com/tidwall/sjson"
 )
 
 const (
@@ -63,6 +64,10 @@ type PluginManager struct {
 	route              atomic.Pointer[pluginRoute]
 	requestRules       atomic.Value // []pluginRequestRule
 	transportRoutes    atomic.Value // []pluginTransportRoute
+	// transportAuthority is true only after a successful authoritative read of
+	// the persisted bindings. An empty route table is not proof of "no plugin".
+	transportAuthority atomic.Bool
+	multiUnavailable   map[int64]string
 }
 
 func NewPluginManager(repo PluginRepository, encryptor SecretEncryptor, cfg *config.Config, hostInfo PluginHostInfo, kvStore PluginKVStore) *PluginManager {
@@ -75,6 +80,7 @@ func NewPluginManager(repo PluginRepository, encryptor SecretEncryptor, cfg *con
 		kvStore:            kvStore,
 		runtimes:           make(map[int64]*pluginRuntime),
 		multiRuntimes:      make(map[int64]*pluginRuntime),
+		multiUnavailable:   make(map[int64]string),
 		localInstallations: make(map[int64]*PluginInstallation),
 	}
 }
@@ -168,6 +174,11 @@ func (m *PluginManager) List(ctx context.Context) ([]*PluginInstallation, error)
 			}
 			continue
 		}
+		if message := m.multiUnavailable[installation.ID]; message != "" {
+			installation.RuntimeHealthy = false
+			installation.RuntimeMessage = message
+			continue
+		}
 		runtime := m.runtimes[installation.ID]
 		if runtime == nil {
 			runtime = m.multiRuntimes[installation.ID]
@@ -179,6 +190,7 @@ func (m *PluginManager) List(ctx context.Context) ([]*PluginInstallation, error)
 			installation.RuntimeMessage = installation.LastError
 		}
 		if route != nil && route.pluginID == installation.ID && route.runtime == nil {
+			installation.RuntimeHealthy = false
 			installation.RuntimeMessage = route.unavailable
 		}
 	}
@@ -205,12 +217,17 @@ func (m *PluginManager) Get(ctx context.Context, id int64) (*PluginInstallation,
 	if runtime == nil {
 		runtime = m.multiRuntimes[id]
 	}
+	multiUnavailable := m.multiUnavailable[id]
 	m.mu.Unlock()
 	installation.RuntimeHealthy = runtime != nil && !runtime.client.Exited()
 	if installation.RuntimeHealthy {
 		installation.RuntimeMessage = "插件进程运行中"
 	} else if route := m.route.Load(); route != nil && route.pluginID == id {
 		installation.RuntimeMessage = route.unavailable
+	}
+	if multiUnavailable != "" {
+		installation.RuntimeHealthy = false
+		installation.RuntimeMessage = multiUnavailable
 	}
 	return installation, nil
 }
@@ -306,9 +323,11 @@ func (m *PluginManager) reconcileOnce(ctx context.Context) error {
 	installations, err := m.repo.List(ctx)
 	if err != nil {
 		// 无法读取权威绑定状态时不能假设插件未启用，否则会把 OAuth 请求静默回落到旧直连路径。
+		m.transportAuthority.Store(false)
 		m.publishUnavailableRoute(0, 100, "插件启用状态暂时无法读取")
 		return fmt.Errorf("读取插件启用状态: %w", err)
 	}
+	m.transportAuthority.Store(true)
 	m.cleanupStaleLocalInstallations(installations)
 	m.publishRequestRules(installations)
 	m.reconcileMultiTransport(ctx, installations)
@@ -601,7 +620,7 @@ func (m *PluginManager) Enable(ctx context.Context, id int64, acceptUntested boo
 	if err != nil {
 		return nil, err
 	}
-	if manifestHasTransportCapability(installation.Manifest) {
+	if manifestHasOpenAIOAuthCapability(installation.Manifest) {
 		if active := m.route.Load(); active != nil && active.pluginID != id {
 			return nil, errors.New("OpenAI OAuth 出站能力已有启用插件，请先停用当前插件")
 		}
@@ -695,16 +714,19 @@ func (m *PluginManager) Disable(ctx context.Context, id int64) (*PluginInstallat
 	runtime := m.removeRuntimeLocked(id)
 	multiRuntime := m.multiRuntimes[id]
 	delete(m.multiRuntimes, id)
+	delete(m.multiUnavailable, id)
 	m.mu.Unlock()
+	// Publish the new routing state before waiting for old streams. New
+	// attempts must stop selecting the draining runtime immediately.
+	m.refreshRequestRules(ctx)
+	if installations, listErr := m.repo.List(ctx); listErr == nil {
+		m.publishMultiTransportRoutes(installations)
+	}
 	if runtime != nil {
 		runtime.drain(10 * time.Second)
 	}
 	if multiRuntime != nil {
 		multiRuntime.drain(10 * time.Second)
-	}
-	m.refreshRequestRules(ctx)
-	if installations, listErr := m.repo.List(ctx); listErr == nil {
-		m.publishMultiTransportRoutes(installations)
 	}
 	return m.Get(ctx, id)
 }
@@ -814,12 +836,27 @@ func (m *PluginManager) SaveConfig(ctx context.Context, id int64, raw json.RawMe
 		temporary = true
 		defer runtime.kill()
 	}
+	var instructionConfig []byte
+	if runtimeConfig, section, splitErr := splitMixedPluginConfig(installation.Manifest, canonical); splitErr != nil {
+		return nil, splitErr
+	} else if section != nil {
+		canonical = runtimeConfig
+		instructionConfig = section
+	}
 	if runtime != nil {
 		applyCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		canonical, err = runtime.validateAndApplyNormalizedConfig(applyCtx, canonical)
 		cancel()
 		if err != nil {
 			return nil, err
+		}
+		if instructionConfig != nil {
+			// The host-owned section is persisted verbatim next to the
+			// runtime's canonical fields.
+			canonical, err = sjson.SetRawBytes(canonical, mixedPluginInstructionSection, instructionConfig)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	encrypted, err := m.encryptor.Encrypt(string(canonical))
@@ -853,10 +890,25 @@ func (m *PluginManager) restoreRuntimeConfig(id int64, runtime *pluginRuntime, p
 	rollbackCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := runtime.validateAndApplyConfig(rollbackCtx, previous); err != nil {
+		message := "插件配置回滚失败: " + err.Error()
 		route := m.route.Load()
 		if route != nil && route.pluginID == id && route.runtime == runtime {
-			stateErr := m.markRuntimeUnavailable(route, "插件配置回滚失败: "+err.Error())
+			stateErr := m.markRuntimeUnavailable(route, message)
 			return errors.Join(err, stateErr)
+		}
+		// A v2 runtime whose draft cannot be rolled back must stop receiving
+		// new sends even though its process is still alive.
+		m.mu.Lock()
+		if m.multiRuntimes[id] == runtime {
+			delete(m.multiRuntimes, id)
+			if m.multiUnavailable == nil {
+				m.multiUnavailable = make(map[int64]string)
+			}
+			m.multiUnavailable[id] = message
+		}
+		m.mu.Unlock()
+		if installations, listErr := m.repo.List(context.Background()); listErr == nil {
+			m.publishMultiTransportRoutes(installations)
 		}
 		return err
 	}
@@ -880,6 +932,11 @@ func (m *PluginManager) Test(ctx context.Context, id int64) (*pluginv1.TestConfi
 		}
 		return &pluginv1.TestConfigResponse{Success: true, Message: "声明式请求规则配置有效"}, nil
 	}
+	runtimeConfig, _, splitErr := splitMixedPluginConfig(installation.Manifest, configJSON)
+	if splitErr != nil {
+		return nil, splitErr
+	}
+	configJSON = runtimeConfig
 	m.mu.Lock()
 	runtime := m.runtimes[id]
 	if runtime == nil {
@@ -1016,6 +1073,9 @@ func (m *PluginManager) ReadUIAsset(ctx context.Context, id int64, relative stri
 	}
 	path := strings.TrimPrefix(strings.ReplaceAll(relative, "\\", "/"), "/")
 	if path == "" || path == "index.html" {
+		if installation.Manifest.UI == nil {
+			return nil, "", os.ErrNotExist
+		}
 		path = installation.Manifest.UI.Entrypoint
 	} else {
 		path = "ui/" + path
@@ -1116,6 +1176,14 @@ func (m *PluginManager) prepareRuntime(ctx context.Context, installation *Plugin
 		return nil, err
 	}
 	configJSON, err := m.decryptConfig(installation)
+	if err == nil {
+		runtimeConfig, _, splitErr := splitMixedPluginConfig(installation.Manifest, configJSON)
+		if splitErr != nil {
+			err = splitErr
+		} else {
+			configJSON = runtimeConfig
+		}
+	}
 	if err == nil && validateConfig {
 		applyCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		err = runtime.validateAndApplyConfig(applyCtx, configJSON)

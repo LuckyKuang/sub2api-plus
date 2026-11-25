@@ -213,18 +213,22 @@ sideways.
 toolbar card above the independently scrolling results. The toolbar holds
 optional category tabs, a model search field (up to 340 px wide on desktop,
 36 px tall), a reset button that de-emphasizes when no filters are active, a
-right-aligned `aria-live="polite"` summary and pricing-period pill, a
-`role="radiogroup"` list/card switcher, and a manual refresh button, over a
-borderless wrapping row of platform filter chips with tabular counts. The
-directory has category and platform filters plus model name/ID search, with no
-group filters, group headings or group counts.
+right-aligned `aria-live="polite"` summary and pricing-period pill, the shared
+`.segmented-control` list/card switch with `aria-pressed`, and a manual refresh
+button, over a borderless wrapping row of platform filter chips with tabular
+counts. The directory has category and platform filters plus model name/ID
+search, with no group filters, group headings or group counts. The layout
+choice is a browser-session preference (module scope, not local storage) and
+survives route unmounts; a changed administrator layout default invalidates it.
 
-The frontend aggregates the authorized response by concrete platform plus
+The authorized response is already filtered and paged by the server. The
+frontend aggregates each returned page by concrete platform plus
 case-insensitive request model ID. Each identity produces exactly one entry;
 identical names on different platforms remain separate. Each entry preserves an
 actual request ID for copying. All underlying group quotes, source channels and
-pricing conditions are retained in details. Search filters whole model entries,
-never removes some quotes from a matched model's comparison.
+pricing conditions are retained in details. Search is sent to the server after
+a 300 ms debounce and never removes some quotes from a matched model's
+comparison.
 
 Cards and list rows show per-unit input/output or unit-price ranges after
 applying each quote's own effective rate exactly once. Equal endpoints show one
@@ -275,23 +279,23 @@ Rate labels use 12 px text and compact padding to keep comparison rows short.
 Each quote header places its group name, source channel, public/subscription
 status and effective rate in one wrapping row, with descriptions below it.
 
-Default filters are all platforms, empty search and name sorting. Search trims
-and case-folds model IDs; platform navigation uses the full authorized directory.
-Name sorting uses model name, platform and stable model key. Price sorting puts
-single-unit models into token/image/request/video/second/unknown buckets and
-orders by minimum unrounded effective base price, with unknown prices last in
-their bucket. Mixed-unit cards follow single-unit cards and use stable name
-ordering instead of comparing unlike units. Counts show unique model cards.
-Groups with no models remain in the API response but add no card or navigation
-item; an entirely empty model directory displays a no-models message.
+Default filters are all platforms and empty search. The server selects the page
+and applies model-name order; the page sorts the returned page consistently by
+model name, platform and stable model key. The current toolbar exposes no price
+sort control. Platform navigation uses the counts from the authorized response.
+Groups with no models add no card or navigation item; a page with no models
+displays the no-models message. Pagination uses the shared numbered pager and
+retains the current category, platform and search text.
 
 Refresh retains valid platform/search/sort filters and updates open details by
 model identity. Removing one group quote updates the existing dialog; removing
 all quotes for the model closes it and restores focus to refresh. A failed refresh clears stale directory data and details and
 shows a retryable error. Request sequence and authenticated user identity guard
 against stale completion; logout/user changes clear all previous data. Details
-support keyboard focus containment, Escape and focus restoration. Copy uses the
-application clipboard helper, including failure feedback and a selectable ID.
+support keyboard focus containment, Escape and focus restoration. Copy awaits
+the application clipboard helper and shows the checkmark only after it confirms
+success for the current model; failures show the shared error feedback and never
+leave a copied state behind. A late result for a previous model is discarded.
 
 Successful catalogs with loaded user rates are reused for 180 seconds in
 document memory, isolated by login session, actor, assistance target and locale.
@@ -299,9 +303,10 @@ The cache holds at most four scopes and clears on login/logout; reads do not
 extend freshness. It never stores tokens or responses in persistent browser
 storage. Entry and locale changes may reuse a fresh response; manual Refresh
 and Retry always invalidate it and perform a real request. Failed, aborted,
-unavailable-rate and superseded responses never populate the cache. Filters
-operate locally, with no timer, focus or visibility refresh. Cached quote
-timestamps remain visible evidence of their original snapshot.
+unavailable-rate and superseded responses never populate the cache. Search and
+filter changes trigger server reads after the 300 ms debounce, and page changes
+read independently; there is no timer, focus or visibility refresh. Cached
+quote timestamps remain visible evidence of their original snapshot.
 
 Successful channel creation, editing (including pricing and status changes),
 and deletion clear all catalog scopes in the same document and invalidate

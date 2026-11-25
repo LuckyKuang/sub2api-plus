@@ -290,6 +290,21 @@ func (r *settingRepository) CompareAndSetSettings(ctx context.Context, expected,
 	for key := range keySet {
 		keys = append(keys, key)
 	}
+	// SELECT ... FOR UPDATE cannot lock a row that does not exist yet, so two
+	// first writes on an upgraded database would both pass the comparison.
+	// Insert empty placeholders in the same transaction; the unique key makes
+	// competing writers wait here and then observe the committed value.
+	now := time.Now()
+	placeholders := make([]*ent.SettingCreate, 0, len(keys))
+	for _, key := range keys {
+		placeholders = append(placeholders, tx.Setting.Create().SetKey(key).SetValue("").SetUpdatedAt(now))
+	}
+	if err := tx.Setting.CreateBulk(placeholders...).
+		OnConflictColumns(setting.FieldKey).
+		DoNothing().
+		Exec(ctx); err != nil {
+		return false, err
+	}
 	rows, err := tx.Setting.Query().Where(setting.KeyIn(keys...)).ForUpdate().All(ctx)
 	if err != nil {
 		return false, err
@@ -304,7 +319,6 @@ func (r *settingRepository) CompareAndSetSettings(ctx context.Context, expected,
 		}
 	}
 
-	now := time.Now()
 	builders := make([]*ent.SettingCreate, 0, len(updates))
 	for key, value := range updates {
 		builders = append(builders, tx.Setting.Create().SetKey(key).SetValue(value).SetUpdatedAt(now))

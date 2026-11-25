@@ -455,6 +455,13 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 			logger.LegacyPrintf("service.gateway", "Account %d: rewrote thinking.type for %s (Anthropic-SDK default 'enabled' -> vendor-specific)", account.ID, reqModel)
 		}
 	}
+	// Request instructions run on the final plain JSON before signing, so the
+	// signed body and the transmitted body stay identical.
+	if modified := s.applyPluginInstructionsToBody(body, account, APIProtocolAnthropic); !bytes.Equal(modified, body) {
+		if err := replaceBody(modified); err != nil {
+			return nil, err
+		}
+	}
 
 	// 重试循环
 	var resp *http.Response
@@ -473,7 +480,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		lastWireBody = wireBody
 
 		// 发送请求
-		resp, err = s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(upstreamReq, account), proxyURL, account.ID, account.Concurrency, tlsProfile)
+		resp, _, err = s.sendGatewayUpstream(upstreamReq, proxyURL, account, tlsProfile)
 		if err != nil {
 			if resp != nil && resp.Body != nil {
 				_ = resp.Body.Close()
@@ -546,7 +553,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 					defer releaseRetryCtx()
 					retryReq, retryWireBody, buildErr := s.buildUpstreamRequest(retryCtx, c, account, filteredBody, token, tokenType, reqModel, reqStream, shouldMimicClaudeCode)
 					if buildErr == nil {
-						retryResp, retryErr := s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(retryReq, account), proxyURL, account.ID, account.Concurrency, tlsProfile)
+						retryResp, _, retryErr := s.sendGatewayUpstream(retryReq, proxyURL, account, tlsProfile)
 						if retryErr == nil {
 							if retryResp.StatusCode < 400 {
 								// 重试请求被上游接受后同步 ParsedRequest，保证 usage/日志看到真实请求体。
@@ -589,7 +596,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 									defer releaseRetryCtx2()
 									retryReq2, retryWireBody2, buildErr2 := s.buildUpstreamRequest(retryCtx2, c, account, filteredBody2, token, tokenType, reqModel, reqStream, shouldMimicClaudeCode)
 									if buildErr2 == nil {
-										retryResp2, retryErr2 := s.httpUpstream.DoWithTLS(prepareAccountOutboundRequest(retryReq2, account), proxyURL, account.ID, account.Concurrency, tlsProfile)
+										retryResp2, _, retryErr2 := s.sendGatewayUpstream(retryReq2, proxyURL, account, tlsProfile)
 										if retryErr2 == nil {
 											if retryResp2.StatusCode < 400 {
 												// 二阶段工具块降级成功时也必须更新当前 body。

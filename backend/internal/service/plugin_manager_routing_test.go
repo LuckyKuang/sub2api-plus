@@ -82,6 +82,7 @@ func TestPluginManagerRoutingSelectsOnlyEligibleOpenAIOAuthAccounts(t *testing.T
 
 func TestOpenAIGatewayPluginRoutingPreservesAPIKeyAndFailsClosedForOAuth(t *testing.T) {
 	manager := &PluginManager{}
+	manager.transportAuthority.Store(true)
 	manager.route.Store(&pluginRoute{pluginID: 1, rolloutPercent: 100, unavailable: "测试不可用"})
 	upstream := &pluginRoutingHTTPUpstream{}
 	service := &OpenAIGatewayService{pluginManager: manager, httpUpstream: upstream}

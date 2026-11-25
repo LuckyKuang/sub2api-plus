@@ -176,7 +176,13 @@ credentials; a pay-as-you-go or unknown credential needs an explicit model
 mapping or a live `/models` snapshot before it is advertised or selected.
 Start Plan publishes GLM-5.4 only from a current, owner-bound entitlement
 observation (`model:glm-5.4` or `show_name=GLM-5.4`); off-peak keeps its own
-model set.
+model set. The ordinary single-group models list, aggregate group selection and
+the native capability endpoints apply the same evidence rule to the same account:
+a coding-plan credential may use the maintained coding catalog even without a
+mapping, a pay-as-you-go or unknown credential needs an explicit mapping or live
+snapshot, and a Start observation is usable only while it is current and bound to
+the same owner identity. A Zhipu group with accounts but no qualifying evidence
+returns an authoritative empty list instead of another platform's defaults.
 
 The reviewed model advertises a 1M context window, 128K maximum output and
 `low` / `high` / `max` reasoning. Requests without an explicit effort keep the

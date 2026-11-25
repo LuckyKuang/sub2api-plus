@@ -21,10 +21,6 @@ func (s *OpenAIGatewayService) doOpenAIUpstream(request *http.Request, proxyURL 
 		return nil, err
 	}
 	*request = *request.WithContext(WithAccountOutboundIdentity(request.Context(), account))
-	request, err = s.applyPluginRequestInstructions(request, account)
-	if err != nil {
-		return nil, err
-	}
 	response, responseErr := s.projectTokens.RoundTrip(request, account, func(req *http.Request) (*http.Response, error) {
 		return s.cnOAuthService.roundTripNativeOAuth(req, account, func(native *http.Request) (*http.Response, error) {
 			resp, err := s.doOpenAIUpstreamPrepared(native, proxyURL, account)
@@ -51,6 +47,12 @@ func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, _
 		return nil, err
 	}
 	credentialAccount = snapshotRequestCredentialAccount(credentialAccount)
+	// Instructions follow the credential owner and run on the final JSON before
+	// signing or request compression.
+	request, err = s.applyPluginRequestInstructions(request, credentialAccount)
+	if err != nil {
+		return nil, err
+	}
 	// The account's route owns every provider-bound send, including unbound
 	// API-key paths and plugins. Explicit transport arguments cannot replace it.
 	ownerProxyURL, err := requestCredentialOwnerProxyURL(request.Context(), credentialAccount)
@@ -131,6 +133,10 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 		return nil, err
 	}
 	credentialAccount = snapshotRequestCredentialAccount(credentialAccount)
+	request, err = s.applyPluginRequestInstructions(request, credentialAccount)
+	if err != nil {
+		return nil, err
+	}
 	// The account's route owns every provider-bound send, including unbound
 	// API-key paths and plugins. Explicit transport arguments cannot replace it.
 	ownerProxyURL, err := requestCredentialOwnerProxyURL(request.Context(), credentialAccount)

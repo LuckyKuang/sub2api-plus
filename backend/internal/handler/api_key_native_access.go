@@ -79,6 +79,11 @@ func (h *APIKeyHandler) GetNativeAccess(c *gin.Context) {
 			if account.Platform != offer.Platform || account.Status != service.StatusActive {
 				continue
 			}
+			// A commercial catalog entry or another account's price does not
+			// prove this account can invoke the target model.
+			if !service.AccountModelEvidenceAllows(c.Request.Context(), &account, offer.Name) {
+				continue
+			}
 			for protocol, path := range paths {
 				upstreamModel := offer.Name
 				if group.Platform == service.PlatformComposite && h.compositeResolver != nil {

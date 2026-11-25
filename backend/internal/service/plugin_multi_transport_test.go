@@ -17,7 +17,7 @@ func TestPluginManifestV2MultiTransport(t *testing.T) {
 		ID: PluginCapabilityOutboundTransport, Platform: PlatformStepFun, AccountType: AccountTypeOAuth,
 	}}
 	manifest.Runtimes = map[string]PluginRuntime{manifest.RuntimeKey(): {Path: "bin/plugin"}}
-	manifest.UI = PluginUIManifest{Entrypoint: "ui/index.html"}
+	manifest.UI = &PluginUIManifest{Entrypoint: "ui/index.html"}
 	manifest.Files = map[string]string{
 		"bin/plugin":    strings.Repeat("a", 64),
 		"ui/index.html": strings.Repeat("b", 64),
@@ -28,6 +28,49 @@ func TestPluginManifestV2MultiTransport(t *testing.T) {
 
 	manifest.Capabilities[0].Platform = "not-a-platform"
 	require.ErrorContains(t, manifest.Validate(), "具体平台")
+}
+
+func TestRoundTripTransportFallsBackToV1AfterV2RolloutMiss(t *testing.T) {
+	manager := &PluginManager{multiRuntimes: map[int64]*pluginRuntime{}}
+	manager.transportAuthority.Store(true)
+	installations := []*PluginInstallation{{
+		ID: 1,
+		Bindings: []PluginBinding{{
+			ID: 11, Capability: PluginCapabilityOutboundTransport,
+			Platform: PlatformOpenAI, AccountType: AccountTypeOAuth,
+			Enabled: true, RolloutPercent: 1,
+		}},
+	}}
+	manager.publishMultiTransportRoutes(installations)
+	manager.route.Store(&pluginRoute{pluginID: 2, rolloutPercent: 100, unavailable: "v1 unavailable"})
+
+	missID := int64(1)
+	for stablePluginBucket(missID) == 0 {
+		missID++
+	}
+	request := httptest.NewRequest("POST", "https://example.test/v1/responses", nil)
+	_, handled, err := manager.RoundTripTransport(context.Background(), request, "", &Account{ID: missID, Platform: PlatformOpenAI, Type: AccountTypeOAuth})
+	require.True(t, handled)
+	require.ErrorContains(t, err, "v1 unavailable")
+
+	hitID := missID - 1
+	if stablePluginBucket(hitID) != 0 {
+		hitID = missID
+		for stablePluginBucket(hitID) != 0 {
+			hitID++
+		}
+	}
+	_, handled, err = manager.RoundTripTransport(context.Background(), request, "", &Account{ID: hitID, Platform: PlatformOpenAI, Type: AccountTypeOAuth})
+	require.True(t, handled)
+	require.ErrorContains(t, err, "插件进程未运行")
+}
+
+func TestRoundTripTransportRefusesNativeFallbackBeforeAuthority(t *testing.T) {
+	manager := &PluginManager{}
+	request := httptest.NewRequest("POST", "https://example.test/v1/responses", nil)
+	_, handled, err := manager.RoundTripTransport(context.Background(), request, "", &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey})
+	require.True(t, handled)
+	require.ErrorContains(t, err, "路由暂时无法读取")
 }
 
 func TestPluginTransportRouteMatchingAndConflicts(t *testing.T) {

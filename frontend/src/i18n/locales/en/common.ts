@@ -18,6 +18,7 @@ export default {
     required: 'Required',
     sending: 'Sending...',
     tryAgain: 'Please try again',
+    retry: 'Retry',
     update: 'Update',
     confirm: 'Confirm',
     reset: 'Reset',

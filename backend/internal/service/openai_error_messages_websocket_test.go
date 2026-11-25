@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -75,10 +76,13 @@ func TestOpenAIErrorMessagesWSHTTPBridgeMatrix(t *testing.T) {
 func TestOpenAIErrorMessagesWSHTTPRejection(t *testing.T) {
 	for _, kind := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
 		for _, cli := range []bool{false, true} {
-			for _, failure := range []struct{ code, publicCode, errorType, want string }{
-				{"upstream_unavailable", "upstream_unavailable", "service_unavailable_error", "服务暂时不可用，请稍后再试。"},
-				{"session_account_lost", "session_account_lost", "server_error", "当前会话可能无法恢复，请新开会话继续。"},
-				{"other_error", "service_error", "server_error", "本次请求未能完成，请稍后再试。"},
+			for _, failure := range []struct {
+				code, publicCode, errorType, want string
+				status                            int
+			}{
+				{"upstream_unavailable", "upstream_unavailable", "service_unavailable_error", "服务暂时不可用，请稍后再试。", 503},
+				{"session_account_lost", "session_account_lost", "server_error", "当前会话可能无法恢复，请新开会话继续。", 400},
+				{"other_error", "request_rejected", "invalid_request_error", "本次请求未被接受，请检查请求内容。", 400},
 			} {
 				t.Run(fmt.Sprintf("%s/cli=%t/%s", kind, cli, failure.code), func(t *testing.T) {
 					var sends atomic.Int32
@@ -117,7 +121,7 @@ func TestOpenAIErrorMessagesWSHTTPRejection(t *testing.T) {
 					require.NoError(t, conn.Write(ctx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.1","input":"hello"}`)))
 					_, payload, err := conn.Read(ctx)
 					require.NoError(t, err)
-					require.JSONEq(t, `{"type":"error","status":400,"sequence_number":0,"error":{"type":"`+failure.errorType+`","code":"`+failure.publicCode+`","message":"`+failure.want+`"}}`, string(payload))
+					require.JSONEq(t, `{"type":"error","status":`+strconv.Itoa(failure.status)+`,"sequence_number":0,"error":{"type":"`+failure.errorType+`","code":"`+failure.publicCode+`","message":"`+failure.want+`"}}`, string(payload))
 					select {
 					case err := <-errCh:
 						require.ErrorContains(t, err, "original diagnostic")

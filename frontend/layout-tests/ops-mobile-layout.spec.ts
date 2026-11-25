@@ -1,9 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
 
-// Acceptance source: openspec/changes/fix-ios16-ops-dashboard-layout.
+// Acceptance source: frontend/layout-tests/README.md and the Ops overview's
+// documented fixed-scroll/chart layout contract.
 // The real OpsDashboard view runs against intercepted ops APIs. Assertions use
 // browser geometry: chart plot regions, canvas sizes, the health hover region,
 // and document reachability. Class names or jsdom snapshots cannot prove them.
+// This suite runs the pinned Chromium geometry; real iOS/WebKit devices are a
+// separately recorded verification and are not claimed by these runs.
 
 const now = Date.UTC(2026, 10, 24, 10, 0, 0)
 
@@ -384,7 +387,7 @@ test('phone overview bottom stays reachable after reload and rotation', async ({
 
   const checkBottom = async () => {
     await page.evaluate(() => window.scrollTo(0, document.scrollingElement!.scrollHeight))
-    expect
+    await expect
       .poll(
         async () => page.evaluate(() => {
           const scroller = document.scrollingElement!

@@ -298,10 +298,20 @@
           <p class="text-xs surface-muted">
             {{ t("admin.plugins.requestConfigHint") }}
           </p>
+          <p v-if="requestConfigLoading" class="text-xs surface-muted" data-testid="plugin-request-config-loading">
+            {{ t("admin.plugins.requestConfigLoading") }}
+          </p>
+          <p v-else-if="uiError" class="flex flex-wrap items-center gap-2 text-xs text-rose-500" data-testid="plugin-request-config-error">
+            <span>{{ uiError }}</span>
+            <button type="button" class="table-action" @click="configPlugin && openConfiguration(configPlugin)">
+              {{ t("common.retry") }}
+            </button>
+          </p>
           <textarea
             v-model="requestConfigText"
             class="input min-h-[420px] w-full font-mono text-xs"
             spellcheck="false"
+            :disabled="requestConfigLoading || !!uiError"
             data-testid="plugin-request-config"
           />
           <div class="flex justify-end gap-2">
@@ -311,7 +321,7 @@
             <button
               type="button"
               class="btn btn-primary"
-              :disabled="requestConfigSaving"
+              :disabled="requestConfigSaving || requestConfigLoading || !requestConfigLoaded || !!uiError"
               data-testid="plugin-request-config-save"
               @click="saveRequestConfig"
             >
@@ -404,6 +414,9 @@ const configPlugin = ref<PluginInstallation | null>(null);
 const uiSession = ref<PluginUISession | null>(null);
 const requestConfigText = ref("");
 const requestConfigSaving = ref(false);
+const requestConfigLoading = ref(false);
+const requestConfigLoaded = ref(false);
+let requestConfigVersion = 0;
 const pluginFrame = ref<HTMLIFrameElement | null>(null);
 const uiLoading = ref(false);
 const uiError = ref("");
@@ -469,11 +482,17 @@ async function handleFileSelected(event: Event): Promise<void> {
 }
 
 function currentRollout(plugin: PluginInstallation): number {
-  return (
-    plugin.bindings.find(
-      (binding) => binding.capability === "openai.oauth.outbound_transport.v1",
-    )?.rollout_percent || 100
-  );
+  const enabled = plugin.bindings.find((binding) => binding.enabled);
+  if (enabled) return enabled.rollout_percent;
+  for (const capability of [
+    "openai.oauth.outbound_transport.v1",
+    "outbound.transport.v1",
+    "request.instructions.prepend.v1",
+  ]) {
+    const binding = plugin.bindings.find((item) => item.capability === capability);
+    if (binding) return binding.rollout_percent;
+  }
+  return 100;
 }
 
 function hasEnabledBinding(plugin: PluginInstallation): boolean {
@@ -556,26 +575,42 @@ async function testPlugin(plugin: PluginInstallation): Promise<void> {
 function isRequestOnlyPlugin(plugin: PluginInstallation | null): boolean {
   if (!plugin) return false;
   const capabilities = plugin.manifest.capabilities || [];
-  return (
-    capabilities.some((capability) => capability.id === "request.instructions.prepend.v1") &&
-    !capabilities.some((capability) => capability.id === "openai.oauth.outbound_transport.v1")
+  const hasRequest = capabilities.some(
+    (capability) => capability.id === "request.instructions.prepend.v1",
   );
+  // Any transport capability (legacy or v2) makes the package mixed. Mixed
+  // packages use their runtime configuration UI.
+  const hasTransport = capabilities.some(
+    (capability) =>
+      capability.id === "openai.oauth.outbound_transport.v1" ||
+      capability.id === "outbound.transport.v1",
+  );
+  return hasRequest && !hasTransport;
 }
 
 async function openConfiguration(plugin: PluginInstallation): Promise<void> {
   if (isRequestOnlyPlugin(plugin)) {
+    const version = ++requestConfigVersion;
     configPlugin.value = plugin;
     uiSession.value = null;
     uiError.value = "";
     requestConfigText.value = "";
+    requestConfigLoaded.value = false;
+    requestConfigLoading.value = true;
     try {
       const config = await adminAPI.plugins.getConfig(plugin.id);
+      if (version !== requestConfigVersion || configPlugin.value?.id !== plugin.id) return;
       requestConfigText.value = JSON.stringify(config || {}, null, 2);
+      requestConfigLoaded.value = true;
     } catch (error: unknown) {
+      if (version !== requestConfigVersion) return;
       uiError.value = errorMessage(error);
+    } finally {
+      if (version === requestConfigVersion) requestConfigLoading.value = false;
     }
     return;
   }
+	requestConfigVersion++;
 	const version = ++uiSessionVersion;
   configPlugin.value = plugin;
   uiSession.value = null;
@@ -596,13 +631,20 @@ async function openConfiguration(plugin: PluginInstallation): Promise<void> {
 }
 
 async function saveRequestConfig(): Promise<void> {
-  if (!configPlugin.value) return;
+  if (!configPlugin.value || !requestConfigLoaded.value) return;
+  const pluginID = configPlugin.value.id;
+  const version = requestConfigVersion;
   requestConfigSaving.value = true;
   try {
     const parsed = JSON.parse(requestConfigText.value || "{}");
-    await pluginStepUp.run(() =>
-      adminAPI.plugins.saveConfig(configPlugin.value!.id, parsed),
-    );
+    await pluginStepUp.run(async () => {
+      // The dialog may have been switched or closed while step-up was open.
+      if (version !== requestConfigVersion || configPlugin.value?.id !== pluginID) {
+        throw new Error(t("admin.plugins.configSessionChanged"));
+      }
+      await adminAPI.plugins.saveConfig(pluginID, parsed);
+    });
+    if (version !== requestConfigVersion) return;
     appStore.showSuccess(t("admin.plugins.requestConfigSaved"));
     closeConfiguration();
     await loadPlugins();
@@ -614,6 +656,7 @@ async function saveRequestConfig(): Promise<void> {
 }
 
 function closeConfiguration(): void {
+	requestConfigVersion++;
 	uiSessionVersion++;
   clearPendingBridgeRequests();
   pluginFrameLoaded.value = false;
@@ -621,6 +664,8 @@ function closeConfiguration(): void {
   uiSession.value = null;
   uiLoading.value = false;
   uiError.value = "";
+  requestConfigLoading.value = false;
+  requestConfigLoaded.value = false;
 }
 
 function clearPendingBridgeRequests(): void {

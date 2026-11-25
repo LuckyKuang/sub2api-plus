@@ -150,7 +150,7 @@ import { useClipboard } from '@/composables/useClipboard'
 import { platformTextClass } from '@/utils/platformColors'
 import { catalogRange, rateSource, type CatalogModel } from './catalog'
 
-defineProps<{ models: CatalogModel[]; rateUnavailable: boolean }>()
+const props = defineProps<{ models: CatalogModel[]; rateUnavailable: boolean }>()
 defineEmits<{ details: [model: CatalogModel] }>()
 
 const { t } = useI18n()
@@ -158,9 +158,11 @@ const { copyToClipboard } = useClipboard()
 const copiedKey = ref<string | null>(null)
 let copiedTimer: ReturnType<typeof setTimeout> | undefined
 
-function onCopyModel(model: CatalogModel) {
-  void copyToClipboard(model.name)
-  copiedKey.value = model.key
+async function onCopyModel(model: CatalogModel) {
+  const key = model.key
+  const ok = await copyToClipboard(model.name)
+  if (!ok || !props.models.some(item => item.key === key)) return
+  copiedKey.value = key
   if (copiedTimer) clearTimeout(copiedTimer)
   copiedTimer = setTimeout(() => {
     copiedKey.value = null

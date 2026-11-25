@@ -29,8 +29,10 @@
 <script setup lang="ts">
 import '@/styles/onboarding.css'
 import { computed, onBeforeUnmount, onMounted, provide, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
+import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { useOnboardingTour } from '@/composables/useOnboardingTour'
 import { useOnboardingStore } from '@/stores/onboarding'
 import AdminSupportBanner from '@/components/admin/support/AdminSupportBanner.vue'
@@ -56,14 +58,35 @@ const view = useUserView()
 const supportUser = computed(() => adminSupportContext.value ? view.user : null)
 const portalArea = usePortalArea()
 const adminGuide = computed(() => portalArea.value === 'admin' && authStore.isAdmin)
+const route = useRoute()
+const adminSettingsStore = useAdminSettingsStore()
+// A custom page's owner is unknown until both menu sources have loaded. The
+// guide must not start with the wrong portal's steps or completion key.
+const portalResolved = computed(() => {
+  if (!route.path.startsWith('/custom/')) return true
+  return adminSettingsStore.loaded && appStore.publicSettingsLoaded
+})
 
-const { replayTour } = useOnboardingTour({
-  storageKey: adminGuide.value ? 'admin_guide' : 'user_guide',
-  variant: adminGuide.value ? 'admin' : 'user',
-  autoStart: !adminSupportContext.value
+const { replayTour, startTour, hasSeen } = useOnboardingTour({
+  storageKey: () => adminGuide.value ? 'admin_guide' : 'user_guide',
+  variant: () => adminGuide.value ? 'admin' : 'user',
+  autoStart: () => !adminSupportContext.value && portalResolved.value
 })
 
 const onboardingStore = useOnboardingStore()
+
+function autoStartResolvedGuide() {
+  if (adminSupportContext.value || !portalResolved.value || hasSeen()) return
+  if (authStore.user?.role !== 'admin') return
+  if (onboardingStore.isDriverActive()) return
+  window.setTimeout(() => {
+    if (onboardingStore.isDriverActive() || hasSeen()) return
+    void startTour()
+  }, 300)
+}
+
+watch(portalResolved, (resolved) => { if (resolved) autoStartResolvedGuide() })
+watch(adminGuide, () => { autoStartResolvedGuide() })
 
 // Inert only covers this layout; dialogs teleported to body and keyboard
 // submission stay reachable. Block them globally for the short switch window.

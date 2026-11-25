@@ -259,7 +259,15 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	// 字段，上游 400 "The `reasoning_content` in the thinking mode must be
 	// passed back to the API"。在共用出站点补空格占位，真实明文不覆盖。
 	body = ensureDeepSeekChatReasoningPlaceholders(account, body)
+	if account != nil && account.Platform == PlatformGrok {
+		// Grok negotiates request compression below. Instructions must run on
+		// the final plain JSON before that encoding step.
+		body = s.applyPluginInstructionsToBody(body, account, APIProtocolChatCompletions)
+	}
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+	if account != nil && account.Platform == PlatformGrok {
+		upstreamCtx = withPluginInstructionsApplied(upstreamCtx)
+	}
 	upstreamReq, err := http.NewRequestWithContext(upstreamCtx, http.MethodPost, targetURL, bytes.NewReader(body))
 	releaseUpstreamCtx()
 	if err != nil {

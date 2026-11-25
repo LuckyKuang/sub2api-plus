@@ -49,7 +49,7 @@ func (s *OpenAIGatewayService) writeOpenAINonStreamingInputTerminal(resp *http.R
 		message = code
 	}
 	setOpsUpstreamError(c, http.StatusBadRequest, code, "")
-	SetOpenAIErrorMessageSource(c, payload)
+	SetOpenAIErrorMessageSource(c, http.StatusBadRequest, payload)
 	if openAICompactClientWantsStream(c) && StopOpenAICompactSSEKeepaliveCommitted(c) {
 		writeOpenAICompactSSEFailureMessage(c, http.StatusBadRequest, code, message)
 	} else {

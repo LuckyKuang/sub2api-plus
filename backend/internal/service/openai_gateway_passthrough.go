@@ -962,12 +962,23 @@ func writeOpenAIPassthroughErrorEnvelope(c *gin.Context, downstreamStatus int, u
 	if c == nil {
 		return
 	}
-	body, _ := json.Marshal(gin.H{
-		"error": gin.H{
-			"type":    "upstream_error",
-			"message": message,
-		},
-	})
+	errorType := "upstream_error"
+	publicCode := ""
+	if definition, ok := codexPublicErrorByKey(getOpenAIErrorMessageSource(c).key); ok {
+		// Direct service callers (and the output middleware) see the same
+		// public type/code/message. Custom text is applied by the middleware.
+		errorType = definition.ErrorType
+		publicCode = definition.PublicCode
+		message = definition.DefaultMessage
+	}
+	errorObject := gin.H{
+		"type":    errorType,
+		"message": message,
+	}
+	if publicCode != "" {
+		errorObject["code"] = publicCode
+	}
+	body, _ := json.Marshal(gin.H{"error": errorObject})
 	if writeOpenAICompactSSEBridge(c, downstreamStatus, body) {
 		return
 	}
@@ -1097,13 +1108,19 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 	// context-window 超限是确定性请求失败（shouldFailoverOpenAIPassthroughResponse
 	// 已保证不切号），其文案对客户端可操作（如触发自动压缩）；在净化信封内保留
 	// 脱敏后的上游消息，而不是抹成通用文案。
-	SetOpenAIErrorMessageSource(c, body)
-	if isOpenAIModelNotFoundError(resp.StatusCode, body) || openAIInputTerminalCode(resp.StatusCode, body) != "" {
-		writeOpenAIUpstreamClientError(c, resp.StatusCode, body, upstreamMsg)
-	} else if isOpenAIContextWindowError(upstreamMsg, body) && upstreamMsg != "" {
-		writeOpenAIPassthroughErrorEnvelope(c, resp.StatusCode, resp.Header, upstreamMsg)
+	publicStatus := resp.StatusCode
+	if key, classified, ok := classifyOpenAIFinalFailure(account, resp.StatusCode, upstreamMsg, body); ok {
+		publicStatus = classified
+		SetCodexPublicErrorFinal(c, key, classified)
 	} else {
-		writeSanitizedOpenAIPassthroughError(c, resp.StatusCode, resp.Header)
+		SetOpenAIErrorMessageSource(c, resp.StatusCode, body)
+	}
+	if isOpenAIModelNotFoundError(resp.StatusCode, body) || openAIInputTerminalCode(resp.StatusCode, body) != "" {
+		writeOpenAIUpstreamClientError(c, publicStatus, body, upstreamMsg)
+	} else if isOpenAIContextWindowError(upstreamMsg, body) && upstreamMsg != "" {
+		writeOpenAIPassthroughErrorEnvelope(c, publicStatus, resp.Header, upstreamMsg)
+	} else {
+		writeSanitizedOpenAIPassthroughError(c, publicStatus, resp.Header)
 	}
 
 	terminalErr := fmt.Errorf("upstream error: %d (client response sanitized)", resp.StatusCode)
@@ -2405,7 +2422,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 					}
 					if !cyberHit && !sawBareError {
 						if status, errType, errMsg, matched := applyOpenAIStreamFailedErrorPassthroughRule(c, account.Platform, dataBytes, failedMessage); matched {
-							SetOpenAIErrorMessageSource(c, dataBytes)
+							SetOpenAIErrorMessageSource(c, openAIErrorEventStatus(dataBytes), dataBytes)
 							// 命中透传规则也要记录 ops 上游错误事件（对齐 CC/Messages 与
 							// antigravity 先例），否则透传命中的 failed 在监控中不可见。
 							s.recordOpenAIStreamUpstreamError(c, account, true, upstreamRequestID, "http_error", dataBytes, failedMessage)
@@ -2705,7 +2722,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		if failoverErr := s.nonStreamingTerminalFailureFailover(c, resp, account, true, terminalType, terminalPayload, msg, mappedModel); failoverErr != nil {
 			return nil, failoverErr
 		}
-		SetOpenAIErrorMessageSource(c, terminalPayload)
+		SetOpenAIErrorMessageSource(c, openAIErrorEventStatus(terminalPayload), terminalPayload)
 		return nil, s.writeOpenAINonStreamingProtocolError(resp, c, account, msg)
 	}
 	finalResponse, ok := extractCodexFinalResponse(bodyText)

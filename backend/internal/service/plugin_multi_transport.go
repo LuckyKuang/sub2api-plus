@@ -19,6 +19,20 @@ type pluginTransportRoute struct {
 	unavailable string
 }
 
+func (m *PluginManager) dropMultiRuntime(id int64, message string) {
+	m.mu.Lock()
+	runtime := m.multiRuntimes[id]
+	delete(m.multiRuntimes, id)
+	if m.multiUnavailable == nil {
+		m.multiUnavailable = make(map[int64]string)
+	}
+	m.multiUnavailable[id] = message
+	m.mu.Unlock()
+	if runtime != nil {
+		runtime.drain(10 * time.Second)
+	}
+}
+
 func (m *PluginManager) reconcileMultiTransport(ctx context.Context, installations []*PluginInstallation) {
 	if m == nil {
 		return
@@ -26,6 +40,9 @@ func (m *PluginManager) reconcileMultiTransport(ctx context.Context, installatio
 	m.mu.Lock()
 	if m.multiRuntimes == nil {
 		m.multiRuntimes = make(map[int64]*pluginRuntime)
+	}
+	if m.multiUnavailable == nil {
+		m.multiUnavailable = make(map[int64]string)
 	}
 	m.mu.Unlock()
 	active := make(map[int64]struct{})
@@ -36,27 +53,48 @@ func (m *PluginManager) reconcileMultiTransport(ctx context.Context, installatio
 		active[installation.ID] = struct{}{}
 		m.mu.Lock()
 		current := m.multiRuntimes[installation.ID]
+		unavailable := m.multiUnavailable[installation.ID]
 		m.mu.Unlock()
 		if current != nil && !current.client.Exited() &&
 			current.installation.BinarySHA256 == installation.BinarySHA256 &&
-			current.installation.ConfigEncrypted == installation.ConfigEncrypted {
-			continue
+			current.installation.ConfigEncrypted == installation.ConfigEncrypted &&
+			unavailable == "" {
+			healthCtx, cancel := context.WithTimeout(ctx, pluginHealthTimeout)
+			healthErr := current.checkHealth(healthCtx)
+			cancel()
+			if healthErr == nil {
+				continue
+			}
+			m.dropMultiRuntime(installation.ID, "插件健康检查失败: "+healthErr.Error())
 		}
 		local, err := m.ensureLocalInstallation(ctx, installation)
 		if err != nil {
 			slog.Warn("plugin_multi_transport_install_failed", "plugin_id", installation.ID, "error", err)
+			m.dropMultiRuntime(installation.ID, "插件安装恢复失败: "+err.Error())
 			continue
 		}
 		runtime, err := m.prepareRuntime(ctx, local, true)
 		if err != nil {
 			slog.Warn("plugin_multi_transport_start_failed", "plugin_id", installation.ID, "error", err)
+			m.dropMultiRuntime(installation.ID, "插件启动失败: "+err.Error())
+			continue
+		}
+		// The binding may have changed while the runtime was starting. Never
+		// publish a runtime prepared from a superseded snapshot.
+		latest, err := m.repo.GetByID(ctx, installation.ID)
+		if err != nil || latest == nil || !hasEnabledMultiTransportBinding(latest.Bindings) ||
+			latest.BinarySHA256 != installation.BinarySHA256 ||
+			latest.ConfigEncrypted != installation.ConfigEncrypted {
+			runtime.kill()
+			m.dropMultiRuntime(installation.ID, "安装状态已变化，等待重新确认")
 			continue
 		}
 		m.mu.Lock()
 		previous := m.multiRuntimes[installation.ID]
+		delete(m.multiUnavailable, installation.ID)
 		m.multiRuntimes[installation.ID] = runtime
 		m.mu.Unlock()
-		if previous != nil {
+		if previous != nil && previous != runtime {
 			previous.drain(10 * time.Second)
 		}
 	}
@@ -71,6 +109,11 @@ func (m *PluginManager) reconcileMultiTransport(ctx context.Context, installatio
 		stale = append(stale, runtime)
 		delete(m.multiRuntimes, id)
 	}
+	for id := range m.multiUnavailable {
+		if _, ok := active[id]; !ok {
+			delete(m.multiUnavailable, id)
+		}
+	}
 	m.mu.Unlock()
 	for _, runtime := range stale {
 		runtime.drain(10 * time.Second)
@@ -81,6 +124,12 @@ func (m *PluginManager) reconcileMultiTransport(ctx context.Context, installatio
 func (m *PluginManager) publishMultiTransportRoutes(installations []*PluginInstallation) {
 	routes := make([]pluginTransportRoute, 0)
 	counts := make(map[string]int)
+	m.mu.Lock()
+	unavailableById := make(map[int64]string, len(m.multiUnavailable))
+	for id, message := range m.multiUnavailable {
+		unavailableById[id] = message
+	}
+	m.mu.Unlock()
 	for _, installation := range installations {
 		if installation == nil {
 			continue
@@ -100,21 +149,26 @@ func (m *PluginManager) publishMultiTransportRoutes(installations []*PluginInsta
 				accountType: binding.AccountType,
 				rollout:     binding.RolloutPercent,
 			}
-			if runtime == nil || runtime.client.Exited() {
+			if message := unavailableById[installation.ID]; message != "" {
+				route.runtime = nil
+				route.unavailable = message
+			} else if runtime == nil || runtime.client.Exited() {
 				route.runtime = nil
 				route.unavailable = "插件进程未运行"
 			}
-			scope := binding.Platform + "/" + binding.AccountType
-			counts[scope]++
+			counts[binding.Platform+"/"+binding.AccountType]++
 			routes = append(routes, route)
 		}
 	}
 	for index := range routes {
 		if counts[routes[index].platform+"/"+routes[index].accountType] > 1 {
+			routes[index].runtime = nil
 			routes[index].unavailable = "同一平台和账号类型存在多个启用的传输插件"
 		}
 	}
 	m.transportRoutes.Store(routes)
+	// This table is only published from an authoritative persisted snapshot.
+	m.transportAuthority.Store(true)
 }
 
 func (m *PluginManager) enableMultiTransportPlugin(ctx context.Context, installation *PluginInstallation, compatibility PluginCompatibility, rolloutPercent int) (*PluginInstallation, error) {
@@ -156,6 +210,7 @@ func (m *PluginManager) enableMultiTransportPlugin(ctx context.Context, installa
 	}
 	runtime, err := m.prepareRuntime(ctx, installation, true)
 	if err != nil {
+		m.dropMultiRuntime(installation.ID, "插件启动失败: "+err.Error())
 		stateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		stateErr := m.repo.UpdateState(stateCtx, installation.ID, PluginStateError, err.Error(), nil, installation.BinarySHA256, PluginStateStarting)
 		cancel()
@@ -168,6 +223,7 @@ func (m *PluginManager) enableMultiTransportPlugin(ctx context.Context, installa
 	}
 	m.mu.Lock()
 	previous := m.multiRuntimes[installation.ID]
+	delete(m.multiUnavailable, installation.ID)
 	m.multiRuntimes[installation.ID] = runtime
 	m.mu.Unlock()
 	if previous != nil {
@@ -177,6 +233,24 @@ func (m *PluginManager) enableMultiTransportPlugin(ctx context.Context, installa
 	if listErr == nil {
 		m.publishMultiTransportRoutes(installations)
 		m.publishRequestRules(installations)
+	}
+	// A mixed package may also declare the legacy OpenAI OAuth transport. Start
+	// that runtime now instead of leaving the binding enabled but unrouted until
+	// a later reconciliation.
+	if manifestHasOpenAIOAuthCapability(installation.Manifest) {
+		v1Runtime, v1Err := m.prepareRuntime(ctx, installation, true)
+		if v1Err != nil {
+			m.publishUnavailableRoute(installation.ID, rolloutPercent, "OpenAI OAuth 传输启动失败: "+v1Err.Error())
+		} else {
+			m.mu.Lock()
+			previous := m.runtimes[installation.ID]
+			m.runtimes[installation.ID] = v1Runtime
+			m.route.Store(&pluginRoute{pluginID: installation.ID, runtime: v1Runtime, rolloutPercent: rolloutPercent})
+			m.mu.Unlock()
+			if previous != nil && previous != v1Runtime {
+				previous.drain(10 * time.Second)
+			}
+		}
 	}
 	result, err := m.repo.GetByID(ctx, installation.ID)
 	if err != nil {
@@ -195,6 +269,9 @@ func (m *PluginManager) RoundTripTransport(ctx context.Context, request *http.Re
 	if m == nil || account == nil {
 		return nil, false, nil
 	}
+	if !m.transportAuthority.Load() {
+		return nil, true, errors.New("插件传输路由暂时无法读取")
+	}
 	routes, _ := m.transportRoutes.Load().([]pluginTransportRoute)
 	accountType := pluginAccountType(account.Type)
 	for _, route := range routes {
@@ -202,7 +279,9 @@ func (m *PluginManager) RoundTripTransport(ctx context.Context, request *http.Re
 			continue
 		}
 		if int(stablePluginBucket(account.ID)) >= route.rollout {
-			return nil, false, nil
+			// A v2 rollout miss falls through to another matching route or the
+			// existing v1 transport, never straight to the native sender.
+			continue
 		}
 		if route.runtime == nil || route.unavailable != "" {
 			return nil, true, fmt.Errorf("插件传输不可用: %s", route.unavailable)
@@ -229,6 +308,10 @@ func (m *PluginManager) RoundTripTransport(ctx context.Context, request *http.Re
 func (m *PluginManager) ShouldRouteTransport(account *Account) bool {
 	if m == nil || account == nil {
 		return false
+	}
+	if !m.transportAuthority.Load() {
+		// Unknown authority must not be reported as "no plugin binding".
+		return true
 	}
 	routes, _ := m.transportRoutes.Load().([]pluginTransportRoute)
 	accountType := pluginAccountType(account.Type)

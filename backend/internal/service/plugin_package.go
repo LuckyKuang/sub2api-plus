@@ -164,6 +164,13 @@ func (i *PluginPackageInstaller) Install(ctx context.Context, reader io.Reader, 
 		return nil, fmt.Errorf("读取已保存插件包: %w", err)
 	}
 	runtimeEntry := manifest.Runtimes[manifest.RuntimeKey()]
+	// Request-only packages have no executable. Their generation must still
+	// change when a different signed package replaces the same plugin key, so
+	// the artifact digest becomes the persisted generation.
+	binarySHA256 := manifest.Files[runtimeEntry.Path]
+	if strings.TrimSpace(binarySHA256) == "" {
+		binarySHA256 = artifactSHA
+	}
 	return &PluginInstallation{
 		PluginKey:       manifest.ID,
 		Name:            manifest.Name,
@@ -175,7 +182,7 @@ func (i *PluginPackageInstaller) Install(ctx context.Context, reader io.Reader, 
 		ArtifactPath:    artifactPath,
 		InstallPath:     installPath,
 		BinaryPath:      filepath.Join(installPath, filepath.FromSlash(runtimeEntry.Path)),
-		BinarySHA256:    manifest.Files[runtimeEntry.Path],
+		BinarySHA256:    binarySHA256,
 		SignatureStatus: signatureStatus,
 		State:           initialState,
 		InstalledBy:     installedBy,

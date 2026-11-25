@@ -8,9 +8,10 @@ import type { ChannelCatalog } from '@/api/channels'
 import { update as updateChannel } from '@/api/admin/channels'
 import { setAdminSupportContext } from '@/utils/adminSupportContext'
 import { clearAvailableChannelCatalogCache } from '@/utils/availableChannelCatalogCache'
+import { resetAvailableChannelsLayoutSession } from '@/composables/useAvailableChannelsLayout'
 
 const mocks = vi.hoisted(() => ({
-  getCatalog: vi.fn(), getCatalogDetail: vi.fn(), copy: vi.fn(), put: vi.fn(),
+  getCatalog: vi.fn(), getCatalogDetail: vi.fn(), copy: vi.fn().mockResolvedValue(true), put: vi.fn(),
   app: { availableChannelsLayout: 'card' },
   auth: { user: { id: 1 }, isAuthenticated: true } as { user: { id: number } | null; isAuthenticated: boolean },
   support: { target: null } as { target: { id: number } | null },
@@ -32,6 +33,7 @@ function leave(wrapper: VueWrapper) { wrappers.splice(wrappers.indexOf(wrapper),
 beforeEach(() => {
   vi.clearAllMocks()
   clearAvailableChannelCatalogCache()
+  resetAvailableChannelsLayoutSession()
   setAdminSupportContext(null)
   mocks.auth = reactive({ user: { id: 1 }, isAuthenticated: true })
   mocks.support = reactive({ target: null })
@@ -368,7 +370,7 @@ describe('available channels user page', () => {
     expect(results.element.contains(filters.element)).toBe(false)
     expect(filters.find('[aria-live="polite"]').exists()).toBe(true)
     expect(filters.find('button[aria-label="common.refresh"]').exists()).toBe(true)
-    expect(filters.find('[role="radiogroup"]').exists()).toBe(true)
+    expect(filters.find('.segmented-control').exists()).toBe(true)
     expect(filters.find('input[type="search"]').exists()).toBe(true)
   })
 
@@ -379,10 +381,10 @@ describe('available channels user page', () => {
     ], user_rate_status: 'loaded', models_total: 3, categories: { group: 3 }, platforms: { openai: 2, anthropic: 1 } })
     const w = page(); await flushPromises()
     const filters = w.get('[data-testid="catalog-filters"]')
-    const radios = filters.findAll('[role="radiogroup"] [role="radio"]')
+    const radios = filters.findAll('.segmented-control .segmented-option')
     expect(radios).toHaveLength(2)
-    expect(radios[0]!.attributes('aria-checked')).toBe('false')
-    expect(radios[1]!.attributes('aria-checked')).toBe('true')
+    expect(radios[0]!.attributes('aria-pressed')).toBe('false')
+    expect(radios[1]!.attributes('aria-pressed')).toBe('true')
     expect(w.findAll('.catalog-model-card')).toHaveLength(3)
 
     await filters.get('input[type="search"]').setValue('model-')
@@ -395,13 +397,13 @@ describe('available channels user page', () => {
 
     // Switch to list view in session: zero catalog API calls, filters & dialog intact
     await radios[0]!.trigger('click')
-    expect(radios[0]!.attributes('aria-checked')).toBe('true')
-    expect(radios[1]!.attributes('aria-checked')).toBe('false')
+    expect(radios[0]!.attributes('aria-pressed')).toBe('true')
+    expect(radios[1]!.attributes('aria-pressed')).toBe('false')
     expect(w.find('[data-testid="catalog-model-list"]').exists()).toBe(true)
     expect(w.find('.catalog-model-card').exists()).toBe(false)
     expect(mocks.getCatalog).toHaveBeenCalledTimes(callsBeforeToggle)
     expect((filters.get('input[type="search"]').element as HTMLInputElement).value).toBe('model-')
-    expect(filters.get('[aria-pressed="true"]').text()).toContain('openai')
+    expect(filters.get('.catalog-platform-chip[aria-pressed="true"]').text()).toContain('openai')
     expect(w.getComponent(CatalogPriceDetails).props('model').name).toBe(openedName)
 
     // Switch back to card view
@@ -418,7 +420,7 @@ describe('available channels user page', () => {
     mocks.app.availableChannelsLayout = 'card'
     await nextTick()
     expect(w.findAll('.catalog-model-card')).toHaveLength(3)
-    expect(radios[1]!.attributes('aria-checked')).toBe('true')
+    expect(radios[1]!.attributes('aria-pressed')).toBe('true')
   })
 
   it('de-emphasizes the reset button when idle and activates it when filters are present', async () => {
@@ -456,7 +458,7 @@ describe('available channels user page', () => {
     await w.get('button[aria-label="common.refresh"]').trigger('click'); await flushPromises()
     expect(w.get('[data-testid="catalog-results"]').element).toBe(results.element)
     expect((filters.get('input[type="search"]').element as HTMLInputElement).value).toBe('model-')
-    expect(filters.get('[aria-pressed="true"]').text()).toContain('openai')
+    expect(filters.get('.catalog-platform-chip[aria-pressed="true"]').text()).toContain('openai')
     expect(mocks.getCatalog.mock.calls.at(-1)![0]).toMatchObject({ search: 'model-', platform: 'openai' })
     expect(results.findAll('h3').map(title => title.text())).toEqual(['model-a', 'model-other', 'model-z'])
   })

@@ -113,19 +113,33 @@ func codexPublicErrorSettingsFromValues(values map[string]string) (codexPublicEr
 
 func (s *SettingService) codexPublicErrorSettings(ctx context.Context) codexPublicErrorSettings {
 	if s == nil {
-		return codexPublicErrorSettings{overrides: map[string]string{}, revision: codexPublicErrorRevision(false, nil)}
+		return defaultCodexPublicErrorSettings()
 	}
 	if !s.codexSafetyBuffering.initialized.Load() {
 		s.refreshCodexSafetyBuffering(ctx)
 	}
-	enabled := s.codexSafetyBuffering.errorMessages.Load()
-	overrides, _ := s.codexSafetyBuffering.errorOverrides.Load().(map[string]string)
-	overrides = cloneCodexPublicErrorOverrides(overrides)
-	return codexPublicErrorSettings{
-		customEnabled: enabled,
-		overrides:     overrides,
-		revision:      codexPublicErrorRevision(enabled, overrides),
+	settings, _ := s.codexSafetyBuffering.publicErrors.Load().(codexPublicErrorSettings)
+	if settings.overrides == nil {
+		return defaultCodexPublicErrorSettings()
 	}
+	settings.overrides = cloneCodexPublicErrorOverrides(settings.overrides)
+	return settings
+}
+
+// storeCodexPublicErrorSnapshotLocked persists the latest committed database
+// state into the runtime after a write. Re-reading under the same mutex used by
+// refreshes prevents an earlier commit that publishes late from overwriting a
+// newer revision.
+func (s *SettingService) storeCodexPublicErrorSnapshotLocked(ctx context.Context) bool {
+	result, ok := s.readCodexPublicErrorSettingsLocked(ctx)
+	if !ok {
+		return false
+	}
+	if raw := result.values[SettingKeyOpenAICodexSafetyBufferingSuppressed]; raw == "" || raw == "true" || raw == "false" {
+		s.codexSafetyBuffering.enabled.Store(raw == "true")
+	}
+	s.codexSafetyBuffering.publicErrors.Store(result.settings)
+	return true
 }
 
 func cloneCodexPublicErrorOverrides(overrides map[string]string) map[string]string {
@@ -258,14 +272,16 @@ func (s *SettingService) SaveCodexPublicErrorSettings(ctx context.Context, expec
 
 	runtime := &s.codexSafetyBuffering
 	runtime.mu.Lock()
-	runtime.errorMessages.Store(next.customEnabled)
-	runtime.errorOverrides.Store(cloneCodexPublicErrorOverrides(next.overrides))
+	// Another instance may have committed a newer revision while this save was
+	// finishing. Re-read the committed pair so this late publish cannot regress
+	// the runtime to an older snapshot.
+	s.storeCodexPublicErrorSnapshotLocked(ctx)
 	bus := runtime.bus
 	runtime.mu.Unlock()
 	if bus != nil {
 		publishCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
-		if publishErr := bus.Publish(publishCtx, SettingKeyOpenAIErrorMessageOverrides); publishErr != nil {
+		if publishErr := bus.Publish(publishCtx, SettingKeyOpenAICodexSafetyBufferingSuppressed); publishErr != nil {
 			slog.Warn("codex public error setting broadcast failed", "stage", "settings_publish", "code", "codex_public_error_setting_publish_failed")
 		}
 	}

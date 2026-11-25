@@ -3012,8 +3012,12 @@ func runOpenAIResponsesWebSocketUsageLimitCase(t *testing.T, mode string, follow
 	_, event, err := clientConn.Read(readCtx)
 	cancelRead()
 	if len(followups) > 0 {
-		require.Equal(t, coderws.StatusTryAgainLater, coderws.CloseStatus(err), "a later-turn limit must not turn into a successful replay: %s", event)
-		require.ErrorContains(t, err, "rate limit")
+		require.NoError(t, err, "the classified error event precedes the close")
+		require.Contains(t, string(event), `"type":"error"`)
+		closeCtx, cancelClose := context.WithTimeout(context.Background(), 5*time.Second)
+		_, _, closeErr := clientConn.Read(closeCtx)
+		cancelClose()
+		require.Equal(t, coderws.StatusTryAgainLater, coderws.CloseStatus(closeErr), "a later-turn limit must not turn into a successful replay: %s", event)
 	} else {
 		require.NoError(t, err)
 		require.Equal(t, "response.completed", gjson.GetBytes(event, "type").String())
