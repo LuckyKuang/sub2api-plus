@@ -309,4 +309,15 @@ describe('KeyUsageView subscription feature flag', () => {
     expect(wrapper.text()).toContain('Wallet Balance')
     wrapper.unmount()
   })
+
+  it('leaves no pending ring animation frames after unmount', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = await mountAndQuery()
+      wrapper.unmount()
+      await vi.advanceTimersByTimeAsync(1200)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
