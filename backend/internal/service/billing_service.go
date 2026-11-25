@@ -966,6 +966,15 @@ func (s *BillingService) initFallbackPricing() {
 		CacheReadPricePerToken: 0.26e-6,
 		SupportsCacheBreakdown: false,
 	}
+	// GLM-5.4 的按量 API 价目尚未公布（BigModel 仅开放 Coding Plan）。此卡沿用
+	// GLM-5.3 的同价配置作为运营基线，使渠道参考价与请求结算一致；官方价格发布后
+	// 只需改这一处。不得回退到裸 "glm-5" 家族卡（$1.00/$3.20），那是旧 SKU 的价。
+	s.fallbackPrices["glm-5.4"] = &ModelPricing{
+		InputPricePerToken:     1.4e-6, // $1.40 per MTok
+		OutputPricePerToken:    4.4e-6, // $4.40 per MTok
+		CacheReadPricePerToken: 0.26e-6,
+		SupportsCacheBreakdown: false,
+	}
 	s.fallbackPrices["glm-5.2"] = &ModelPricing{
 		InputPricePerToken:     1.4e-6, // $1.40 per MTok
 		OutputPricePerToken:    4.4e-6, // $4.40 per MTok
@@ -1478,11 +1487,10 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	if strings.Contains(modelLower, "glm-5-turbo") || strings.Contains(modelLower, "glm-5turbo") {
 		return s.fallbackPrices["glm-5-turbo"]
 	}
-	// GLM-5.4 has no published pay-as-you-go price in this catalog. Falling
-	// through to the bare "glm-5" family card would under- or over-bill it.
-	// Platform-aware pricing may still use the configured zhipu fallback SKU.
+	// GLM-5.4 使用与 GLM-5.3 相同的配置卡（按量 API 价目尚未公布）。必须排在
+	// 裸 "glm-5" 之前，否则会被家族匹配抢走并按旧 SKU 计价。
 	if strings.Contains(modelLower, "glm-5.4") {
-		return nil
+		return s.fallbackPrices["glm-5.4"]
 	}
 	if strings.Contains(modelLower, "glm-5") {
 		return s.fallbackPrices["glm-5"]
