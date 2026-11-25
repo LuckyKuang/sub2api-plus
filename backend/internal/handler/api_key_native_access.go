@@ -79,6 +79,11 @@ func (h *APIKeyHandler) GetNativeAccess(c *gin.Context) {
 			if account.Platform != offer.Platform || account.Status != service.StatusActive {
 				continue
 			}
+			// A commercial catalog entry or another account's price does not
+			// prove this account can invoke the target model.
+			if !service.AccountModelEvidenceAllows(c.Request.Context(), &account, offer.Name) {
+				continue
+			}
 			for protocol, path := range paths {
 				upstreamModel := offer.Name
 				if group.Platform == service.PlatformComposite && h.compositeResolver != nil {
@@ -183,7 +188,7 @@ func nativeAccessCandidates(group *service.Group, accounts []service.Account, ca
 		if len(mapping) == 0 {
 			defaults := defaultModelIDsForPlatform(account.Platform)
 			if service.IsMultiProtocolAPIKeyProvider(account.Platform) {
-				defaults = cnmodels.DefaultModelIDs(account.Platform)
+				defaults = service.FilterStaticCatalogModels(account, cnmodels.DefaultModelIDs(account.Platform))
 			}
 			if snapshot := account.GetUpstreamModelMetadataSnapshot(); snapshot != nil {
 				defaults = nil

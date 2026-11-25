@@ -24,10 +24,10 @@
         </div>
       </div>
 
-      <!-- Right: Announcements + Docs + Language + Subscriptions + Balance + User Dropdown -->
+      <!-- Right: shared tools everywhere; personal widgets only in the user portal. -->
       <div class="flex shrink-0 items-center gap-1 sm:gap-3">
-        <!-- Announcement Bell -->
-        <AnnouncementBell v-if="user" />
+        <!-- Personal announcements only belong to the user portal. -->
+        <AnnouncementBell v-if="user && isUserPortal" />
 
         <!-- Docs Link -->
         <a
@@ -57,11 +57,11 @@
         <LocaleSwitcher v-if="!compactHeader" />
 
         <!-- Subscription Progress (for users with active subscriptions; not mounted at all when the feature is off) -->
-        <SubscriptionProgressMini v-if="user && subscriptionFeatureEnabled && !compactHeader" />
+        <SubscriptionProgressMini v-if="user && isUserPortal && subscriptionFeatureEnabled && !compactHeader" />
 
         <!-- Balance Display -->
         <div
-          v-if="user && !compactHeader"
+          v-if="user && isUserPortal && !compactHeader"
           class="group relative hidden items-center gap-2 rounded-lg bg-primary-50/[0.15] px-3 py-1.5 dark:bg-primary-900/20 sm:flex"
         >
           <svg
@@ -149,7 +149,7 @@
               </div>
 
               <!-- Balance (mobile only) -->
-              <div v-if="compactHeader" class="border-b border-gray-100 px-4 py-2 dark:border-dark-700">
+              <div v-if="compactHeader && isUserPortal" class="border-b border-gray-100 px-4 py-2 dark:border-dark-700">
                 <div class="text-xs surface-muted">
                   {{ t('common.balance') }}
                 </div>
@@ -167,21 +167,23 @@
                   <router-link v-if="modelPlazaEnabled" :to="{ path: '/model-plaza', query: { embedded: '1' } }" class="dropdown-item" @click="closeDropdown"><Icon name="grid" size="sm" />{{ t('nav.modelPlaza') }}</router-link>
                   <div class="flex flex-col items-start gap-3 px-4 py-2">
                     <LocaleSwitcher />
-                    <SubscriptionProgressMini v-if="subscriptionFeatureEnabled" inline class="w-full" />
+                    <SubscriptionProgressMini v-if="isUserPortal && subscriptionFeatureEnabled" inline class="w-full" />
                   </div>
                 </template>
-                <router-link to="/profile" @click="closeDropdown" class="dropdown-item">
-                  <Icon name="user" size="sm" />
-                  {{ t('nav.profile') }}
-                </router-link>
+                <template v-if="isUserPortal">
+                  <router-link to="/profile" @click="closeDropdown" class="dropdown-item">
+                    <Icon name="user" size="sm" />
+                    {{ t('nav.profile') }}
+                  </router-link>
 
-                <router-link to="/keys" @click="closeDropdown" class="dropdown-item">
-                  <Icon name="key" size="sm" />
-                  {{ t('nav.apiKeys') }}
-                </router-link>
+                  <router-link to="/keys" @click="closeDropdown" class="dropdown-item">
+                    <Icon name="key" size="sm" />
+                    {{ t('nav.apiKeys') }}
+                  </router-link>
+                </template>
 
                 <a
-                  v-if="view.isAdmin"
+                  v-if="isAdminPortal"
                   href="https://github.com/luckykuang/sub2api-plus"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -233,7 +235,7 @@
                       d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 14a1 1 0 110 2 1 1 0 010-2zm1.07-7.75c0-.6-.49-1.25-1.32-1.25-.7 0-1.22.4-1.43 1.02a1 1 0 11-1.9-.62A3.41 3.41 0 0111.8 5c2.02 0 3.25 1.4 3.25 2.9 0 2-1.83 2.55-2.43 3.12-.43.4-.47.75-.47 1.23a1 1 0 01-2 0c0-1 .16-1.82 1.1-2.7.69-.64 1.82-1.05 1.82-2.06z"
                     />
                   </svg>
-                  {{ $t('onboarding.restartTour') }}
+                  {{ t('onboarding.restartTour') }}
                 </button>
               </div>
 
@@ -268,6 +270,7 @@
 
 <script setup lang="ts">
 import { adminSupportContext } from '@/utils/adminSupportContext'
+import { usePortalArea } from '@/composables/usePortalArea'
 import { useUserView } from '@/composables/useUserView'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useElementSize } from '@vueuse/core'
@@ -297,6 +300,9 @@ const adminSettingsStore = useAdminSettingsStore()
 const onboardingStore = useOnboardingStore()
 
 const view = useUserView()
+const portalArea = usePortalArea()
+const isAdminPortal = computed(() => authStore.isAdmin && portalArea.value === 'admin')
+const isUserPortal = computed(() => portalArea.value === 'user')
 const user = computed(() => view.user)
 const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -313,9 +319,9 @@ const balanceFrozenText = computed(() => t('common.frozenBalance') === 'common.f
 const balanceTotalText = computed(() => t('common.totalBalance') === 'common.totalBalance' ? '总余额' : t('common.totalBalance'))
 const balanceFrozenLabel = computed(() => `${balanceFrozenText.value} ${formatHeaderMoney(frozenBalance.value)}`)
 
-// 只在标准模式的管理员下显示新手引导按钮
+// 管理员在管理端或用户端都可以重播对应界面的引导；协助只读视图不挂载。
 const showOnboardingButton = computed(() => {
-  return !authStore.isSimpleMode && !adminSupportContext.value && user.value?.role === 'admin'
+  return !authStore.isSimpleMode && !adminSupportContext.value && authStore.isAdmin
 })
 
 const userInitials = computed(() => {
@@ -350,8 +356,11 @@ const pageTitle = computed(() => {
   if (route.name === 'CustomPage' || route.meta.adminSupportResource === 'custom') {
     const id = route.params.id as string
     const publicItems = appStore.cachedPublicSettings?.custom_menu_items ?? []
-    const menuItem = publicItems.find((item) => item.id === id)
-      ?? (authStore.isAdmin ? adminSettingsStore.customMenuItems.find((item) => item.id === id) : undefined)
+    const userItem = publicItems.find((item) => item.id === id && item.visibility !== 'admin')
+    const adminItem = isAdminPortal.value
+      ? adminSettingsStore.customMenuItems.find((item) => item.id === id && item.visibility === 'admin')
+      : undefined
+    const menuItem = userItem ?? adminItem
     if (menuItem?.label) return menuItem.label
   }
   const titleKey = routeMetaKeys.value.titleKey

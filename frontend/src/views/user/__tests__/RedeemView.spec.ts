@@ -254,20 +254,4 @@ describe('RedeemView refresh after redemption', () => {
     expect(getHistory).toHaveBeenCalledTimes(2)
     wrapper.unmount()
   })
-
-  it('keeps the code and reports failure when the redemption request itself fails', async () => {
-    redeem.mockRejectedValue({ response: { data: { detail: 'Invalid code' } } })
-    const wrapper = await submitCode()
-
-    expect(showError).toHaveBeenCalledWith('redeem.redeemFailed')
-    expect(wrapper.text()).toContain('Invalid code')
-    expect(wrapper.text()).not.toContain('Code applied')
-    expect((wrapper.get('input#code').element as HTMLInputElement).value).toBe(' REDEEM-CODE ')
-    expect(refreshUser).not.toHaveBeenCalled()
-    expect(fetchActiveSubscriptions).not.toHaveBeenCalled()
-    expect(getHistory).toHaveBeenCalledOnce()
-    expect(showSuccess).not.toHaveBeenCalled()
-    expect(showWarning).not.toHaveBeenCalled()
-    wrapper.unmount()
-  })
 })

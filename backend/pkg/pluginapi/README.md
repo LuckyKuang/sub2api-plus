@@ -19,9 +19,11 @@
 
 独立进程是代码和发布边界，不是操作系统安全沙箱。插件拥有 Sub2API 服务用户所拥有的文件和网络权限，因此只应安装可信发布者的签名包。闭源二进制可提高源码分发门槛，但不能承诺无法反编译。
 
-## 初期能力边界
+## 能力边界
 
-当前只接受 `openai.oauth.outbound_transport.v1`：
+当前接受两种能力：
+
+### `openai.oauth.outbound_transport.v1`
 
 - 仅匹配 `platform=openai` 且 `account_type=oauth` 的上游 HTTP 请求。
 - API Key 账号、其他 provider、OAuth 登录与 Token 刷新流程不进入插件。
@@ -29,6 +31,27 @@
 - 命中插件的 OAuth WebSocket 账号会使用 Sub2API 现有 HTTP Bridge，不直接建立上游 WebSocket，避免绕过 v1 HTTP 插件协议。
 - Sub2API 继续负责响应状态处理、SSE 解析、错误映射、用量统计、计费和下游输出。
 - 灰度比例以账号 ID 稳定分桶，未命中的 OAuth 账号继续使用原有内置路径。
+
+### `request.instructions.prepend.v1`
+
+- 需要清单 `schema_version: 2`，按 `platform + account_type (oauth/apikey)` 声明。
+- 纯请求包只包含签名清单，不包含运行时、UI 或可执行文件；宿主不会启动外部进程。
+- 规则保存在插件加密配置中：`default_text`、`platform_overrides`、`account_overrides`，取值优先级为精确账号类型 > 平台 > 默认。
+- 宿主在最终协议组包点把文本插入指令槽：Chat 的 system/developer、Responses 的 `instructions`、Anthropic 的 `system`、Gemini 的 `systemInstruction.parts`。
+- 灰度比例按账号 ID 稳定分桶；同一次请求每个插件只取一条文本，多个插件按稳定的插件/绑定顺序拼接。
+
+### `outbound.transport.v1`
+
+- 需要清单 `schema_version: 2`，按具体 `platform + account_type (oauth/apikey)` 声明；需要目标平台运行时、静态 UI 和文件哈希。
+- 按本次尝试的真实凭据 owner 平台和账号类型选择发送者，每次发送最多命中一个传输实现。
+- 同一能力、平台和账号类型的活动传输槽互斥；v1 与 v2 可以分别启用，不同平台/类型可以分别启用，灰度按账号 ID 稳定分桶。
+- v1 `openai.oauth.outbound_transport.v1` 继续兼容；两者同时命中时优先 v2 精确范围，未命中时回退 v1。
+- 传输进程建立真实上游 HTTP/TLS 连接并返回原始响应；宿主继续负责响应解析、错误映射、用量、计费和审计。
+- 普通 Anthropic 转发、Anthropic API Key 直通、账号测试和原生 Gemini 请求共享同一凭据 owner 的指令/传输选择；Gemini 原生与反重力 HTTP 桥仍需按部署矩阵单独验证。
+
+### 混合包配置
+
+同时声明传输与 `request.instructions.prepend.v1` 的 schema v2 包把指令配置放在顶层 `request_instructions` 对象中，其余字段归运行时所有。宿主在把配置交给运行时校验或应用前移除该节，保存时再合并回同一份加密配置；运行时与指令各自校验自己的字段，列表发布和重载使用同一份快照。迁移 `317_plugin_bindings_transport_exclusive.sql` 只保留传输槽位的唯一约束，多个纯指令包可在同一范围共存。
 
 ## 宿主服务（HostService）
 

@@ -28,6 +28,26 @@ vi.mock("@/api/admin/groups", async (original) => ({
   getAllIncludingInactive: vi.fn().mockResolvedValue([]),
 }));
 
+const { getCodexErrorMessages, patchCodexErrorMessages } = vi.hoisted(() => {
+  const fixture = {
+    revision: "r1",
+    custom_enabled: false,
+    items: [
+      { key: "rate_limit_exceeded", group: "service", public_code: "rate_limit_exceeded", default_message: "当前请求受到频率限制，请稍后再试。", custom_message: null, effective_message: "当前请求受到频率限制，请稍后再试。" },
+      { key: "output_length_limit", group: "media", public_code: null, default_message: "输出已达到长度上限，可缩小请求范围或调整输出上限。", custom_message: null, effective_message: "输出已达到长度上限，可缩小请求范围或调整输出上限。" },
+    ],
+  };
+  return {
+    getCodexErrorMessages: vi.fn().mockResolvedValue(fixture),
+    patchCodexErrorMessages: vi.fn(),
+  };
+});
+vi.mock("@/api/admin/settings", async (original) => ({
+  ...await original<typeof import("@/api/admin/settings")>(),
+  getCodexErrorMessages,
+  patchCodexErrorMessages,
+}));
+
 const { getOutboundIdentity, updateOutboundIdentity } = vi.hoisted(() => ({
   getOutboundIdentity: vi.fn(), updateOutboundIdentity: vi.fn(),
 }));
@@ -926,26 +946,99 @@ describe("admin SettingsView payment visible method controls", () => {
     } finally { wrapper.unmount(); }
   });
 
-  it("loads and saves the session error message switch independently of the Codex transport switches", async () => {
-    getSettings.mockResolvedValue({ ...baseSettingsResponse, openai_error_messages_normalized: true });
+  it("loads the upstream error message catalog and saves its custom-mode switch through the dedicated API", async () => {
     const wrapper = mountView();
     try {
       await flushPromises();
       await openIdentityTab(wrapper);
-      const suppression = wrapper.get('[data-testid="openai-error-messages-normalized"]');
-      expect((suppression.element as HTMLInputElement).checked).toBe(true);
-      await suppression.setValue(false);
+      expect(getCodexErrorMessages).toHaveBeenCalled();
+      const panel = wrapper.get('[data-testid="codex-error-messages-panel"]');
+      expect(panel.text()).toContain("当前请求受到频率限制，请稍后再试。");
+      const toggle = wrapper.get('[data-testid="codex-error-messages-custom-enabled"]');
+      await toggle.setValue(true);
+      await wrapper.get('[data-testid="codex-error-messages-save"]').trigger("click");
+      await flushPromises();
+      expect(patchCodexErrorMessages).toHaveBeenCalledWith({
+        revision: "r1",
+        custom_enabled: true,
+        changes: {},
+      });
       await wrapper.find("form").trigger("submit.prevent");
       await flushPromises();
-      expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({
-        openai_error_messages_normalized: false,
-        openai_codex_ws_enabled: true,
-        openai_codex_http_ws_enabled: false,
-      }));
-      await suppression.setValue(true);
-      await wrapper.find("form").trigger("submit.prevent");
+      expect(updateSettings.mock.calls.at(-1)![0]).not.toHaveProperty("openai_error_messages_normalized");
+    } finally { wrapper.unmount(); }
+  });
+
+  it("saves and enables a default-mode text edit in one revisioned PATCH", async () => {
+    patchCodexErrorMessages.mockResolvedValueOnce({
+      revision: "r2",
+      custom_enabled: true,
+      items: [
+        { key: "rate_limit_exceeded", group: "service", public_code: "rate_limit_exceeded", default_message: "当前请求受到频率限制，请稍后再试。", custom_message: "自定义限流提示", effective_message: "自定义限流提示" },
+        { key: "output_length_limit", group: "media", public_code: null, default_message: "输出已达到长度上限，可缩小请求范围或调整输出上限。", custom_message: null, effective_message: "输出已达到长度上限，可缩小请求范围或调整输出上限。" },
+      ],
+    });
+    const wrapper = mountView();
+    try {
       await flushPromises();
-      expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ openai_error_messages_normalized: true }));
+      await openIdentityTab(wrapper);
+      const panel = wrapper.get('[data-testid="codex-error-messages-panel"]');
+      const rows = panel.findAll("tr.record-row-parent");
+      await rows[0]!.findAll("button")[0]!.trigger("click");
+      await panel.get('[data-testid="codex-error-messages-editor"]').setValue("自定义限流提示");
+      const apply = panel.findAll("button").find(button => button.text() === "admin.settings.gatewayForwarding.codexErrorMessages.apply");
+      expect(apply).toBeTruthy();
+      await apply!.trigger("click");
+      const save = wrapper.get('[data-testid="codex-error-messages-save"]');
+      expect(save.text()).toContain("admin.settings.gatewayForwarding.codexErrorMessages.saveAndEnable");
+      await save.trigger("click");
+      await flushPromises();
+      expect(patchCodexErrorMessages).toHaveBeenCalledWith({
+        revision: "r1",
+        custom_enabled: true,
+        changes: { rate_limit_exceeded: "自定义限流提示" },
+      });
+    } finally { wrapper.unmount(); }
+  });
+
+  it("keeps the draft and exposes the conflict reload action on a normalized 409", async () => {
+    patchCodexErrorMessages.mockRejectedValueOnce({ status: 409 });
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openIdentityTab(wrapper);
+      const panel = wrapper.get('[data-testid="codex-error-messages-panel"]');
+      const rows = panel.findAll("tr.record-row-parent");
+      await rows[0]!.findAll("button")[0]!.trigger("click");
+      await panel.get('[data-testid="codex-error-messages-editor"]').setValue("保留的草稿");
+      const apply = panel.findAll("button").find(button => button.text() === "admin.settings.gatewayForwarding.codexErrorMessages.apply");
+      await apply!.trigger("click");
+      await wrapper.get('[data-testid="codex-error-messages-save"]').trigger("click");
+      await flushPromises();
+      const conflict = panel.get('[data-testid="codex-error-messages-conflict"]');
+      expect(conflict.exists()).toBe(true);
+      expect(panel.get('[data-testid="codex-error-messages-conflict-reload"]').exists()).toBe(true);
+      expect(panel.text()).toContain("admin.settings.gatewayForwarding.codexErrorMessages.customDraft");
+      expect(showSuccess).not.toHaveBeenCalledWith("admin.settings.gatewayForwarding.codexErrorMessages.save");
+    } finally { wrapper.unmount(); }
+  });
+
+  it("counts Unicode code points instead of UTF-16 units in the message editor", async () => {
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openIdentityTab(wrapper);
+      const panel = wrapper.get('[data-testid="codex-error-messages-panel"]');
+      const rows = panel.findAll("tr.record-row-parent");
+      await rows[0]!.findAll("button")[0]!.trigger("click");
+      const editor = panel.get('[data-testid="codex-error-messages-editor"]');
+      const apply = () => panel.findAll("button").find(button => button.text() === "admin.settings.gatewayForwarding.codexErrorMessages.apply")!;
+      await editor.setValue("😀".repeat(501));
+      await apply().trigger("click");
+      expect(panel.text()).toContain("admin.settings.gatewayForwarding.codexErrorMessages.limitExceeded");
+      await editor.setValue("😀".repeat(500));
+      await apply().trigger("click");
+      expect(panel.text()).toContain("admin.settings.gatewayForwarding.codexErrorMessages.customDraft");
     } finally { wrapper.unmount(); }
   });
 

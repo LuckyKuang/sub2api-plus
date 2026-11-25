@@ -54,6 +54,23 @@ volumes:
   redis_data:
 ```
 
+## WSL2 Availability
+
+If the published port stops responding after deployment, run
+`wsl.exe --list --verbose` from PowerShell. WSL can stop an idle distribution
+after the last attached command exits. Docker and the published port go offline
+with the distribution. See [Microsoft's WSL service documentation](https://learn.microsoft.com/en-us/windows/wsl/systemd#how-does-enabling-systemd-affect-wsl-architecture).
+
+For a twelve-hour audit window, keep this command open in a dedicated
+PowerShell terminal. Substitute your deployment's distribution name for
+`ubuntu`. Press Ctrl+C to end the session early.
+
+```powershell
+wsl.exe --distribution ubuntu --exec /usr/bin/sleep 12h
+```
+
+Once Docker is running, check `/health` on the configured published port again.
+
 ## Startup and Database Recovery
 
 `concurrency.ping_interval` defaults to 10 seconds and accepts 0 or 5–30.
@@ -99,7 +116,7 @@ application container after changing these values.
 ## Tags
 
 - `latest` - Latest stable release
-- `vX.Y.Z-custom.NNN` - Immutable fork release, for example `v0.2.24-custom.001`
+- `vX.Y.Z-custom.NNN` - Immutable fork release, for example `v0.2.24-custom.002`
 - `x.y` - Latest patch of minor version
 - `x` - Latest minor of major version
 
@@ -108,8 +125,8 @@ preserves the leading `v` and replaces only `+` with `-` to produce the
 OCI-compatible image tag. For example:
 
 ```text
-Git/GitHub: v0.2.24+custom.001
-GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.2.24-custom.001
+Git/GitHub: v0.2.24+custom.002
+GHCR:       ghcr.io/luckykuang/sub2api-plus:v0.2.24-custom.002
 ```
 
 Pin the immutable release tag in production. Use `latest` only when automatic

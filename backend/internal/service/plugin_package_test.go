@@ -192,7 +192,7 @@ func testPluginManifest(files map[string][]byte) PluginManifest {
 		Runtimes: map[string]PluginRuntime{
 			PluginManifest{}.RuntimeKey(): {Path: "bin/plugin"},
 		},
-		UI:    PluginUIManifest{Entrypoint: "ui/index.html"},
+		UI:    &PluginUIManifest{Entrypoint: "ui/index.html"},
 		Files: hashes,
 	}
 }
@@ -247,4 +247,24 @@ func writeZipEntry(t *testing.T, writer *zip.Writer, path string, data []byte) {
 	require.NoError(t, err)
 	_, err = entry.Write(data)
 	require.NoError(t, err)
+}
+
+func TestPluginPackageInstallerInstallsRequestOnlyPackage(t *testing.T) {
+	cfg := testPluginConfig(t.TempDir(), true)
+	installer := NewPluginPackageInstaller(cfg, PluginHostInfo{Version: "0.1.179", BuildType: "release"})
+	manifest := validRequestManifest()
+	manifest.Requires.Sub2API = ">=0.1.170 <0.2.0"
+	manifest.Requires.TestedSub2APIVersions = []string{"0.1.179"}
+	archive := buildPluginArchive(t, manifest, nil, "", nil)
+
+	installation, err := installer.Install(context.Background(), bytes.NewReader(archive), nil)
+	require.NoError(t, err)
+	require.True(t, installation.Manifest.IsRequestOnly())
+	require.Equal(t, PluginStateDisabled, installation.State)
+	// A request-only package has no executable, so its artifact digest is the
+	// comparable generation used by all mutation guards.
+	require.Len(t, installation.BinarySHA256, 64)
+	require.FileExists(t, installation.ArtifactPath)
+	require.DirExists(t, installation.InstallPath)
+	require.Len(t, installation.Manifest.Capabilities, 1)
 }

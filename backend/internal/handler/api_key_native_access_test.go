@@ -94,3 +94,24 @@ func TestCompositeConversionEndpointsMustCoverEveryModel(t *testing.T) {
 	require.Empty(t, compositeConversionEndpoints(models), "dedicated non-chat APIs must not be falsely advertised as convertible")
 	require.Empty(t, compositeConversionEndpoints(nil))
 }
+
+// The shared Zhipu catalog is a candidate list, not proof that a
+// pay-as-you-go key can invoke a coding-plan SKU.
+func TestNativeAccessCandidatesHideGLM54WithoutCodingPlan(t *testing.T) {
+	group := &service.Group{Platform: service.PlatformComposite}
+	payg := service.Account{Platform: service.PlatformZhipu, Status: service.StatusActive, Credentials: map[string]any{"account_mode": service.AccountModePayG}}
+
+	names := map[string]bool{}
+	for _, candidate := range nativeAccessCandidates(group, []service.Account{payg}, nil, nil) {
+		names[candidate.Name] = true
+	}
+	require.True(t, names["glm-5.3"])
+	require.False(t, names["glm-5.4"])
+
+	coding := service.Account{Platform: service.PlatformZhipu, Status: service.StatusActive, Credentials: map[string]any{"account_mode": service.AccountModeCoding}}
+	names = map[string]bool{}
+	for _, candidate := range nativeAccessCandidates(group, []service.Account{payg, coding}, nil, nil) {
+		names[candidate.Name] = true
+	}
+	require.True(t, names["glm-5.4"])
+}

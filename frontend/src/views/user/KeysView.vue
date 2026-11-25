@@ -408,6 +408,15 @@
 
           <template #cell-actions="{ row }">
             <div class="table-actions">
+              <!-- Test Button -->
+              <button
+                @click="openTestModal(row)"
+                class="table-action"
+                data-testid="test-key-action"
+              >
+                <Icon name="beaker" size="sm" />
+                <span class="text-xs">{{ t('keys.testKey') }}</span>
+              </button>
               <!-- Use Key Button -->
               <button
                 @click="openUseKeyModal(row)"
@@ -415,13 +424,6 @@
               >
                 <Icon name="terminal" size="sm" />
                 <span class="text-xs">{{ t('keys.useKey') }}</span>
-              </button>
-              <button
-                @click="editKey(row)"
-                class="table-action"
-              >
-                <Icon name="edit" size="sm" />
-                <span class="text-xs">{{ t('common.edit') }}</span>
               </button>
               <ActionMenu :items="keyRowActions(row)" @select="handleKeyRowAction(row, $event)" />
             </div>
@@ -1062,6 +1064,14 @@
       @close="closeUseKeyModal"
     />
 
+    <!-- Test Key Modal -->
+    <KeyTestModal
+      :show="showTestModal"
+      :api-key="selectedTestKey"
+      :base-url="publicSettings?.api_base_url || ''"
+      @close="closeTestModal"
+    />
+
     <!-- CCS Client Selection Dialog for Antigravity -->
     <BaseDialog
       :show="showCcsClientSelect"
@@ -1212,6 +1222,7 @@ import SearchInput from '@/components/common/SearchInput.vue'
 import Icon from '@/components/icons/Icon.vue'
 import NativeAccessFields from '@/components/keys/NativeAccessFields.vue'
 import UseKeyModal from '@/components/keys/UseKeyModal.vue'
+import KeyTestModal from '@/components/keys/KeyTestModal.vue'
 import CheckboxDropdown from '@/components/common/CheckboxDropdown.vue'
 import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
@@ -1403,10 +1414,12 @@ const showDeleteDialog = ref(false)
 const showResetQuotaDialog = ref(false)
 const showResetRateLimitDialog = ref(false)
 const showUseKeyModal = ref(false)
+const showTestModal = ref(false)
 const showCcsClientSelect = ref(false)
 const showColumnDropdown = ref(false)
 const pendingCcsRow = ref<ApiKey | null>(null)
 const selectedKey = ref<ApiKey | null>(null)
+const selectedTestKey = ref<ApiKey | null>(null)
 const editingAggregateGroupIDs = ref<number[]>([])
 let keyEditRequestID = 0
 const copiedKeyId = ref<number | null>(null)
@@ -1714,6 +1727,16 @@ const closeUseKeyModal = () => {
   selectedKey.value = null
 }
 
+const openTestModal = (key: ApiKey) => {
+  selectedTestKey.value = key
+  showTestModal.value = true
+}
+
+const closeTestModal = () => {
+  showTestModal.value = false
+  selectedTestKey.value = null
+}
+
 const handlePageChange = (page: number) => {
   selectedIds.value = []
   pagination.value.page = page
@@ -1863,6 +1886,7 @@ const closeGroupSelector = (event: MouseEvent) => {
 
 // Each row shows its two everyday actions; the rest live in one "more" menu.
 const keyRowActions = (key: ApiKey): ActionMenuItem[] => [
+  { key: 'edit', label: t('common.edit'), icon: 'edit' },
   { key: 'ccswitch', label: t('keys.importToCcSwitch'), icon: 'upload', hidden: !!publicSettings.value?.hide_ccs_import_button },
   key.status === 'active'
     ? { key: 'toggle', label: t('keys.disable'), icon: 'ban', tone: 'warning', mutates: true }
@@ -1871,7 +1895,8 @@ const keyRowActions = (key: ApiKey): ActionMenuItem[] => [
 ]
 
 const handleKeyRowAction = (key: ApiKey, action: string) => {
-  if (action === 'ccswitch') importToCcswitch(key)
+  if (action === 'edit') void editKey(key)
+  else if (action === 'ccswitch') importToCcswitch(key)
   else if (action === 'toggle') void toggleKeyStatus(key)
   else if (action === 'delete') confirmDelete(key)
 }

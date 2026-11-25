@@ -166,6 +166,37 @@ credentials enter account failover before model traffic or client output.
 Start-plan and off-peak JWT authentication always uses `Authorization: Bearer`,
 independently of the API-key account's optional auth-scheme metadata.
 
+## GLM-5.4 availability
+
+GLM-5.4 is a Coding Plan model in the reviewed catalog. The shared
+`cnmodels` catalog lists it for admin configuration, but that entry is not
+proof that a pay-as-you-go account can invoke it. Public listings, aggregate
+key selection and native model lists retain it only for personal/team coding
+credentials; a pay-as-you-go or unknown credential needs an explicit model
+mapping or a live `/models` snapshot before it is advertised or selected.
+Start Plan publishes GLM-5.4 only from a current, owner-bound entitlement
+observation (`model:glm-5.4` or `show_name=GLM-5.4`); off-peak keeps its own
+model set. The ordinary single-group models list, aggregate group selection and
+the native capability endpoints apply the same evidence rule to the same account:
+a coding-plan credential may use the maintained coding catalog even without a
+mapping, a pay-as-you-go or unknown credential needs an explicit mapping or live
+snapshot, and a Start observation is usable only while it is current and bound to
+the same owner identity. A Zhipu group with accounts but no qualifying evidence
+returns an authoritative empty list instead of another platform's defaults.
+
+The reviewed model advertises a 1M context window, 128K maximum output and
+`low` / `high` / `max` reasoning. Requests without an explicit effort keep the
+upstream default (`max`). Chat Completions and the Anthropic-compatible
+Messages path preserve explicit `low`; older GLM models keep their existing
+low-to-high promotion. Vision is advertised only where the actual account and
+endpoint support image input.
+
+There is no reviewed pay-as-you-go token price for GLM-5.4. Billing refuses
+the legacy `glm-5` family card and may use the configured Zhipu platform
+fallback SKU (`glm-5.3` by default). The Coding Plan quota multiplier is not a
+token price. Sources: [GLM-5.4 model card](https://docs.bigmodel.cn/cn/guide/models/glm-5.4),
+[ZCode plans](https://zcode.z.ai/en/docs/configuration).
+
 ## Coding-plan quota
 
 Linked personal and team accounts query

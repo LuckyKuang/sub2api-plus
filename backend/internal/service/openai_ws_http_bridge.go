@@ -346,26 +346,33 @@ func (c *openAIWSToolCallReplayCollector) addItem(item gjson.Result) {
 	c.items = append(c.items, json.RawMessage(raw))
 }
 
-func buildOpenAIWSHTTPBridgeErrorEvent(statusCode int, message string) []byte {
+// buildOpenAIWSHTTPBridgeErrorEvent builds the WS error frame from the public
+// catalog, never from provider diagnostics.
+func buildOpenAIWSHTTPBridgeErrorEvent(statusCode int, key, message string) []byte {
+	definition, ok := codexPublicErrorByKey(key)
+	if !ok {
+		definition, _ = codexPublicErrorByKey("service_error")
+	}
 	message = strings.TrimSpace(message)
 	if message == "" {
-		message = http.StatusText(statusCode)
+		message = definition.DefaultMessage
 	}
-	if message == "" {
-		message = "upstream request failed"
+	errorObject := map[string]any{"message": message}
+	if definition.ErrorType != "" {
+		errorObject["type"] = definition.ErrorType
+	}
+	if definition.PublicCode != "" {
+		errorObject["code"] = definition.PublicCode
 	}
 	event := map[string]any{
 		"type":            "error",
 		"sequence_number": 0,
 		"status":          statusCode,
-		"error": map[string]any{
-			"type":    "upstream_error",
-			"message": message,
-		},
+		"error":           errorObject,
 	}
 	body, err := json.Marshal(event)
 	if err != nil {
-		return []byte(`{"type":"error","sequence_number":0,"error":{"type":"upstream_error","message":"upstream request failed"}}`)
+		return []byte(`{"type":"error","sequence_number":0,"error":{"type":"server_error","code":"service_error","message":"本次请求未能完成，请稍后再试。"}}`)
 	}
 	return body
 }
@@ -432,7 +439,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	writeClientMessage func([]byte) error,
 ) (*OpenAIForwardResult, error) {
 	ctx, outbound := beginOutboundObservation(ctx)
-	SetOpenAIErrorMessageSource(c, nil)
+	ResetOpenAIErrorMessageSource(c)
 	if s == nil {
 		return nil, errors.New("service is nil")
 	}
@@ -579,7 +586,9 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 				return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, true)
 			}
 			safeErr := sanitizeUpstreamErrorMessage(err.Error())
-			clientError := buildOpenAIWSHTTPBridgeErrorEvent(http.StatusBadGateway, "Upstream request failed")
+			key, publicStatus := ClassifyCodexPublicFailure(http.StatusBadGateway, nil)
+			clientError := buildOpenAIWSHTTPBridgeErrorEvent(publicStatus, key, s.codexPublicErrorMessage(ctx, key))
+			SetCodexPublicErrorFinal(c, key, publicStatus)
 			if writeErr := writeClientMessage(clientError); writeErr == nil {
 				markOpenAIWSClientVisibleFailure(c, "error", clientError)
 			}
@@ -631,10 +640,8 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if account.Platform != PlatformGrok && (shouldFailover || shouldCooldownOpenAITransientUpstreamError(resp.StatusCode, respBody)) {
 			s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, actualModel)
 		}
-		clientError := buildOpenAIWSHTTPBridgeErrorEvent(resp.StatusCode, upstreamMsg)
-		if code := openAIInputTerminalCode(resp.StatusCode, respBody); code != "" {
-			clientError, _ = sjson.SetBytes(clientError, "error.code", code)
-		}
+		publicKey, publicStatus := ClassifyCodexPublicFailure(resp.StatusCode, respBody)
+		clientError := buildOpenAIWSHTTPBridgeErrorEvent(publicStatus, publicKey, s.codexPublicErrorMessage(ctx, publicKey))
 		if resp.StatusCode == http.StatusServiceUnavailable && IsOpenAIPolicyCapacityUnavailable(respBody) {
 			retryAdvice := make(map[string]string)
 			retryHeaders := openAIPolicyCapacityRetryHeaders(resp.Header, respBody)
@@ -643,22 +650,12 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 					retryAdvice[name] = value
 				}
 			}
-			clientError, _ = json.Marshal(map[string]any{
-				"type":            "error",
-				"sequence_number": 0,
-				"status":          http.StatusServiceUnavailable,
-				"error": map[string]any{
-					"type":    "service_unavailable_error",
-					"code":    "policy_capacity_unavailable",
-					"message": openAICapacityShedClientMessage(upstreamMsg, respBody),
-					"headers": retryAdvice,
-				},
-			})
+			clientError, _ = sjson.SetBytes(clientError, "error.headers", retryAdvice)
 		}
 		if rewritten, changed := sanitizeOpenAICapacityShedErrorCodeForClient(clientError); changed {
 			clientError = rewritten
 		}
-		SetOpenAIErrorMessageSource(c, respBody)
+		SetCodexPublicErrorFinal(c, publicKey, publicStatus)
 		if writeErr := writeClientMessage(clientError); writeErr == nil {
 			markOpenAIWSClientVisibleFailure(c, "error", clientError)
 		}

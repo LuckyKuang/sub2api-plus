@@ -1,10 +1,27 @@
-import { shallowRef } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 
 export interface SupportContext { userId: number; actorId: number }
 export const adminSupportContext = shallowRef<SupportContext | null>(null)
 let generation = 0
 const imageKeys = new Map<string, number>()
 const pendingImageReads = new Set<AbortController>()
+
+// While a target change is in flight the old page stays mounted but must not
+// submit or issue personal requests. Components keep the previous context until
+// the router guard resolves the destination.
+const transitionDepth = ref(0)
+export const supportTransitioning = computed(() => transitionDepth.value > 0)
+let supportExitRequested = false
+
+export function beginSupportTransition(): void { transitionDepth.value += 1 }
+export function endSupportTransition(): void { if (transitionDepth.value > 0) transitionDepth.value -= 1 }
+export function requestSupportExit(): void { supportExitRequested = true }
+export function clearSupportExit(): void { supportExitRequested = false }
+export function consumeSupportExit(): boolean {
+  const requested = supportExitRequested
+  supportExitRequested = false
+  return requested
+}
 
 export function setAdminSupportContext(context: SupportContext | null): void {
   if (context?.userId === adminSupportContext.value?.userId && context?.actorId === adminSupportContext.value?.actorId) return

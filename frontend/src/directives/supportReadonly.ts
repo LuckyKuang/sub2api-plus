@@ -1,21 +1,25 @@
 import { watchEffect, type ObjectDirective } from 'vue'
-import { adminSupportContext } from '@/utils/adminSupportContext'
+import { adminSupportContext, supportTransitioning } from '@/utils/adminSupportContext'
 
 const cleanup = new WeakMap<HTMLElement, () => void>()
+
+function isLocked(): boolean {
+  return adminSupportContext.value !== null || supportTransitioning.value
+}
 
 // Explicitly mark mutation controls/forms. Browse, filter, copy and download
 // controls are unmarked and retain their ordinary behavior, including teleports.
 export const supportReadonly: ObjectDirective<HTMLElement> = {
   mounted(element) {
     const block = (event: Event) => {
-      if (!adminSupportContext.value) return
+      if (!isLocked()) return
       event.preventDefault()
       event.stopImmediatePropagation()
     }
     for (const type of ['click', 'submit', 'change', 'input']) element.addEventListener(type, block, true)
     const changed = new Map<HTMLElement, Set<string>>()
     const lock = () => {
-      if (!adminSupportContext.value) {
+      if (!isLocked()) {
         for (const [control, attributes] of changed) for (const attribute of attributes) control.removeAttribute(attribute)
         changed.clear()
         return

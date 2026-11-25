@@ -56,9 +56,9 @@ func TestOpenAIGatewayService_OAuthAstraProModeRejectionPassesThrough(t *testing
 
 	respJSON := recorder.Body.String()
 	require.Equal(t, "invalid_request_error", gjson.Get(respJSON, "error.type").String())
-	require.Equal(t, "model_specific_rejection", gjson.Get(respJSON, "error.code").String())
-	require.Equal(t, "reasoning.mode", gjson.Get(respJSON, "error.param").String())
-	require.Equal(t, "reasoning.mode is not supported for this model", gjson.Get(respJSON, "error.message").String())
+	require.Equal(t, "request_rejected", gjson.Get(respJSON, "error.code").String())
+	require.False(t, gjson.Get(respJSON, "error.param").Exists(), "provider field paths are not approved public fields")
+	require.Equal(t, "本次请求未被接受，请检查请求内容。", gjson.Get(respJSON, "error.message").String())
 }
 
 // TestOpenAIGatewayService_OAuthAstraProModeKeptAcrossRejectedFieldRetry reuses

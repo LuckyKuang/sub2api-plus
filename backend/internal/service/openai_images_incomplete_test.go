@@ -28,11 +28,11 @@ func TestExtractImagesUpstreamError_IncompleteIsRetryable(t *testing.T) {
 	if !IsOpenAIImagesRetryableUpstreamError(got) {
 		t.Fatal("incomplete(max_output_tokens) should be retryable for failover")
 	}
-	if got.Code != "response_incomplete" {
-		t.Fatalf("unexpected code %q", got.Code)
+	if got.Code != "service_error" {
+		t.Fatalf("already-failed incomplete should use the C09 fallback, got %q", got.Code)
 	}
-	if !strings.Contains(got.Message, "max_output_tokens") {
-		t.Fatalf("message should carry reason, got %q", got.Message)
+	if strings.Contains(got.Message, "max_output_tokens") {
+		t.Fatalf("upstream free-text reason must not reach the public task error, got %q", got.Message)
 	}
 }
 

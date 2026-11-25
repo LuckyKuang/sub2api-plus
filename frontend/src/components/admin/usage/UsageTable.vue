@@ -624,6 +624,14 @@
             </div>
           </div>
           <!-- Rate and Summary -->
+          <div
+            v-if="tooltipData && formatBillingServiceTier(tooltipData.billing_service_tier, t)"
+            data-testid="billing-service-tier"
+            class="flex items-center justify-between gap-6"
+          >
+            <span class="surface-muted">{{ t('usage.billingServiceTier') }}</span>
+            <span class="font-semibold text-cyan-300">{{ formatBillingServiceTier(tooltipData.billing_service_tier, t) }}</span>
+          </div>
           <div class="flex items-center justify-between gap-6">
             <span class="surface-muted">{{ t('usage.rate') }}</span>
             <span class="font-semibold text-blue-400">{{ formatMultiplier(tooltipData?.rate_multiplier ?? 1) }}x</span>
@@ -668,7 +676,7 @@ import { formatDateTime, formatReasoningEffort, reasoningEffortValuesEqual } fro
 import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
 import { formatTokenPricePerMillion } from '@/utils/usagePricing'
 import { formatTokenShare, sumTokenBuckets } from '@/utils/tokenShare'
-import { formatRequestedServiceTier, formatResponseServiceTier } from '@/utils/usageServiceTier'
+import { formatBillingServiceTier, formatRequestedServiceTier, formatResponseServiceTier } from '@/utils/usageServiceTier'
 import { resolveUsageRequestType } from '@/utils/usageRequestType'
 import {
   LATENCY_BAR_CLASSES,

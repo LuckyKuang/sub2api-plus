@@ -1,7 +1,7 @@
 export default {
   plugins: {
     title: 'Plugin Management',
-    description: 'Install and manage isolated OAuth outbound transport plugins. API Key flows are unchanged.',
+    description: 'Install and manage outbound transport and declarative request-instruction plugins. Each package declares its platform and account type.',
     upload: 'Install plugin',
     uploadHint: 'Only .s2plugin packages are accepted; trusted publisher signatures are required by default.',
     runtimeNotice: 'Plugin installation, enable/disable, and configuration are handled dynamically by the Sub2API Plus host and normally do not require a host restart. Restart only when the host version or host configuration changes according to your deployment process.',
@@ -13,7 +13,7 @@ export default {
     disable: 'Disable',
     test: 'Test',
     uninstall: 'Uninstall',
-    rollout: 'OAuth traffic percentage',
+    rollout: 'Traffic percentage',
     compatibility: 'Version compatibility',
     currentVersion: 'Current Sub2API Plus',
     requiredVersion: 'Required range',
@@ -32,6 +32,10 @@ export default {
     error: 'Error',
     starting: 'Starting',
     configTitle: '{name} configuration',
+    requestConfigHint: 'This plugin provides only declarative request instructions. Edit the JSON rules below: default_text, platform_overrides and account_overrides. Text is injected before the caller instructions; no external process runs.',
+    requestConfigSaved: 'Request instruction rules saved',
+    requestConfigLoading: 'Loading plugin configuration...',
+    configSessionChanged: 'The configuration session changed. Reopen the plugin configuration before saving.',
     loadingUI: 'Loading plugin configuration UI...',
     uiUnavailable: 'Unable to load the plugin configuration UI',
     uploadSuccess: 'Plugin installed and kept disabled',
@@ -39,12 +43,12 @@ export default {
     disableSuccess: 'Plugin disabled',
     uninstallSuccess: 'Plugin uninstalled',
     testSuccess: 'Plugin test passed',
-    confirmDisable: 'Disable this plugin? New OAuth requests immediately return to the built-in Sub2API Plus path.',
+    confirmDisable: 'Disable this plugin? New requests immediately stop selecting its bindings and use any remaining binding or the native path.',
     confirmUninstall: 'Uninstall this plugin? It must be disabled first. Installed files and configuration will be removed.',
     confirmUntested: 'This plugin is compatible but has not declared the current Sub2API Plus version as tested. Enable it anyway?',
     fileRequired: 'Select a .s2plugin file',
     bridgeRejected: 'Plugin UI message validation failed',
-    onlyOpenAI: 'Initial capability: OpenAI OAuth outbound transport only',
+    onlyOpenAI: 'Capabilities are declared by each package',
     noAccountCoupling: 'The scope is platform and account type. Account records are not changed and no per-account toggle is required.'
   }
 }

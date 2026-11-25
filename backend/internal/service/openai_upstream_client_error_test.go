@@ -127,10 +127,9 @@ func TestHandleErrorResponse_Deterministic400IsNotRewrappedAs502(t *testing.T) {
 
 	body := rec.Body.String()
 	require.Equal(t, "invalid_request_error", gjson.Get(body, "error.type").String())
-	require.Equal(t, "invalid_function_parameters", gjson.Get(body, "error.code").String())
-	require.Equal(t, "input[8].tools[1].tools[2].parameters", gjson.Get(body, "error.param").String(),
-		"param 是客户端定位哪个字段非法的唯一线索")
-	require.Contains(t, gjson.Get(body, "error.message").String(), "Invalid schema for function 'automation_update'")
+	require.Equal(t, "request_rejected", gjson.Get(body, "error.code").String())
+	require.False(t, gjson.Get(body, "error.param").Exists(), "nested provider paths are not approved public fields")
+	require.Equal(t, "本次请求未被接受，请检查请求内容。", gjson.Get(body, "error.message").String())
 	require.NotContains(t, body, "Upstream request failed")
 
 	// 确定性请求错误不该换号重试——换任何账号都是同样的结果。
@@ -187,8 +186,8 @@ func TestHandleErrorResponse_Deterministic400WithoutUpstreamMetadata(t *testing.
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	body := rec.Body.String()
 	require.Equal(t, "invalid_request_error", gjson.Get(body, "error.type").String())
-	require.Equal(t, "Invalid 'input': expected an array.", gjson.Get(body, "error.message").String())
-	require.False(t, gjson.Get(body, "error.code").Exists(), "上游没给 code 就不要编一个")
+	require.Equal(t, "request_rejected", gjson.Get(body, "error.code").String())
+	require.Equal(t, "本次请求未被接受，请检查请求内容。", gjson.Get(body, "error.message").String())
 	require.False(t, gjson.Get(body, "error.param").Exists(), "上游没给 param 就不要编一个")
 }
 
@@ -221,20 +220,19 @@ func TestHandleErrorResponse_NonDeterministicStatusesKeepGeneric502(t *testing.T
 		wantType   string
 		wantMsg    string
 	}{
-		// 404/405 可能是上游 base_url 配错（运营方问题），不当成客户端错误暴露。
+		// 404/405 with no resource/model evidence use the C09 server fallback.
 		{"not_found", http.StatusNotFound, `{"error":{"message":"Unknown request URL"}}`,
-			http.StatusBadGateway, "upstream_error", "Upstream request failed"},
+			http.StatusBadGateway, "server_error", "服务处理请求时出错，请稍后再试。"},
 		{"unprocessable", http.StatusUnprocessableEntity, `{"error":{"message":"Invalid schema for field messages"}}`,
-			http.StatusBadGateway, "upstream_error", "Upstream request failed"},
-		// 401/402/403 是网关运营方的凭据/账单问题，必须继续对客户端屏蔽上游账号状态。
-		// 403 的自由文本不能升级成 durable access-state typed failover；只有明确结构化 code 才可以。
+			http.StatusUnprocessableEntity, "invalid_request_error", "本次请求未被接受，请检查请求内容。"},
+		// B01/B02 share the public 503 and text; the reasons stay distinct internally.
 		{"unauthorized", http.StatusUnauthorized, `{"error":{"message":"Incorrect API key provided: sk-abc"}}`,
-			http.StatusBadGateway, "upstream_error", "Upstream authentication failed, please contact administrator"},
+			http.StatusServiceUnavailable, "service_unavailable_error", "服务暂不可用，请稍后再试。若持续出现，请联系管理员。"},
 		{"forbidden", http.StatusForbidden, `{"error":{"message":"Your account is deactivated"}}`,
-			http.StatusBadGateway, "upstream_error", "Upstream access forbidden, please contact administrator"},
-		// 429 保持独立映射。
+			http.StatusServiceUnavailable, "service_unavailable_error", "服务暂不可用，请稍后再试。若持续出现，请联系管理员。"},
+		// 429 keeps its own public status and text.
 		{"rate_limited", http.StatusTooManyRequests, `{"error":{"message":"Rate limit reached"}}`,
-			http.StatusTooManyRequests, "rate_limit_error", "Upstream rate limit exceeded, please retry later"},
+			http.StatusTooManyRequests, "rate_limit_error", "当前请求受到频率限制，请稍后再试。"},
 	}
 
 	for _, tc := range cases {
@@ -307,31 +305,34 @@ func TestWriteOpenAIUpstreamClientError_PayloadShape(t *testing.T) {
 			body:        openAIInvalidFunctionParametersBody,
 			upstreamMsg: "Invalid schema for function 'automation_update'",
 			wantType:    "invalid_request_error",
-			wantCode:    "invalid_function_parameters",
-			wantParam:   "input[8].tools[1].tools[2].parameters",
-			wantMessage: "Invalid schema for function 'automation_update'",
+			wantCode:    "request_rejected",
+			wantMessage: "本次请求未被接受，请检查请求内容。",
 		},
 		{
 			name:        "upstream_type_preserved",
 			body:        `{"error":{"type":"invalid_prompt","message":"blocked"}}`,
 			upstreamMsg: "blocked",
-			wantType:    "invalid_prompt",
-			wantMessage: "blocked",
+			wantType:    "invalid_request_error",
+			wantCode:    "request_rejected",
+			wantMessage: "本次请求未被接受，请检查请求内容。",
 		},
 		{
 			name:        "empty_body_falls_back",
 			body:        ``,
 			upstreamMsg: "",
 			wantType:    "invalid_request_error",
-			wantMessage: openAIUpstreamClientErrorFallbackMessage,
+			wantCode:    "request_rejected",
+			wantMessage: "本次请求未被接受，请检查请求内容。",
 		},
 		{
-			// 调用方传入的 message 已脱敏，必须原样使用，不得回落读取原始 body。
+			// The sanitized caller message stays in operations; the public body
+			// is rebuilt from the catalog.
 			name:        "sanitized_message_wins_over_raw_body",
 			body:        `{"error":{"message":"failed for key=secret123"}}`,
 			upstreamMsg: "failed for key=***",
 			wantType:    "invalid_request_error",
-			wantMessage: "failed for key=***",
+			wantCode:    "request_rejected",
+			wantMessage: "本次请求未被接受，请检查请求内容。",
 		},
 	}
 

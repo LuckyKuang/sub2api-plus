@@ -65,7 +65,7 @@ func (s *OpenAIGatewayService) forwardAnthropicViaNativeAnthropicEndpoint(
 		}
 		body = rewritten
 	}
-	if normalized, changed := NormalizeGLM53AnthropicThinking(body, upstreamModel); changed {
+	if normalized, changed := NormalizeGLMAnthropicThinking(body, upstreamModel); changed {
 		body = normalized
 	}
 

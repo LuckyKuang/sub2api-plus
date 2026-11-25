@@ -140,10 +140,10 @@ func TestOpenAIManagedSingleAccountModelNotFoundExhaustionPreservesStructured400
 	}, false)
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.Equal(t, "invalid_request_error", gjson.Get(recorder.Body.String(), "error.type").String())
+	require.Equal(t, "not_found_error", gjson.Get(recorder.Body.String(), "error.type").String())
 	require.Equal(t, "model_not_found", gjson.Get(recorder.Body.String(), "error.code").String())
 	require.Equal(t, "model", gjson.Get(recorder.Body.String(), "error.param").String())
-	require.Equal(t, "The requested model is unavailable on this account", gjson.Get(recorder.Body.String(), "error.message").String())
+	require.Equal(t, "所选模型当前不可用，请更换模型。", gjson.Get(recorder.Body.String(), "error.message").String())
 }
 
 func TestOpenAIManagedModelNotFoundExhaustionSanitizesMessage(t *testing.T) {
@@ -159,7 +159,7 @@ func TestOpenAIManagedModelNotFoundExhaustionSanitizesMessage(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 	require.NotContains(t, recorder.Body.String(), "super-secret-value")
-	require.Contains(t, gjson.Get(recorder.Body.String(), "error.message").String(), "access_token=***")
+	require.Equal(t, "所选模型当前不可用，请更换模型。", gjson.Get(recorder.Body.String(), "error.message").String())
 	recorded, ok := c.Get(service.OpsUpstreamErrorMessageKey)
 	require.True(t, ok)
 	require.NotContains(t, recorded, "super-secret-value")
@@ -441,7 +441,7 @@ func TestOpsWebSocketCredentialFailoverExhaustedIsRecorded(t *testing.T) {
 			Stage: string(service.GatewayFailureStageAccountAuth), Scope: string(service.GatewayFailureScopeAccount),
 			Reason: string(service.GrokCredentialReasonRevoked), Message: "Grok OAuth credentials require account action",
 		}})
-		closeOpenAIWSFailoverExhausted(c, nil, &service.UpstreamFailoverError{
+		(&OpenAIGatewayHandler{}).closeOpenAIWSFailoverExhausted(c, nil, &service.UpstreamFailoverError{
 			Stage:             service.GatewayFailureStageAccountAuth,
 			Scope:             service.GatewayFailureScopeAccount,
 			Reason:            service.GrokCredentialReasonRevoked,

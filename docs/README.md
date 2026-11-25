@@ -25,6 +25,7 @@ belong in GitHub Release notes.
 ## Protocols and Tasks
 
 - [OpenAI Responses and WebSocket ingress](protocols/OPENAI_RESPONSES.md)
+- [Codex public error messages — implementation specification](protocols/CODEX_PUBLIC_ERRORS.md)
 - [Codex client profile restrictions](protocols/CODEX_CLIENT_PROFILES.md)
 - [Managed official Codex CLI tasks](CODEX_CLI.md)
 - [Asynchronous image tasks and Gemini/Vertex batches](ASYNC_IMAGE_TASKS.md)

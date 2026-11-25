@@ -105,6 +105,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 	if err != nil {
 		return nil, err
 	}
+	upstreamReq = upstreamReq.WithContext(WithPluginRequestOperation(upstreamReq.Context(), "embeddings"))
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
@@ -119,6 +120,11 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 			Kind:               "request_error",
 			Message:            safeErr,
 		})
+		if account != nil && account.Platform == PlatformOpenAI {
+			SetCodexPublicErrorFinal(c, "service_connection_failed", http.StatusBadGateway)
+		} else {
+			MarkLocalOpenAIError(c)
+		}
 		writeOpenAIEmbeddingsError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed")
 		return nil, fmt.Errorf("upstream request failed: %s", safeErr)
 	}
@@ -170,6 +176,11 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		if !errors.Is(err, ErrUpstreamResponseBodyTooLarge) {
+			if account != nil && account.Platform == PlatformOpenAI {
+				SetCodexPublicErrorFinal(c, "invalid_service_response", http.StatusBadGateway)
+			} else {
+				MarkLocalOpenAIError(c)
+			}
 			writeOpenAIEmbeddingsError(c, http.StatusBadGateway, "api_error", "Failed to read upstream response")
 		}
 		return nil, fmt.Errorf("read upstream body: %w", err)
@@ -200,6 +211,19 @@ func (s *OpenAIGatewayService) writeOpenAIEmbeddingsUpstreamResponse(c *gin.Cont
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	}
 	s.finalizeCodexClientQuotaHeaders(c.Writer.Header(), c, account)
+	if resp.StatusCode >= 400 && account != nil && account.Platform == PlatformOpenAI {
+		// A confirmed failure is projected even when the provider returned
+		// HTML, text or another unexpected MIME type.
+		key, publicStatus := ClassifyCodexPublicFailure(resp.StatusCode, body)
+		SetCodexPublicErrorFinal(c, key, publicStatus)
+		document := codexPublicErrorDocument(key, func(key string) string {
+			return s.codexPublicErrorMessage(c.Request.Context(), key)
+		})
+		c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+		c.Writer.WriteHeader(publicStatus)
+		_, _ = c.Writer.Write([]byte(document))
+		return
+	}
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		c.Writer.Header().Set("Content-Type", ct)
 	} else {

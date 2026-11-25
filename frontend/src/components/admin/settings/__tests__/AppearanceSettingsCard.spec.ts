@@ -173,6 +173,9 @@ describe('appearance settings draft and publication', () => {
     const wrapper = mount(AppearanceSettingsCard, { props: { active: true } })
     await flushPromises()
     const restored = { ...defaultConsoleAppearance(), card_transparency: 45 }
+    await vi.waitFor(() => {
+      expect(wrapper.get<HTMLButtonElement>('[data-testid="appearance-reset-background"]').element.disabled).toBe(false)
+    }, { timeout: 5000 })
     await wrapper.get('[data-testid="appearance-reset-background"]').trigger('click')
     expect(mocks.store.consoleAppearancePreview).toEqual(restored)
     expect(mocks.save).not.toHaveBeenCalled()

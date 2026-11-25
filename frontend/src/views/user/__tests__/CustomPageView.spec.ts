@@ -13,7 +13,7 @@ const { appStore } = vi.hoisted(() => ({
 vi.mock('@/components/layout/AppLayout.vue', () => ({ default: { template: '<div><slot /></div>' } }))
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { id: 'docs' } }) }))
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key, locale: { value: 'en' } }) }))
-vi.mock('@/stores', () => ({ useAppStore: () => appStore }))
+vi.mock('@/stores', () => ({ useAppStore: () => appStore, useAuthStore: () => ({ isAdmin: false }), useAdminSettingsStore: () => ({ customMenuItems: [] }) }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ isAdmin: false, user: { id: 7 }, token: 'test-token' }) }))
 vi.mock('@/stores/adminSettings', () => ({ useAdminSettingsStore: () => ({ customMenuItems: [] }) }))
 vi.mock('@/api/client', () => ({ buildApiUrl: (path: string) => `/api/v1${path}` }))

@@ -1478,6 +1478,12 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	if strings.Contains(modelLower, "glm-5-turbo") || strings.Contains(modelLower, "glm-5turbo") {
 		return s.fallbackPrices["glm-5-turbo"]
 	}
+	// GLM-5.4 has no published pay-as-you-go price in this catalog. Falling
+	// through to the bare "glm-5" family card would under- or over-bill it.
+	// Platform-aware pricing may still use the configured zhipu fallback SKU.
+	if strings.Contains(modelLower, "glm-5.4") {
+		return nil
+	}
 	if strings.Contains(modelLower, "glm-5") {
 		return s.fallbackPrices["glm-5"]
 	}

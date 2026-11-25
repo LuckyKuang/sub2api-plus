@@ -180,38 +180,55 @@ The setting is available through both public settings JSON and the
 HTML-injected first-paint configuration. It uses
 the existing settings table and requires no migration or environment variable.
 
-The list is a compact menu grouped by concrete platform, with numbered model
-rows, dotted leaders and separate copy-ID buttons. The entire model row,
-including its prices and empty space, opens the same complete quote dialog as
-cards. Hover and keyboard focus show a rounded floating highlight that moves
-between rows without intercepting clicks; reduced-motion preferences disable
-its transitions. Copying never opens details. It uses two columns at a
-results-container width of 900 px or more and one column below it. Names wrap on narrow screens. It
-retains the project theme, category/platform filters, model search and existing
-sort comparison within each platform; platform sections follow the first match
-in the sorted results. Both layouts consume the same authorized catalog,
-aggregation, effective price ranges, units and condition labels. Layout changes
-preserve filters and open details and perform no catalog request. Unlike the
+The list is a unified four-column record-card directory (Model / Platform, Input
+price, Output price, Available quotes) rendered inside a single directory card
+rather than split into per-platform sections. Each model row shows a 34 px
+platform icon badge, monospace `<h3>` model ID, inline copy-ID button with
+temporary checkmark feedback, platform label, billing unit, condition chips,
+right-aligned tabular-nums input/output prices, a quote-count pill, and a
+details cue. The entire model row, including its prices and empty space, opens
+the same complete quote dialog as cards; copying never opens details. Hover and
+keyboard focus highlight the row card directly in CSS without JS measurements;
+reduced-motion preferences disable transitions. Below a 900 px container width
+each row reflows into a stacked mobile card with wrapping model IDs and no
+horizontal overflow. Both layouts consume the same authorized catalog,
+aggregation, effective price ranges, units and condition labels. Users can
+toggle between list and card views for the current session from the toolbar
+without triggering a catalog API request, preserving search text, platform
+filter, page and any open details dialog; changes to the administrator's
+`available_channels_layout` setting reset the session override. Unlike the
 reference menu's raw-price/multiplier presentation, list prices here already
 include the effective rate exactly once. Unknown prices are not free and zero
 prices remain zero. No model descriptions or popularity flags are invented.
 
 Cards fill the content width using container queries: 1/2/3 columns at
-0/460/700 px, with 20 px gaps. Both themes, sidebar width changes,
-long IDs and mobile details are supported; only price tables scroll sideways.
+0/640/1020 px, with 14 px gaps, 12 px card corners, a 34 px platform icon badge,
+and an inset two-row key-value pricing ledger so long price ranges stay aligned
+without mid-number wrapping. Both themes, custom wallpapers, sidebar width
+changes, long IDs and mobile details are supported; only price tables scroll
+sideways.
 
-Search and sorting use the shared 240px search and 200px selection fields from
-[CONTRIBUTING.md](../CONTRIBUTING.md). Below 1024px, fields stack at full width;
-reset stays outside the fields at its natural width. The directory has category
-and platform filters plus model name/ID search, with no group filters, group
-headings or group counts.
+`AppHeader` owns the visible page title and subtitle; the view keeps an
+`sr-only` `<h1>` landmark and consolidates controls into a single pinned top
+toolbar card above the independently scrolling results. The toolbar holds
+optional category tabs, a model search field (up to 340 px wide on desktop,
+36 px tall), a reset button that de-emphasizes when no filters are active, a
+right-aligned `aria-live="polite"` summary and pricing-period pill, the shared
+`.segmented-control` list/card switch with `aria-pressed`, and a manual refresh
+button, over a borderless wrapping row of platform filter chips with tabular
+counts. The directory has category and platform filters plus model name/ID
+search, with no group filters, group headings or group counts. The layout
+choice is a browser-session preference (module scope, not local storage) and
+survives route unmounts; a changed administrator layout default invalidates it.
 
-The frontend aggregates the authorized response by concrete platform plus
+The authorized response is already filtered and paged by the server. The
+frontend aggregates each returned page by concrete platform plus
 case-insensitive request model ID. Each identity produces exactly one entry;
 identical names on different platforms remain separate. Each entry preserves an
 actual request ID for copying. All underlying group quotes, source channels and
-pricing conditions are retained in details. Search filters whole model entries,
-never removes some quotes from a matched model's comparison.
+pricing conditions are retained in details. Search is sent to the server after
+a 300 ms debounce and never removes some quotes from a matched model's
+comparison.
 
 Cards and list rows show per-unit input/output or unit-price ranges after
 applying each quote's own effective rate exactly once. Equal endpoints show one
@@ -221,19 +238,27 @@ unknown or non-finite base prices are excluded from ranges, with an incomplete-p
 notice; explicit zero remains zero. Failed personal-rate lookup labels ranges as
 default-rate references. Minimum displayed price does not select a routing group.
 
-The card layout adapts from one to at most three columns, with 20px gaps and larger
-cards with 16px corners. Wrapped platform buttons retain their natural width.
 Desktop controls remain fixed above the independently scrolling results.
 
-Details identify the model in the dialog title, offer a copy-ID button and
-immediately show every authorized quote in the group comparison table. Escape,
-the close button and clicking the backdrop close the dialog and restore focus.
-Each group's complete pricing and billing conditions are available through its
-keyboard-focusable disclosure. Quote details and each resolved service tier
-(Fast/priority, Flex and Ultrafast) start collapsed; their price tables are mounted
-only while expanded. Multiple quotes and tiers can stay open; reopening details
-or switching models resets disclosures. Opening details performs no extra API
-request and never truncates the authorized quote list.
+Details identify the model in the `BaseDialog` title without repeating an
+in-body `<h3>` heading. The dialog body starts with a compact top metadata bar
+(platform badge, group quote count and copy-ID button) and a left-accented
+billing notice, followed by a comparison hint row with a "Show all disclosures"
+toggle and the right-aligned tabular-nums group comparison table. Clicking or
+activating any comparison row toggles that group's lazy-mounted
+`details.catalog-quote-disclosure` panel, rotates its row chevron, highlights
+the selected row, and in default focused mode collapses any previously opened
+disclosure while scrolling the revealed detail smoothly into view. Closed
+disclosures carry the native `hidden` attribute by default so they neither form
+a stacked scroll wall nor enter the dialog keyboard Tab loop; toggling "Show all
+disclosures" reveals all disclosure summaries and allows multiple quotes to stay
+open simultaneously. Escape, the close button and clicking the backdrop close
+the dialog and restore focus. Quote details and each resolved service tier
+(Fast/priority, Flex and Ultrafast) start collapsed; their price tables are
+mounted only while expanded. Reopening details or switching models resets both
+expanded quotes/tiers and the "Show all disclosures" toggle. Opening details
+performs one targeted detail request for the selected model and never truncates
+the authorized quote list.
 Collapsed price regions are excluded from the dialog's Tab loop; their summaries
 remain reachable, and expanded price regions rejoin that loop.
 Official reference prices remain expanded inside an opened quote. Small price
@@ -254,23 +279,23 @@ Rate labels use 12 px text and compact padding to keep comparison rows short.
 Each quote header places its group name, source channel, public/subscription
 status and effective rate in one wrapping row, with descriptions below it.
 
-Default filters are all platforms, empty search and name sorting. Search trims
-and case-folds model IDs; platform navigation uses the full authorized directory.
-Name sorting uses model name, platform and stable model key. Price sorting puts
-single-unit models into token/image/request/video/second/unknown buckets and
-orders by minimum unrounded effective base price, with unknown prices last in
-their bucket. Mixed-unit cards follow single-unit cards and use stable name
-ordering instead of comparing unlike units. Counts show unique model cards.
-Groups with no models remain in the API response but add no card or navigation
-item; an entirely empty model directory displays a no-models message.
+Default filters are all platforms and empty search. The server selects the page
+and applies model-name order; the page sorts the returned page consistently by
+model name, platform and stable model key. The current toolbar exposes no price
+sort control. Platform navigation uses the counts from the authorized response.
+Groups with no models add no card or navigation item; a page with no models
+displays the no-models message. Pagination uses the shared numbered pager and
+retains the current category, platform and search text.
 
 Refresh retains valid platform/search/sort filters and updates open details by
 model identity. Removing one group quote updates the existing dialog; removing
 all quotes for the model closes it and restores focus to refresh. A failed refresh clears stale directory data and details and
 shows a retryable error. Request sequence and authenticated user identity guard
 against stale completion; logout/user changes clear all previous data. Details
-support keyboard focus containment, Escape and focus restoration. Copy uses the
-application clipboard helper, including failure feedback and a selectable ID.
+support keyboard focus containment, Escape and focus restoration. Copy awaits
+the application clipboard helper and shows the checkmark only after it confirms
+success for the current model; failures show the shared error feedback and never
+leave a copied state behind. A late result for a previous model is discarded.
 
 Successful catalogs with loaded user rates are reused for 180 seconds in
 document memory, isolated by login session, actor, assistance target and locale.
@@ -278,9 +303,10 @@ The cache holds at most four scopes and clears on login/logout; reads do not
 extend freshness. It never stores tokens or responses in persistent browser
 storage. Entry and locale changes may reuse a fresh response; manual Refresh
 and Retry always invalidate it and perform a real request. Failed, aborted,
-unavailable-rate and superseded responses never populate the cache. Filters
-operate locally, with no timer, focus or visibility refresh. Cached quote
-timestamps remain visible evidence of their original snapshot.
+unavailable-rate and superseded responses never populate the cache. Search and
+filter changes trigger server reads after the 300 ms debounce, and page changes
+read independently; there is no timer, focus or visibility refresh. Cached
+quote timestamps remain visible evidence of their original snapshot.
 
 Successful channel creation, editing (including pricing and status changes),
 and deletion clear all catalog scopes in the same document and invalidate

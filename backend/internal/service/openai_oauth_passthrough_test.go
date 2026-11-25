@@ -1407,6 +1407,8 @@ func TestOpenAIGatewayService_APIKeyPassthrough_RebuildsUpstreamErrors(t *testin
 		responseBody   string
 		retryAfter     string
 		wantStatus     int
+		wantType       string
+		wantCode       string
 		wantMessage    string
 		wantRetryAfter string
 	}{
@@ -1416,8 +1418,10 @@ func TestOpenAIGatewayService_APIKeyPassthrough_RebuildsUpstreamErrors(t *testin
 			contentType:    "text/html; charset=UTF-8",
 			responseBody:   `<!DOCTYPE html><title>secret-upstream.example denied the request</title>`,
 			retryAfter:     "17",
-			wantStatus:     http.StatusBadGateway,
-			wantMessage:    "Upstream access denied",
+			wantStatus:     http.StatusServiceUnavailable,
+			wantType:       "service_unavailable_error",
+			wantCode:       "service_unavailable",
+			wantMessage:    "服务暂不可用，请稍后再试。若持续出现，请联系管理员。",
 			wantRetryAfter: "17",
 		},
 		// 瞬时 5xx（500/502/503/504/520-524）对 API-key 账号已改走多账号
@@ -1428,16 +1432,20 @@ func TestOpenAIGatewayService_APIKeyPassthrough_RebuildsUpstreamErrors(t *testin
 			statusCode:   530,
 			contentType:  "text/html; charset=UTF-8",
 			responseBody: `<!DOCTYPE html><title>secret-upstream.example | 530: Origin DNS error</title>`,
-			wantStatus:   530,
-			wantMessage:  "Upstream service temporarily unavailable",
+			wantStatus:   http.StatusBadGateway,
+			wantType:     "server_error",
+			wantCode:     "server_error",
+			wantMessage:  "服务处理请求时出错，请稍后再试。",
 		},
 		{
 			name:         "structured 5xx",
 			statusCode:   http.StatusNotImplemented,
 			contentType:  "application/json",
 			responseBody: `{"error":{"message":"secret-upstream.example internal failure"}}`,
-			wantStatus:   http.StatusNotImplemented,
-			wantMessage:  "Upstream service temporarily unavailable",
+			wantStatus:   http.StatusBadGateway,
+			wantType:     "server_error",
+			wantCode:     "server_error",
+			wantMessage:  "服务处理请求时出错，请稍后再试。",
 		},
 		{
 			name:         "unstructured 4xx",
@@ -1445,7 +1453,9 @@ func TestOpenAIGatewayService_APIKeyPassthrough_RebuildsUpstreamErrors(t *testin
 			contentType:  "text/plain",
 			responseBody: `proxy secret-upstream.example rejected the request`,
 			wantStatus:   http.StatusBadRequest,
-			wantMessage:  "Upstream request failed",
+			wantType:     "invalid_request_error",
+			wantCode:     "request_rejected",
+			wantMessage:  "本次请求未被接受，请检查请求内容。",
 		},
 		{
 			name:         "malicious valid json 4xx",
@@ -1454,7 +1464,9 @@ func TestOpenAIGatewayService_APIKeyPassthrough_RebuildsUpstreamErrors(t *testin
 			responseBody: `{"error":{"message":"secret-upstream.example invalid parameter","type":"invalid_request_error","code":"upstream_secret_code","param":"private_field","internal_token":"sk-upstream-secret"},"rate_limit":{"remaining":0,"reset":"internal-window"},"debug":{"admin":"root"},"redirect":"https://secret-upstream.example/admin"}`,
 			retryAfter:   "not-a-valid-delay",
 			wantStatus:   http.StatusBadRequest,
-			wantMessage:  "Upstream request failed",
+			wantType:     "invalid_request_error",
+			wantCode:     "request_rejected",
+			wantMessage:  "本次请求未被接受，请检查请求内容。",
 		},
 	}
 
@@ -1523,9 +1535,9 @@ func TestOpenAIGatewayService_APIKeyPassthrough_RebuildsUpstreamErrors(t *testin
 			} {
 				require.Empty(t, rec.Header().Values(key), "sensitive upstream header %s must be dropped", key)
 			}
-			require.Equal(t, "upstream_error", gjson.Get(rec.Body.String(), "error.type").String())
+			require.Equal(t, tt.wantType, gjson.Get(rec.Body.String(), "error.type").String())
 			require.Equal(t, tt.wantMessage, gjson.Get(rec.Body.String(), "error.message").String())
-			require.False(t, gjson.Get(rec.Body.String(), "error.code").Exists())
+			require.Equal(t, tt.wantCode, gjson.Get(rec.Body.String(), "error.code").String())
 			require.False(t, gjson.Get(rec.Body.String(), "error.param").Exists())
 			require.False(t, gjson.Get(rec.Body.String(), "rate_limit").Exists())
 			require.NotContains(t, rec.Body.String(), "secret-upstream.example")
@@ -1594,7 +1606,8 @@ func TestOpenAIGatewayService_APIKeyPassthrough_CompactErrorBeforeKeepaliveIsSin
 	require.Error(t, err)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.True(t, gjson.Valid(rec.Body.String()))
-	require.Equal(t, "upstream_error", gjson.Get(rec.Body.String(), "error.type").String())
+	require.Equal(t, "invalid_request_error", gjson.Get(rec.Body.String(), "error.type").String())
+	require.Equal(t, "request_rejected", gjson.Get(rec.Body.String(), "error.code").String())
 	require.NotContains(t, rec.Body.String(), "event:")
 	require.NotContains(t, rec.Body.String(), ": keepalive")
 	require.NotContains(t, rec.Body.String(), "secret-upstream.example")
@@ -1633,8 +1646,8 @@ func TestOpenAIGatewayService_APIKeyPassthrough_CompactErrorAfterKeepaliveIsFail
 	require.Len(t, events, 1)
 	require.Equal(t, "response.failed", events[0][0])
 	require.Equal(t, "failed", gjson.Get(events[0][1], "response.status").String())
-	require.Equal(t, "upstream_error", gjson.Get(events[0][1], "response.error.code").String())
-	require.Equal(t, "Upstream request failed", gjson.Get(events[0][1], "response.error.message").String())
+	require.Equal(t, "request_rejected", gjson.Get(events[0][1], "response.error.code").String())
+	require.Equal(t, "本次请求未被接受，请检查请求内容。", gjson.Get(events[0][1], "response.error.message").String())
 	require.NotContains(t, rec.Body.String(), "secret-upstream.example")
 }
 
@@ -1938,8 +1951,8 @@ func TestOpenAIGatewayService_APIKeyPassthrough_ContextWindow502DoesNotFailover(
 	var failoverErr *UpstreamFailoverError
 	require.False(t, errors.As(err, &failoverErr), "context-window errors are deterministic request failures")
 	require.True(t, c.Writer.Written())
-	require.Equal(t, http.StatusBadGateway, rec.Code)
-	require.Contains(t, rec.Body.String(), "exceeds the context window")
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "会话内容超出模型的上下文长度")
 	require.True(t, body.closed)
 }
 

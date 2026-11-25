@@ -321,6 +321,9 @@ func (h *AsyncImageHandler) List(c *gin.Context) {
 		imageTaskError(c, err)
 		return
 	}
+	for _, task := range tasks.Data {
+		h.projectTaskForUser(c, task)
+	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, tasks)
 }
@@ -411,6 +414,7 @@ func (h *AsyncImageHandler) Get(c *gin.Context) {
 		return
 	}
 	h.releaseFinishedTask(task.ID, c)
+	h.projectTaskForUser(c, task)
 	c.Header("Cache-Control", "no-store")
 	if task.Status == service.ImageTaskStatusProcessing {
 		c.Header("Retry-After", "3")
@@ -1049,6 +1053,22 @@ func imageTaskError(c *gin.Context, err error) {
 func imageTaskJSONError(c *gin.Context, status int, code, message string) {
 	c.Header("Cache-Control", "no-store")
 	c.JSON(status, gin.H{"error": gin.H{"type": code, "code": code, "message": message}})
+}
+
+// projectTaskForUser replaces a stored OpenAI failure with the current public
+// text. Administrator Ops reads the original stored record independently.
+func (h *AsyncImageHandler) projectTaskForUser(c *gin.Context, task *service.ImageTask) {
+	if task == nil || task.Platform != service.PlatformOpenAI || len(task.Error) == 0 {
+		return
+	}
+	var resolve func(string) string
+	if h.openAI != nil && h.openAI.gatewayService != nil && c != nil && c.Request != nil {
+		ctx := c.Request.Context()
+		resolve = func(key string) string {
+			return h.openAI.gatewayService.CodexPublicErrorMessage(ctx, key)
+		}
+	}
+	task.Error = service.ProjectCodexImageTaskError(task.HTTPStatus, task.Error, resolve)
 }
 
 func (h *AsyncImageHandler) releaseFinishedTask(taskID string, c *gin.Context) {

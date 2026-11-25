@@ -8,9 +8,10 @@ startup, and backups. Follow the shared
 ## Select the runtime and project
 
 On Linux, use local Docker Engine and Compose v2. On Windows, first inspect
-`wsl.exe -l -v`, select an existing running WSL2 Debian/Ubuntu distribution,
-and run every Docker, Compose, build, filesystem, and readiness command inside
-that distribution. Verify `docker info` and `docker compose version` there.
+`wsl.exe -l -v` and select the existing WSL2 Debian/Ubuntu distribution. Start
+it if stopped. Run Docker, Compose, builds, filesystem operations, and internal
+health probes inside that distribution. Verify `docker info` and
+`docker compose version` there.
 Never call Windows-host Docker, silently choose another distribution, or fall
 back to a host build. Use `wslpath` to translate Windows repository/deployment
 paths. Prefer working inside WSL for command sequences; do not pass Linux
@@ -99,6 +100,10 @@ internal probe, then probe the configured published endpoint from Linux or
 the selected WSL distribution. If the requested client is Windows, also
 verify its published endpoint from Windows before claiming Windows access
 works. A container-only check does not prove published-port reachability.
+
+When a Windows user needs the Web UI after the deployment command exits, keep
+the selected distribution running for the requested session and verify the
+published endpoint again. See [WSL2 availability](../../../deploy/DOCKER.md#wsl2-availability).
 
 ## Cleanup and recovery
 

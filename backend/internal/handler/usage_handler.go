@@ -67,6 +67,16 @@ func NewUsageHandler(
 	}
 }
 
+func (h *UsageHandler) codexPublicErrorMessageResolver(c *gin.Context) func(string) string {
+	if h == nil || h.settingService == nil || c == nil {
+		return nil
+	}
+	ctx := c.Request.Context()
+	return func(key string) string {
+		return h.settingService.CodexPublicErrorMessage(ctx, key)
+	}
+}
+
 func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) (*userUsageFilters, bool) {
 	subject, ok := middleware2.GetReadSubjectFromContext(c)
 	if !ok {
@@ -350,6 +360,9 @@ func (h *UsageHandler) ListErrors(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	for _, item := range result.Items {
+		service.ProjectCodexUserErrorListItem(item, h.codexPublicErrorMessageResolver(c))
+	}
 	response.Paginated(c, result.Items, int64(result.Total), result.Page, result.PageSize)
 }
 
@@ -379,6 +392,7 @@ func (h *UsageHandler) GetErrorDetail(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	service.ProjectCodexUserErrorDetail(detail, h.codexPublicErrorMessageResolver(c))
 	response.Success(c, detail)
 }
 

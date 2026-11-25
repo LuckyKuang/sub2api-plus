@@ -611,6 +611,7 @@ func TestAPIContracts(t *testing.T) {
 								"request_id": "req_123",
 								"model": "claude-3",
 								"request_fast_enabled": null,
+								"billing_service_tier": null,
 								"request_type": "stream",
 								"native_compaction_v2": false,
 								"openai_ws_mode": false,

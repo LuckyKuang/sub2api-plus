@@ -185,6 +185,61 @@ func newGatewayModelsHandlerForTest(repo service.AccountRepository, routeRepo ..
 	}
 }
 
+func TestGatewayModelsZhipuEvidenceKeepsGLM54Scoped(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const groupID int64 = 8891
+	coding := service.Account{
+		ID: 1, Platform: service.PlatformZhipu, Type: service.AccountTypeAPIKey,
+		Credentials: map[string]any{"account_mode": service.AccountModeCoding},
+	}
+	payg := service.Account{
+		ID: 2, Platform: service.PlatformZhipu, Type: service.AccountTypeAPIKey,
+		Credentials: map[string]any{"account_mode": service.AccountModePayG},
+	}
+	observed := service.Account{
+		ID: 3, Platform: service.PlatformZhipu, Type: service.AccountTypeAPIKey,
+		Credentials: map[string]any{"account_mode": service.AccountModePayG},
+	}
+	observed.SetUpstreamModelMetadataSnapshot(service.UpstreamModelMetadataSnapshot{
+		Models: map[string]service.UpstreamModelMetadata{"glm-5.4": {ID: "glm-5.4"}},
+	})
+
+	for _, tc := range []struct {
+		name    string
+		account service.Account
+		want    string
+		absent  string
+	}{
+		{"coding plan without mapping", coding, "glm-5.4", ""},
+		{"payg without evidence stays empty", payg, "", "glm-5.4"},
+		{"live snapshot is evidence", observed, "glm-5.4", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newGatewayModelsHandlerForTest(&gatewayModelsAccountRepoStub{
+				byGroup: map[int64][]service.Account{groupID: {tc.account}},
+			})
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+			c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: &service.Group{ID: groupID, Platform: service.PlatformZhipu}})
+			prepareGatewayMetadataTest(h, c)
+			h.Models(c)
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			var response gatewayModelsResponseForTest
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+			ids := modelIDsForTest(response.Data)
+			if tc.want != "" {
+				require.Contains(t, ids, tc.want)
+			} else {
+				require.Empty(t, ids)
+			}
+			if tc.absent != "" {
+				require.NotContains(t, ids, tc.absent)
+			}
+		})
+	}
+}
+
 func TestGatewayCompositeRouteModelsAppearInBothCatalogs(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const groupID int64 = 7784

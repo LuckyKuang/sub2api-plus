@@ -555,6 +555,13 @@ func (s *RedeemService) redeem(ctx context.Context, userID int64, code string, r
 		return nil, err
 	}
 
+	// 在事务内回读已核销的记录，确保响应与核销、权益发放一起提交。
+	// 提交后再查询会让已到账的兑换因一次读取失败而向用户报错。
+	redeemCode, err = s.redeemRepo.GetByID(txCtx, redeemCode.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get updated redeem code: %w", err)
+	}
+
 	// 提交事务
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit transaction: %w", err)
@@ -566,12 +573,6 @@ func (s *RedeemService) redeem(ctx context.Context, userID int64, code string, r
 	// 余额类正数兑换码触发邀请返利（best-effort，失败不影响兑换结果）
 	if redeemCode.Type == RedeemTypeBalance && redeemCode.Value > 0 {
 		s.tryAccrueAffiliateRebateForRedeem(ctx, userID, redeemCode.Value)
-	}
-
-	// 重新获取更新后的兑换码
-	redeemCode, err = s.redeemRepo.GetByID(ctx, redeemCode.ID)
-	if err != nil {
-		return nil, fmt.Errorf("get updated redeem code: %w", err)
 	}
 
 	return redeemCode, nil

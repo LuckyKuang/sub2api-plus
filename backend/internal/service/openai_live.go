@@ -869,6 +869,9 @@ func (s *OpenAIGatewayService) ProxyLiveSidebandWithHooks(
 				reportError(policyErr)
 				return
 			}
+			if messageType == coderws.MessageText {
+				payload = s.projectCodexPublicErrorPayload(proxyCtx, payload)
+			}
 			if writeErr := downstream.Write(proxyCtx, messageType, payload); writeErr != nil {
 				reportError(writeErr)
 				return

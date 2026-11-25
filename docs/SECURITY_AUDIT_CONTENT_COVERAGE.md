@@ -864,7 +864,11 @@ from the original HTTP request or WS turn before these outbound adaptations.
 Unknown metadata/options/items remain pass-through; recognized sibling content
 remains auditable. OAuth Zstd encoding happens at the final HTTP/plugin send
 boundary, after ingress decoding and audit, with no new endpoint or ingress path.
-Models residency adds an outbound declaration only. Real-payload regressions
+Plugin request instructions are an outbound-only adaptation applied after ingress
+audit and before final compression/signing; they add no inbound content. Transport
+plugins receive the same already-audited request and can change only the sender;
+their bytes are not re-ingested by the host audit. Models residency adds an
+outbound declaration only. Real-payload regressions
 cover plain/Lite HTTP and WS shapes, canonical content in both engines, and the
 existing blocked/allowed stage-order gates for both credential types.
 
@@ -1111,25 +1115,29 @@ observes client rendering without changing ingress audit or client binaries.
 
 ### Downstream session error wording projection
 
-`openai_error_messages_normalized` changes only messages for three exact error
-codes at the final OpenAI HTTP/SSE/WS output boundary. It introduces no request
-extraction, tool-field, endpoint, identity, account-selection or ingress audit
-changes. Both audit engines consume the same original canonical request and
-retain their existing admission/side-effect ordering. Errors remain failures;
-other providers, unknown events, user content and policy codes pass through.
-HTTP ops capture is inside the final projection boundary, and WS observers see
-original frames, so diagnostic persistence remains original. The independently
+OpenAI-owned calls always project the public error catalog at the final
+HTTP/SSE/WS output boundary; custom mode only selects saved overrides over the
+built-in defaults. The projection introduces no request extraction, tool-field,
+endpoint, identity, account-selection or ingress audit changes. Both audit
+engines consume the same original canonical request and retain their existing
+admission/side-effect ordering. Errors remain failures; other providers, unknown
+events, user content and policy codes pass through. HTTP ops capture is inside
+the final projection boundary, and WS observers see original frames, so
+diagnostic persistence remains original. Diagnostic response headers are
+removed before commit; Retry-After remains. User error history rebuilds the
+public body, while administrator Ops keeps the original record. The independently
 derived `TestOpenAIErrorMessages*` regressions cover precise protocol carriers,
-forbidden field changes, ON/OFF at final release, account/outbound/socket matrices,
+forbidden field changes, default/custom release, account/outbound/socket matrices,
 settings persistence and reconciliation. Handler
 `TestOpenAIErrorMessagesPreserveOpsDiagnostics` observes actual queued original
 error records and downstream replacement, including handler-produced SSE and EOF.
 The dedicated official CLI consumer matrix provides client display evidence.
-Sanitized final errors retain only an exact recognized source code as display
-metadata; retry candidates cannot set it, and each HTTP-bridged WS turn clears
-it. Regressions exercise actual account recovery versus exhaustion, unknown
-final failures, HTTP/WS rejection sanitization and raw ops capture. Real HTTP
-socket checks also cover fixed-length headers committed before live toggles.
+Sanitized final errors retain only an exact recognized source code or trusted
+status fallback as display metadata; retry candidates cannot set it, and each
+HTTP-bridged WS turn clears it. Regressions exercise actual account recovery
+versus exhaustion, unknown final failures, HTTP/WS rejection sanitization and raw
+ops capture. Real HTTP socket checks also cover fixed-length headers committed
+before the final error write.
 These changes stay after request admission and do not alter either audit engine.
 `TestOpenAIErrorMessagesNonStreamingFailure` covers native/passthrough SSE-to-JSON
 rejections and compact failures after keepalive; the original terminal/error

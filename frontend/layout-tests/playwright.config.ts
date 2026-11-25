@@ -19,7 +19,7 @@ const locales = ['en-US', 'zh-CN']
 
 export default defineConfig({
   testDir: '.',
-  testMatch: ['overlays.spec.ts', 'user-layout.spec.ts', 'user-audit-workspaces.spec.ts', 'admin-layout.spec.ts', 'admin-hover-cards.spec.ts', 'mobile-admin-cards.spec.ts', 'motion.spec.ts', 'empty-state-coverage.spec.ts', 'three-zone-contract.spec.ts'],
+  testMatch: ['overlays.spec.ts', 'user-layout.spec.ts', 'user-audit-workspaces.spec.ts', 'admin-layout.spec.ts', 'admin-hover-cards.spec.ts', 'mobile-admin-cards.spec.ts', 'ops-mobile-layout.spec.ts', 'motion.spec.ts', 'empty-state-coverage.spec.ts', 'three-zone-contract.spec.ts'],
   fullyParallel: true,
   workers: 2,
   retries: 0,
@@ -50,7 +50,7 @@ export default defineConfig({
   }))),
   ...themes.flatMap(colorScheme => locales.map(locale => ({
     name: `admin-layout-${colorScheme}-${locale}`,
-    testMatch: ['admin-layout.spec.ts', 'admin-hover-cards.spec.ts', 'mobile-admin-cards.spec.ts', 'empty-state-coverage.spec.ts', 'three-zone-contract.spec.ts'],
+    testMatch: ['admin-layout.spec.ts', 'admin-hover-cards.spec.ts', 'mobile-admin-cards.spec.ts', 'ops-mobile-layout.spec.ts', 'empty-state-coverage.spec.ts', 'three-zone-contract.spec.ts'],
     use: { viewport: { width: 1440, height: 900 }, colorScheme, locale },
   }))),
   ...[{ width: 390, height: 844 }, { width: 1440, height: 600 }].flatMap(viewport => themes.map(colorScheme => ({
@@ -67,7 +67,9 @@ export default defineConfig({
     cwd: frontend,
     command: 'pnpm exec vite --config layout-tests/vite.config.ts',
     url: 'http://127.0.0.1:18193/layout-tests/index.html',
-    timeout: 30_000,
+    // A cold Vite transform of the full AppLayout graph on a WSL bind mount
+    // can exceed 30s after a dependency reinstall.
+    timeout: 120_000,
     reuseExistingServer: false,
   }, {
     cwd: frontend,

@@ -140,7 +140,88 @@ UI 是插件包内的静态页面，不需要修改 Sub2API 前端源码。宿�
 }
 ```
 
-打包器会自动填充目标平台运行时、UI 和运行时文件的 SHA-256。清单中的 `requires.sub2api` 是硬兼容范围；`tested_sub2api_versions` 应只填写真实验证过的版本；`recommended_sub2api_version` 用于管理页面展示。当前宿主仅处理 `openai.oauth.outbound_transport.v1`，声明其他能力不会自动产生新路由。后续增加 Provider 支持时，会在协议、能力清单和宿主路由完成适配后，再补充对应的清单示例。
+打包器会自动填充目标平台运行时、UI 和运行时文件的 SHA-256。清单中的 `requires.sub2api` 是硬兼容范围；`tested_sub2api_versions` 应只填写真实验证过的版本；`recommended_sub2api_version` 用于管理页面展示。
+
+### 纯请求处理包（schema v2）
+
+声明式前置提示词使用 `schema_version: 2` 和 `request.instructions.prepend.v1`。纯请求包不包含运行时、UI 或文件哈希，宿主只解析签名清单并保存加密配置：
+
+```json
+{
+  "schema_version": 2,
+  "id": "example.prompt.stepfun",
+  "name": "StepFun prompt",
+  "version": "0.1.0",
+  "requires": {
+    "sub2api": ">=0.1.179 <0.2.0",
+    "tested_sub2api_versions": ["0.1.179"],
+    "plugin_protocol": 1,
+    "transport_api": 1,
+    "ui_bridge": 1
+  },
+  "capabilities": [
+    {
+      "id": "request.instructions.prepend.v1",
+      "platform": "stepfun",
+      "account_type": "oauth"
+    }
+  ]
+}
+```
+
+管理页对这类插件使用宿主 JSON 表单，配置格式为：
+
+```json
+{
+  "default_text": "默认使用中文回答。",
+  "platform_overrides": {"stepfun": "默认使用中文，保留产品英文名。"},
+  "account_overrides": [
+    {"platform": "stepfun", "account_type": "oauth", "text": "默认使用中文，保留 Step Plan 产品名。"}
+  ]
+}
+```
+
+取值优先级为精确平台+账号类型、平台、默认值；同一插件只取一条文本。多个插件的非空文本按稳定的插件/绑定顺序拼接。文本只在最终协议组包点插入，不执行模板、不读取变量、不访问网络。清单声明的平台和账号类型必须具体；纯请求包不能声明可执行载荷或动态 UI。
+
+### 多平台出站传输包（schema v2）
+
+`outbound.transport.v1` 允许同一套传输协议服务项目平台目录中的 OAuth 和 API Key 推理路径。包仍需目标平台运行时、静态 UI 和文件哈希；宿主按本次凭据 owner 的 `platform + account_type` 选择发送者，同一组合最多一个活动传输槽。
+
+```json
+{
+  "schema_version": 2,
+  "id": "example.stepfun.transport",
+  "name": "StepFun transport",
+  "version": "0.1.0",
+  "requires": {
+    "sub2api": ">=0.1.179 <0.2.0",
+    "tested_sub2api_versions": ["0.1.179"],
+    "plugin_protocol": 1,
+    "transport_api": 1,
+    "ui_bridge": 1
+  },
+  "capabilities": [
+    {"id": "outbound.transport.v1", "platform": "stepfun", "account_type": "oauth"}
+  ],
+  "runtimes": {"linux-arm64": {"path": "bin/plugin"}},
+  "ui": {"entrypoint": "ui/index.html"},
+  "files": {
+    "bin/plugin": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "ui/index.html": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  }
+}
+```
+
+哈希值必须是包内实际文件的 SHA-256；上面的十六进制只是形状示例，不能直接发布。v1 `openai.oauth.outbound_transport.v1` 继续可用。v2 精确范围优先，未命中时回退 v1；不同平台/账号类型可以分别灰度。原生 Gemini/Antigravity 发送点、WebSocket 传输以及逐平台真实账号矩阵仍需在对应网关和部署环境单独验证，不能由通用 HTTP 单测代替。
+
+### 混合包：传输 + 请求指令
+
+同一 schema v2 清单可以同时声明 `outbound.transport.v1`（或 v1）与 `request.instructions.prepend.v1`。配置所有权是固定的：
+
+- 运行时拥有除 `request_instructions` 之外的所有字段；宿主在把配置交给插件校验或应用前会移除该节。
+- 宿主拥有 `request_instructions`，其结构与纯请求包相同：`default_text`、`platform_overrides`、`account_overrides`。宿主在保存前校验该节，并与运行时字段一起持久化。
+- 启用混合包会同时启用已声明的传输和指令绑定；配置保存成功后，新请求立即使用新的指令文本，传输继续使用同一份持久化配置。
+- 迁移 `317_plugin_bindings_transport_exclusive.sql` 只让传输能力占用每个 `capability + platform + account_type` 的唯一槽位；多个纯指令包可以在同一范围共存，并按稳定的插件 ID/绑定顺序拼接。
 
 ## 7. 生成密钥并签名
 

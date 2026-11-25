@@ -1107,6 +1107,44 @@ export interface UpdateSettingsRequest {
   allow_user_view_error_requests?: boolean;
 }
 
+export interface CodexPublicErrorItem {
+  key: string;
+  group: "request" | "service" | "transport" | "media" | string;
+  public_code: string | null;
+  default_message: string;
+  custom_message: string | null;
+  effective_message: string;
+}
+
+export interface CodexPublicErrorSnapshot {
+  revision: string;
+  custom_enabled: boolean;
+  items: CodexPublicErrorItem[];
+}
+
+export interface PatchCodexPublicErrorMessagesRequest {
+  revision: string;
+  custom_enabled?: boolean;
+  changes?: Record<string, string | null>;
+}
+
+export async function getCodexErrorMessages(): Promise<CodexPublicErrorSnapshot> {
+  const { data } = await apiClient.get<CodexPublicErrorSnapshot>(
+    "/admin/settings/codex-error-messages",
+  );
+  return data;
+}
+
+export async function patchCodexErrorMessages(
+  payload: PatchCodexPublicErrorMessagesRequest,
+): Promise<CodexPublicErrorSnapshot> {
+  const { data } = await apiClient.patch<CodexPublicErrorSnapshot>(
+    "/admin/settings/codex-error-messages",
+    payload,
+  );
+  return data;
+}
+
 /**
  * Get all system settings
  * @returns System settings

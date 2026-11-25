@@ -13,10 +13,22 @@ import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
-import { adminSupportContext, setAdminSupportContext } from '@/utils/adminSupportContext'
+import {
+  adminSupportContext,
+  clearSupportExit,
+  consumeSupportExit,
+  requestSupportExit,
+  setAdminSupportContext
+} from '@/utils/adminSupportContext'
 import { useAdminSupportViewStore } from '@/stores/adminSupportView'
 import { useSubscriptionStore } from '@/stores/subscriptions'
-import { parseAdminSupportTargetId, selfPathForSupportResource, type AdminSupportResource, selfPaths, supportPathForPersonalPath } from '@/utils/adminSupport'
+import {
+  parseAdminSupportTargetId,
+  resolveAdminSupportRouteDecision,
+  type AdminSupportResource,
+  selfPaths,
+  supportPathForPersonalPath
+} from '@/utils/adminSupport'
 
 /**
  * Route definitions with lazy loading
@@ -806,6 +818,13 @@ const router = createRouter({
   }
 })
 
+// Browser back/forward is an explicit destination decision. Without this, the
+// assistance rewrite below would keep a personal history entry on the target's
+// page instead of restoring the administrator's own page.
+if (typeof window !== 'undefined') {
+  window.addEventListener('popstate', () => { requestSupportExit() })
+}
+
 /**
  * Navigation guard: Authentication check
  */
@@ -856,7 +875,10 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   const currentSupport = adminSupportContext.value
-  if (currentSupport && authStore.isAdmin && !to.meta.adminSupportResource) {
+  let supportExitRequested = false
+  if (currentSupport && authStore.isAdmin) supportExitRequested = consumeSupportExit()
+  else clearSupportExit()
+  if (currentSupport && authStore.isAdmin && !to.meta.adminSupportResource && !supportExitRequested) {
     const destination = supportPathForPersonalPath(currentSupport.userId, to.path)
     if (destination) { next({ path: destination, query: to.query, hash: to.hash }); return }
   }
@@ -961,31 +983,29 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   const supportResource = to.meta.adminSupportResource as AdminSupportResource | undefined
-  const supportTarget = parseAdminSupportTargetId(to.params.user_id)
-  if (requiresAdmin && authStore.isAdmin && supportResource && supportTarget === null) {
-    next(selfPathForSupportResource(supportResource))
-    return
-  }
-  if (
-    requiresAdmin &&
-    authStore.isAdmin &&
-    supportResource &&
-    supportTarget === authStore.user?.id
-  ) {
-    next(selfPathForSupportResource(supportResource))
-    return
+  const supportTarget = supportResource ? parseAdminSupportTargetId(to.params.user_id) : null
+  if (requiresAdmin && authStore.isAdmin && supportResource) {
+    const decision = resolveAdminSupportRouteDecision({
+      resource: supportResource,
+      targetUserId: supportTarget,
+      actorUserId: authStore.user!.id,
+      customId: to.params.id
+    })
+    if (decision.kind === 'self') {
+      // The redirect itself must not be rewritten back to a previous target.
+      requestSupportExit()
+      next(decision.path)
+      return
+    }
+    if (decision.kind === 'safe-landing') {
+      next(decision.path)
+      return
+    }
   }
 
-  const context = requiresAdmin && authStore.isAdmin && supportResource && supportTarget !== null
-    ? { userId: supportTarget, actorId: authStore.user!.id } : null
-  if (context?.userId !== adminSupportContext.value?.userId || context?.actorId !== adminSupportContext.value?.actorId) {
-    setAdminSupportContext(context)
-    useSubscriptionStore().clear()
-    useAdminSupportViewStore().clearTarget()
-  }
-  if (context && useAdminSupportViewStore().target?.id !== context.userId) {
-    try { await useAdminSupportViewStore().loadTarget(context.userId) } catch { /* The shared view renders the read error and retry. */ }
-  }
+  // The support context is committed only after this navigation is confirmed.
+  // A cancelled, failed or superseded navigation must keep the previous route's
+  // read identity; see the afterEach commit below.
 
   if (requiresAdmin && authStore.isAdmin) {
     const adminComplianceStore = useAdminComplianceStore()
@@ -1102,6 +1122,23 @@ router.beforeEach(async (to, _from, next) => {
  * Navigation guard: End loading and trigger prefetch
  */
 router.afterEach((to) => {
+  // Commit the assistance scope only for the confirmed route. Candidate reads
+  // start after this point and cannot leak into a superseded page.
+  const authStore = useAuthStore()
+  const supportResource = to.meta.adminSupportResource as AdminSupportResource | undefined
+  const targetUserId = supportResource ? parseAdminSupportTargetId(to.params.user_id) : null
+  const actorId = authStore.user?.id
+  const context = authStore.isAdmin && supportResource && targetUserId !== null && actorId !== undefined && targetUserId !== actorId
+    ? { userId: targetUserId, actorId }
+    : null
+  if (context?.userId !== adminSupportContext.value?.userId || context?.actorId !== adminSupportContext.value?.actorId) {
+    setAdminSupportContext(context)
+    useSubscriptionStore().clear()
+    useAdminSupportViewStore().clearTarget()
+  }
+  if (context && useAdminSupportViewStore().target?.id !== context.userId) {
+    void useAdminSupportViewStore().loadTarget(context.userId).catch(() => undefined)
+  }
   // 结束导航加载状态
   navigationLoading.endNavigation()
 

@@ -59,20 +59,26 @@ test('image task cards fit phones and gate creation while preserving history', a
 })
 
 // docs/AVAILABLE_CHANNELS.md: real production list rows must fit 320px phones,
-// use two columns on wide screens, and preserve quotes, keyboard focus and cache.
+// render as a unified four-column directory on wide screens, and preserve
+// quotes, toolbar layout switching, keyboard focus and cache.
 test('available-channel list fits both themes and supports quote details, filtering and copying', async ({ page }, info) => {
   test.setTimeout(120_000)
   const { theme, locale } = presentation(info)
   const longName = 'model-00-' + 'long-id-'.repeat(16)
   const catalog = {
     groups: [
-      group(1, Array.from({ length: 12 }, (_, index) => offer(index === 0 ? longName : `model-${String(index).padStart(2, '0')}`))),
+      group(1, Array.from({ length: 8 }, (_, index) => offer(index === 0 ? longName : `model-${String(index).padStart(2, '0')}`))),
       group(2, [offer('anthropic-model', { platform: 'anthropic' })]),
       group(3, [offer('model-01')]),
     ],
     user_rate_status: 'loaded',
+    models_total: 9,
+    categories: { group: 9 },
+    platforms: { openai: 8, anthropic: 1 },
+    page: 1,
+    page_size: 9,
   }
-  let reads = 0
+  let listReads = 0
   const writes: string[] = []
   await page.route('**/api/v1/**', async route => {
     const request = route.request()
@@ -81,8 +87,26 @@ test('available-channel list fits both themes and supports quote details, filter
     let data: unknown = []
     if (url.pathname === '/api/v1/channels/available') {
       expect(url.searchParams.get('view')).toBe('catalog')
-      reads++
-      data = catalog
+      const modelQuery = url.searchParams.get('model')
+      const searchQuery = (url.searchParams.get('search') || '').trim().toLowerCase()
+      if (modelQuery) {
+        data = {
+          ...catalog,
+          groups: catalog.groups
+            .map(item => ({ ...item, models: item.models.filter(m => m.name.toLowerCase() === modelQuery.toLowerCase()) }))
+            .filter(item => item.models.length > 0),
+        }
+      } else {
+        listReads++
+        if (searchQuery) {
+          const filtered = catalog.groups
+            .map(item => ({ ...item, models: item.models.filter(m => m.name.toLowerCase().includes(searchQuery)) }))
+            .filter(item => item.models.length > 0)
+          data = { ...catalog, groups: filtered, models_total: 1 }
+        } else {
+          data = catalog
+        }
+      }
     } else if (url.pathname === '/api/v1/auth/me' || url.pathname === '/api/v1/user/profile') data = user
     await route.fulfill({ json: { code: 0, data } })
   })
@@ -95,38 +119,29 @@ test('available-channel list fits both themes and supports quote details, filter
     // The first production-view import on a WSL bind mount can be cold. Wait
     // for the page itself before applying the normal data/geometry assertions.
     await expect(page.getByTestId('catalog-results')).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByTestId('catalog-heading')).toHaveCount(0)
+    const filters = page.getByTestId('catalog-filters')
     const list = page.getByTestId('catalog-model-list')
-    await expect(list.locator('h3')).toHaveCount(13)
-    // Shared filter contract: one 160px width for search and selection fields
-    // on desktop; full-width stacked fields below 1024px, with natural actions.
-    const filterBar = page.getByTestId('catalog-filters').locator('.filter-bar')
-    const searchBox = (await filterBar.locator('.filter-field--search').boundingBox())!
-    const sortBox = (await filterBar.locator('.filter-field:not(.filter-field--search)').boundingBox())!
+    await expect(list.locator('h3')).toHaveCount(9)
+
+    const searchBox = (await filters.locator('input[type="search"]').boundingBox())!
     if (width >= 1024) {
-      expect(searchBox.width).toBeCloseTo(160, 0)
-      expect(sortBox.width).toBeCloseTo(160, 0)
-      expect(sortBox.y).toBeCloseTo(searchBox.y, 0)
+      expect(searchBox.width).toBeGreaterThanOrEqual(220)
+      expect(searchBox.width).toBeLessThanOrEqual(345)
     } else {
-      const barBox = (await filterBar.boundingBox())!
-      expect(searchBox.width).toBeCloseTo(barBox.width, 0)
-      expect(sortBox.width).toBeCloseTo(barBox.width, 0)
-      expect(sortBox.y).toBeGreaterThanOrEqual(searchBox.y + searchBox.height)
+      expect(searchBox.width).toBeGreaterThan(160)
     }
-    expect((await filterBar.locator('input[type="search"]').boundingBox())!.width).toBeCloseTo(searchBox.width, 0)
-    expect((await filterBar.locator('.select-trigger').boundingBox())!.width).toBeCloseTo(sortBox.width, 0)
-    const reset = filterBar.getByRole('button').last()
-    expect(await reset.evaluate(element => element.closest('.filter-field') === null)).toBe(true)
-    expect((await reset.boundingBox())!.width).toBeLessThan(200)
+
     const geometry = await list.evaluate(element => ({
       overflow: document.documentElement.scrollWidth > innerWidth,
       clipped: [...element.querySelectorAll('.catalog-list-row')].some(row => row.scrollWidth > row.clientWidth + 1),
-      columns: getComputedStyle(element.querySelector('.catalog-list-rows')!).gridTemplateColumns.split(' ').length,
+      headerVisible: getComputedStyle(element.querySelector('.catalog-dir-header')!).display !== 'none',
     }))
     expect(geometry.overflow).toBe(false)
     expect(geometry.clipped).toBe(false)
-    expect(geometry.columns).toBe(width === 1920 ? 2 : 1)
-    // Café Shop reference and the user's acceptance requirement: the row's
-    // empty area and prices open details, not just its model-name text.
+    expect(geometry.headerVisible).toBe(width === 1920)
+
+    // The entire row, including its prices and empty area, opens quote details.
     const row = list.locator('.catalog-list-row').first()
     const box = (await row.boundingBox())!
     await row.click({ position: { x: box.width - 8, y: box.height - 8 } })
@@ -134,24 +149,9 @@ test('available-channel list fits both themes and supports quote details, filter
     await expect(page.getByRole('dialog')).toHaveAccessibleName('anthropic-model')
     await page.keyboard.press('Escape')
     await expect(page.getByRole('dialog')).toBeHidden()
-    // Hover is a visible, non-intercepting card overlay, aligned with the
-    // complete row in each theme/viewport (not just a model-name text color).
-    await row.hover()
-    const highlight = list.locator('.catalog-list-highlight.is-active')
-    await expect(highlight).toHaveCount(1)
-    await expect(highlight).toHaveCSS('opacity', '1')
-    await expect(highlight).toHaveCSS('pointer-events', 'none')
-    const markBox = (await highlight.boundingBox())!
-    const rowBox = (await row.boundingBox())!
-    for (const key of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(markBox[key] - rowBox[key])).toBeLessThanOrEqual(1)
-    await expect(highlight).toHaveCSS('transition-duration', '0s')
-    const otherRow = list.locator('.catalog-list-row').nth(1)
-    await otherRow.hover()
-    const movedBox = (await list.locator('.catalog-list-highlight.is-active').boundingBox())!
-    const otherBox = (await otherRow.boundingBox())!
-    for (const key of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(movedBox[key] - otherBox[key])).toBeLessThanOrEqual(1)
+
     await row.scrollIntoViewIfNeeded()
-    const prices = row.locator('.font-mono.tabular-nums:not([aria-hidden])').first()
+    const prices = row.locator('.catalog-price-val').first()
     await expect(prices).toContainText('$2')
     const priceBox = (await prices.boundingBox())!
     await page.mouse.click(priceBox.x + priceBox.width / 2, priceBox.y + priceBox.height / 2)
@@ -160,7 +160,17 @@ test('available-channel list fits both themes and supports quote details, filter
     await page.getByRole('dialog').click({ position: { x: 1, y: 1 } })
     await expect(page.getByRole('dialog')).toBeHidden()
   }
-  const readsBeforeFilter = reads
+
+  // Toolbar view switcher toggles card <-> list without extra catalog reads.
+  const readsBeforeToggle = listReads
+  const viewSwitch = page.getByTestId('catalog-filters').locator('[role="radiogroup"] [role="radio"]')
+  await viewSwitch.nth(1).click()
+  await expect(page.locator('.catalog-model-card')).toHaveCount(9)
+  expect(listReads).toBe(readsBeforeToggle)
+  await viewSwitch.nth(0).click()
+  await expect(page.getByTestId('catalog-model-list')).toBeVisible()
+  expect(listReads).toBe(readsBeforeToggle)
+
   await page.locator('input[type="search"]').fill('model-01')
   const list = page.getByTestId('catalog-model-list')
   await expect(list.locator('h3')).toHaveCount(1)
@@ -171,14 +181,15 @@ test('available-channel list fits both themes and supports quote details, filter
   await expect(dialog).toBeVisible()
   await expect(dialog).toHaveAccessibleName('model-01')
   await expect(dialog.locator('.catalog-comparison tbody tr')).toHaveCount(2)
+  await expect(dialog.locator('.catalog-quote')).toHaveCount(0)
+  await dialog.locator('.catalog-comparison tbody tr').first().click()
+  await expect(dialog.locator('.catalog-quote')).toHaveCount(1)
   await dialog.locator('.catalog-copy-model').click()
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem('copied-model'))).toBe('model-01')
   await expect(dialog).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(dialog).toBeHidden()
   await expect(trigger).toBeFocused()
-  await page.mouse.move(0, 0)
-  await expect(list.locator('.catalog-list-highlight.is-active')).toHaveCount(1)
   await page.keyboard.press('Space')
   await expect(dialog).toBeVisible()
   await dialog.getByRole('button', { name: 'Close modal' }).click()
@@ -186,10 +197,6 @@ test('available-channel list fits both themes and supports quote details, filter
   await list.locator('.catalog-copy-model').click()
   await expect(dialog).toBeHidden()
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem('copied-model'))).toBe('model-01')
-  await page.emulateMedia({ reducedMotion: 'no-preference' })
-  await list.locator('.catalog-list-row').hover()
-  await expect(list.locator('.catalog-list-highlight.is-active')).toHaveCSS('transition-duration', '0.18s, 0.18s, 0.18s, 0.12s')
-  expect(reads).toBe(readsBeforeFilter)
   expect(writes).toEqual([])
 })
 const invitees = Array.from({ length: 32 }, (_, index) => ({

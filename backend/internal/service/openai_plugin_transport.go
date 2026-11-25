@@ -47,6 +47,12 @@ func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, _
 		return nil, err
 	}
 	credentialAccount = snapshotRequestCredentialAccount(credentialAccount)
+	// Instructions follow the credential owner and run on the final JSON before
+	// signing or request compression.
+	request, err = s.applyPluginRequestInstructions(request, credentialAccount)
+	if err != nil {
+		return nil, err
+	}
 	// The account's route owns every provider-bound send, including unbound
 	// API-key paths and plugins. Explicit transport arguments cannot replace it.
 	ownerProxyURL, err := requestCredentialOwnerProxyURL(request.Context(), credentialAccount)
@@ -77,7 +83,7 @@ func (s *OpenAIGatewayService) doOpenAIUpstreamPrepared(request *http.Request, _
 func (s *OpenAIGatewayService) doOpenAIPreparedTransport(request *http.Request, ownerProxyURL string, owner, selected *Account) (*http.Response, error) {
 	observeOutboundHTTP(request, owner)
 	if s.pluginManager != nil {
-		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, ownerProxyURL, owner)
+		response, handled, err := s.pluginManager.RoundTripTransport(request.Context(), request, ownerProxyURL, owner)
 		if handled {
 			return response, err
 		}
@@ -97,6 +103,10 @@ func (s *AccountTestService) doOpenAIAccountTestUpstream(request *http.Request, 
 		return nil, err
 	}
 	*request = *request.WithContext(WithAccountOutboundIdentity(request.Context(), account))
+	request, err = s.applyPluginRequestInstructions(request, account)
+	if err != nil {
+		return nil, err
+	}
 	response, responseErr := s.projectTokens.RoundTrip(request, account, func(req *http.Request) (*http.Response, error) {
 		return s.cnOAuthService.roundTripNativeOAuth(req, account, func(native *http.Request) (*http.Response, error) {
 			response, err := s.doOpenAIAccountTestUpstreamPrepared(native, proxyURL, account, useTLSFallback)
@@ -123,6 +133,10 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 		return nil, err
 	}
 	credentialAccount = snapshotRequestCredentialAccount(credentialAccount)
+	request, err = s.applyPluginRequestInstructions(request, credentialAccount)
+	if err != nil {
+		return nil, err
+	}
 	// The account's route owns every provider-bound send, including unbound
 	// API-key paths and plugins. Explicit transport arguments cannot replace it.
 	ownerProxyURL, err := requestCredentialOwnerProxyURL(request.Context(), credentialAccount)
@@ -172,7 +186,7 @@ func (s *AccountTestService) doOpenAIAccountTestUpstreamPrepared(
 
 func (s *AccountTestService) doOpenAIAccountTestPreparedTransport(request *http.Request, ownerProxyURL string, owner, selected *Account, useTLSFallback bool) (*http.Response, error) {
 	if s.pluginManager != nil {
-		response, handled, err := s.pluginManager.RoundTripOpenAIOAuth(request.Context(), request, ownerProxyURL, owner)
+		response, handled, err := s.pluginManager.RoundTripTransport(request.Context(), request, ownerProxyURL, owner)
 		if handled {
 			return response, err
 		}

@@ -298,7 +298,7 @@ func (d inflightEstimateDeps) inflightConvertEffortBody(ctx context.Context, acc
 	if protocol == APIProtocolAnthropic {
 		if inbound == APIProtocolAnthropic {
 			if account.Platform != PlatformAnthropic {
-				forwarded, _ = NormalizeGLM53AnthropicThinking(body, model)
+				forwarded, _ = NormalizeGLMAnthropicThinking(body, model)
 			}
 			return forwarded, nil
 		}

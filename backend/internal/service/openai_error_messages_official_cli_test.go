@@ -46,9 +46,9 @@ func testOpenAIErrorMessagesOfficialCLIMatrix(t *testing.T, binary string, statu
 	t.Helper()
 	for _, kind := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
 		for _, cli := range []bool{false, true} {
-			for _, enabled := range []bool{false, true} {
+			{
 				for _, code := range []string{"upstream_response_interrupted", "upstream_unavailable", "session_account_lost"} {
-					t.Run(kind+"/cli="+strconvBool(cli)+"/enabled="+strconvBool(enabled)+"/"+code, func(t *testing.T) {
+					t.Run(kind+"/cli="+strconvBool(cli)+"/"+code, func(t *testing.T) {
 						var sends, requests atomic.Int32
 						upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
 							sends.Add(1)
@@ -71,7 +71,6 @@ func testOpenAIErrorMessagesOfficialCLIMatrix(t *testing.T, binary string, statu
 						if rejection {
 							owner.Extra["openai_passthrough"] = true
 						}
-						saveErrorMessages(t, svc.settingService, enabled)
 						completed := make(chan error, 1)
 						server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 							if r.Method != http.MethodPost || r.URL.Path != "/backend-api/codex/responses" {
@@ -101,7 +100,7 @@ func testOpenAIErrorMessagesOfficialCLIMatrix(t *testing.T, binary string, statu
 						defer server.Close()
 						ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 						defer cancel()
-						args := []string{"../../../tools/test_codex_error_messages.py", "--binary", binary, "--url", server.URL, "--code", code, "--enabled", strconvBool(enabled)}
+						args := []string{"../../../tools/test_codex_error_messages.py", "--binary", binary, "--url", server.URL, "--code", code}
 						if rejection {
 							args = append(args, "--http-rejection")
 						}

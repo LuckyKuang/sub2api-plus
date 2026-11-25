@@ -14,7 +14,7 @@ import {
 } from './adminUIRequest'
 import { refreshAuthTokens } from './tokenRefresh'
 import { getAPIBaseURL } from './url'
-import { adminSupportContext, supportReadURL, supportReadOnlyError, supportRequestGeneration, rememberSupportImageKeys } from '@/utils/adminSupportContext'
+import { adminSupportContext, supportTransitioning, supportReadURL, supportReadOnlyError, supportRequestGeneration, rememberSupportImageKeys } from '@/utils/adminSupportContext'
 export { buildApiUrl, buildGatewayUrl } from './url'
 
 // ==================== Axios Instance Configuration ====================
@@ -54,6 +54,11 @@ const getUserTimezone = (): string => {
 
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // A target switch, in either direction, keeps the previous page mounted. It
+    // must not submit personal writes before the router confirms the new route.
+    if (supportTransitioning.value && config.method !== 'get' && config.url !== '/auth/logout') {
+      throw supportReadOnlyError()
+    }
     const context = adminSupportContext.value
     if (context) {
       const url = String(config.url || '')

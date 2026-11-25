@@ -12,6 +12,7 @@ const {
   uploadPlugin,
   enablePlugin,
   savePluginConfig,
+  getPluginConfig,
   createUISession,
   stepUpRun,
 } = vi.hoisted(() => ({
@@ -19,6 +20,7 @@ const {
   uploadPlugin: vi.fn(),
   enablePlugin: vi.fn(),
   savePluginConfig: vi.fn(),
+  getPluginConfig: vi.fn(),
   createUISession: vi.fn(),
   stepUpRun: vi.fn((action: () => Promise<unknown>) => action()),
 }))
@@ -31,7 +33,7 @@ vi.mock('@/api/admin', () => ({
       enable: enablePlugin,
       disable: vi.fn(),
       remove: vi.fn(),
-      getConfig: vi.fn().mockResolvedValue({}),
+      getConfig: getPluginConfig,
       saveConfig: savePluginConfig,
       test: vi.fn().mockResolvedValue({ success: true, message: 'ok', latency_ms: 1 }),
       createUISession,
@@ -238,4 +240,47 @@ describe('管理员插件页二次验证', () => {
     expect(stepUpRun).toHaveBeenCalledTimes(1)
     expect(uploadPlugin).toHaveBeenCalledTimes(1)
   })
+
+  it('configures a request-instruction plugin through the host JSON form', async () => {
+    const requestPlugin = {
+      ...plugin,
+      id: 9,
+      plugin_key: 'local.test.prompt',
+      name: 'Prompt',
+      manifest: {
+        ...plugin.manifest,
+        schema_version: 2,
+        capabilities: [
+          { id: 'request.instructions.prepend.v1', platform: 'stepfun', account_type: 'oauth' },
+        ],
+        ui: { entrypoint: '' },
+      },
+      bindings: [
+        {
+          id: 2,
+          plugin_id: 9,
+          capability: 'request.instructions.prepend.v1',
+          platform: 'stepfun',
+          account_type: 'oauth',
+          enabled: false,
+          rollout_percent: 100,
+        },
+      ],
+    }
+    listPlugins.mockResolvedValue([requestPlugin])
+    getPluginConfig.mockResolvedValue({ default_text: 'hello' })
+    savePluginConfig.mockResolvedValue({ default_text: 'changed' })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(item => item.text() === 'admin.plugins.configure')!.trigger('click')
+    await flushPromises()
+    expect(createUISession).not.toHaveBeenCalled()
+    const textarea = wrapper.get('[data-testid="plugin-request-config"]')
+    expect((textarea.element as HTMLTextAreaElement).value).toContain('hello')
+    await textarea.setValue('{"default_text":"changed"}')
+    await wrapper.get('[data-testid="plugin-request-config-save"]').trigger('click')
+    await flushPromises()
+    expect(savePluginConfig).toHaveBeenCalledWith(9, { default_text: 'changed' })
+  })
+
 })

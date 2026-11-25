@@ -12,7 +12,6 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
-	"github.com/tidwall/gjson"
 )
 
 type errorMessageSettingsRepo struct {
@@ -51,7 +50,7 @@ func TestOpenAIErrorMessagesPreserveOpsDiagnostics(t *testing.T) {
 			})
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/responses", nil))
-			want := "响应已中断，请输入「继续」重新提交。"
+			want := "服务暂时不可用，请稍后再试。"
 			if protocol == "json" {
 				want = "当前会话可能无法恢复，请新开会话继续。"
 				require.Equal(t, 400, rec.Code)
@@ -69,64 +68,70 @@ func TestOpenAIErrorMessagesPreserveOpsDiagnostics(t *testing.T) {
 	}
 }
 
-// Acceptance: exhausted retries must display the requested message even when
-// the gateway's existing error mapping omits the upstream code. The switch
-// changes neither the HTTP/SSE failure contract nor the administrator record.
 func TestOpenAIErrorMessagesFailoverExhausted(t *testing.T) {
 	for _, platform := range []string{service.PlatformOpenAI, service.PlatformGrok} {
-		for _, enabled := range []bool{false, true} {
-			for _, streaming := range []bool{false, true} {
-				for _, failure := range []struct{ code, want string }{
-					{"upstream_unavailable", "响应已中断，请输入「继续」重新提交。"},
-					{"upstream_response_interrupted", "响应已中断，请输入「继续」重新提交。"},
-					{"session_account_lost", "当前会话可能无法恢复，请新开会话继续。"},
-					{"other_error", "Upstream service temporarily unavailable"},
-					{"UPSTREAM_UNAVAILABLE", "Upstream service temporarily unavailable"},
-				} {
-					t.Run(fmt.Sprintf("%s/enabled=%t/stream=%t/%s", platform, enabled, streaming, failure.code), func(t *testing.T) {
-						setupOpsErrorLogTestQueue(t, 1)
-						ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-						settings := service.NewSettingService(&errorMessageSettingsRepo{disabled: !enabled}, nil)
-						router := gin.New()
-						router.Use(GatewayOpsErrorLoggerMiddleware(ops, settings))
-						router.POST("/v1/responses", func(c *gin.Context) {
-							setOpsSelectedAccount(c, 101, platform)
-							if streaming {
-								c.Header("Content-Type", "text/event-stream")
-								_, _ = c.Writer.WriteString("data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial answer\"}\n\n")
-							}
-							(&OpenAIGatewayHandler{}).handleFailoverExhausted(c, &service.UpstreamFailoverError{
-								StatusCode:   503,
-								ResponseBody: []byte(`{"error":{"code":"` + failure.code + `","message":"original upstream diagnostic"}}`),
-							}, streaming)
-						})
-						rec := httptest.NewRecorder()
-						router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/responses", nil))
-						want := "Upstream service temporarily unavailable"
-						if enabled && platform == service.PlatformOpenAI {
-							want = failure.want
-						}
+		for _, streaming := range []bool{false, true} {
+			for _, failure := range []struct {
+				code, want, publicCode, errorType string
+				wantStatus                        int
+			}{
+				{"upstream_unavailable", "服务暂时不可用，请稍后再试。", "upstream_unavailable", "service_unavailable_error", 503},
+				{"upstream_response_interrupted", "本次响应已中断。请先检查已收到的内容，再决定是否继续。", "upstream_response_interrupted", "server_error", 502},
+				{"session_account_lost", "当前会话可能无法恢复，请新开会话继续。", "session_account_lost", "server_error", 503},
+				{"other_error", "服务暂时不可用，请稍后再试。", "upstream_unavailable", "service_unavailable_error", 503},
+				{"UPSTREAM_UNAVAILABLE", "服务暂时不可用，请稍后再试。", "upstream_unavailable", "service_unavailable_error", 503},
+			} {
+				t.Run(fmt.Sprintf("%s/stream=%t/%s", platform, streaming, failure.code), func(t *testing.T) {
+					setupOpsErrorLogTestQueue(t, 1)
+					ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+					settings := service.NewSettingService(&errorMessageSettingsRepo{}, nil)
+					router := gin.New()
+					router.Use(GatewayOpsErrorLoggerMiddleware(ops, settings))
+					router.POST("/v1/responses", func(c *gin.Context) {
+						setOpsSelectedAccount(c, 101, platform)
 						if streaming {
-							require.Equal(t, 200, rec.Code)
-							require.Contains(t, rec.Body.String(), `"delta":"partial answer"`)
-							require.Contains(t, rec.Body.String(), `"type":"response.failed"`)
-							require.Contains(t, rec.Body.String(), `"code":"upstream_error"`)
-							require.Contains(t, rec.Body.String(), want)
-						} else {
-							require.Equal(t, 502, rec.Code)
-							require.JSONEq(t, `{"error":{"type":"upstream_error","message":"`+want+`"}}`, rec.Body.String())
-							require.False(t, gjson.Get(rec.Body.String(), "error.code").Exists(), "do not change the existing error envelope")
+							c.Header("Content-Type", "text/event-stream")
+							_, _ = c.Writer.WriteString("data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial answer\"}\n\n")
 						}
-						require.Equal(t, int64(1), OpsErrorLogQueueLength())
-						entry := (<-opsErrorLogQueue).entry
-						if !streaming {
-							require.NotNil(t, entry.UpstreamErrorMessage)
-							require.Equal(t, "original upstream diagnostic", *entry.UpstreamErrorMessage)
-						}
-						require.Contains(t, entry.ErrorBody, "Upstream service temporarily unavailable")
-						require.NotContains(t, entry.ErrorBody, "响应已中断")
+						(&OpenAIGatewayHandler{}).handleFailoverExhausted(c, &service.UpstreamFailoverError{
+							StatusCode:   503,
+							ResponseBody: []byte(`{"error":{"code":"` + failure.code + `","message":"original upstream diagnostic"}}`),
+						}, streaming)
 					})
-				}
+					rec := httptest.NewRecorder()
+					router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/responses", nil))
+					want := "Upstream service temporarily unavailable"
+					if platform == service.PlatformOpenAI {
+						want = failure.want
+					}
+					if streaming {
+						require.Equal(t, 200, rec.Code)
+						require.Contains(t, rec.Body.String(), `"delta":"partial answer"`)
+						require.Contains(t, rec.Body.String(), `"type":"response.failed"`)
+						require.Contains(t, rec.Body.String(), want)
+					} else {
+						wantStatus := 502
+						if platform == service.PlatformOpenAI {
+							wantStatus = failure.wantStatus
+						}
+						require.Equal(t, wantStatus, rec.Code)
+						if platform == service.PlatformOpenAI {
+							require.JSONEq(t, `{"error":{"code":"`+failure.publicCode+`","type":"`+failure.errorType+`","message":"`+want+`"}}`, rec.Body.String())
+						} else {
+							require.JSONEq(t, `{"error":{"type":"upstream_error","message":"`+want+`"}}`, rec.Body.String())
+						}
+					}
+					require.Equal(t, int64(1), OpsErrorLogQueueLength())
+					entry := (<-opsErrorLogQueue).entry
+					if !streaming {
+						require.NotNil(t, entry.UpstreamErrorMessage)
+						require.Equal(t, "original upstream diagnostic", *entry.UpstreamErrorMessage)
+					}
+					require.NotEmpty(t, entry.ErrorBody)
+					if platform == service.PlatformOpenAI {
+						require.NotContains(t, entry.ErrorBody, want)
+					}
+				})
 			}
 		}
 	}

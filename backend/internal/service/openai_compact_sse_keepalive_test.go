@@ -120,7 +120,8 @@ func TestWriteOpenAICompactSSEBridge_AfterKeepaliveCommitFailureEmitsFailedEvent
 	require.Len(t, events, 1)
 	require.Equal(t, "response.failed", events[0][0])
 	require.Equal(t, "failed", gjson.Get(events[0][1], "response.status").String())
-	require.Contains(t, gjson.Get(events[0][1], "response.error.message").String(), "upstream exploded")
+	require.Equal(t, "server_error", gjson.Get(events[0][1], "response.error.code").String())
+	require.Equal(t, "服务处理请求时出错，请稍后再试。", gjson.Get(events[0][1], "response.error.message").String())
 	require.NotEmpty(t, gjson.Get(events[0][1], "response.id").String())
 
 	streamErr, ok := GetOpsStreamError(c)

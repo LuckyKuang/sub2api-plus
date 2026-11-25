@@ -562,13 +562,27 @@ function getRingOffset(ring: RingItem): number {
   return CIRCUMFERENCE - (Math.min(ring.pct, 100) / 100) * CIRCUMFERENCE
 }
 
+let ringAnimationToken = 0
+
+// Browser frames drive the count-up; non-visual environments (jsdom, SSR)
+// fall back to timers so a pending animation cannot throw after teardown.
+function scheduleRingFrame(callback: () => void) {
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(callback)
+    return
+  }
+  setTimeout(callback, 16)
+}
+
 function triggerRingAnimation(items: RingItem[]) {
   ringAnimated.value = false
   displayPcts.value = items.map(() => 0)
+  const token = ++ringAnimationToken
 
   nextTick(() => {
-    requestAnimationFrame(() => {
+    scheduleRingFrame(() => {
       setTimeout(() => {
+        if (token !== ringAnimationToken) return
         ringAnimated.value = true
 
         // Animate percentage numbers
@@ -577,13 +591,14 @@ function triggerRingAnimation(items: RingItem[]) {
         const targets = items.map(item => item.isBalance ? 0 : item.pct)
 
         function tick() {
+          if (token !== ringAnimationToken) return
           const elapsed = performance.now() - startTime
           const p = Math.min(elapsed / duration, 1)
           const ease = 1 - Math.pow(1 - p, 3)
           displayPcts.value = targets.map(target => Math.round(ease * target))
-          if (p < 1) requestAnimationFrame(tick)
+          if (p < 1) scheduleRingFrame(tick)
         }
-        requestAnimationFrame(tick)
+        scheduleRingFrame(tick)
       }, 50)
     })
   })
@@ -971,6 +986,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  ringAnimationToken += 1
   if (resetTimer) clearInterval(resetTimer)
 })
 </script>

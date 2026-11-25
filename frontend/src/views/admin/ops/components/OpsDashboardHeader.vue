@@ -937,6 +937,7 @@ function handleToolbarRefresh() {
 
         <button
           v-if="!props.fullscreen"
+          data-testid="ops-refresh"
           type="button"
           class="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:surface-hover surface-control surface-muted"
           :disabled="loading"
@@ -1014,10 +1015,14 @@ function handleToolbarRefresh() {
         <div :class="props.workspace ? 'card workspace-shell flex flex-col gap-4 p-6' : 'contents'">
           <div v-if="overview" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
             <!-- Left: Health + Realtime -->
-            <div :class="['glass-surface lg:col-span-5', props.fullscreen ? 'p-6' : 'p-4']">
+            <div
+              data-testid="ops-overview-card"
+              :class="['glass-surface lg:col-span-5', props.fullscreen ? 'p-6' : 'p-4']"
+            >
               <div class="grid h-full grid-cols-1 gap-6 md:grid-cols-[200px_1fr] md:items-center">
                 <!-- 1) Health Score -->
                 <div
+                  data-testid="ops-health-card"
                   class="group relative flex cursor-pointer flex-col items-center justify-center rounded-xl py-2 transition-all hover:surface-hover md:border-r md:border-gray-200 md:pr-6 dark:md:border-dark-700"
                 >
                   <!-- Diagnosis Popover (hover) -->
@@ -1228,7 +1233,7 @@ function handleToolbarRefresh() {
             </div>
 
             <!-- Right: 6 cards (3 cols x 2 rows) -->
-            <div class="grid h-full grid-cols-1 content-center gap-4 sm:grid-cols-2 lg:col-span-7 lg:grid-cols-3">
+            <div class="grid grid-cols-1 content-center gap-4 sm:grid-cols-2 md:h-full lg:col-span-7 lg:grid-cols-3">
               <!-- Card 1: Requests -->
               <div class="glass-surface p-4" style="order: 1;">
                 <div class="flex items-center justify-between">

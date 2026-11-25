@@ -150,7 +150,7 @@ const options = computed(() => {
 </script>
 
 <template>
-  <div class="glass-surface flex h-full flex-col p-6 ring-1 ring-gray-900/5 dark:ring-dark-700">
+  <div data-testid="ops-error-trend-chart" class="glass-surface flex flex-col p-6 ring-1 ring-gray-900/5 md:h-full dark:ring-dark-700">
     <div class="mb-4 flex shrink-0 items-center justify-between">
       <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
         <svg class="h-4 w-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -184,7 +184,7 @@ const options = computed(() => {
       </div>
     </div>
 
-    <div class="min-h-0 flex-1">
+    <div data-testid="ops-error-trend-plot" class="ops-chart-plot md:flex-1 md:min-h-0">
       <Line v-if="state === 'ready' && chartData" :data="chartData" :options="options" />
       <div v-else class="flex h-full items-center justify-center">
         <div v-if="state === 'loading'" class="animate-pulse text-sm text-gray-400">{{ t('common.loading') }}</div>
@@ -193,3 +193,22 @@ const options = computed(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Phone: the plot owns a definite height so Chart.js cannot resize the page
+   from inside a content-sized card. Title and detail actions stay above it. */
+@media (max-width: 767.98px) {
+  .ops-chart-plot {
+    position: relative;
+    height: 200px;
+    flex: none;
+    min-width: 0;
+  }
+  .ops-chart-plot :deep(canvas) {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+  }
+}
+</style>

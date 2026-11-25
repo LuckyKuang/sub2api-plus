@@ -23,6 +23,20 @@ var codexSafetyBufferingHeaders = [...]string{
 	"x-codex-safety-buffering-faster-model",
 }
 
+// Upstream error responses must not leak diagnostics through response headers.
+// Retry-After is a protocol-level hint and stays, while authentication,
+// redirect, proxy and debug carriers are removed before the status commits.
+var codexPublicErrorUnsafeHeaders = [...]string{
+	"Www-Authenticate",
+	"Proxy-Authenticate",
+	"Location",
+	"Server-Timing",
+	"X-Upstream-Request-Id",
+	"X-Upstream-Error",
+	"X-Debug-Error",
+	"X-Trace-Id",
+}
+
 // This is a downstream-only projection. Callers retain the original payload
 // for accounting, policy errors, route state, and transport lifecycle observers.
 func stripCodexSafetyBuffering(payload []byte) ([]byte, error) {
@@ -165,17 +179,18 @@ func flushCodexSafetyBufferingHTTPOutput(c *gin.Context) error {
 
 type codexSafetyBufferingHTTPWriter struct {
 	gin.ResponseWriter
-	mu                sync.Mutex
-	ctx               context.Context
-	c                 *gin.Context
-	service           *OpenAIGatewayService
-	account           *Account
-	projectionEnabled func() bool
-	projectPayload    func([]byte, string) []byte
-	bypassProjection  func() bool
-	pending           *openAIFirstOutputStage
-	lineSize          int
-	lineHead          byte
+	mu                     sync.Mutex
+	ctx                    context.Context
+	c                      *gin.Context
+	service                *OpenAIGatewayService
+	account                *Account
+	projectionEnabled      func() bool
+	projectPayload         func([]byte, string) []byte
+	bypassProjection       func() bool
+	stripDiagnosticHeaders bool
+	pending                *openAIFirstOutputStage
+	lineSize               int
+	lineHead               byte
 }
 
 // Reuse the anonymous spool used by first-output staging. The existing gateway
@@ -238,6 +253,14 @@ func (w *codexSafetyBufferingHTTPWriter) prepareHeaders() {
 	// Later events may change length even if this first event is unchanged.
 	if isEventStreamResponse(w.Header()) {
 		w.removeFixedContentLength()
+	}
+	// Diagnostic headers belong to confirmed failures. A successful response,
+	// including an async image submission whose Location is its polling
+	// address, keeps its own protocol headers.
+	if w.stripDiagnosticHeaders && !w.Written() && w.Status() >= http.StatusBadRequest {
+		for _, name := range codexPublicErrorUnsafeHeaders {
+			w.Header().Del(name)
+		}
 	}
 	if w.service != nil && !w.Written() && w.service.codexSafetyBufferingOutputEnabled(w.ctx, w.account) {
 		for key := range w.Header() {
@@ -308,6 +331,11 @@ func (w *codexSafetyBufferingHTTPWriter) Write(p []byte) (int, error) {
 		projected := w.project(p, "http")
 		if !bytes.Equal(projected, p) && !w.Written() {
 			w.Header().Del("Content-Length")
+			if !isEventStreamResponse(w.Header()) && !strings.HasPrefix(strings.ToLower(w.Header().Get("Content-Type")), "application/json") {
+				// A confirmed failure may arrive as HTML, text or binary. Its
+				// replacement is always the approved JSON envelope.
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			}
 		}
 		if err := w.writeRaw(projected); err != nil {
 			return 0, err
@@ -446,6 +474,9 @@ func (w *codexSafetyBufferingHTTPWriter) finish() error {
 		payload := w.project(original, "http")
 		if !bytes.Equal(payload, original) && !w.Written() {
 			w.Header().Del("Content-Length")
+			if !isEventStreamResponse(w.Header()) && !strings.HasPrefix(strings.ToLower(w.Header().Get("Content-Type")), "application/json") {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			}
 		}
 		return w.writeRaw(payload)
 	}

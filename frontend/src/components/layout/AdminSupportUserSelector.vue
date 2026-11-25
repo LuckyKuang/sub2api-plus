@@ -21,7 +21,7 @@
             {{ (option as AccountOption | undefined)?.label ?? t('admin.support.selectorLabel') }}
           </span>
           <span class="block truncate text-[10px] surface-muted">
-            {{ selectedUserId === actorUserId ? t('admin.support.selfAccount') : t('admin.support.readOnlyTarget') }}
+            {{ selectedUserId === actorUserId ? t('admin.support.selfAccount') : t('admin.support.readOnlyTarget') }} · #{{ selectedUserId }}
           </span>
         </span>
       </span>
@@ -56,7 +56,13 @@ import { useRoute, useRouter } from 'vue-router'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useAdminSupportViewStore, useAuthStore } from '@/stores'
-import { setAdminSupportContext } from '@/utils/adminSupportContext'
+import {
+  adminSupportContext,
+  beginSupportTransition,
+  clearSupportExit,
+  endSupportTransition,
+  requestSupportExit
+} from '@/utils/adminSupportContext'
 import { accountSelectionDestination, parseAdminSupportTargetId } from '@/utils/adminSupport'
 
 interface Props {
@@ -129,12 +135,25 @@ function optionInitial(option?: AccountOption): string {
   return label.slice(0, 1).toUpperCase()
 }
 
-function selectAccount(value: string | number | boolean | null): void {
+async function selectAccount(value: string | number | boolean | null): Promise<void> {
   const targetUserId = Number(value)
   if (!Number.isSafeInteger(targetUserId) || targetUserId <= 0 || actorUserId.value <= 0) return
-  if (targetUserId === actorUserId.value) setAdminSupportContext(null)
   const destination = accountSelectionDestination(route.path, actorUserId.value, targetUserId)
-  if (destination && destination !== route.path) void router.push(destination)
+  if (!destination || destination === route.path) return
+
+  // Keep the previous support context until the guard resolves the new route so
+  // the old page cannot turn writable mid-flight. The transition lock blocks its
+  // controls; returning to self marks the one-shot guard exception instead of
+  // clearing the context early.
+  const returningToSelf = targetUserId === actorUserId.value && adminSupportContext.value !== null
+  beginSupportTransition()
+  try {
+    if (returningToSelf) requestSupportExit()
+    await router.push(destination)
+  } finally {
+    if (returningToSelf) clearSupportExit()
+    endSupportTransition()
+  }
 }
 
 onMounted(() => {

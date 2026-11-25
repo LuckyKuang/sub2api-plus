@@ -56,7 +56,38 @@ func writeOpenAIUpstreamClientError(c *gin.Context, statusCode int, body []byte,
 	}
 	errorPayload["message"] = message
 
-	c.JSON(statusCode, gin.H{"error": errorPayload})
+	publicStatus := statusCode
+	key := getOpenAIErrorMessageSource(c).key
+	if key == "" && isOpenAIContextWindowError(upstreamMsg, body) && strings.TrimSpace(upstreamMsg) != "" {
+		key = "context_length_exceeded"
+	}
+	classified := 0
+	if key == "" {
+		key, classified = ClassifyCodexPublicFailure(statusCode, body)
+	} else {
+		key, classified = ClassifyCodexPublicFailureKey(statusCode, key)
+	}
+	if key != "" {
+		SetCodexPublicErrorFinal(c, key, classified)
+		if statusCode >= 400 {
+			publicStatus = classified
+		}
+		if definition, ok := codexPublicErrorByKey(key); ok {
+			// Direct callers (without the output middleware) still receive the
+			// public type/code/message; the middleware rebuilds the same fields.
+			if definition.ErrorType != "" {
+				errorPayload["type"] = definition.ErrorType
+			}
+			if definition.PublicCode != "" {
+				errorPayload["code"] = definition.PublicCode
+			}
+			errorPayload["message"] = definition.DefaultMessage
+			if param, _ := errorPayload["param"].(string); !codexPublicErrorParamAllowed(param) {
+				delete(errorPayload, "param")
+			}
+		}
+	}
+	c.JSON(publicStatus, gin.H{"error": errorPayload})
 }
 
 // WriteOpenAIUpstreamClientError preserves a structured deterministic upstream

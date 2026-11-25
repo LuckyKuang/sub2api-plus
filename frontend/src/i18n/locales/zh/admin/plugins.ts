@@ -1,7 +1,7 @@
 export default {
   plugins: {
     title: '插件管理',
-    description: '安装和管理独立运行的 OAuth 出站传输插件。API Key 流程不受影响。',
+    description: '安装和管理出站传输插件与声明式请求指令插件。平台和账号类型由插件包声明。',
     upload: '安装插件',
     uploadHint: '仅接受 .s2plugin 包；默认要求可信发布者签名。',
     runtimeNotice: '插件安装、启用、停用和配置由 Sub2API Plus 宿主动态处理，通常不需要重启宿主实例。只有宿主版本或宿主配置本身变化时，才按部署方式执行重启。',
@@ -13,7 +13,7 @@ export default {
     disable: '停用',
     test: '测试',
     uninstall: '卸载',
-    rollout: 'OAuth 流量比例',
+    rollout: '流量比例',
     compatibility: '版本兼容性',
     currentVersion: '当前 Sub2API Plus',
     requiredVersion: '要求范围',
@@ -32,6 +32,10 @@ export default {
     error: '异常',
     starting: '启动中',
     configTitle: '{name} 配置',
+    requestConfigHint: '该插件只提供声明式请求指令。请编辑下方 JSON：default_text、platform_overrides 和 account_overrides。文本会插在调用方指令之前，不会启动外部进程。',
+    requestConfigSaved: '请求指令规则已保存',
+    requestConfigLoading: '正在读取插件配置...',
+    configSessionChanged: '配置会话已变更，请重新打开插件配置后再保存。',
     loadingUI: '正在加载插件配置界面...',
     uiUnavailable: '无法加载插件配置界面',
     uploadSuccess: '插件安装成功，当前保持停用',
@@ -39,12 +43,12 @@ export default {
     disableSuccess: '插件已停用',
     uninstallSuccess: '插件已卸载',
     testSuccess: '插件测试通过',
-    confirmDisable: '确定停用此插件吗？新的 OAuth 请求会立即恢复 Sub2API Plus 原有路径。',
+    confirmDisable: '确定停用此插件吗？新请求会立即停止选择该插件的绑定，并按剩余绑定或原生路径发送。',
     confirmUninstall: '确定卸载此插件吗？插件必须先停用。此操作会移除安装文件和配置。',
     confirmUntested: '该插件兼容当前版本范围，但未声明已测试当前 Sub2API Plus 版本。确定承担风险并启用吗？',
     fileRequired: '请选择 .s2plugin 文件',
     bridgeRejected: '插件 UI 消息校验失败',
-    onlyOpenAI: '初期能力：仅 OpenAI OAuth 出站传输',
+    onlyOpenAI: '能力范围由插件包声明',
     noAccountCoupling: '作用域为平台与账号类型，不修改账号数据，也不需要在账号页逐个开启。'
   }
 }
