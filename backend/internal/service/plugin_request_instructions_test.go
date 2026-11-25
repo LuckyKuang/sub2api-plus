@@ -1,4 +1,4 @@
-//go:build unit
+//go:build unit || !integration
 
 package service
 
@@ -122,9 +122,15 @@ func TestApplyPluginRequestInstructions(t *testing.T) {
 	require.True(t, changed)
 	var root map[string]any
 	require.NoError(t, json.Unmarshal(got, &root))
-	system := root["system"].([]any)
-	require.Equal(t, "Prepend", system[0].(map[string]any)["text"])
-	require.Equal(t, "existing", system[1].(map[string]any)["text"])
+	system, ok := root["system"].([]any)
+	require.True(t, ok)
+	require.Len(t, system, 2)
+	firstPart, ok := system[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "Prepend", firstPart["text"])
+	secondPart, ok := system[1].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "existing", secondPart["text"])
 
 	gemini := []byte(`{"contents":[],"systemInstruction":{"parts":[{"text":"existing"}]}}`)
 	got, changed = ApplyPluginRequestInstructions(gemini, "gemini", "Prepend")

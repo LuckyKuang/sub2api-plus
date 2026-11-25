@@ -379,14 +379,6 @@ func prependGeminiInstruction(body []byte, text string) ([]byte, bool) {
 	return updated, err == nil
 }
 
-func mustMarshal(value any) []byte {
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return nil
-	}
-	return encoded
-}
-
 // pluginInstructionsAppliedKey marks a body that already passed the
 // instruction transform before wire encoding (for example Grok compression).
 type pluginInstructionsAppliedKey struct{}

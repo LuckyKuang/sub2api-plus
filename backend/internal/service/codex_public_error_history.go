@@ -112,9 +112,7 @@ func ProjectCodexImageTaskError(status int, payload json.RawMessage, resolve fun
 		key = resolved
 	}
 	if key == "" {
-		key, status = ClassifyCodexPublicFailure(status, payload)
-	} else {
-		status = codexPublicErrorPublicStatus(key, status)
+		key, _ = ClassifyCodexPublicFailure(status, payload)
 	}
 	definition, ok := codexPublicErrorByKey(key)
 	if !ok || definition.PublicCode == "" {

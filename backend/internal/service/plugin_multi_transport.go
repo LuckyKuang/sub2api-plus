@@ -171,7 +171,7 @@ func (m *PluginManager) publishMultiTransportRoutes(installations []*PluginInsta
 	m.transportAuthority.Store(true)
 }
 
-func (m *PluginManager) enableMultiTransportPlugin(ctx context.Context, installation *PluginInstallation, compatibility PluginCompatibility, rolloutPercent int) (*PluginInstallation, error) {
+func (m *PluginManager) enableMultiTransportPlugin(ctx context.Context, installation *PluginInstallation, rolloutPercent int) (*PluginInstallation, error) {
 	if installation == nil {
 		return nil, errors.New("插件安装记录为空")
 	}
@@ -192,7 +192,7 @@ func (m *PluginManager) enableMultiTransportPlugin(ctx context.Context, installa
 			}
 		}
 	}
-	compatibility = EvaluatePluginCompatibility(installation.Manifest, m.hostInfo)
+	compatibility := EvaluatePluginCompatibility(installation.Manifest, m.hostInfo)
 	bindings := append([]PluginBinding(nil), installation.Bindings...)
 	for index := range bindings {
 		switch bindings[index].Capability {

@@ -25,6 +25,18 @@ func saveErrorMessages(t *testing.T, s *SettingService, enabled bool) {
 	require.NoError(t, s.persistSystemSettingsWithCodexSafetyBuffering(t.Context(), &SystemSettings{}, map[string]string{SettingKeyOpenAIErrorMessagesNormalized: strconvBool(enabled)}))
 }
 
+// normalizeOpenAIErrorMessage projects against the catalog defaults, matching
+// the resolver production paths use when no custom override is stored.
+func normalizeOpenAIErrorMessage(payload []byte, source openAIErrorMessageSource) []byte {
+	return normalizeOpenAIErrorMessageWithResolver(payload, source, func(key string) string {
+		definition, ok := codexPublicErrorByKey(key)
+		if !ok {
+			return ""
+		}
+		return definition.DefaultMessage
+	})
+}
+
 // Expectations come from the three requested error codes and protocol shapes;
 // compare the entire document so a lost code, usage or opaque field fails.
 func TestOpenAIErrorMessagesProtocolContract(t *testing.T) {

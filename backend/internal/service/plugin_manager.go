@@ -647,7 +647,7 @@ func (m *PluginManager) Enable(ctx context.Context, id int64, acceptUntested boo
 		return m.enableRequestOnlyPlugin(ctx, installation, compatibility, rolloutPercent)
 	}
 	if manifestHasMultiTransportCapability(installation.Manifest) {
-		return m.enableMultiTransportPlugin(ctx, installation, compatibility, rolloutPercent)
+		return m.enableMultiTransportPlugin(ctx, installation, rolloutPercent)
 	}
 	installation, err = m.ensureLocalInstallation(ctx, installation)
 	if err != nil {

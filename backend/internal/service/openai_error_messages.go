@@ -218,16 +218,6 @@ func openAIProtocolError(root gjson.Result) (string, gjson.Result) {
 	return path, root
 }
 
-func normalizeOpenAIErrorMessage(payload []byte, source openAIErrorMessageSource) []byte {
-	return normalizeOpenAIErrorMessageWithResolver(payload, source, func(key string) string {
-		definition, ok := codexPublicErrorByKey(key)
-		if !ok {
-			return ""
-		}
-		return definition.DefaultMessage
-	})
-}
-
 // codexPublicErrorParamAllowed keeps only platform-level request field names.
 // Nested provider paths and free text never become a public error side channel.
 func codexPublicErrorParamAllowed(param string) bool {
