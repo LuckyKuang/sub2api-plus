@@ -637,6 +637,7 @@ function mountView(attachTo?: HTMLElement) {
     global: {
       stubs: {
         AppLayout: AppLayoutStub,
+        teleport: true,
         Select: SelectStub,
         Toggle: ToggleStub,
         Icon: true,
@@ -946,12 +947,28 @@ describe("admin SettingsView payment visible method controls", () => {
     } finally { wrapper.unmount(); }
   });
 
+  it("keeps the upstream error catalog inside the configuration dialog", async () => {
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      await openIdentityTab(wrapper);
+      const panel = wrapper.get('[data-testid="codex-error-messages-panel"]');
+      // The page stays compact: the catalog table only exists after opening the dialog.
+      expect(panel.find('[data-testid="codex-error-messages-save"]').exists()).toBe(false);
+      expect(panel.findAll("tr.record-row-parent")).toHaveLength(0);
+      await panel.get('[data-testid="codex-error-messages-open"]').trigger("click");
+      expect(panel.find('[data-testid="codex-error-messages-save"]').exists()).toBe(true);
+      expect(panel.findAll("tr.record-row-parent").length).toBeGreaterThan(0);
+    } finally { wrapper.unmount(); }
+  });
+
   it("loads the upstream error message catalog and saves its custom-mode switch through the dedicated API", async () => {
     const wrapper = mountView();
     try {
       await flushPromises();
       await openIdentityTab(wrapper);
       expect(getCodexErrorMessages).toHaveBeenCalled();
+      await wrapper.get('[data-testid="codex-error-messages-open"]').trigger("click");
       const panel = wrapper.get('[data-testid="codex-error-messages-panel"]');
       expect(panel.text()).toContain("当前请求受到频率限制，请稍后再试。");
       const toggle = wrapper.get('[data-testid="codex-error-messages-custom-enabled"]');
@@ -982,6 +999,7 @@ describe("admin SettingsView payment visible method controls", () => {
     try {
       await flushPromises();
       await openIdentityTab(wrapper);
+      await wrapper.get('[data-testid="codex-error-messages-open"]').trigger("click");
       const panel = wrapper.get('[data-testid="codex-error-messages-panel"]');
       const rows = panel.findAll("tr.record-row-parent");
       await rows[0]!.findAll("button")[0]!.trigger("click");
@@ -1007,6 +1025,7 @@ describe("admin SettingsView payment visible method controls", () => {
     try {
       await flushPromises();
       await openIdentityTab(wrapper);
+      await wrapper.get('[data-testid="codex-error-messages-open"]').trigger("click");
       const panel = wrapper.get('[data-testid="codex-error-messages-panel"]');
       const rows = panel.findAll("tr.record-row-parent");
       await rows[0]!.findAll("button")[0]!.trigger("click");
@@ -1028,6 +1047,7 @@ describe("admin SettingsView payment visible method controls", () => {
     try {
       await flushPromises();
       await openIdentityTab(wrapper);
+      await wrapper.get('[data-testid="codex-error-messages-open"]').trigger("click");
       const panel = wrapper.get('[data-testid="codex-error-messages-panel"]');
       const rows = panel.findAll("tr.record-row-parent");
       await rows[0]!.findAll("button")[0]!.trigger("click");
