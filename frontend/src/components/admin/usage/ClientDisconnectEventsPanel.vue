@@ -1,6 +1,6 @@
 <template>
   <div class="min-w-0 w-full" :class="{ 'workspace-body !gap-0 disconnect-workspace': workspace }" data-testid="client-disconnect-events-panel">
-    <div class="disconnect-filters border-b border-gray-100 px-4 py-4 dark:border-dark-700/50" :class="{ 'workspace-fixed': workspace }">
+    <div class="disconnect-filters border-b border-[var(--surface-edge)] px-4 py-4" :class="{ 'workspace-fixed': workspace }">
       <div class="disconnect-filter-fields grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
         <div ref="userSearchRef" class="relative">
           <label class="input-label">{{ t('admin.usage.disconnectEvents.userAccount') }}</label>
@@ -25,7 +25,7 @@
           <Teleport to="body" :disabled="!workspace">
           <div
             v-if="showUserDropdown && userResults.length > 0"
-            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
+            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-[var(--surface-edge)] shadow-lg surface-panel"
             :style="workspace ? userDropdownStyle : undefined"
             data-testid="disconnect-user-options"
             @click.stop
@@ -67,7 +67,7 @@
           <Teleport to="body" :disabled="!workspace">
           <div
             v-if="showAPIKeyDropdown && apiKeyResults.length > 0"
-            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
+            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-[var(--surface-edge)] shadow-lg surface-panel"
             :style="workspace ? apiKeyDropdownStyle : undefined"
             data-testid="disconnect-api-key-options"
             @click.stop
@@ -190,13 +190,13 @@
     </div>
 
     <div class="record-table-scroll table-container min-w-0 w-full max-w-full overflow-x-auto" :class="{ 'workspace-table-viewport': workspace }">
-      <table class="record-table w-full min-w-[2200px] divide-y divide-gray-200 dark:divide-dark-700">
-        <thead class="surface-inset">
+      <table class="record-table w-full min-w-[2200px] divide-y divide-[var(--surface-edge)]">
+        <thead>
           <tr>
             <th v-for="heading in headings" :key="heading" class="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase surface-muted">{{ heading }}</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-100 surface-inset dark:divide-dark-800">
+        <tbody class="divide-y divide-[var(--surface-edge)]">
           <tr v-if="loading">
             <td :colspan="headings.length" class="px-4 py-12 text-center text-sm surface-muted">{{ t('common.loading') }}</td>
           </tr>

@@ -14,28 +14,28 @@
     <div v-else class="space-y-6" :class="placement !== 'right' ? 'p-6' : ''">
       <!-- Summary -->
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2" :class="placement !== 'right' ? 'lg:grid-cols-4' : ''">
-        <div class="rounded-xl surface-inset p-4">
+        <div class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.requestId') }}</div>
           <div class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">
             {{ requestId || '—' }}
           </div>
         </div>
 
-        <div v-if="detail.async_task_id" class="rounded-xl surface-inset p-4">
+        <div v-if="detail.async_task_id" class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.asyncTaskId') }}</div>
           <div class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.async_task_id }}
           </div>
         </div>
 
-        <div class="rounded-xl surface-inset p-4">
+        <div class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.time') }}</div>
-          <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+          <div class="mt-1 text-sm font-medium tabular-nums text-gray-900 dark:text-white">
             {{ formatDateTime(detail.created_at) }}
           </div>
         </div>
 
-        <div class="rounded-xl surface-inset p-4">
+        <div class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">
             {{ isUpstreamError(detail) ? t('admin.ops.errorDetail.account') : t('admin.ops.errorDetail.user') }}
           </div>
@@ -49,21 +49,21 @@
           </div>
         </div>
 
-        <div class="rounded-xl surface-inset p-4">
+        <div class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.platform') }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.platform || '—' }}
           </div>
         </div>
 
-        <div class="rounded-xl surface-inset p-4">
+        <div class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.group') }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.group_name || (detail.group_id != null ? String(detail.group_id) : '—') }}
           </div>
         </div>
 
-        <div class="rounded-xl surface-inset p-4">
+        <div class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.model') }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
             <template v-if="hasModelMapping(detail)">
@@ -77,53 +77,53 @@
           </div>
         </div>
 
-        <div class="rounded-xl surface-inset p-4">
+        <div class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.inboundEndpoint') }}</div>
           <div class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.inbound_endpoint || '—' }}
           </div>
         </div>
 
-        <div class="rounded-xl surface-inset p-4">
+        <div class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.upstreamEndpoint') }}</div>
           <div class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.upstream_endpoint || '—' }}
           </div>
         </div>
 
-        <div class="rounded-xl surface-inset p-4">
+        <div class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.status') }}</div>
           <div class="mt-1">
-            <span :class="['inline-flex items-center rounded-lg px-2 py-1 text-xs font-black ring-1 ring-inset shadow-sm', statusClass]">
+            <span :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-black tabular-nums ring-1 ring-inset shadow-sm', statusClass]">
               {{ detail.status_code }}
             </span>
           </div>
         </div>
 
-        <div class="rounded-xl surface-inset p-4">
+        <div class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.upstreamStatus') }}</div>
           <div class="mt-1">
-            <span :class="['inline-flex items-center rounded-lg px-2 py-1 text-xs font-black ring-1 ring-inset shadow-sm', upstreamStatusClass]">
+            <span :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-black tabular-nums ring-1 ring-inset shadow-sm', upstreamStatusClass]">
               {{ detail.upstream_status_code ?? '—' }}
             </span>
           </div>
         </div>
 
-        <div class="rounded-xl surface-inset p-4">
+        <div class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.requestType') }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
             {{ formatRequestTypeLabel(detail.request_type) }}
           </div>
         </div>
 
-        <div class="rounded-xl surface-inset p-4">
+        <div class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.message') }}</div>
           <div class="mt-1 break-words text-sm font-medium text-gray-900 dark:text-white" :title="rootCauseMessage">
             {{ rootCauseMessage || '—' }}
           </div>
         </div>
 
-        <div v-if="detail.api_key_prefix" class="rounded-xl surface-inset p-4">
+        <div v-if="detail.api_key_prefix" class="surface-subcard p-4">
           <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.errorDetail.apiKeyPrefix') }}</div>
           <div class="mt-1 font-mono text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.api_key_prefix }}
@@ -132,7 +132,7 @@
 
       </div>
 
-      <div v-if="rootCauseMessage" class="rounded-xl bg-amber-50/[0.15] p-6 dark:bg-amber-900/10">
+      <div v-if="rootCauseMessage" class="rounded-lg border border-amber-200/70 bg-amber-50/[0.15] p-6 dark:border-amber-900/50 dark:bg-amber-900/10">
         <h3 class="text-sm font-black uppercase tracking-wider text-amber-900 dark:text-amber-200">{{ t('admin.ops.errorDetail.rootCause') }}</h3>
         <div class="mt-3 break-words text-sm font-medium text-amber-900 dark:text-amber-100">{{ rootCauseMessage }}</div>
       </div>
@@ -140,36 +140,36 @@
       <!-- 身份上报请求头：账号请求头覆写变量实际发给上游的值 -->
       <div
         v-if="reportedHeaderGroups.length"
-        class="rounded-xl surface-inset p-6"
+        class="surface-subcard p-6"
         data-testid="error-detail-reported-headers"
       >
         <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetail.reportedHeaders.title') }}</h3>
-        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.errorDetail.reportedHeaders.hint') }}</p>
+        <p class="mt-1 text-xs surface-muted">{{ t('admin.ops.errorDetail.reportedHeaders.hint') }}</p>
         <div class="mt-4 space-y-3">
           <div
             v-for="group in reportedHeaderGroups"
             :key="group.key"
-            class="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800"
+            class="overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-field"
           >
             <div
               v-if="group.accountName || group.accountId != null"
-              class="flex items-center gap-2 border-b border-gray-100 px-4 py-2 text-xs dark:border-dark-700"
+              class="flex items-center gap-2 border-b border-[var(--surface-edge)] px-4 py-2 text-xs"
             >
-              <span class="text-gray-400">{{ t('admin.ops.errorDetail.account') }}</span>
+              <span class="surface-muted">{{ t('admin.ops.errorDetail.account') }}</span>
               <span class="font-medium text-gray-900 dark:text-white">{{ group.accountName || '—' }}</span>
-              <span v-if="group.accountId != null" class="font-mono text-gray-400">#{{ group.accountId }}</span>
+              <span v-if="group.accountId != null" class="font-mono surface-muted">#{{ group.accountId }}</span>
             </div>
-            <div class="divide-y divide-gray-100 dark:divide-dark-700">
+            <div class="divide-y divide-[var(--surface-edge)]">
               <div
                 v-for="header in group.headers"
                 :key="header.name"
                 class="flex items-center gap-3 px-4 py-2"
               >
-                <span class="w-2/5 min-w-0 flex-shrink-0 break-all font-mono text-xs text-gray-500 dark:text-gray-400 sm:w-1/3">{{ header.name }}</span>
+                <span class="w-2/5 min-w-0 flex-shrink-0 break-all font-mono text-xs surface-muted sm:w-1/3">{{ header.name }}</span>
                 <span class="min-w-0 flex-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">{{ header.value }}</span>
                 <button
                   type="button"
-                  class="flex-shrink-0 rounded-md px-2 py-1 text-[10px] font-bold text-primary-700 transition-colors hover:bg-primary-50 dark:text-primary-200 dark:hover:bg-dark-700"
+                  class="flex-shrink-0 rounded-md px-2 py-1 text-[10px] font-bold text-primary-700 transition-colors hover:bg-primary-50 dark:text-primary-200 dark:hover:surface-hover"
                   @click="copyReportedHeader(header.name, header.value)"
                 >
                   {{ t('admin.ops.errorDetail.reportedHeaders.copy') }}
@@ -180,32 +180,32 @@
         </div>
       </div>
 
-      <div class="rounded-xl surface-inset p-6">
+      <div class="surface-subcard p-6">
         <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetail.diagnosticPayloads') }}</h3>
         <div v-if="!diagnosticPayloadSections.length" class="mt-4 text-sm surface-muted">{{ t('common.noData') }}</div>
         <div v-else class="mt-4 space-y-4">
           <div v-for="section in diagnosticPayloadSections" :key="section.key">
             <div class="mb-2 text-xs font-bold uppercase tracking-wider surface-muted">{{ diagnosticPayloadLabel(section.key) }}</div>
-            <pre class="max-h-[520px] overflow-auto rounded-xl border border-gray-200 surface-inset p-4 text-xs text-gray-800 dark:border-dark-700 dark:text-gray-100"><code>{{ prettyJSON(section.value) }}</code></pre>
+            <pre class="max-h-[520px] overflow-auto rounded-lg border border-[var(--surface-edge)] surface-field p-4 text-xs text-gray-800 dark:text-gray-100"><code>{{ prettyJSON(section.value) }}</code></pre>
           </div>
         </div>
       </div>
 
       <!-- Structured diagnostic vocabulary only; the backend rejects raw URLs,
            request headers, credentials, and arbitrary user-provided strings. -->
-      <div v-if="detail.routing_diagnostics" class="rounded-xl surface-inset p-6">
+      <div v-if="detail.routing_diagnostics" class="surface-subcard p-6">
         <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetail.routingDiagnostics') }}</h3>
         <dl v-if="detail.routing_diagnostics.selection_decision" class="mt-4 grid grid-cols-2 gap-2 text-sm">
-          <dt class="text-gray-500">{{ t('admin.ops.errorDetail.candidatePool') }}</dt>
+          <dt class="surface-muted">{{ t('admin.ops.errorDetail.candidatePool') }}</dt>
           <dd data-testid="candidate-pool">{{ detail.routing_diagnostics.candidate_pool ?? t('admin.ops.errorDetail.unknownDiagnostic') }}</dd>
-          <dt class="text-gray-500">{{ t('admin.ops.errorDetail.selectionReason') }}</dt>
+          <dt class="surface-muted">{{ t('admin.ops.errorDetail.selectionReason') }}</dt>
           <dd data-testid="selection-reason">{{ detail.routing_diagnostics.selection_reason || t('admin.ops.errorDetail.unknownDiagnostic') }}</dd>
         </dl>
-        <pre class="mt-4 max-h-[360px] overflow-auto rounded-xl border border-gray-200 surface-inset p-4 text-xs text-gray-800 dark:border-dark-700 dark:text-gray-100"><code>{{ prettyObject(detail.routing_diagnostics) }}</code></pre>
+        <pre class="mt-4 max-h-[360px] overflow-auto rounded-lg border border-[var(--surface-edge)] surface-field p-4 text-xs text-gray-800 dark:text-gray-100"><code>{{ prettyObject(detail.routing_diagnostics) }}</code></pre>
       </div>
 
       <!-- Upstream errors list (only for request errors) -->
-      <div v-if="showUpstreamList" class="rounded-xl surface-inset p-6">
+      <div v-if="showUpstreamList" class="surface-subcard p-6">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetails.upstreamErrors') }}</h3>
           <div class="text-xs surface-muted" v-if="correlatedUpstreamLoading">{{ t('common.loading') }}</div>
@@ -219,15 +219,15 @@
           <div
             v-for="(ev, idx) in correlatedUpstreamErrors"
             :key="ev.id"
-            class="rounded-xl border border-gray-200 surface-inset p-4 dark:border-dark-700"
+            class="rounded-lg border border-[var(--surface-edge)] surface-field p-4"
           >
             <div class="flex flex-wrap items-center justify-between gap-2">
               <div class="text-xs font-black text-gray-900 dark:text-white">
                 #{{ idx + 1 }}
-                <span v-if="ev.type" class="ml-2 rounded-md surface-inset px-2 py-0.5 font-mono text-[10px] font-bold surface-muted">{{ ev.type }}</span>
+                <span v-if="ev.type" class="ml-2 rounded-md border border-[var(--surface-edge)] px-2 py-0.5 font-mono text-[10px] font-bold surface-muted">{{ ev.type }}</span>
               </div>
               <div class="flex items-center gap-2">
-                <div class="font-mono text-xs surface-muted">
+                <div class="font-mono text-xs tabular-nums surface-muted">
                   {{ ev.status_code ?? '—' }}
                 </div>
                 <button
@@ -268,7 +268,7 @@
 
             <pre
               v-if="expandedUpstreamDetailIds.has(ev.id)"
-              class="mt-3 max-h-[240px] overflow-auto rounded-xl border border-gray-200 surface-inset p-3 text-xs text-gray-800 dark:border-dark-700 dark:text-gray-100"
+              class="mt-3 max-h-[240px] overflow-auto rounded-lg border border-[var(--surface-edge)] surface-field p-3 text-xs text-gray-800 dark:text-gray-100"
             ><code>{{ prettyJSON(getUpstreamResponsePreview(ev)) }}</code></pre>
           </div>
         </div>
@@ -514,7 +514,7 @@ function statusBadgeClass(code: number): string {
   if (code >= 500) return 'bg-red-50/[0.15] text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-500/30'
   if (code === 429) return 'bg-purple-50/[0.15] text-purple-700 ring-purple-600/20 dark:bg-purple-900/30 dark:text-purple-400 dark:ring-purple-500/30'
   if (code >= 400) return 'bg-amber-50/[0.15] text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-500/30'
-  return 'surface-inset surface-muted ring-gray-600/20 dark:surface-inset dark:ring-gray-500/30'
+  return 'border border-[var(--surface-edge)] surface-muted ring-gray-600/20 dark:ring-gray-500/30'
 }
 
 const statusClass = computed(() => statusBadgeClass(detail.value?.status_code ?? 0))

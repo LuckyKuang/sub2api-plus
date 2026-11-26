@@ -1,5 +1,5 @@
 <template>
-  <form class="surface-card rounded-xl border border-gray-200 p-6 dark:border-dark-700" @submit.prevent="save">
+  <form class="card p-6" @submit.prevent="save">
     <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV3.settings.title') }}</h2>
     <p class="mt-2 text-sm surface-muted">{{ t('channelMonitorV3.settings.description') }}</p>
     <fieldset v-if="draft" class="mt-6" :disabled="saving || loading">

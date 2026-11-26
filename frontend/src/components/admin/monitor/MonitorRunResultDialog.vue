@@ -9,7 +9,7 @@
       <div
         v-for="r in results"
         :key="r.model"
-        class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-dark-600"
+        class="surface-subcard flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
       >
         <div class="flex flex-col">
           <span class="font-medium text-gray-900 dark:text-white">{{ formatMonitorModel(r.model) }}</span>
@@ -23,7 +23,7 @@
           >
             {{ statusLabel(r.status) }}
           </span>
-          <span class="text-xs surface-muted" :title="t('monitorCommon.timingHint')">{{ t('monitorCommon.firstText') }} {{ formatLatency(r.first_text_ms) }} ms · {{ t('monitorCommon.firstByte') }} {{ formatLatency(r.first_byte_ms) }} ms · {{ t('usage.latencyDuration') }} {{ formatLatency(r.latency_ms) }} ms</span>
+          <span class="text-xs tabular-nums surface-muted" :title="t('monitorCommon.timingHint')">{{ t('monitorCommon.firstText') }} {{ formatLatency(r.first_text_ms) }} ms · {{ t('monitorCommon.firstByte') }} {{ formatLatency(r.first_byte_ms) }} ms · {{ t('usage.latencyDuration') }} {{ formatLatency(r.latency_ms) }} ms</span>
         </div>
       </div>
     </div>

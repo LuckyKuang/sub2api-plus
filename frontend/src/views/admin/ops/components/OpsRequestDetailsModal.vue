@@ -235,27 +235,27 @@ function accountLabel(row: OpsRequestDetail): string {
 
         <!-- Table -->
         <div v-else class="flex min-h-0 flex-1 flex-col">
-          <div v-if="items.length === 0" class="rounded-xl border border-dashed border-gray-200 p-10 text-center dark:border-dark-700">
+          <div v-if="items.length === 0" class="rounded-lg border border-dashed border-[var(--surface-edge)] p-10 text-center">
             <div class="text-sm font-medium surface-muted">{{ t('admin.ops.requestDetails.empty') }}</div>
             <div class="mt-1 text-xs surface-muted">{{ t('admin.ops.requestDetails.emptyHint') }}</div>
           </div>
 
-          <div v-else class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
+          <div v-else class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--surface-edge)]">
             <div class="record-table-scroll min-h-0 flex-1 overflow-auto">
-              <div v-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
+              <div v-if="!isDesktopViewport" class="divide-y divide-[var(--surface-edge)]">
                 <div v-for="(row, idx) in items" :key="idx" class="space-y-2 p-4">
                   <div class="flex flex-wrap items-center gap-2">
                     <span class="rounded-md px-2 py-1 text-[10px] font-bold" :class="kindBadgeClass(row.kind)">
                       {{ row.kind === 'error' ? t('admin.ops.requestDetails.kind.error') : t('admin.ops.requestDetails.kind.success') }}
                     </span>
                     <span class="text-xs font-medium surface-muted">{{ (row.platform || 'unknown').toUpperCase() }}</span>
-                    <span class="ml-auto text-[11px] surface-muted">{{ formatDateTime(row.created_at) }}</span>
+                    <span class="ml-auto text-[11px] tabular-nums surface-muted">{{ formatDateTime(row.created_at) }}</span>
                   </div>
                   <div class="break-all text-xs surface-muted">{{ row.model || '-' }}</div>
                   <div v-if="typeof row.account_id === 'number' && row.account_id > 0" class="break-all text-xs surface-muted" :title="accountLabel(row)">
                     {{ t('admin.ops.requestDetails.table.account') }}: {{ accountLabel(row) }}
                   </div>
-                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs surface-muted">
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums surface-muted">
                     <span>{{ latencyLabel }}: {{ formatLatency(row) }}</span>
                     <span>{{ row.status_code ?? '-' }}</span>
                   </div>
@@ -279,8 +279,8 @@ function accountLabel(row: OpsRequestDetail): string {
                   </button>
                 </div>
               </div>
-              <table v-else class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
-                <thead class="sticky top-0 z-10 surface-inset">
+              <table v-else class="record-table min-w-full divide-y divide-[var(--surface-edge)]">
+                <thead class="sticky top-0 z-10">
                 <tr>
                   <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider surface-muted">
                     {{ t('admin.ops.requestDetails.table.time') }}
@@ -311,7 +311,7 @@ function accountLabel(row: OpsRequestDetail): string {
                   </th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-gray-200 surface-inset dark:divide-dark-700">
+              <tbody class="divide-y divide-[var(--surface-edge)]">
                 <tr v-for="(row, idx) in items" :key="idx" class="hover:surface-hover">
                   <td class="whitespace-nowrap px-4 py-3 text-xs surface-muted">
                     {{ formatDateTime(row.created_at) }}

@@ -868,7 +868,7 @@ function handleToolbarRefresh() {
     <div
       data-testid="ops-toolbar"
       class="flex flex-wrap items-center justify-between gap-4"
-      :class="props.workspace ? 'ops-workspace-toolbar workspace-fixed card p-6' : 'border-b border-gray-100 pb-4 dark:border-dark-700'"
+      :class="props.workspace ? 'ops-workspace-toolbar workspace-fixed card p-6' : 'border-b border-[var(--surface-edge)] pb-4'"
     >
       <div class="ops-toolbar-summary">
         <h1 class="flex items-center gap-2 text-xl font-black text-gray-900 dark:text-white">
@@ -917,7 +917,7 @@ function handleToolbarRefresh() {
             @update:model-value="handleGroupChange"
           />
 
-          <div class="ops-toolbar-separator mx-1 hidden h-4 w-[1px] bg-gray-200 dark:bg-dark-700 sm:block"></div>
+          <div class="ops-toolbar-separator mx-1 hidden h-4 w-[1px] bg-[var(--surface-edge)] sm:block"></div>
 
           <Select
             :model-value="timeRange"
@@ -954,7 +954,7 @@ function handleToolbarRefresh() {
           </svg>
         </button>
 
-        <div v-if="!props.fullscreen" class="ops-toolbar-separator mx-1 hidden h-4 w-[1px] bg-gray-200 dark:bg-dark-700 sm:block"></div>
+        <div v-if="!props.fullscreen" class="ops-toolbar-separator mx-1 hidden h-4 w-[1px] bg-[var(--surface-edge)] sm:block"></div>
 
         <!-- Alert Rules Button (hidden in fullscreen) -->
         <button
@@ -1023,14 +1023,14 @@ function handleToolbarRefresh() {
                 <!-- 1) Health Score -->
                 <div
                   data-testid="ops-health-card"
-                  class="group relative flex cursor-pointer flex-col items-center justify-center rounded-xl py-2 transition-all hover:surface-hover md:border-r md:border-gray-200 md:pr-6 dark:md:border-dark-700"
+                  class="group relative flex cursor-pointer flex-col items-center justify-center rounded-lg py-2 transition-all hover:surface-hover md:border-r md:border-[var(--surface-edge)] md:pr-6"
                 >
                   <!-- Diagnosis Popover (hover) -->
                   <div
                     class="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-72 -translate-x-1/2 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 md:left-full md:top-0 md:ml-2 md:mt-0 md:translate-x-0"
                   >
-                    <div class="rounded-xl surface-inset p-4 shadow-xl ring-1 ring-black/5 dark:ring-white/10">
-                      <h4 class="mb-3 border-b border-gray-100 pb-2 text-sm font-bold text-gray-900 dark:border-dark-700 dark:text-white flex items-center gap-2">
+                    <div class="surface-panel rounded-lg border border-[var(--surface-edge)] p-4">
+                      <h4 class="mb-3 flex items-center gap-2 border-b border-[var(--surface-edge)] pb-2 text-sm font-bold text-gray-900 dark:text-white">
                         <Icon name="brain" size="sm" class="text-blue-500" />
                         {{ t('admin.ops.diagnosis.title') }}
                       </h4>
@@ -1071,7 +1071,7 @@ function handleToolbarRefresh() {
                         </div>
                       </div>
 
-                      <div class="mt-3 border-t border-gray-100 pt-2 text-[10px] dark:border-dark-700 surface-muted">
+                      <div class="mt-3 border-t border-[var(--surface-edge)] pt-2 text-[10px] surface-muted">
                         {{ t('admin.ops.diagnosis.footer') }}
                       </div>
                     </div>
@@ -1480,10 +1480,10 @@ function handleToolbarRefresh() {
           </div>
 
           <!-- Integrated: System health (cards) -->
-          <div v-if="overview" class="mt-2 border-t border-gray-100 pt-4 dark:border-dark-700">
+          <div v-if="overview" class="mt-2 border-t border-[var(--surface-edge)] pt-4">
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               <!-- CPU -->
-              <div class="rounded-xl surface-inset p-3">
+              <div class="surface-subcard p-3 tabular-nums">
                 <div class="flex items-center gap-1">
                   <div class="text-[10px] font-bold uppercase tracking-wider surface-muted">CPU</div>
                   <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.cpu')" />
@@ -1497,7 +1497,7 @@ function handleToolbarRefresh() {
               </div>
 
               <!-- MEM -->
-              <div class="rounded-xl surface-inset p-3">
+              <div class="surface-subcard p-3 tabular-nums">
                 <div class="flex items-center gap-1">
                   <div class="text-[10px] font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.memory') }}</div>
                   <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.memory')" />
@@ -1515,7 +1515,7 @@ function handleToolbarRefresh() {
               </div>
 
               <!-- DB -->
-              <div class="rounded-xl surface-inset p-3">
+              <div class="surface-subcard p-3 tabular-nums">
                 <div class="flex items-center gap-1">
                   <div class="text-[10px] font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.db') }}</div>
                   <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.db')" />
@@ -1532,7 +1532,7 @@ function handleToolbarRefresh() {
               </div>
 
               <!-- Redis -->
-              <div class="rounded-xl surface-inset p-3">
+              <div class="surface-subcard p-3 tabular-nums">
                 <div class="flex items-center gap-1">
                   <div class="text-[10px] font-bold uppercase tracking-wider surface-muted">Redis</div>
                   <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.redis')" />
@@ -1548,7 +1548,7 @@ function handleToolbarRefresh() {
               </div>
 
               <!-- Goroutines -->
-              <div class="rounded-xl surface-inset p-3">
+              <div class="surface-subcard p-3 tabular-nums">
                 <div class="flex items-center gap-1">
                   <div class="text-[10px] font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.goroutines') }}</div>
                   <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.goroutines')" />
@@ -1567,7 +1567,7 @@ function handleToolbarRefresh() {
               </div>
 
               <!-- Jobs -->
-              <div class="rounded-xl surface-inset p-3">
+              <div class="surface-subcard p-3 tabular-nums">
                 <div class="flex items-center justify-between gap-2">
                   <div class="flex items-center gap-1">
                     <div class="text-[10px] font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.jobs') }}</div>
@@ -1603,7 +1603,7 @@ function handleToolbarRefresh() {
         <div
           v-for="hb in jobHeartbeats"
           :key="hb.job_name"
-          class="rounded-xl border border-gray-100 surface-inset p-4 dark:border-dark-700"
+          class="surface-subcard p-4 tabular-nums"
         >
           <div class="flex items-center justify-between gap-3">
             <div class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ hb.job_name }}</div>
@@ -1645,7 +1645,7 @@ function handleToolbarRefresh() {
           <DateTimePicker :aria-label="t('admin.ops.customTimeRange.startTime')"
             v-model="customStartTimeInput"
             type="datetime-local"
-            class="w-full rounded-lg border border-gray-300 surface-inset px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-dark-600 dark:text-white"
+            class="w-full rounded-lg border border-[var(--surface-edge)] surface-field px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:text-white"
           />
         </div>
         <div>
@@ -1655,7 +1655,7 @@ function handleToolbarRefresh() {
           <DateTimePicker :aria-label="t('admin.ops.customTimeRange.endTime')"
             v-model="customEndTimeInput"
             type="datetime-local"
-            class="w-full rounded-lg border border-gray-300 surface-inset px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-dark-600 dark:text-white"
+            class="w-full rounded-lg border border-[var(--surface-edge)] surface-field px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:text-white"
           />
         </div>
         <div class="flex justify-end gap-3 pt-2">

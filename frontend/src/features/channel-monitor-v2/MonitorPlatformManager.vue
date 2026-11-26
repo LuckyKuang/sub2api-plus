@@ -16,7 +16,7 @@
           <strong class="text-xs">{{ t('channelMonitorV2.settings.platformList') }}</strong>
           <button v-if="availablePlatforms.length" type="button" class="btn btn-ghost btn-sm" :disabled="disabled" :aria-expanded="addingPlatform" :aria-label="t('channelMonitorV2.settings.addPlatform')" data-testid="open-add-platform" @click="addingPlatform = !addingPlatform"><Icon name="plus" size="sm" /></button>
         </div>
-        <div v-if="addingPlatform && availablePlatforms.length" class="mb-3 space-y-2 rounded-xl border border-gray-200 p-2 dark:border-dark-600">
+        <div v-if="addingPlatform && availablePlatforms.length" class="surface-subcard mb-3 space-y-2 p-2">
           <Select v-model="newPlatform" :searchable="true" :options="availablePlatforms" :disabled="disabled" :aria-label="t('channelMonitorV2.settings.selectPlatform')" :placeholder="t('channelMonitorV2.settings.selectPlatform')" />
           <button type="button" class="btn btn-secondary btn-sm w-full" :disabled="disabled || !newPlatform" data-testid="add-platform" @click="addPlatform">{{ t('channelMonitorV2.settings.addPlatform') }}</button>
         </div>

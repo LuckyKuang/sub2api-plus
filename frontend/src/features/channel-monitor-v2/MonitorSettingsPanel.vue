@@ -51,7 +51,7 @@
     </div>
 
     <fieldset v-else-if="draft" class="min-w-0 space-y-5" :disabled="saving">
-      <div v-if="saveConflict" class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-100" role="alert">
+      <div v-if="saveConflict" class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-100" role="alert">
         <p>{{ t('channelMonitorV2.settings.saveConflict') }}</p>
         <button type="button" class="btn btn-secondary btn-sm mt-3" data-testid="reload-conflict" @click="load">{{ t('channelMonitorV2.settings.reloadConfig') }}</button>
       </div>
@@ -171,7 +171,7 @@
             </label>
           </div>
         </div>
-        <div class="border-t border-gray-100 px-5 py-3 text-xs dark:border-dark-700 surface-muted">
+        <div class="border-t border-[var(--surface-edge)] px-5 py-3 text-xs surface-muted">
           {{
             t('channelMonitorV2.settings.ignoredSummary', {
               ignored: draft.ignored_error_categories?.length || 0,
@@ -225,7 +225,7 @@
       </details>
 
       <div class="space-y-2">
-        <div class="rounded-lg border border-gray-200 surface-inset px-4 py-3 text-xs dark:border-dark-600 surface-muted">
+        <div class="surface-subcard px-4 py-3 text-xs surface-muted">
           <p class="font-medium text-gray-800 dark:text-gray-100">{{ t('channelMonitorV2.settings.userContractTitle') }}</p>
           <ul class="mt-1.5 list-disc space-y-0.5 pl-4">
             <li>{{ t('channelMonitorV2.settings.userContract.health') }}</li>
@@ -235,7 +235,7 @@
           </ul>
         </div>
       </div>
-      <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 px-4 py-3 text-xs dark:border-dark-600 surface-muted">
+      <div class="surface-subcard flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs surface-muted">
         <span>{{ t(dirty ? 'channelMonitorV2.settings.unsavedChanges' : 'channelMonitorV2.settings.noChanges') }}</span>
         <button type="button" class="btn btn-ghost btn-sm" :disabled="!dirty || saving" data-testid="reset-draft" @click="resetDraft">{{ t('channelMonitorV2.settings.resetChanges') }}</button>
       </div>

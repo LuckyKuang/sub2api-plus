@@ -345,16 +345,16 @@ function severityBadgeClass(severity: string | undefined): string {
   if (s === 'p0' || s === 'critical') return 'bg-red-100/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300'
   if (s === 'p1' || s === 'warning') return 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
   if (s === 'p2' || s === 'info') return 'bg-blue-100/[0.15] text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-  if (s === 'p3') return 'surface-inset surface-muted dark:surface-inset'
-  return 'surface-inset surface-muted dark:surface-inset'
+  if (s === 'p3') return 'border border-[var(--surface-edge)] surface-muted'
+  return 'border border-[var(--surface-edge)] surface-muted'
 }
 
 function statusBadgeClass(status: string | undefined): string {
   const s = String(status || '').trim().toLowerCase()
   if (s === 'firing') return 'bg-red-50/[0.15] text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-300 dark:ring-red-500/30'
   if (s === 'resolved') return 'bg-green-50/[0.15] text-green-700 ring-green-600/20 dark:bg-green-900/30 dark:text-green-300 dark:ring-green-500/30'
-  if (s === 'manual_resolved') return 'surface-inset text-slate-700 ring-slate-600/20 dark:surface-inset dark:text-slate-300 dark:ring-slate-500/30'
-  return 'surface-inset surface-muted ring-gray-600/20 dark:surface-inset dark:ring-gray-500/30'
+  if (s === 'manual_resolved') return 'border border-[var(--surface-edge)] text-slate-700 ring-slate-600/20 dark:text-slate-300 dark:ring-slate-500/30'
+  return 'border border-[var(--surface-edge)] surface-muted ring-gray-600/20 dark:ring-gray-500/30'
 }
 
 function formatStatusLabel(status: string | undefined): string {
@@ -370,7 +370,7 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
 </script>
 
 <template>
-  <div class="glass-surface p-6 ring-1 ring-gray-900/5 dark:ring-dark-700" :class="{ 'workspace-table-card': props.workspace, 'workspace-shell': props.workspace, 'ops-workspace-alerts': props.workspace }">
+  <div class="glass-surface p-6" :class="{ 'workspace-table-card': props.workspace, 'workspace-shell': props.workspace, 'ops-workspace-alerts': props.workspace }">
     <div class="ops-alert-heading workspace-fixed mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div>
         <h3 class="text-sm font-bold text-gray-900 dark:text-white">{{ t('admin.ops.alertEvents.title') }}</h3>
@@ -403,13 +403,13 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
       {{ t('admin.ops.alertEvents.loading') }}
     </div>
 
-    <div v-else-if="empty" class="rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm dark:border-dark-700 surface-muted">
+    <div v-else-if="empty" class="rounded-lg border border-dashed border-[var(--surface-edge)] p-8 text-center text-sm surface-muted">
       {{ t('admin.ops.alertEvents.empty') }}
     </div>
 
-    <div v-else class="overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700" :class="{ 'workspace-body': props.workspace, 'workspace-shell': props.workspace }">
+    <div v-else class="overflow-hidden rounded-lg border border-[var(--surface-edge)]" :class="{ 'workspace-body': props.workspace, 'workspace-shell': props.workspace }">
       <div class="record-table-scroll max-h-[600px] overflow-y-auto" :class="{ 'workspace-table-viewport': props.workspace }" @scroll="onScroll">
-        <div v-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
+        <div v-if="!isDesktopViewport" class="divide-y divide-[var(--surface-edge)]">
           <div
             v-for="row in events"
             :key="row.id"
@@ -423,7 +423,7 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
               <span class="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold ring-1 ring-inset" :class="statusBadgeClass(row.status)">
                 {{ formatStatusLabel(row.status) }}
               </span>
-              <span class="ml-auto text-[11px] surface-muted">
+              <span class="ml-auto text-[11px] tabular-nums surface-muted">
                 {{ formatDateTime(row.fired_at || row.created_at) }}
               </span>
             </div>
@@ -452,8 +452,8 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
             <div class="text-[11px] surface-muted">{{ formatDimensionsSummary(row) }}</div>
           </div>
         </div>
-        <table v-else class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
-          <thead class="sticky top-0 z-10 surface-inset">
+        <table v-else class="record-table min-w-full divide-y divide-[var(--surface-edge)]">
+          <thead class="sticky top-0 z-10">
             <tr>
               <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider surface-muted">
                 {{ t('admin.ops.alertEvents.table.time') }}
@@ -481,7 +481,7 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
               </th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-200 surface-inset dark:divide-dark-700">
+          <tbody class="divide-y divide-[var(--surface-edge)]">
             <tr
               v-for="row in events"
               :key="row.id"
@@ -574,7 +574,7 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
       </div>
 
       <div v-else class="space-y-5">
-        <div class="rounded-xl surface-inset p-4">
+        <div class="surface-subcard p-4">
           <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div class="flex flex-wrap items-center gap-2">
@@ -594,7 +594,7 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
             </div>
 
             <div class="flex flex-wrap gap-2">
-              <div class="flex items-center gap-2 rounded-lg surface-inset px-2 py-1 ring-1 ring-gray-200 dark:ring-dark-700">
+              <div class="flex items-center gap-2 rounded-lg border border-[var(--surface-edge)] px-2 py-1">
                 <span class="text-[11px] font-bold surface-muted">{{ t('admin.ops.alertEvents.detail.silence') }}</span>
                 <Select
                   :model-value="silenceDuration"
@@ -617,27 +617,27 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
         </div>
 
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div class="rounded-xl surface-inset p-4">
+            <div class="surface-subcard p-4">
               <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.alertEvents.detail.firedAt') }}</div>
-              <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ formatDateTime(selected.fired_at || selected.created_at) }}</div>
+              <div class="mt-1 text-sm font-medium tabular-nums text-gray-900 dark:text-white">{{ formatDateTime(selected.fired_at || selected.created_at) }}</div>
             </div>
-            <div class="rounded-xl surface-inset p-4">
+            <div class="surface-subcard p-4">
               <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.alertEvents.detail.resolvedAt') }}</div>
-              <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ selected.resolved_at ? formatDateTime(selected.resolved_at) : '-' }}</div>
+              <div class="mt-1 text-sm font-medium tabular-nums text-gray-900 dark:text-white">{{ selected.resolved_at ? formatDateTime(selected.resolved_at) : '-' }}</div>
             </div>
-            <div class="rounded-xl surface-inset p-4">
+            <div class="surface-subcard p-4">
               <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.alertEvents.detail.ruleId') }}</div>
               <div class="mt-1 flex flex-wrap items-center gap-2">
                 <div class="font-mono text-sm font-bold text-gray-900 dark:text-white">#{{ selected.rule_id }}</div>
                 <a
-                  class="inline-flex items-center gap-1 rounded-md surface-inset px-2 py-1 text-[11px] font-bold ring-1 ring-gray-200 hover:surface-hover dark:ring-dark-700 surface-muted"
+                  class="inline-flex items-center gap-1 rounded-md border border-[var(--surface-edge)] px-2 py-1 text-[11px] font-bold hover:surface-hover surface-control surface-muted"
                   :href="`/admin/ops?open_alert_rules=1&alert_rule_id=${selected.rule_id}`"
                 >
                   <Icon name="externalLink" size="xs" />
                   {{ t('admin.ops.alertEvents.detail.viewRule') }}
                 </a>
                 <a
-                  class="inline-flex items-center gap-1 rounded-md surface-inset px-2 py-1 text-[11px] font-bold ring-1 ring-gray-200 hover:surface-hover dark:ring-dark-700 surface-muted"
+                  class="inline-flex items-center gap-1 rounded-md border border-[var(--surface-edge)] px-2 py-1 text-[11px] font-bold hover:surface-hover surface-control surface-muted"
                   :href="`/admin/ops?platform=${encodeURIComponent(getDimensionString(selected,'platform')||'')}&group_id=${selected.dimensions?.group_id || ''}&error_type=request&open_error_details=1`"
                 >
                   <Icon name="externalLink" size="xs" />
@@ -645,7 +645,7 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
                 </a>
               </div>
             </div>
-            <div class="rounded-xl surface-inset p-4">
+            <div class="surface-subcard p-4">
               <div class="text-xs font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.alertEvents.detail.dimensions') }}</div>
               <div class="mt-1 text-sm text-gray-900 dark:text-white">
                 <div v-if="getDimensionString(selected, 'platform')">platform={{ getDimensionString(selected, 'platform') }}</div>
@@ -656,7 +656,7 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
           </div>
 
 
-        <div class="rounded-xl border border-gray-200 surface-inset p-4 dark:border-dark-700">
+        <div class="surface-subcard p-4">
           <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div class="text-sm font-bold text-gray-900 dark:text-white">{{ t('admin.ops.alertEvents.detail.historyTitle') }}</div>
@@ -671,16 +671,16 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
           <div v-else-if="history.length === 0" class="py-6 text-center text-xs surface-muted">
             {{ t('admin.ops.alertEvents.detail.historyEmpty') }}
           </div>
-          <div v-else class="record-table-scroll overflow-hidden rounded-lg border border-gray-100 dark:border-dark-700">
-            <table class="record-table record-table-compact min-w-full divide-y divide-gray-100 dark:divide-dark-700">
-              <thead class="surface-inset">
+          <div v-else class="record-table-scroll overflow-hidden rounded-lg border border-[var(--surface-edge)]">
+            <table class="record-table record-table-compact min-w-full divide-y divide-[var(--surface-edge)]">
+              <thead>
                 <tr>
                   <th class="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.alertEvents.table.time') }}</th>
                   <th class="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.alertEvents.table.status') }}</th>
                   <th class="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wider surface-muted">{{ t('admin.ops.alertEvents.table.metric') }}</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+              <tbody class="divide-y divide-[var(--surface-edge)]">
                 <tr v-for="it in history" :key="it.id" class="hover:surface-hover">
                   <td class="px-3 py-2 text-xs surface-muted">{{ formatDateTime(it.fired_at || it.created_at) }}</td>
                   <td class="px-3 py-2 text-xs">

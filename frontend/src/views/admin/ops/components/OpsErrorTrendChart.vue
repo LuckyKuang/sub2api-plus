@@ -150,8 +150,8 @@ const options = computed(() => {
 </script>
 
 <template>
-  <div data-testid="ops-error-trend-chart" class="glass-surface flex flex-col p-6 ring-1 ring-gray-900/5 md:h-full dark:ring-dark-700">
-    <div class="mb-4 flex shrink-0 items-center justify-between">
+  <div data-testid="ops-error-trend-chart" class="glass-surface flex flex-col p-6 md:h-full">
+    <div class="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-2">
       <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
         <svg class="h-4 w-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
@@ -167,7 +167,7 @@ const options = computed(() => {
       <div class="flex items-center gap-2">
         <button
           type="button"
-          class="inline-flex items-center rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 dark:border-dark-700 surface-control surface-muted"
+          class="inline-flex items-center rounded-lg border border-[var(--surface-edge)] px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 surface-control surface-muted"
           :disabled="!hasRequestErrors"
           @click="emit('openRequestErrors')"
         >
@@ -175,7 +175,7 @@ const options = computed(() => {
         </button>
         <button
           type="button"
-          class="inline-flex items-center rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 dark:border-dark-700 surface-control surface-muted"
+          class="inline-flex items-center rounded-lg border border-[var(--surface-edge)] px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 surface-control surface-muted"
           :disabled="!hasUpstreamErrors"
           @click="emit('openUpstreamErrors')"
         >

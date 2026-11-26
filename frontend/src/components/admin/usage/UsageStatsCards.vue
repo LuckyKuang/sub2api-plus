@@ -1,5 +1,5 @@
 <template>
-  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
     <div class="card p-4">
       <p class="text-xs font-medium surface-muted">{{ t('usage.totalRequests') }}</p>
       <p class="mt-1 text-2xl font-bold tabular-nums">{{ stats?.total_requests?.toLocaleString() || '0' }}</p>
@@ -29,7 +29,7 @@
             />
           </svg>
           <span
-            class="pointer-events-none absolute left-1/2 top-full z-30 mt-2 hidden w-56 -translate-x-1/2 rounded-lg border border-gray-200 p-3 text-left text-xs shadow-lg group-hover:block group-focus:block dark:border-dark-600 surface-panel surface-muted"
+            class="pointer-events-none absolute left-1/2 top-full z-30 mt-2 hidden w-56 -translate-x-1/2 rounded-lg border border-[var(--surface-edge)] p-3 text-left text-xs shadow-lg group-hover:block group-focus:block surface-panel surface-muted"
           >
             <span class="mb-2 block font-medium text-gray-900 dark:text-white">
               {{ cacheDetailLabel() }}

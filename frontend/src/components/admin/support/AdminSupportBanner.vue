@@ -12,7 +12,7 @@
           </p>
         </div>
       </div>
-      <span class="inline-flex flex-shrink-0 items-center rounded-md border border-amber-300 surface-inset px-3 py-1 text-xs font-semibold text-amber-800 dark:border-amber-700 dark:text-amber-200">
+      <span class="inline-flex flex-shrink-0 items-center rounded-md border border-amber-300 bg-amber-100/40 px-3 py-1 text-xs font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
         {{ t('admin.support.readOnly') }}
       </span>
     </div>

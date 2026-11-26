@@ -2,7 +2,7 @@
   <AppLayout workspace>
     <div class="workspace-page">
       <header
-        class="workspace-fixed glass-surface page-header mb-0 p-5 ring-1 ring-gray-900/5 dark:ring-dark-700 sm:p-6"
+        class="workspace-fixed glass-surface page-header mb-0 p-5 sm:p-6"
       >
         <h1 class="page-title flex items-center gap-2 text-xl font-black text-gray-900 dark:text-white">
           <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50/[0.15] text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
@@ -30,7 +30,7 @@
 
       <TablePageLayout v-else>
       <template #filters>
-        <p v-if="!activeProbesEnabled" class="monitor-legacy-notice mb-3 rounded-lg bg-amber-50/[0.15] p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="status">
+        <p v-if="!activeProbesEnabled" class="monitor-legacy-notice mb-3 rounded-lg border border-amber-200/70 bg-amber-50/[0.15] p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200" role="status">
           {{ t('admin.channelMonitor.probesDisabledHint') }}
         </p>
         <MonitorFiltersBar
@@ -71,11 +71,11 @@
           </template>
 
           <template #cell-availability_7d="{ row }">
-            <span class="text-sm text-gray-900 dark:text-gray-100">{{ formatAvailability(row) }}</span>
+            <span class="text-sm tabular-nums text-gray-900 dark:text-gray-100">{{ formatAvailability(row) }}</span>
           </template>
 
           <template #cell-latency="{ row }">
-            <div class="text-xs text-gray-900 dark:text-gray-100" :title="t('monitorCommon.timingHint')">
+            <div class="text-xs tabular-nums text-gray-900 dark:text-gray-100" :title="t('monitorCommon.timingHint')">
               <div>{{ t('monitorCommon.firstText') }} {{ formatLatency(row.primary_first_text_ms) }} ms</div>
               <div>{{ t('monitorCommon.firstByte') }} {{ formatLatency(row.primary_first_byte_ms) }} ms</div>
               <div>{{ t('usage.latencyDuration') }} {{ formatLatency(row.primary_latency_ms) }} ms</div>

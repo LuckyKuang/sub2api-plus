@@ -2,7 +2,7 @@
   <div class="card overflow-hidden" :class="{ 'workspace-table-card': workspace, 'workspace-shell': workspace }">
     <div
       v-if="showIpGeoToolbar"
-      class="flex items-center justify-end gap-2 border-b border-gray-200 px-4 py-2 dark:border-dark-700"
+      class="flex items-center justify-end gap-2 border-b border-[var(--surface-edge)] px-4 py-2"
       :class="{ 'workspace-fixed': workspace }"
     >
       <span v-if="pendingIpCount > 0" class="text-xs surface-muted">
@@ -77,7 +77,7 @@
               <span :title="t('usage.reasoningEffort')">{{ formatReasoningEffort(row.reasoning_effort) }}<template v-if="hasReasoningEffortMapping(row)"> ↳ {{ formatReasoningEffort(row.upstream_reasoning_effort) }}</template></span>
               <span
                 class="inline-flex items-center rounded border px-1.5 py-px text-[10px] leading-tight"
-                :class="row.request_fast_enabled === true ? 'border-primary-200 bg-primary-50/40 text-primary-600 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-400' : 'border-gray-200 dark:border-dark-600 surface-muted'"
+                :class="row.request_fast_enabled === true ? 'border-primary-200 bg-primary-50/40 text-primary-600 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-400' : 'border-[var(--surface-edge)] surface-muted'"
                 :title="t('usage.fastStateHint')"
               >
                 {{ t('usage.fastStateLabel') }}: {{ t(row.request_fast_enabled === true ? 'usage.fastEnabled' : row.request_fast_enabled === false ? 'usage.fastDisabled' : 'usage.fastUnrecorded') }}
@@ -387,7 +387,7 @@
         top: tokenTooltipPosition.y + 'px'
       }"
     >
-      <div class="whitespace-nowrap rounded-lg border border-gray-700 surface-panel px-3 py-2.5 text-xs shadow-xl dark:border-gray-600">
+      <div class="whitespace-nowrap rounded-lg border border-[var(--surface-edge)] surface-panel px-3 py-2.5 text-xs tabular-nums shadow-xl">
         <div class="space-y-1.5">
           <div>
             <div class="text-xs font-semibold surface-muted mb-1">{{ t('usage.tokenDetails') }}</div>
@@ -460,7 +460,7 @@
               <span class="font-medium text-[var(--surface-text)]">{{ tokenTooltipData.cache_read_tokens.toLocaleString() }} <span v-if="requestTokenShare(tokenTooltipData, tokenTooltipData.cache_read_tokens)" class="surface-muted">({{ requestTokenShare(tokenTooltipData, tokenTooltipData.cache_read_tokens) }})</span></span>
             </div>
           </div>
-          <div class="flex items-center justify-between gap-6 border-t border-gray-700 pt-1.5">
+          <div class="flex items-center justify-between gap-6 border-t border-[var(--surface-edge)] pt-1.5">
             <span class="surface-muted">{{ t('usage.totalTokens') }}</span>
             <span class="font-semibold text-blue-400">{{ ((tokenTooltipData?.input_tokens || 0) + (tokenTooltipData?.output_tokens || 0) + (tokenTooltipData?.cache_creation_tokens || 0) + (tokenTooltipData?.cache_read_tokens || 0)).toLocaleString() }}</span>
           </div>
@@ -481,7 +481,7 @@
         top: latencyTooltipPosition.y + 'px'
       }"
     >
-      <div class="whitespace-nowrap rounded-lg border border-gray-700 surface-panel px-3 py-2.5 text-xs shadow-xl dark:border-gray-600">
+      <div class="whitespace-nowrap rounded-lg border border-[var(--surface-edge)] surface-panel px-3 py-2.5 text-xs tabular-nums shadow-xl">
         <div class="space-y-1.5">
           <div class="text-xs font-semibold surface-muted mb-1">{{ t('usage.latencyDetails') }}</div>
           <div v-if="latencyTooltipData" class="flex items-center justify-between gap-4">
@@ -514,10 +514,10 @@
             <span class="surface-muted">{{ t('usage.latencyTps') }}</span>
             <span class="font-medium text-cyan-300">{{ formatTpsDisplay(averageTps(latencyTooltipData)) }}</span>
           </div>
-          <div v-if="latencyTooltipData && tpsNote(latencyTooltipData)" data-testid="latency-tps-note" class="border-t border-gray-700 pt-1.5 text-[11px] leading-relaxed surface-muted">
+          <div v-if="latencyTooltipData && tpsNote(latencyTooltipData)" data-testid="latency-tps-note" class="border-t border-[var(--surface-edge)] pt-1.5 text-[11px] leading-relaxed surface-muted">
             {{ t(tpsNote(latencyTooltipData)!) }}
           </div>
-          <div v-if="latencyTooltipNote(latencyTooltipData)" class="border-t border-gray-700 pt-1.5 text-[11px] leading-relaxed surface-muted">
+          <div v-if="latencyTooltipNote(latencyTooltipData)" class="border-t border-[var(--surface-edge)] pt-1.5 text-[11px] leading-relaxed surface-muted">
             {{ latencyTooltipNote(latencyTooltipData) }}
           </div>
         </div>
@@ -536,10 +536,10 @@
         top: tooltipPosition.y + 'px'
       }"
     >
-      <div class="whitespace-nowrap rounded-lg border border-gray-700 surface-panel px-3 py-2.5 text-xs shadow-xl dark:border-gray-600">
+      <div class="whitespace-nowrap rounded-lg border border-[var(--surface-edge)] surface-panel px-3 py-2.5 text-xs tabular-nums shadow-xl">
         <div class="space-y-1.5">
           <!-- Cost Breakdown -->
-          <div class="mb-2 border-b border-gray-700 pb-1.5">
+          <div class="mb-2 border-b border-[var(--surface-edge)] pb-1.5">
             <div class="text-xs font-semibold surface-muted mb-1">{{ t('usage.costDetails') }}</div>
             <div v-if="tooltipData && tooltipData.input_cost > 0" class="flex items-center justify-between gap-4">
               <span class="surface-muted">{{ t('admin.usage.inputCost') }}</span>
@@ -646,7 +646,7 @@
           </div>
           <!-- Account billing (separated from user billing) -->
           <template v-if="showAccountBilling">
-            <div class="flex items-center justify-between gap-6 border-t border-gray-700 pt-1.5">
+            <div class="flex items-center justify-between gap-6 border-t border-[var(--surface-edge)] pt-1.5">
               <span class="surface-muted">{{ t('usage.accountMultiplier') }}</span>
               <span class="font-semibold text-blue-400">{{ formatMultiplier(tooltipData?.account_rate_multiplier ?? 1) }}x</span>
             </div>

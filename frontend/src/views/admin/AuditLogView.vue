@@ -86,7 +86,7 @@
       <template #table>
         <DataTable :columns="columns" :data="logs" :loading="loading" row-key="id">
           <template #cell-created_at="{ value }">
-            <span class="whitespace-nowrap surface-muted">{{ formatTime(value) }}</span>
+            <span class="whitespace-nowrap tabular-nums surface-muted">{{ formatTime(value) }}</span>
           </template>
 
           <template #cell-actor="{ row }">
@@ -119,7 +119,7 @@
           </template>
 
           <template #cell-latency_ms="{ value }">
-            <span class="whitespace-nowrap surface-muted">{{ value }} ms</span>
+            <span class="whitespace-nowrap tabular-nums surface-muted">{{ value }} ms</span>
           </template>
 
           <template #cell-client_ip="{ value }">
@@ -176,7 +176,7 @@
 
       <div v-else-if="detail" class="space-y-5 py-2">
         <!-- Hero: action + result at a glance -->
-        <div class="glass-surface border p-5">
+        <div class="surface-subcard p-5">
           <div class="flex flex-wrap items-center gap-3">
             <span :class="statusBadgeClass(detail.status_code)">
               <span class="console-data-mark h-1.5 w-1.5 rounded-full" :class="statusDotClass(detail.status_code)"></span>
@@ -187,14 +187,14 @@
             </span>
           </div>
 
-          <div class="mt-3 flex items-center gap-2 rounded-lg surface-inset px-3 py-2 ring-1 ring-gray-200 dark:ring-dark-600">
-            <span class="rounded surface-inset px-1.5 py-0.5 font-mono text-[11px] font-bold surface-muted">
+          <div class="mt-3 flex items-center gap-2 rounded-lg border border-[var(--surface-edge)] surface-field px-3 py-2">
+            <span class="rounded border border-[var(--surface-edge)] px-1.5 py-0.5 font-mono text-[11px] font-bold surface-muted">
               {{ detail.method }}
             </span>
             <span class="break-all font-mono text-xs surface-muted">{{ detail.path }}</span>
           </div>
 
-          <div class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs surface-muted">
+          <div class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs tabular-nums surface-muted">
             <span class="inline-flex items-center gap-1.5">
               <Icon name="clock" size="xs" />
               {{ formatTime(detail.created_at) }}
@@ -209,7 +209,7 @@
 
         <!-- Actor / auth / source -->
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div class="rounded-xl surface-inset p-4">
+          <div class="surface-subcard p-4">
             <div class="text-xs font-bold uppercase tracking-wider surface-muted">
               {{ t('admin.audit.columns.actor') }}
             </div>
@@ -219,7 +219,7 @@
             <div class="mt-0.5 text-xs surface-muted">{{ detail.actor_role }}</div>
           </div>
 
-          <div class="rounded-xl surface-inset p-4">
+          <div class="surface-subcard p-4">
             <div class="text-xs font-bold uppercase tracking-wider surface-muted">
               {{ t('admin.audit.filters.authMethod') }}
             </div>
@@ -231,7 +231,7 @@
             </div>
           </div>
 
-          <div class="rounded-xl surface-inset p-4">
+          <div class="surface-subcard p-4">
             <div class="text-xs font-bold uppercase tracking-wider surface-muted">
               {{ t('admin.audit.columns.clientIp') }}
             </div>
@@ -246,7 +246,7 @@
           <h4 class="mb-1.5 text-xs font-bold uppercase tracking-wider surface-muted">
             {{ t('admin.audit.detail.userAgent') }}
           </h4>
-          <div class="break-all rounded-xl surface-inset p-3 font-mono text-xs leading-relaxed surface-muted">
+          <div class="surface-subcard break-all p-3 font-mono text-xs leading-relaxed surface-muted">
             {{ detail.user_agent || '—' }}
           </div>
         </section>
@@ -256,7 +256,7 @@
           <h4 class="mb-1.5 text-xs font-bold uppercase tracking-wider surface-muted">
             {{ t('admin.audit.detail.requestBody') }}
           </h4>
-          <pre class="max-h-72 overflow-auto rounded-xl surface-inset p-4 font-mono text-xs leading-relaxed surface-muted">{{ prettyBody(detail.request_body) }}</pre>
+          <pre class="max-h-72 overflow-auto rounded-lg border border-[var(--surface-edge)] surface-field p-4 font-mono text-xs leading-relaxed surface-muted">{{ prettyBody(detail.request_body) }}</pre>
         </section>
 
         <!-- Extra -->
@@ -264,7 +264,7 @@
           <h4 class="mb-1.5 text-xs font-bold uppercase tracking-wider surface-muted">
             {{ t('admin.audit.detail.extra') }}
           </h4>
-          <pre class="max-h-48 overflow-auto rounded-xl surface-inset p-4 font-mono text-xs leading-relaxed surface-muted">{{ JSON.stringify(detail.extra, null, 2) }}</pre>
+          <pre class="max-h-48 overflow-auto rounded-lg border border-[var(--surface-edge)] surface-field p-4 font-mono text-xs leading-relaxed surface-muted">{{ JSON.stringify(detail.extra, null, 2) }}</pre>
         </section>
       </div>
     </BaseDialog>
@@ -671,7 +671,7 @@ function statusText(status: number): string {
 }
 
 function statusBadgeClass(status: number): string {
-  const base = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-xs font-semibold'
+  const base = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-xs font-semibold tabular-nums '
   if (status >= 500) return base + 'bg-red-100/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300'
   if (status >= 400) return base + 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
   return base + 'bg-green-100/[0.15] text-green-700 dark:bg-green-900/30 dark:text-green-300'

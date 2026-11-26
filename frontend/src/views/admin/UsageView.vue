@@ -54,7 +54,7 @@
                 <Teleport to="body">
                 <div
                   v-if="showColumnDropdown"
-                  class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
+                  class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-[var(--surface-edge)] p-1 shadow-lg surface-panel"
                   :style="columnDropdownStyle"
                   data-testid="usage-column-menu"
                   @click.stop
@@ -76,7 +76,7 @@
                       :stroke-width="2"
                     />
                   </button>
-                  <button type="button" class="w-full rounded-[var(--surface-radius-item)] border-t px-3 py-2 text-left text-sm text-primary-600 hover:surface-hover surface-control" @click="restoreRecommendedColumns">{{ t('inspection.resetColumns') }}</button>
+                  <button type="button" class="w-full rounded-[var(--surface-radius-item)] border-t border-[var(--surface-edge)] px-3 py-2 text-left text-sm text-primary-600 hover:surface-hover surface-control" @click="restoreRecommendedColumns">{{ t('inspection.resetColumns') }}</button>
                 </div>
                 </Teleport>
               </div>

@@ -2,7 +2,7 @@
   <AppLayout workspace>
     <div class="workspace-page admin-dashboard">
       <div class="card workspace-fixed dashboard-toolbar p-4">
-            <div class="flex flex-wrap items-center gap-4">
+            <div class="flex flex-wrap items-center gap-3">
               <div class="flex min-w-0 max-w-full flex-wrap items-center gap-2">
                 <span class="text-sm font-medium surface-muted"
                   >{{ t('admin.dashboard.timeRange') }}:</span
@@ -29,10 +29,10 @@
                   />
                 </div>
               </div>
-      <div class="dashboard-refresh flex flex-wrap items-center gap-3">
-        <RefreshControl :state="overviewRefresh" />
-        <button v-if="!stats && overviewRefresh.error.value" class="btn btn-secondary" @click="refreshAll">{{ t('inspection.retry') }}</button>
-      </div>
+              <div class="dashboard-refresh flex flex-wrap items-center gap-3">
+                <RefreshControl :state="overviewRefresh" />
+                <button v-if="!stats && overviewRefresh.error.value" class="btn btn-secondary" @click="refreshAll">{{ t('inspection.retry') }}</button>
+              </div>
             </div>
           </div>
 
@@ -43,7 +43,7 @@
           <div class="skeleton mt-3 h-9 w-44"></div>
           <div class="skeleton mt-3 h-3 w-64"></div>
         </div>
-        <div class="grid grid-cols-2 gap-4 md:grid-cols-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
           <div v-for="n in 6" :key="n" class="card p-4">
             <div class="skeleton h-3 w-16"></div>
             <div class="skeleton mt-3 h-6 w-20"></div>
@@ -56,13 +56,13 @@
         <!-- Hero: today's operational + financial pulse (the one primary focus) -->
         <div class="dashboard-kpis workspace-fixed flex flex-col gap-4">
           <div class="dashboard-hero card p-5">
-            <div class="flex flex-wrap items-start justify-between gap-6">
+            <div class="flex flex-wrap items-start justify-between gap-4 sm:gap-6">
               <div class="min-w-0">
                 <p class="text-xs font-medium surface-muted">{{ t('admin.dashboard.todayTokens') }}</p>
-                <p class="mt-1 text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
+                <p class="mt-1 text-3xl font-bold tracking-tight tabular-nums text-gray-900 dark:text-white">
                   {{ formatTokens(stats.today_tokens) }}
                 </p>
-                <p class="mt-1 flex flex-wrap gap-x-1.5 text-xs surface-muted">
+                <p class="mt-1 flex flex-wrap gap-x-1.5 text-xs tabular-nums surface-muted">
                   <span>{{ t('dashboard.input') }} {{ todayTokenShare(stats.today_input_tokens) }}</span>
                   <span aria-hidden="true">·</span>
                   <span>{{ t('dashboard.output') }} {{ todayTokenShare(stats.today_output_tokens) }}</span>
@@ -72,13 +72,13 @@
                   </template>
                 </p>
               </div>
-              <div class="shrink-0 text-right">
+              <div class="shrink-0 text-left sm:text-right">
                 <p class="text-xs font-medium surface-muted">{{ t('admin.dashboard.todayRequests') }}</p>
-                <p class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{{ formatNumber(stats.today_requests) }}</p>
-                <p class="mt-1 text-xs surface-muted">{{ t('common.total') }}: {{ formatNumber(stats.total_requests) }}</p>
+                <p class="mt-1 text-2xl font-bold tabular-nums text-gray-900 dark:text-white">{{ formatNumber(stats.today_requests) }}</p>
+                <p class="mt-1 text-xs tabular-nums surface-muted">{{ t('common.total') }}: {{ formatNumber(stats.total_requests) }}</p>
               </div>
             </div>
-            <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-gray-100 pt-3 text-xs dark:border-dark-700">
+            <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--surface-edge)] pt-3 text-xs tabular-nums">
               <span class="surface-muted">{{ t('admin.dashboard.actual') }}</span>
               <span class="font-semibold text-green-600 dark:text-green-400">${{ formatCost(stats.today_actual_cost) }}</span>
               <span class="surface-muted" aria-hidden="true">/</span>
@@ -91,14 +91,14 @@
           </div>
 
           <!-- Supporting KPIs: uniform and neutral; color carries no meaning here -->
-          <div class="dashboard-kpi-grid grid grid-cols-2 gap-4 md:grid-cols-3">
+          <div class="dashboard-kpi-grid grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
           <!-- Total API Keys -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg surface-inset p-2">
+              <div class="surface-subcard shrink-0 p-2">
                 <Icon name="key" size="md" class="surface-muted" :stroke-width="2" />
               </div>
-              <div>
+              <div class="min-w-0 tabular-nums">
                 <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.apiKeys') }}
                 </p>
@@ -115,10 +115,10 @@
           <!-- Service Accounts -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg surface-inset p-2">
+              <div class="surface-subcard shrink-0 p-2">
                 <Icon name="server" size="md" class="surface-muted" :stroke-width="2" />
               </div>
-              <div>
+              <div class="min-w-0 tabular-nums">
                 <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.accounts') }}
                 </p>
@@ -140,10 +140,10 @@
           <!-- New Users Today -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg surface-inset p-2">
+              <div class="surface-subcard shrink-0 p-2">
                 <Icon name="userPlus" size="md" class="surface-muted" :stroke-width="2" />
               </div>
-              <div>
+              <div class="min-w-0 tabular-nums">
                 <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.users') }}
                 </p>
@@ -160,10 +160,10 @@
           <!-- Total Tokens -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg surface-inset p-2">
+              <div class="surface-subcard shrink-0 p-2">
                 <Icon name="database" size="md" class="surface-muted" :stroke-width="2" />
               </div>
-              <div>
+              <div class="min-w-0 tabular-nums">
                 <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.totalTokens') }}
                 </p>
@@ -202,10 +202,10 @@
           <!-- Performance (RPM/TPM) -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg surface-inset p-2">
+              <div class="surface-subcard shrink-0 p-2">
                 <Icon name="bolt" size="md" class="surface-muted" :stroke-width="2" />
               </div>
-              <div class="flex-1">
+              <div class="min-w-0 flex-1 tabular-nums">
                 <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.performance') }}
                 </p>
@@ -228,10 +228,10 @@
           <!-- Avg Response Time -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
-              <div class="rounded-lg surface-inset p-2">
+              <div class="surface-subcard shrink-0 p-2">
                 <Icon name="clock" size="md" class="surface-muted" :stroke-width="2" />
               </div>
-              <div>
+              <div class="min-w-0 tabular-nums">
                 <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.avgResponse') }}
                 </p>
@@ -300,7 +300,7 @@
       </template>
 
       <!-- Empty/error: the overview failed to load and no inline error banner is shown -->
-      <div v-else class="flex flex-1 items-center justify-center p-8">
+      <div v-else class="card flex flex-1 items-center justify-center p-8">
         <EmptyState
           :title="t('common.noData')"
           :action-text="t('common.refresh')"
