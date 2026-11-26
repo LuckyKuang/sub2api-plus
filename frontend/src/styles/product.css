@@ -184,13 +184,24 @@
 @media (max-width: 767px) {
   .app-layout-admin .record-cards .record-card-fields {
     grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
+    gap: 10px;
   }
   .app-layout-admin .record-cards .record-card-fields > :is([data-field], .record-card-selection, .record-card-actions) {
     margin-block: 0;
   }
+  .app-layout-admin .record-cards .record-card-primary {
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--surface-edge);
+  }
+  .app-layout-admin .record-cards [data-field="select"] {
+    justify-content: flex-end;
+  }
+  .app-layout-admin .record-cards [data-field="select"] > div {
+    flex: 0 0 auto;
+  }
   .app-layout-admin .record-cards [data-field] {
     flex-direction: row;
+    align-items: baseline;
     gap: 12px;
   }
   .app-layout-admin .record-cards [data-field] > span {

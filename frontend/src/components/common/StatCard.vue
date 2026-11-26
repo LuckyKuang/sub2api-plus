@@ -1,7 +1,9 @@
 <template>
   <div class="stat-card">
-    <div :class="['stat-icon', iconClass]">
-      <component v-if="icon" :is="icon" class="h-6 w-6" aria-hidden="true" />
+    <div v-if="icon || $slots.icon" :class="['stat-icon', iconClass]">
+      <slot name="icon">
+        <component v-if="icon" :is="icon" class="h-5 w-5" aria-hidden="true" />
+      </slot>
     </div>
     <div class="min-w-0 flex-1">
       <p class="stat-label truncate">{{ title }}</p>
@@ -17,6 +19,10 @@
           {{ formattedChange }}
         </span>
       </div>
+      <p v-if="subtitle" class="mt-1 truncate text-xs surface-muted" :title="subtitle">
+        {{ subtitle }}
+      </p>
+      <slot name="footer" />
     </div>
   </div>
 </template>
@@ -32,6 +38,7 @@ type IconVariant = 'primary' | 'success' | 'warning' | 'danger'
 interface Props {
   title: string
   value: number | string
+  subtitle?: string
   icon?: Component
   iconVariant?: IconVariant
   change?: number

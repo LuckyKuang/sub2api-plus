@@ -6,8 +6,36 @@
     </div>
 
     <!-- 固定区域：搜索和过滤器 -->
-    <div v-if="$slots.filters" class="layout-section-fixed workspace-fixed">
-      <slot name="filters" />
+    <div v-if="$slots.filters" ref="filtersSectionRef" class="layout-section-fixed workspace-fixed">
+      <button
+        v-if="shouldCollapseMobileFilters"
+        type="button"
+        class="mobile-filters-toggle"
+        :aria-expanded="mobileFiltersExpanded"
+        @click="mobileFiltersExpanded = !mobileFiltersExpanded"
+      >
+        <span class="flex items-center gap-2 font-medium">
+          <Icon name="filter" size="sm" />
+          <span>{{ filtersLabel }}</span>
+          <span v-if="activeFilterCount > 0" class="badge badge-primary">{{ activeFilterCount }}</span>
+        </span>
+        <span class="flex items-center gap-1 text-xs surface-muted">
+          <span>{{ mobileFiltersExpanded ? hideFiltersLabel : showFiltersLabel }}</span>
+          <Icon
+            name="chevronDown"
+            size="sm"
+            class="transition-transform duration-200"
+            :class="{ 'rotate-180': mobileFiltersExpanded }"
+          />
+        </span>
+      </button>
+      <div
+        ref="filtersBodyRef"
+        :class="{ 'mt-3': shouldCollapseMobileFilters && mobileFiltersExpanded }"
+        v-show="!shouldCollapseMobileFilters || mobileFiltersExpanded"
+      >
+        <slot name="filters" />
+      </div>
     </div>
 
     <!-- 滚动区域：表格 -->
@@ -25,12 +53,56 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, onUpdated, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import Icon from '@/components/icons/Icon.vue'
+
+let translate: ((key: string) => string) | null = null
+try {
+  const { t } = useI18n()
+  translate = (key: string) => t(key)
+} catch {
+  translate = null
+}
+
+const filtersLabel = computed(() => translate ? translate('common.filters') : 'Filters')
+const showFiltersLabel = computed(() => translate ? translate('common.showFilters') : 'Show filters')
+const hideFiltersLabel = computed(() => translate ? translate('common.hideFilters') : 'Hide filters')
 
 const isMobile = ref(false)
 const layoutRef = ref<HTMLElement | null>(null)
+const filtersSectionRef = ref<HTMLElement | null>(null)
+const filtersBodyRef = ref<HTMLElement | null>(null)
 const availableHeight = ref('auto')
+const filterFieldCount = ref(0)
+const activeFilterCount = ref(0)
+const mobileFiltersExpanded = ref(false)
 let observer: ResizeObserver | undefined
+let filterMutationObserver: MutationObserver | undefined
+
+const shouldCollapseMobileFilters = computed(() => isMobile.value && filterFieldCount.value >= 3)
+
+const inspectFilters = () => {
+  const container = filtersBodyRef.value
+  if (!container) {
+    filterFieldCount.value = 0
+    activeFilterCount.value = 0
+    return
+  }
+  const fields = container.querySelectorAll('.filter-field')
+  filterFieldCount.value = fields.length
+  let active = 0
+  fields.forEach((field) => {
+    const input = field.querySelector<HTMLInputElement>('input')
+    if (input && input.value.trim().length > 0) {
+      active += 1
+      return
+    }
+    const clearBtn = field.querySelector('[aria-label="Clear"], [data-clear], .select-clear')
+    if (clearBtn) active += 1
+  })
+  activeFilterCount.value = active
+}
 
 const checkMobile = () => {
   isMobile.value = window.innerWidth < 1024
@@ -44,16 +116,26 @@ const checkMobile = () => {
 
 onMounted(() => {
   checkMobile()
+  nextTick(inspectFilters)
   window.addEventListener('resize', checkMobile)
   if (typeof ResizeObserver !== 'undefined' && layoutRef.value?.parentElement) {
     observer = new ResizeObserver(checkMobile)
     observer.observe(layoutRef.value.parentElement)
   }
+  if (typeof MutationObserver !== 'undefined' && filtersBodyRef.value) {
+    filterMutationObserver = new MutationObserver(inspectFilters)
+    filterMutationObserver.observe(filtersBodyRef.value, { childList: true, subtree: true, attributes: true })
+  }
+})
+
+onUpdated(() => {
+  inspectFilters()
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
   observer?.disconnect()
+  filterMutationObserver?.disconnect()
 })
 </script>
 
@@ -67,6 +149,27 @@ onUnmounted(() => {
 
 .layout-section-fixed {
   @apply flex-shrink-0;
+}
+
+.mobile-filters-toggle {
+  display: flex;
+  width: 100%;
+  min-height: var(--control-height);
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--surface-edge);
+  border-radius: var(--surface-radius-control);
+  background-color: var(--surface-soft);
+  color: var(--surface-text);
+  font-size: 13px;
+  transition: background-color 150ms, border-color 150ms;
+}
+
+.mobile-filters-toggle:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--console-control-hover-edge);
 }
 
 .table-page-pagination { container-name: table-page-pagination; container-type: inline-size; }
