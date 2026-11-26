@@ -808,7 +808,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	}
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
-	credentialAccount.ApplyHeaderOverrides(req.Header)
+	credentialAccount.ApplyHeaderOverrides(req.Context(), req.Header)
 	if err := s.alignOpenAIUpstreamSessionIdentityFromBody(c, account, req.Header, body); err != nil {
 		return nil, err
 	}
@@ -1115,10 +1115,12 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 	} else {
 		SetOpenAIErrorMessageSource(c, resp.StatusCode, body)
 	}
-	if isOpenAIModelNotFoundError(resp.StatusCode, body) || openAIInputTerminalCode(resp.StatusCode, body) != "" {
-		writeOpenAIUpstreamClientError(c, publicStatus, body, upstreamMsg)
+	clientMsg := sanitizeOpenAIPassthroughClientErrorText(account, upstreamMsg)
+	if isOpenAIModelNotFoundError(resp.StatusCode, body) || openAIInputTerminalCode(resp.StatusCode, body) != "" ||
+		isOpenAIInvalidEncryptedContentError(resp.StatusCode, upstreamMsg, body) {
+		writeOpenAIUpstreamClientError(c, publicStatus, body, clientMsg)
 	} else if isOpenAIContextWindowError(upstreamMsg, body) && upstreamMsg != "" {
-		writeOpenAIPassthroughErrorEnvelope(c, publicStatus, resp.Header, upstreamMsg)
+		writeOpenAIPassthroughErrorEnvelope(c, publicStatus, resp.Header, clientMsg)
 	} else {
 		writeSanitizedOpenAIPassthroughError(c, publicStatus, resp.Header)
 	}

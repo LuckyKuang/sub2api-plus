@@ -314,7 +314,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 		identity := s.applyOpenAIOutboundIdentity(ctx, account, upstreamReq.Header, true)
 		SetOpsRoutingDiagnostics(c, &OpsRoutingDiagnostics{OutboundIdentitySource: identity.Source})
 	} else {
-		account.ApplyHeaderOverrides(upstreamReq.Header)
+		account.ApplyHeaderOverrides(upstreamReq.Context(), upstreamReq.Header)
 	}
 	applyOpenCodeSessionHeader(c, account, targetURL, upstreamReq.Header, body)
 	if account.Platform == PlatformGrok {

@@ -191,10 +191,14 @@ Messages path preserve explicit `low`; older GLM models keep their existing
 low-to-high promotion. Vision is advertised only where the actual account and
 endpoint support image input.
 
-There is no reviewed pay-as-you-go token price for GLM-5.4. Billing refuses
-the legacy `glm-5` family card and may use the configured Zhipu platform
-fallback SKU (`glm-5.3` by default). The Coding Plan quota multiplier is not a
-token price. Sources: [GLM-5.4 model card](https://docs.bigmodel.cn/cn/guide/models/glm-5.4),
+BigModel has not published a pay-as-you-go token price for GLM-5.4. The
+compiled card mirrors the reviewed GLM-5.3 card ($1.40 input / $4.40 output /
+$0.26 cache read per MTok) so channel reference and request settlement agree;
+replace it when the official price lands. Billing still refuses the legacy
+`glm-5` family card, and the configured Zhipu platform fallback SKU
+(`glm-5.3` by default) continues to cover models without a same-model card.
+The Coding Plan quota multiplier is not a token price. Sources:
+[GLM-5.4 model card](https://docs.bigmodel.cn/cn/guide/models/glm-5.4),
 [ZCode plans](https://zcode.z.ai/en/docs/configuration).
 
 ## Coding-plan quota

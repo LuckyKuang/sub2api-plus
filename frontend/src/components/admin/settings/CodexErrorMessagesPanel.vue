@@ -1,174 +1,206 @@
 <template>
-  <section class="mt-6 rounded-xl border border-[var(--border-color)] p-4" data-testid="codex-error-messages-panel">
-    <div class="flex flex-wrap items-start justify-between gap-4">
-      <div>
+  <section class="mt-6 rounded-xl border border-[var(--border-color)] p-4 sm:p-5" data-testid="codex-error-messages-panel">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0 flex-1">
         <h3 class="text-sm font-semibold">
           {{ t('admin.settings.gatewayForwarding.codexErrorMessages.title') }}
         </h3>
         <p class="mt-1 max-w-3xl text-xs surface-muted">
           {{ t('admin.settings.gatewayForwarding.codexErrorMessages.description') }}
         </p>
+        <p class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs surface-muted">
+          <span class="badge" data-testid="codex-error-messages-mode">
+            {{ customEnabled ? t('admin.settings.gatewayForwarding.codexErrorMessages.customOn') : t('admin.settings.gatewayForwarding.codexErrorMessages.customOff') }}
+          </span>
+          <span>{{ t('admin.settings.gatewayForwarding.codexErrorMessages.customCount', { count: customCount }) }}</span>
+        </p>
       </div>
-      <div class="flex items-center gap-2">
-        <span class="text-xs surface-muted">
-          {{ t('admin.settings.gatewayForwarding.codexErrorMessages.customEnabled') }}
-        </span>
-        <Toggle
-          id="codex-error-messages-custom-enabled"
-          v-model="customEnabled"
-          data-testid="codex-error-messages-custom-enabled"
-          @update:model-value="modeTouched = true"
-        />
-      </div>
-    </div>
-
-    <div class="filter-bar mt-4">
-      <div class="filter-field">
-        <Select
-          v-model="groupFilter"
-          class="w-full"
-          :options="groupOptions"
-          data-testid="codex-error-messages-group"
-        />
-      </div>
-      <div class="filter-field">
-        <input
-          v-model="search"
-          type="search"
-          class="input w-full"
-          :placeholder="t('admin.settings.gatewayForwarding.codexErrorMessages.searchPlaceholder')"
-          data-testid="codex-error-messages-search"
-        />
-      </div>
-      <label class="filter-pair text-xs surface-muted">
-        <input v-model="onlyCustom" type="checkbox" class="h-4 w-4" />
-        {{ t('admin.settings.gatewayForwarding.codexErrorMessages.onlyCustom') }}
-      </label>
-      <span class="text-xs surface-muted">
-        {{ t('admin.settings.gatewayForwarding.codexErrorMessages.customCount', { count: customCount }) }}
-      </span>
-    </div>
-
-    <p v-if="conflict" class="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200" data-testid="codex-error-messages-conflict">
-      <span>{{ t('admin.settings.gatewayForwarding.codexErrorMessages.conflict') }}</span>
-      <button type="button" class="table-action" data-testid="codex-error-messages-conflict-reload" @click="load">
-        {{ t('admin.settings.gatewayForwarding.codexErrorMessages.conflictReload') }}
+      <button
+        type="button"
+        class="btn btn-secondary shrink-0"
+        data-testid="codex-error-messages-open"
+        @click="openDialog"
+      >
+        {{ t('admin.settings.gatewayForwarding.codexErrorMessages.configure') }}
       </button>
-    </p>
-
-    <div class="record-table-scroll mt-4">
-      <table class="record-table w-full text-left text-xs">
-        <thead class="surface-muted">
-          <tr>
-            <th class="px-2 py-2 font-medium">{{ t('admin.settings.gatewayForwarding.codexErrorMessages.reason') }}</th>
-            <th class="px-2 py-2 font-medium">{{ t('admin.settings.gatewayForwarding.codexErrorMessages.key') }}</th>
-            <th class="px-2 py-2 font-medium">{{ t('admin.settings.gatewayForwarding.codexErrorMessages.code') }}</th>
-            <th class="px-2 py-2 font-medium">{{ t('admin.settings.gatewayForwarding.codexErrorMessages.effective') }}</th>
-            <th class="px-2 py-2 font-medium">{{ t('admin.settings.gatewayForwarding.codexErrorMessages.source') }}</th>
-            <th class="px-2 py-2 font-medium" />
-          </tr>
-        </thead>
-        <tbody>
-          <template v-for="item in filteredItems" :key="item.key">
-            <tr class="record-row-parent border-t border-[var(--border-color)] align-top">
-              <td class="px-2 py-2">{{ reasonLabel(item) }}</td>
-              <td class="px-2 py-2 font-mono text-[11px]">{{ item.key }}</td>
-              <td class="px-2 py-2 font-mono text-[11px]">{{ item.public_code || '—' }}</td>
-              <td class="px-2 py-2">
-                <div>{{ effectiveMessage(item) }}</div>
-                <div v-if="draftOverrides[item.key]" class="mt-1 text-[11px] surface-muted">
-                  {{ t('admin.settings.gatewayForwarding.codexErrorMessages.customDraft') }}
-                </div>
-              </td>
-              <td class="px-2 py-2">
-                <span class="badge">
-                  {{ sourceLabel(item) }}
-                </span>
-              </td>
-              <td class="px-2 py-2 text-right">
-                <button type="button" class="table-action" @click="startEditing(item)">
-                  {{ t('admin.settings.gatewayForwarding.codexErrorMessages.edit') }}
-                </button>
-                <button
-                  v-if="draftOverrides[item.key]"
-                  type="button"
-                  class="table-action ml-2"
-                  @click="restoreOne(item.key)"
-                >
-                  {{ t('admin.settings.gatewayForwarding.codexErrorMessages.restore') }}
-                </button>
-              </td>
-            </tr>
-            <tr v-if="editingKey === item.key" class="record-row-leaf border-t border-[var(--border-color)]">
-              <td colspan="6" class="px-2 py-3">
-                <div class="grid gap-3 lg:grid-cols-2">
-                  <div>
-                    <div class="mb-1 text-[11px] font-medium surface-muted">
-                      {{ t('admin.settings.gatewayForwarding.codexErrorMessages.defaultText') }}
-                    </div>
-                    <p class="rounded-lg border border-[var(--border-color)] p-2">
-                      {{ item.default_message }}
-                    </p>
-                  </div>
-                  <div>
-                    <div class="mb-1 text-[11px] font-medium surface-muted">
-                      {{ t('admin.settings.gatewayForwarding.codexErrorMessages.customText') }}
-                    </div>
-                    <textarea
-                      v-model="editorText"
-                      class="input min-h-20 w-full"
-                      :placeholder="t('admin.settings.gatewayForwarding.codexErrorMessages.customPlaceholder')"
-                      data-testid="codex-error-messages-editor"
-                      @input="editorError = ''"
-                    />
-                    <p class="mt-1 flex flex-wrap items-center justify-between gap-2 text-[11px] surface-muted">
-                      <span>{{ t('admin.settings.gatewayForwarding.codexErrorMessages.editorHint') }}</span>
-                      <span :class="editorError ? 'text-rose-400' : ''" data-testid="codex-error-messages-counter">
-                        {{ t('admin.settings.gatewayForwarding.codexErrorMessages.counter', { count: editorCodePoints }) }}
-                      </span>
-                    </p>
-                    <p v-if="editorError" class="mt-1 text-[11px] text-rose-400">
-                      {{ editorError }}
-                    </p>
-                  </div>
-                </div>
-                <div class="mt-3 flex flex-wrap justify-end gap-2">
-                  <button type="button" class="btn btn-secondary" @click="cancelEditing">
-                    {{ t('admin.settings.gatewayForwarding.codexErrorMessages.cancel') }}
-                  </button>
-                  <button type="button" class="btn btn-primary" @click="applyEditing(item)">
-                    {{ t('admin.settings.gatewayForwarding.codexErrorMessages.apply') }}
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </template>
-          <tr v-if="filteredItems.length === 0">
-            <td colspan="6" class="px-2 py-6 text-center surface-muted">
-              {{ t('admin.settings.gatewayForwarding.codexErrorMessages.empty') }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
     </div>
 
-    <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
-      <span class="text-xs surface-muted">{{ errorText }}</span>
-      <div class="flex flex-wrap gap-2">
-        <button type="button" class="btn btn-secondary" :disabled="saving" @click="resetDraft">
-          {{ t('admin.settings.gatewayForwarding.codexErrorMessages.discard') }}
-        </button>
-        <button type="button" class="btn btn-secondary" :disabled="saving || !customCount" @click="restoreAll">
-          {{ t('admin.settings.gatewayForwarding.codexErrorMessages.restoreAll') }}
-        </button>
-        <button type="button" class="btn btn-secondary" :disabled="saving" @click="load">
-          {{ t('admin.settings.gatewayForwarding.codexErrorMessages.reload') }}
-        </button>
-        <button type="button" class="btn btn-primary" :disabled="saving || !dirty" data-testid="codex-error-messages-save" @click="save">
-          {{ saveButtonLabel }}
-        </button>
+    <BaseDialog
+      :show="dialogOpen"
+      :title="t('admin.settings.gatewayForwarding.codexErrorMessages.title')"
+      width="extra-wide"
+      :close-on-click-outside="false"
+      @close="closeDialog"
+    >
+      <div class="space-y-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <p class="min-w-0 flex-1 text-xs surface-muted">
+            {{ t('admin.settings.gatewayForwarding.codexErrorMessages.description') }}
+          </p>
+          <div class="flex shrink-0 items-center gap-2">
+            <span class="text-xs surface-muted">
+              {{ t('admin.settings.gatewayForwarding.codexErrorMessages.customEnabled') }}
+            </span>
+            <Toggle
+              id="codex-error-messages-custom-enabled"
+              v-model="customEnabled"
+              data-testid="codex-error-messages-custom-enabled"
+              @update:model-value="modeTouched = true"
+            />
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <div class="filter-field">
+            <Select
+              v-model="groupFilter"
+              class="w-full"
+              :options="groupOptions"
+              data-testid="codex-error-messages-group"
+            />
+          </div>
+          <div class="filter-field">
+            <input
+              v-model="search"
+              type="search"
+              class="input w-full"
+              :placeholder="t('admin.settings.gatewayForwarding.codexErrorMessages.searchPlaceholder')"
+              data-testid="codex-error-messages-search"
+            />
+          </div>
+          <label class="filter-pair text-xs surface-muted">
+            <input v-model="onlyCustom" type="checkbox" class="h-4 w-4" />
+            {{ t('admin.settings.gatewayForwarding.codexErrorMessages.onlyCustom') }}
+          </label>
+          <span class="text-xs surface-muted">
+            {{ t('admin.settings.gatewayForwarding.codexErrorMessages.customCount', { count: customCount }) }}
+          </span>
+        </div>
+
+        <p v-if="conflict" class="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-200" data-testid="codex-error-messages-conflict">
+          <span>{{ t('admin.settings.gatewayForwarding.codexErrorMessages.conflict') }}</span>
+          <button type="button" class="table-action" data-testid="codex-error-messages-conflict-reload" @click="load">
+            {{ t('admin.settings.gatewayForwarding.codexErrorMessages.conflictReload') }}
+          </button>
+        </p>
+
+        <div class="record-table-scroll">
+          <table class="record-table w-full text-left text-xs">
+            <thead class="surface-muted">
+              <tr>
+                <th class="px-2 py-2 font-medium">{{ t('admin.settings.gatewayForwarding.codexErrorMessages.reason') }}</th>
+                <th class="px-2 py-2 font-medium">{{ t('admin.settings.gatewayForwarding.codexErrorMessages.key') }}</th>
+                <th class="px-2 py-2 font-medium">{{ t('admin.settings.gatewayForwarding.codexErrorMessages.code') }}</th>
+                <th class="px-2 py-2 font-medium">{{ t('admin.settings.gatewayForwarding.codexErrorMessages.effective') }}</th>
+                <th class="px-2 py-2 font-medium">{{ t('admin.settings.gatewayForwarding.codexErrorMessages.source') }}</th>
+                <th class="px-2 py-2 font-medium" />
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="item in filteredItems" :key="item.key">
+                <tr class="record-row-parent border-t border-[var(--border-color)] align-top">
+                  <td class="px-2 py-2">{{ reasonLabel(item) }}</td>
+                  <td class="px-2 py-2 font-mono text-[11px]">{{ item.key }}</td>
+                  <td class="px-2 py-2 font-mono text-[11px]">{{ item.public_code || '—' }}</td>
+                  <td class="px-2 py-2">
+                    <div>{{ effectiveMessage(item) }}</div>
+                    <div v-if="draftOverrides[item.key]" class="mt-1 text-[11px] surface-muted">
+                      {{ t('admin.settings.gatewayForwarding.codexErrorMessages.customDraft') }}
+                    </div>
+                  </td>
+                  <td class="px-2 py-2">
+                    <span class="badge">
+                      {{ sourceLabel(item) }}
+                    </span>
+                  </td>
+                  <td class="px-2 py-2 text-right">
+                    <button type="button" class="table-action" @click="startEditing(item)">
+                      {{ t('admin.settings.gatewayForwarding.codexErrorMessages.edit') }}
+                    </button>
+                    <button
+                      v-if="draftOverrides[item.key]"
+                      type="button"
+                      class="table-action ml-2"
+                      @click="restoreOne(item.key)"
+                    >
+                      {{ t('admin.settings.gatewayForwarding.codexErrorMessages.restore') }}
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="editingKey === item.key" class="record-row-leaf border-t border-[var(--border-color)]">
+                  <td colspan="6" class="px-2 py-3">
+                    <div class="grid gap-3 lg:grid-cols-2">
+                      <div>
+                        <div class="mb-1 text-[11px] font-medium surface-muted">
+                          {{ t('admin.settings.gatewayForwarding.codexErrorMessages.defaultText') }}
+                        </div>
+                        <p class="rounded-lg border border-[var(--border-color)] p-2">
+                          {{ item.default_message }}
+                        </p>
+                      </div>
+                      <div>
+                        <div class="mb-1 text-[11px] font-medium surface-muted">
+                          {{ t('admin.settings.gatewayForwarding.codexErrorMessages.customText') }}
+                        </div>
+                        <textarea
+                          v-model="editorText"
+                          class="input min-h-20 w-full"
+                          :placeholder="t('admin.settings.gatewayForwarding.codexErrorMessages.customPlaceholder')"
+                          data-testid="codex-error-messages-editor"
+                          @input="editorError = ''"
+                        />
+                        <p class="mt-1 flex flex-wrap items-center justify-between gap-2 text-[11px] surface-muted">
+                          <span>{{ t('admin.settings.gatewayForwarding.codexErrorMessages.editorHint') }}</span>
+                          <span :class="editorError ? 'text-rose-400' : ''" data-testid="codex-error-messages-counter">
+                            {{ t('admin.settings.gatewayForwarding.codexErrorMessages.counter', { count: editorCodePoints }) }}
+                          </span>
+                        </p>
+                        <p v-if="editorError" class="mt-1 text-[11px] text-rose-400">
+                          {{ editorError }}
+                        </p>
+                      </div>
+                    </div>
+                    <div class="mt-3 flex flex-wrap justify-end gap-2">
+                      <button type="button" class="btn btn-secondary" @click="cancelEditing">
+                        {{ t('admin.settings.gatewayForwarding.codexErrorMessages.cancel') }}
+                      </button>
+                      <button type="button" class="btn btn-primary" @click="applyEditing(item)">
+                        {{ t('admin.settings.gatewayForwarding.codexErrorMessages.apply') }}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+              <tr v-if="filteredItems.length === 0">
+                <td colspan="6" class="px-2 py-6 text-center surface-muted">
+                  {{ t('admin.settings.gatewayForwarding.codexErrorMessages.empty') }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+
+      <template #footer>
+        <div class="flex w-full flex-wrap items-center justify-between gap-3">
+          <span class="text-xs surface-muted">{{ errorText }}</span>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" class="btn btn-secondary" :disabled="saving" @click="resetDraft">
+              {{ t('admin.settings.gatewayForwarding.codexErrorMessages.discard') }}
+            </button>
+            <button type="button" class="btn btn-secondary" :disabled="saving || !customCount" @click="restoreAll">
+              {{ t('admin.settings.gatewayForwarding.codexErrorMessages.restoreAll') }}
+            </button>
+            <button type="button" class="btn btn-secondary" :disabled="saving" @click="load">
+              {{ t('admin.settings.gatewayForwarding.codexErrorMessages.reload') }}
+            </button>
+            <button type="button" class="btn btn-primary" :disabled="saving || !dirty" data-testid="codex-error-messages-save" @click="save">
+              {{ saveButtonLabel }}
+            </button>
+          </div>
+        </div>
+      </template>
+    </BaseDialog>
   </section>
 </template>
 
@@ -181,6 +213,7 @@ import {
   type CodexPublicErrorItem,
   type CodexPublicErrorSnapshot,
 } from '@/api/admin/settings'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
 import Toggle from '@/components/common/Toggle.vue'
 
@@ -202,6 +235,7 @@ const onlyCustom = ref(false)
 const editingKey = ref('')
 const editorText = ref('')
 const editorError = ref('')
+const dialogOpen = ref(false)
 
 const groupOptions = computed(() => [
   { value: 'all', label: t('admin.settings.gatewayForwarding.codexErrorMessages.allGroups') },
@@ -388,6 +422,14 @@ async function save() {
   } finally {
     saving.value = false
   }
+}
+
+function openDialog() {
+  dialogOpen.value = true
+}
+
+function closeDialog() {
+  dialogOpen.value = false
 }
 
 onMounted(load)

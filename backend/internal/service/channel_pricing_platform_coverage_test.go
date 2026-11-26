@@ -325,6 +325,17 @@ func TestPlatformCoverage_BuiltinOnlyPlatforms(t *testing.T) {
 	require.Equal(t, ChannelPricingStatusPriced, glm.Status)
 	require.InDelta(t, 1.4e-6, *glm.Pricing.InputPrice, 1e-15)
 
+	// GLM-5.4 借用 GLM-5.3 的同型号价卡：渠道设置必须显示价格，且来源是同型号
+	// 内置价，而不是平台兜底或旧 glm-5 家族价。
+	glm54 := mustResolve(t, svc, PlatformZhipu, "glm-5.4")
+	require.Equal(t, ChannelPricingStatusPriced, glm54.Status)
+	require.Equal(t, ChannelPricingSourceBuiltinFallback, glm54.Source)
+	require.Equal(t, "glm-5.4", glm54.MatchedModel)
+	require.NotNil(t, glm54.Pricing)
+	require.InDelta(t, 1.4e-6, *glm54.Pricing.InputPrice, 1e-15)
+	require.InDelta(t, 4.4e-6, *glm54.Pricing.OutputPrice, 1e-15)
+	require.InDelta(t, 0.26e-6, *glm54.Pricing.CacheReadPrice, 1e-15)
+
 	deepseek := mustResolve(t, svc, PlatformDeepseek, "deepseek-v4-pro")
 	require.Equal(t, ChannelPricingStatusPriced, deepseek.Status)
 	require.Equal(t, ChannelPricingSourceReleaseCatalog, deepseek.Source)

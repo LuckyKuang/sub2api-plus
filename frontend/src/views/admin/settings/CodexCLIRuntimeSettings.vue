@@ -28,8 +28,8 @@
         {{ t(ready ? 'codexCliRuntime.ready' : 'codexCliRuntime.notReady') }}
       </dd>
     </dl>
-    <div v-if="status" class="flex items-start justify-between gap-4 border-t border-gray-200 pt-4 dark:border-dark-600">
-      <div>
+    <div v-if="status" class="flex flex-wrap items-start justify-between gap-3 border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div class="min-w-0">
         <h4 class="text-sm font-medium">{{ t('codexCliRuntime.bridgeTitle') }}</h4>
         <p class="mt-1 text-xs surface-muted">{{ t('codexCliRuntime.bridgeHint') }}</p>
         <p v-if="!ready && !bridgeEnabled" class="mt-1 text-xs text-amber-700 dark:text-amber-300">{{ t('codexCliRuntime.bridgeRequiresReady') }}</p>

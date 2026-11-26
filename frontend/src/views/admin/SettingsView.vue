@@ -8534,8 +8534,8 @@
             <template #codex>
               <CodexCLIRuntimeSettings />
               <div class="space-y-4 rounded-lg border border-gray-200 p-4 dark:border-dark-600">
-                <div class="flex items-start justify-between gap-4">
-                  <div>
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
                     <label class="text-sm font-medium surface-muted" for="codex-upstream-ws">
                       {{ t('admin.settings.gatewayForwarding.codexUpstreamWS') }}
                     </label>
@@ -8548,8 +8548,8 @@
                 <p v-if="form.openai_codex_ws_enabled && !form.openai_codex_ws_deployment_allowed" class="text-xs text-amber-600 dark:text-amber-400">
                   {{ t('admin.settings.gatewayForwarding.codexUpstreamWSDeploymentBlocked') }}
                 </p>
-                <div class="flex items-start justify-between gap-4">
-                  <div>
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
                     <label class="text-sm font-medium surface-muted" for="codex-http-ws">
                       {{ t('admin.settings.gatewayForwarding.codexHTTPWS') }}
                     </label>
@@ -8560,8 +8560,8 @@
                   <Toggle id="codex-http-ws" v-model="form.openai_codex_http_ws_enabled" :disabled="!form.openai_codex_ws_enabled || !form.openai_codex_ws_deployment_allowed" data-testid="codex-http-ws" />
                 </div>
               </div>
-              <div class="flex items-start justify-between gap-4">
-                <div>
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
                   <label class="text-sm font-medium surface-muted" for="codex-safety-buffering-suppressed">
                     {{ t('admin.settings.gatewayForwarding.codexSafetyBufferingSuppressed') }}
                   </label>

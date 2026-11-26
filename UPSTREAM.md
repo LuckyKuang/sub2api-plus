@@ -6,7 +6,52 @@ publication status. Release naming and procedures live in
 
 ## Integrated Baseline
 
-The current tree integrates official [`v0.2.24`](https://github.com/Wei-Shaw/sub2api/releases/tag/v0.2.24),
+The current tree integrates official [`v0.2.25`](https://github.com/Wei-Shaw/sub2api/releases/tag/v0.2.25),
+peeled commit `348997267d756eab5729bb6b78a275a15d18796a`, from Plus main
+`25617c9b1`. The bounded upstream delta starts at the previously reviewed v0.2.24
+tag and ends at v0.2.25. It adds identity-report variables to account header
+overrides, upstream-group name/notes synchronization, OpenAI passthrough error
+redaction and structured-field bounds, and an `invalid_encrypted_content`
+client response. The dependency bump in the same tag is already present in Plus.
+
+Plus imports the header-override identity variables under the existing outbound
+identity contract: only API-key accounts resolve them, identity header names stay
+blocked by `outboundidentity.IsIdentityHeader`, OAuth and setup-token accounts
+drop a variable-bearing override entirely at runtime and reject it on save, and
+`request_id` is sanitized before interpolation because a client may supply it.
+Model-list and manifest requests resolve variables without an inbound user scope,
+and the OpenAI WS pool buckets connections by the reported identity so handshakes
+are never shared across users. Ops error events record only variable-generated
+headers, with literal template text redacted so relay secrets never reach logs.
+
+The OpenAI passthrough path keeps the audited error catalog as the
+client-visible authority. Upstream's base-URL/credential redaction, scalar and
+length bounds for `error.type`/`code`/`param`, and the
+`invalid_encrypted_content` routing to the catalog are integrated. Upstream's
+rule-driven rewrite of the client status and body for `openai_passthrough`
+accounts is not imported: it would let an administrator rule replace the audited
+catalog text, which [CODEX_PUBLIC_ERRORS](docs/protocols/CODEX_PUBLIC_ERRORS.md)
+forbids.
+
+Upstream's upstream-group synchronization rebuilds the billing probe that Plus
+retired in `234_drop_upstream_billing_probe.sql` under the
+`remove-sub2api-brand-and-upstream-billing-probe` decision, including its
+upstream-declared rate write-back into `accounts.rate_multiplier`. That cluster
+(upstream commits for group sync, include multi-value, text validation and
+VERSION sync) is intentionally excluded; the probe route remains absent and the
+retirement migration stays authoritative.
+
+The [seven provider gate](docs/SEVEN_PROVIDER_TEST_MATRIX.md#v025-import-requirements)
+covers the existing official-agent baselines. Codex keeps its pinned identity
+catalog and manually selected identity; the variable feature never selects or
+rewrites an identity declaration. Shared header-override, ops and passthrough
+paths apply to MiniMax, StepFun and Zhipu while their agent-specific protocols
+retain the reviewed baselines. This import needs no SQL migration or dependency
+pin change.
+
+## Previous baseline
+
+The previous tree integrated official [`v0.2.24`](https://github.com/Wei-Shaw/sub2api/releases/tag/v0.2.24),
 peeled commit `5c2982a81b46e2142d0143d2f83c1ce9c4da1d24`, from Plus main
 `56bec477d64add7e468b97e07a92d0f5d637230d`. The bounded upstream delta starts
 at the previously reviewed v0.2.23 tag and ends at v0.2.24. It adds duplicate
@@ -263,9 +308,9 @@ These identifiers describe the current planned source revision. Its tag and
 image are not published; the mapping status below governs publication.
 
 ```text
-Git/GitHub: v0.2.24+custom.002
-Application: 0.2.24+custom.002
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.24-custom.002
+Git/GitHub: v0.2.25+custom.001
+Application: 0.2.25+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.25-custom.001
 ```
 
 ## Release Mapping
@@ -359,6 +404,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.24-custom.002
 | `v0.2.23+custom.001` | `v0.2.23` | `5af9afb588c4b014b3df9db7d4073af1f8ae01b6` | published |
 | `v0.2.24+custom.001` | `v0.2.24` | `5c2982a81b46e2142d0143d2f83c1ce9c4da1d24` | published |
 | `v0.2.24+custom.002` | `v0.2.24` | `5c2982a81b46e2142d0143d2f83c1ce9c4da1d24` | published |
+| `v0.2.25+custom.001` | `v0.2.25` | `348997267d756eab5729bb6b78a275a15d18796a` | planned |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains

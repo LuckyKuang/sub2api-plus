@@ -3,6 +3,7 @@
 package service
 
 import (
+	"context"
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
 	"net/http"
 	"strings"
@@ -83,7 +84,7 @@ func TestHeaderOverrideIgnoresLegacyManagedIdentity(t *testing.T) {
 				for range 2 { // Cached and uncached reads must both filter old data.
 					require.Equal(t, map[string]string{"x-route": "retained", "anthropic-beta": "test-capability"}, account.GetHeaderOverrides())
 					headers := http.Header{"User-Agent": {"trusted-client/1.0"}, "Authorization": {"Bearer retained"}}
-					account.ApplyHeaderOverrides(headers)
+					account.ApplyHeaderOverrides(context.Background(), headers)
 					require.Equal(t, "trusted-client/1.0", headers.Get("User-Agent"))
 					require.Equal(t, "Bearer retained", headers.Get("Authorization"))
 					require.Equal(t, "retained", getHeaderRaw(headers, "x-route"))
@@ -221,7 +222,7 @@ func TestApplyHeaderOverrides(t *testing.T) {
 	h["anthropic-beta"] = []string{"claude-code-20250219,oauth-2025-04-20"} // 非 canonical 原样 key
 	h.Set("Content-Type", "application/json")
 
-	acc.ApplyHeaderOverrides(h)
+	acc.ApplyHeaderOverrides(context.Background(), h)
 
 	// 通用覆写不能替换身份模块设置的 UA。
 	require.Equal(t, []string{"claude-cli/2.1.161 (external, cli)"}, h["User-Agent"])
@@ -257,7 +258,7 @@ func TestApplyHeaderOverridesIgnoresLegacyContentEncoding(t *testing.T) {
 	})
 
 	h := http.Header{}
-	acc.ApplyHeaderOverrides(h)
+	acc.ApplyHeaderOverrides(context.Background(), h)
 
 	require.Empty(t, h.Get("Content-Encoding"))
 	require.Equal(t, "custom-value", getHeaderRaw(h, "x-custom"))
@@ -276,7 +277,7 @@ func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
 		credKeyHeaderOverrides:       map[string]any{"user-agent": "hacked"},
 	})
 	h := baseline()
-	oauth.ApplyHeaderOverrides(h)
+	oauth.ApplyHeaderOverrides(context.Background(), h)
 	require.Equal(t, "orig", h.Get("User-Agent"))
 
 	// 未启用开关
@@ -284,7 +285,7 @@ func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
 		credKeyHeaderOverrides: map[string]any{"user-agent": "hacked"},
 	})
 	h = baseline()
-	off.ApplyHeaderOverrides(h)
+	off.ApplyHeaderOverrides(context.Background(), h)
 	require.Equal(t, "orig", h.Get("User-Agent"))
 
 	// 禁止覆写的头（authorization / x-api-key / host 等）不会被应用
@@ -299,13 +300,13 @@ func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
 	})
 	h = http.Header{}
 	h.Set("Authorization", "Bearer real-key")
-	blocked.ApplyHeaderOverrides(h)
+	blocked.ApplyHeaderOverrides(context.Background(), h)
 	require.Equal(t, "Bearer real-key", h.Get("Authorization"))
 	require.Empty(t, h.Get("X-Api-Key"))
 	require.Empty(t, h.Get("Host"))
 
 	// nil header 不 panic
-	blocked.ApplyHeaderOverrides(nil)
+	blocked.ApplyHeaderOverrides(context.Background(), nil)
 }
 
 func TestApplyHeaderOverridesCannotAllowBrandedIdentityOnWire(t *testing.T) {
@@ -317,7 +318,7 @@ func TestApplyHeaderOverridesCannotAllowBrandedIdentityOnWire(t *testing.T) {
 		"X-Grok-Conv-Id":           {"conversation"},
 	}
 
-	account.ApplyHeaderOverrides(header)
+	account.ApplyHeaderOverrides(context.Background(), header)
 
 	req, err := http.NewRequest(http.MethodGet, "https://example.com", nil)
 	require.NoError(t, err)
@@ -334,7 +335,7 @@ func TestApplyHeaderOverridesCannotAllowBrandedIdentityOnWire(t *testing.T) {
 		},
 	})
 	header = http.Header{}
-	apiKey.ApplyHeaderOverrides(header)
+	apiKey.ApplyHeaderOverrides(context.Background(), header)
 	require.Empty(t, header.Get("User-Agent"))
 }
 

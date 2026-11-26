@@ -304,7 +304,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_TurnRetryForcesF
 	ap.mu.Unlock()
 	require.NotNil(t, lastAcquire)
 	staleConnB := newOpenAIWSConn(pool.nextConnID(account.ID), account.ID, staleB, nil)
-	staleConnB.handshakeCompatibility = normalizeOpenAIWSHandshakeCompatibility(lastAcquire.Headers)
+	staleConnB.handshakeCompatibility = normalizeOpenAIWSHandshakeCompatibility(nil, lastAcquire.Headers)
 	staleConnB.routingAffinity = normalizeOpenAIWSRoutingAffinity(lastAcquire.Headers)
 	ap.mu.Lock()
 	ap.conns[staleConnB.id] = staleConnB

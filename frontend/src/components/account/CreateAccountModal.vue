@@ -1958,6 +1958,7 @@
 
             <HeaderOverrideEditor
               :rows="headerOverrideRows"
+              :allow-variables="headerOverrideAllowVariables"
               @update:rows="headerOverrideRows = $event"
             />
           </div>
@@ -2347,6 +2348,7 @@
 
           <HeaderOverrideEditor
             :rows="headerOverrideRows"
+            :allow-variables="headerOverrideAllowVariables"
             @update:rows="headerOverrideRows = $event"
           />
         </div>
@@ -4430,7 +4432,9 @@ const validateGrokOAuthUpstreamConfig = (): boolean => {
     }
   }
   if (headerOverrideEnabled.value) {
-    const headerError = validateHeaderOverrideRows(headerOverrideRows.value)
+    const headerError = validateHeaderOverrideRows(headerOverrideRows.value, {
+      allowVariables: headerOverrideAllowVariables.value
+    })
     if (headerError) {
       appStore.showError(t(`admin.accounts.headerOverride.${headerError}`))
       return false
@@ -4810,6 +4814,9 @@ const tempUnschedPresets = computed(() => [
     }
   }
 ])
+
+// 身份上报变量仅 api_key 账号可用：OAuth 订阅上游不能收到网关用户身份
+const headerOverrideAllowVariables = computed(() => form.type === 'apikey')
 
 const form = reactive({
   name: '',
@@ -6080,7 +6087,9 @@ const handleSubmit = async () => {
   // Add header override if enabled for this API-key platform
   if (isHeaderOverrideCapable(form.platform, 'apikey')) {
     if (headerOverrideEnabled.value) {
-      const headerError = validateHeaderOverrideRows(headerOverrideRows.value)
+      const headerError = validateHeaderOverrideRows(headerOverrideRows.value, {
+      allowVariables: headerOverrideAllowVariables.value
+    })
       if (headerError) {
         appStore.showError(t(`admin.accounts.headerOverride.${headerError}`))
         return

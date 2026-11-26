@@ -7,7 +7,9 @@ const {
   getRequestErrorDetail,
   getUpstreamErrorDetail,
   listRequestErrorUpstreamErrors,
+  copyToClipboard,
 } = vi.hoisted(() => ({
+  copyToClipboard: vi.fn(),
   getRequestErrorDetail: vi.fn(),
   getUpstreamErrorDetail: vi.fn(),
   listRequestErrorUpstreamErrors: vi.fn(),
@@ -27,6 +29,10 @@ vi.mock('@/stores', () => ({
 
 vi.mock('@/utils/format', () => ({
   formatDateTime: (value: string) => value,
+}))
+
+vi.mock('@/composables/useClipboard', () => ({
+  useClipboard: () => ({ copyToClipboard: copyToClipboard })
 }))
 
 vi.mock('vue-i18n', async (importOriginal) => {
@@ -163,5 +169,46 @@ describe('OpsErrorDetailModal upstream diagnostics', () => {
     expect(wrapper.text()).toContain('429')
     expect(wrapper.findAll('pre')).toHaveLength(2)
     expect(wrapper.text()).not.toContain('admin.ops.errorDetail.payloads.upstream_detail')
+    expect(wrapper.find('[data-testid="error-detail-reported-headers"]').exists()).toBe(false)
+  })
+
+  it('shows the identity headers that were reported upstream and copies them', async () => {
+    getRequestErrorDetail.mockResolvedValue({
+      id: 2,
+      created_at: '2026-11-24T00:00:00Z',
+      phase: 'upstream',
+      error_owner: 'provider',
+      status_code: 502,
+      platform: 'openai',
+      request_id: 'rid-2',
+      upstream_errors: JSON.stringify([
+        {
+          account_id: 5,
+          account_name: 'relay-a',
+          upstream_status_code: 400,
+          reported_headers: { 'x-gateway-user-id': '7' }
+        }
+      ])
+    })
+
+    const wrapper = shallowMount(OpsErrorDetailModal, {
+      props: { show: true, errorId: 2, errorType: 'request' },
+      global: {
+        stubs: {
+          DetailContentHost: { template: '<div><slot /></div>' },
+          Icon: true
+        }
+      }
+    })
+    await flushPromises()
+
+    const section = wrapper.get('[data-testid="error-detail-reported-headers"]')
+    expect(section.text()).toContain('relay-a')
+    expect(section.text()).toContain('x-gateway-user-id')
+    await section.get('button').trigger('click')
+    expect(copyToClipboard).toHaveBeenCalledWith(
+      'x-gateway-user-id: 7',
+      'admin.ops.errorDetail.reportedHeaders.copied'
+    )
   })
 })

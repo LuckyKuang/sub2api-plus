@@ -370,22 +370,25 @@ func TestPlatformPricingFallback_SettingsFailureCannotBecomeAnInventedFreeCard(t
 	require.Error(t, err)
 }
 
-func TestPlatformPricingFallback_ZhipuGLM54UsesConfiguredFallbackSKU(t *testing.T) {
+func TestPlatformPricingFallback_ZhipuGLM54UsesSameModelCardWithoutFallback(t *testing.T) {
 	billing := platformFallbackTestBilling(nil)
 	price, err := billing.GetModelPricingForPlatform(context.Background(), PlatformZhipu, "glm-5.4")
 	require.NoError(t, err)
 	requirePlatformFallbackRates(t, price, 1.4e-6, 4.4e-6)
-	require.Equal(t, "glm-5.3", price.FallbackModel)
-	require.Equal(t, PlatformZhipu, price.FallbackPlatform)
+	// GLM-5.4 carries its own reviewed card (mirrored from GLM-5.3), so the
+	// platform fallback SKU is not consulted and no fallback is recorded.
+	require.Empty(t, price.FallbackModel)
+	require.Empty(t, price.FallbackPlatform)
 
-	// Disabling the platform fallback leaves GLM-5.4 without a price instead of
-	// borrowing the legacy glm-5 family card.
+	// Disabling the platform fallback must not remove a same-model card, and the
+	// legacy glm-5 family card must still not price GLM-5.4.
 	billing.pricingFallbackModels = func(context.Context) (map[string]string, error) {
 		return map[string]string{}, nil
 	}
 	price, err = billing.GetModelPricingForPlatform(context.Background(), PlatformZhipu, "glm-5.4")
-	require.ErrorIs(t, err, ErrModelPricingUnavailable)
-	require.Nil(t, price)
+	require.NoError(t, err)
+	requirePlatformFallbackRates(t, price, 1.4e-6, 4.4e-6)
+	require.Empty(t, price.FallbackModel)
 }
 
 func TestPlatformPricingFallback_ZhipuGLM54ExplicitPriceWins(t *testing.T) {

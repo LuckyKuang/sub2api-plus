@@ -191,7 +191,7 @@ func (s *GrokQuotaService) prepareGrokObservedModelsRequest(ctx context.Context,
 			}
 		}
 	}
-	account.ApplyHeaderOverrides(req.Header)
+	account.ApplyHeaderOverrides(req.Context(), req.Header)
 
 	if s.httpUpstream == nil {
 		return nil, "", nil
