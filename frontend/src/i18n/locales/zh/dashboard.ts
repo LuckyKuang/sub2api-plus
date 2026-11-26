@@ -177,13 +177,19 @@ export default {
       scopeAll: '全部已授权的按量分组',
       scopeCustom: '自定义分组（{count} 个）',
       scopeUngrouped: '未绑定分组',
-      model: '文本模型',
+      model: '测试模型',
       modelPlaceholder: '选择模型',
+      prompt: '测试问题 / 提示词',
+      promptHint: '可修改问题，测试后查看模型的实际回答。',
+      imagePromptHint: '描述你想生成的图片，图片生成可能需要几分钟。',
+      response: '模型回答',
+      generatedImage: '生成的图片 {index}',
       protocol: {
         responses: 'Responses',
         chat: 'Chat Completions',
         messages: 'Messages',
-        gemini: 'Gemini'
+        gemini: 'Gemini',
+        images: '图片生成'
       },
       endpointHint: '将向 {endpoint} 发送 1 次 {protocol} 请求。',
       costHint: '将发送 1 次请求，按该分组规则计费；取消或超时仍可能计费。',
@@ -193,10 +199,10 @@ export default {
       failed: '测试失败',
       successDetail: '模型 {model} · {ms} 毫秒',
       requestId: '请求 ID：{id}',
-      loading: '正在读取可用文本模型…',
+      loading: '正在读取可用模型…',
       retry: '重试',
       loadFailed: '未能读取可用模型。这不代表密钥失效，请稍后重试。',
-      noCapability: '当前密钥没有可通过网页测试的文本模型。',
+      noCapability: '当前密钥没有可通过网页测试的模型。',
       emptyScope: '该聚合密钥当前没有可用模型。',
       blocked: {
         readonly: '只读协助模式不能发送测试请求。',
@@ -220,7 +226,8 @@ export default {
         network: '未能确认：网络请求失败或跨域响应不可读。',
         timeout: '未能确认：请求超时。',
         noText: '未能确认有效文本响应。',
-        unknown: '未能确认有效文本响应。'
+        noImage: '未返回有效的生成图片，请更换提示词或模型重试。',
+        unknown: '未能确认有效响应。'
       }
     },
     useKey: '使用密钥',

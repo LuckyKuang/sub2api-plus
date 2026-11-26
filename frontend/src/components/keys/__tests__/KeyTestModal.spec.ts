@@ -164,6 +164,29 @@ afterEach(() => {
 })
 
 describe('KeyTestModal capability discovery', () => {
+  it('tests an image-only model with the account-test prompt and renders its image response', async () => {
+    const image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII='
+    getNativeAccess.mockResolvedValue(access([{ name: 'gpt-image-1', endpoints: ['/v1/images/generations'] }]))
+    const wrapper = await mountModal()
+
+    expect(wrapper.findAll('option').map(option => option.text())).toEqual(['gpt-image-1'])
+    const prompt = wrapper.get('textarea#key-test-prompt')
+    expect((prompt.element as HTMLTextAreaElement).value).toBe(en.admin.accounts.imagePromptDefault)
+    await prompt.setValue('Generate an orange cat astronaut sticker.')
+    fetchMock.mockResolvedValue(gatewayResponse({ data: [{ b64_json: image }] }))
+    await startButton(wrapper).trigger('click')
+    await flushPromises()
+
+    const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://api.example.com/v1/images/generations')
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      model: 'gpt-image-1', prompt: 'Generate an orange cat astronaut sticker.',
+    })
+    expect(wrapper.get('[data-testid="key-test-result"]').text()).toContain('Test passed')
+    expect(wrapper.get('[data-testid="key-test-output-image"]').attributes('src')).toBe(`data:image/png;base64,${image}`)
+    wrapper.unmount()
+  })
+
   it('opens the selected row, loads candidates, and sends no inference', async () => {
     getNativeAccess.mockResolvedValue(access([{ name: 'gpt-5', endpoints: ['/v1/responses'] }]))
     const wrapper = await mountModal()
@@ -188,6 +211,27 @@ describe('KeyTestModal capability discovery', () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(Object.keys(init.headers as Record<string, string>)).not.toContain('X-Composite-Group-ID')
     expect(wrapper.get('[data-testid="key-test-result"]').text()).toContain('Test passed')
+    wrapper.unmount()
+  })
+
+  it('tests an aggregate image alias through the group that supports its image endpoint', async () => {
+    getNativeAccess.mockResolvedValue(access([{
+      name: 'shared-model',
+      endpoints: ['/v1/responses', '/v1/images/generations'],
+      group_ids: [3, 9],
+      image_group_ids: [9],
+      is_image: true,
+    }]))
+    fetchMock.mockResolvedValue(gatewayResponse({ data: [{ url: 'https://images.example.com/generated-cat.png' }] }))
+    const wrapper = await mountModal(makeKey({ group_id: null, group: undefined, group_binding_mode: 'all' }))
+    await startButton(wrapper).trigger('click')
+    await flushPromises()
+
+    const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://api.example.com/v1/images/generations')
+    expect(request.headers).toMatchObject({ 'X-Composite-Group-ID': '9' })
+    expect(wrapper.get('[data-testid="key-test-result"]').text()).toContain('Test passed')
+    expect(wrapper.get('[data-testid="key-test-output-image"]').attributes('src')).toBe('https://images.example.com/generated-cat.png')
     wrapper.unmount()
   })
 
@@ -310,6 +354,155 @@ describe('KeyTestModal keyboard contract', () => {
 })
 
 describe('KeyTestModal inference', () => {
+  it('sends hi by default and displays the returned text', async () => {
+    getNativeAccess.mockResolvedValue(access([{ name: 'gpt-5', endpoints: ['/v1/responses'] }]))
+    fetchMock.mockResolvedValue(gatewayResponse({ output_text: 'Hello! How can I help?' }))
+    const wrapper = await mountModal()
+
+    expect((wrapper.get('textarea#key-test-prompt').element as HTMLTextAreaElement).value).toBe('hi')
+    await startButton(wrapper).trigger('click')
+    await flushPromises()
+
+    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(request.body as string).input).toBe('hi')
+    expect(wrapper.get('[data-testid="key-test-output-text"]').text()).toBe('Hello! How can I help?')
+    wrapper.unmount()
+  })
+
+  it('updates untouched default prompts when switching between text and image models', async () => {
+    getNativeAccess.mockResolvedValue(access([
+      { name: 'gpt-5', endpoints: ['/v1/responses'] },
+      { name: 'gpt-image-1', endpoints: ['/v1/images/generations'] },
+    ]))
+    const wrapper = await mountModal()
+    wrapper.getComponent(SelectStub).vm.$emit('update:modelValue', 'gpt-5')
+    await flushPromises()
+    const prompt = wrapper.get('textarea#key-test-prompt')
+    expect((prompt.element as HTMLTextAreaElement).value).toBe('hi')
+
+    wrapper.getComponent(SelectStub).vm.$emit('update:modelValue', 'gpt-image-1')
+    await flushPromises()
+    expect((prompt.element as HTMLTextAreaElement).value).toBe(en.admin.accounts.imagePromptDefault)
+
+    wrapper.getComponent(SelectStub).vm.$emit('update:modelValue', 'gpt-5')
+    await flushPromises()
+    expect((prompt.element as HTMLTextAreaElement).value).toBe('hi')
+    wrapper.unmount()
+  })
+
+  it('preserves an entered prompt when the model changes and submits it', async () => {
+    getNativeAccess.mockResolvedValue(access([
+      { name: 'gpt-5', endpoints: ['/v1/responses'] },
+      { name: 'gpt-image-1', endpoints: ['/v1/images/generations'] },
+    ]))
+    const wrapper = await mountModal()
+    wrapper.getComponent(SelectStub).vm.$emit('update:modelValue', 'gpt-5')
+    await flushPromises()
+    const prompt = wrapper.get('textarea#key-test-prompt')
+    await prompt.setValue('Draw a small red kite over a green field.')
+
+    wrapper.getComponent(SelectStub).vm.$emit('update:modelValue', 'gpt-image-1')
+    await flushPromises()
+    expect((prompt.element as HTMLTextAreaElement).value).toBe('Draw a small red kite over a green field.')
+
+    wrapper.getComponent(SelectStub).vm.$emit('update:modelValue', 'gpt-5')
+    await flushPromises()
+    fetchMock.mockResolvedValue(gatewayResponse({ output_text: 'Here is the kite.' }))
+    await startButton(wrapper).trigger('click')
+    await flushPromises()
+
+    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(request.body as string).input).toBe('Draw a small red kite over a green field.')
+    wrapper.unmount()
+  })
+
+  it.each(['', '  \n\t  '])('disables testing for a blank prompt %j', async (prompt) => {
+    getNativeAccess.mockResolvedValue(access([{ name: 'gpt-5', endpoints: ['/v1/responses'] }]))
+    const wrapper = await mountModal()
+    await wrapper.get('textarea#key-test-prompt').setValue(prompt)
+
+    expect(startButton(wrapper).attributes()).toHaveProperty('disabled')
+    await startButton(wrapper).trigger('click')
+    expect(fetchMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('clears an old result when the prompt is edited', async () => {
+    getNativeAccess.mockResolvedValue(access([{ name: 'gpt-5', endpoints: ['/v1/responses'] }]))
+    fetchMock.mockResolvedValue(gatewayResponse({ output_text: 'The previous answer.' }))
+    const wrapper = await mountModal()
+    await startButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="key-test-output-text"]').text()).toBe('The previous answer.')
+
+    await wrapper.get('textarea#key-test-prompt').setValue('Say something different.')
+    expect(wrapper.find('[data-testid="key-test-result"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="key-test-output-text"]').exists()).toBe(false)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it.each([
+    { name: 'no image data', response: { data: [] } },
+    { name: 'text only', response: { output_text: 'I generated an image.' } },
+    { name: 'an unsafe image URL', response: { data: [{ url: 'javascript:alert(1)' }] } },
+  ])('rejects an image response with $name', async ({ response }) => {
+    getNativeAccess.mockResolvedValue(access([{ name: 'gpt-image-1', endpoints: ['/v1/images/generations'] }]))
+    fetchMock.mockResolvedValue(gatewayResponse(response))
+    const wrapper = await mountModal()
+    await startButton(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="key-test-result"]').text()).toContain('Test failed')
+    expect(wrapper.get('[data-testid="key-test-failure-reason"]').text()).toBe('No valid generated image was returned. Try another prompt or model.')
+    expect(wrapper.find('[data-testid="key-test-output-image"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('reports an image that cannot display as a failure without another inference request', async () => {
+    getNativeAccess.mockResolvedValue(access([{ name: 'gpt-image-1', endpoints: ['/v1/images/generations'] }]))
+    fetchMock.mockResolvedValue(gatewayResponse(
+      { data: [{ url: 'https://images.example.com/unavailable.png' }] },
+      200,
+      { 'X-Request-ID': 'req-image-preview' },
+    ))
+    const wrapper = await mountModal()
+    await startButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="key-test-result"]').text()).toContain('Test passed')
+
+    await wrapper.get('[data-testid="key-test-output-image"]').trigger('error')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="key-test-result"]').text()).toContain('Test failed')
+    expect(wrapper.get('[data-testid="key-test-failure-reason"]').text()).toBe('No valid generated image was returned. Try another prompt or model.')
+    expect(wrapper.get('[data-testid="key-test-request-id"]').text()).toContain('req-image-preview')
+    expect(wrapper.find('[data-testid="key-test-output-image"]').exists()).toBe(false)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('keeps a successful image result when another returned image cannot display', async () => {
+    getNativeAccess.mockResolvedValue(access([{ name: 'gpt-image-1', endpoints: ['/v1/images/generations'] }]))
+    fetchMock.mockResolvedValue(gatewayResponse({ data: [
+      { url: 'https://images.example.com/unavailable.png' },
+      { url: 'https://images.example.com/cat.png' },
+    ] }))
+    const wrapper = await mountModal()
+    await startButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="key-test-output-image"]')).toHaveLength(2)
+
+    await wrapper.findAll('[data-testid="key-test-output-image"]')[0]!.trigger('error')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="key-test-result"]').text()).toContain('Test passed')
+    expect(wrapper.findAll('[data-testid="key-test-output-image"]')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="key-test-output-image"]').attributes('src')).toBe('https://images.example.com/cat.png')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
   it('runs one Responses request with the row key and shows model plus latency', async () => {
     getNativeAccess.mockResolvedValue(access([{ name: 'gpt-5', endpoints: ['/v1/responses'] }]))
     fetchMock.mockResolvedValue(gatewayResponse({
@@ -480,6 +673,53 @@ describe('KeyTestModal inference', () => {
     await vi.advanceTimersByTimeAsync(KEY_TEST_TIMEOUT_MS)
 
     expect(wrapper.get('[data-testid="key-test-failure-reason"]').text()).toBe('Unable to confirm: the request timed out.')
+    wrapper.unmount()
+  })
+
+  it('allows image generation beyond the text timeout and aborts at five minutes', async () => {
+    getNativeAccess.mockResolvedValue(access([{ name: 'gpt-image-1', endpoints: ['/v1/images/generations'] }]))
+    const wrapper = await mountModal()
+    let requestSignal: AbortSignal | null | undefined
+    fetchMock.mockImplementation((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      requestSignal = init.signal
+      init.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+    }))
+    vi.useFakeTimers()
+    await startButton(wrapper).trigger('click')
+    await vi.advanceTimersByTimeAsync(60_000)
+
+    expect(requestSignal?.aborted).toBe(false)
+    expect(wrapper.find('[data-testid="key-test-result"]').exists()).toBe(false)
+    expect(startButton(wrapper).attributes()).toHaveProperty('disabled')
+
+    await vi.advanceTimersByTimeAsync(239_999)
+    expect(requestSignal?.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(requestSignal?.aborted).toBe(true)
+    expect(wrapper.get('[data-testid="key-test-failure-reason"]').text()).toBe('Unable to confirm: the request timed out.')
+    wrapper.unmount()
+  })
+
+  it('aborts image generation immediately when closing and ignores its late response', async () => {
+    getNativeAccess.mockResolvedValue(access([{ name: 'gpt-image-1', endpoints: ['/v1/images/generations'] }]))
+    let resolveFetch!: (response: Response) => void
+    let requestSignal: AbortSignal | null | undefined
+    fetchMock.mockImplementation((_url: string, init: RequestInit) => {
+      requestSignal = init.signal
+      return new Promise(resolve => { resolveFetch = resolve })
+    })
+    const wrapper = await mountModal()
+    await startButton(wrapper).trigger('click')
+    expect(requestSignal?.aborted).toBe(false)
+
+    await wrapper.setProps({ show: false })
+    expect(requestSignal?.aborted).toBe(true)
+    resolveFetch(gatewayResponse({ data: [{ url: 'https://images.example.com/cat.png' }] }))
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="key-test-result"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="key-test-output-image"]').exists()).toBe(false)
     wrapper.unmount()
   })
 

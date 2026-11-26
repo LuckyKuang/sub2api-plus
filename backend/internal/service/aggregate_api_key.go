@@ -285,6 +285,8 @@ type AggregateNativeModel struct {
 	Endpoints           []string `json:"endpoints"`
 	ConversionEndpoints []string `json:"conversion_endpoints"`
 	GroupIDs            []int64  `json:"group_ids"`
+	IsImage             bool     `json:"is_image"`
+	ImageGroupIDs       []int64  `json:"image_group_ids,omitempty"`
 }
 
 func (s *APIKeyService) AggregateNativeModels(ctx context.Context, key *APIKey) ([]AggregateNativeModel, error) {
@@ -316,8 +318,21 @@ func (s *APIKeyService) AggregateNativeModels(ctx context.Context, key *APIKey) 
 				if routing := group.GetRoutingAccountIDs(model); len(routing) > 0 && !slices.Contains(routing, account.ID) {
 					continue
 				}
-				protocols := account.NativeProtocols(account.GetMappedModel(mapped))
-				if len(protocols) == 0 {
+				mappedModel := account.GetMappedModel(mapped)
+				imageEndpoint, image := NativeImageAccess(account, model, mappedModel)
+				nativeEndpoints := []string{}
+				if image {
+					if imageEndpoint != "" && GroupAllowsImageGeneration(group) {
+						nativeEndpoints = append(nativeEndpoints, imageEndpoint)
+					}
+				} else {
+					for _, protocol := range account.NativeProtocols(mappedModel) {
+						if path := paths[protocol]; path != "" {
+							nativeEndpoints = append(nativeEndpoints, path)
+						}
+					}
+				}
+				if len(nativeEndpoints) == 0 {
 					continue
 				}
 				id := account.Platform + "\x00" + model
@@ -329,8 +344,12 @@ func (s *APIKeyService) AggregateNativeModels(ctx context.Context, key *APIKey) 
 				if !slices.Contains(offer.GroupIDs, group.ID) {
 					offer.GroupIDs = append(offer.GroupIDs, group.ID)
 				}
-				for _, protocol := range protocols {
-					if path := paths[protocol]; path != "" && !slices.Contains(offer.Endpoints, path) {
+				offer.IsImage = offer.IsImage || image
+				if image && !slices.Contains(offer.ImageGroupIDs, group.ID) {
+					offer.ImageGroupIDs = append(offer.ImageGroupIDs, group.ID)
+				}
+				for _, path := range nativeEndpoints {
+					if !slices.Contains(offer.Endpoints, path) {
 						offer.Endpoints = append(offer.Endpoints, path)
 					}
 				}

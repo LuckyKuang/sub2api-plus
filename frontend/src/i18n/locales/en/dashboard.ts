@@ -177,13 +177,19 @@ export default {
       scopeAll: 'All authorized pay-as-you-go groups',
       scopeCustom: 'Custom groups ({count})',
       scopeUngrouped: 'No group assigned',
-      model: 'Text model',
+      model: 'Test model',
       modelPlaceholder: 'Choose a model',
+      prompt: 'Test prompt',
+      promptHint: 'Edit the question to see the model’s answer.',
+      imagePromptHint: 'Describe the image you want to generate. Image generation may take several minutes.',
+      response: 'Model response',
+      generatedImage: 'Generated image {index}',
       protocol: {
         responses: 'Responses',
         chat: 'Chat Completions',
         messages: 'Messages',
-        gemini: 'Gemini'
+        gemini: 'Gemini',
+        images: 'Images'
       },
       endpointHint: 'Sends one {protocol} request to {endpoint}.',
       costHint: 'Will send 1 request, billed by this group’s rules. Cancellation or timeout may still be billed.',
@@ -193,10 +199,10 @@ export default {
       failed: 'Test failed',
       successDetail: 'Model {model} · {ms} ms',
       requestId: 'Request ID: {id}',
-      loading: 'Loading available text models…',
+      loading: 'Loading available models…',
       retry: 'Retry',
       loadFailed: 'Could not load available models. This does not mean the key is invalid. Try again later.',
-      noCapability: 'This key has no text model that the browser can test.',
+      noCapability: 'This key has no model that the browser can test.',
       emptyScope: 'This aggregate key currently has no available models.',
       blocked: {
         readonly: 'Read-only assistance cannot send a test request.',
@@ -220,7 +226,8 @@ export default {
         network: 'Unable to confirm: the network request failed or the cross-origin response was unreadable.',
         timeout: 'Unable to confirm: the request timed out.',
         noText: 'Unable to confirm a valid text response.',
-        unknown: 'Unable to confirm a valid text response.'
+        noImage: 'No valid generated image was returned. Try another prompt or model.',
+        unknown: 'Unable to confirm a valid response.'
       }
     },
     useKey: 'Use Key',

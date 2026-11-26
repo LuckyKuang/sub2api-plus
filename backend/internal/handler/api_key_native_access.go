@@ -20,6 +20,7 @@ type nativeAccessModel struct {
 	Platform            string   `json:"platform"`
 	Endpoints           []string `json:"endpoints"`
 	ConversionEndpoints []string `json:"conversion_endpoints"`
+	IsImage             bool     `json:"is_image"`
 }
 
 // GetNativeAccess projects only the caller's authorized group and public models.
@@ -69,19 +70,20 @@ func (h *APIKeyHandler) GetNativeAccess(c *gin.Context) {
 	candidates := nativeAccessCandidates(group, accounts, catalog, routeModels)
 	models := []nativeAccessModel{}
 	endpoints := map[string]bool{}
-	paths := map[string]string{service.APIProtocolResponses: "/v1/responses", service.APIProtocolChatCompletions: "/v1/chat/completions", service.APIProtocolAnthropic: "/v1/messages", "gemini": "/v1beta", "systemone": "/v1/systemone"}
+	paths := map[string]string{service.APIProtocolResponses: "/v1/responses", service.APIProtocolChatCompletions: "/v1/chat/completions", service.APIProtocolAnthropic: "/v1/messages", "gemini": "/v1beta", "systemone": "/v1/systemone", service.CompositeRouteEndpointImages: "/v1/images/generations"}
 	metadataCtx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	for _, offer := range candidates {
 		available := map[string]bool{}
 		convertible := map[string]bool{}
+		isImage := false
 		for _, account := range accounts {
 			if account.Platform != offer.Platform || account.Status != service.StatusActive {
 				continue
 			}
 			// A commercial catalog entry or another account's price does not
 			// prove this account can invoke the target model.
-			if !service.AccountModelEvidenceAllows(c.Request.Context(), &account, offer.Name) {
+			if group.Platform != service.PlatformComposite && !service.AccountModelEvidenceAllows(c.Request.Context(), &account, offer.Name) {
 				continue
 			}
 			for protocol, path := range paths {
@@ -101,8 +103,24 @@ func (h *APIKeyHandler) GetNativeAccess(c *gin.Context) {
 					}
 					upstreamModel = decision.UpstreamModel
 				}
+				requestModel := upstreamModel
 				upstreamModel = h.compositeResolver.NativeRoutingModel(c.Request.Context(), group.ID, account.Platform, upstreamModel)
+				if group.Platform == service.PlatformComposite && !service.AccountModelEvidenceAllows(c.Request.Context(), &account, upstreamModel) {
+					continue
+				}
 				if !account.IsModelSupported(upstreamModel) {
+					continue
+				}
+				imageEndpoint, image := service.NativeImageAccess(&account, requestModel, account.GetMappedModel(upstreamModel))
+				if image {
+					if imageEndpoint == path && service.GroupAllowsImageGeneration(group) {
+						available[path] = true
+						endpoints[path] = true
+						isImage = true
+					}
+					continue
+				}
+				if protocol == service.CompositeRouteEndpointImages {
 					continue
 				}
 				if service.CompositePlatformConversionSupported(account.Platform, protocol) && len(account.NativeProtocols(account.GetMappedModel(upstreamModel))) > 0 {
@@ -122,7 +140,7 @@ func (h *APIKeyHandler) GetNativeAccess(c *gin.Context) {
 				endpoints[path] = true
 			}
 		}
-		model := nativeAccessModel{Name: offer.Name, Platform: offer.Platform, Endpoints: []string{}, ConversionEndpoints: []string{}}
+		model := nativeAccessModel{Name: offer.Name, Platform: offer.Platform, Endpoints: []string{}, ConversionEndpoints: []string{}, IsImage: isImage}
 		for path := range convertible {
 			model.ConversionEndpoints = append(model.ConversionEndpoints, path)
 		}
