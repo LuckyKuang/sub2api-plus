@@ -308,9 +308,9 @@ These identifiers describe the current planned source revision. Its tag and
 image are not published; the mapping status below governs publication.
 
 ```text
-Git/GitHub: v0.2.24+custom.002
-Application: 0.2.24+custom.002
-GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.24-custom.002
+Git/GitHub: v0.2.25+custom.001
+Application: 0.2.25+custom.001
+GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.25-custom.001
 ```
 
 ## Release Mapping
@@ -404,6 +404,7 @@ GHCR: ghcr.io/luckykuang/sub2api-plus:v0.2.24-custom.002
 | `v0.2.23+custom.001` | `v0.2.23` | `5af9afb588c4b014b3df9db7d4073af1f8ae01b6` | published |
 | `v0.2.24+custom.001` | `v0.2.24` | `5c2982a81b46e2142d0143d2f83c1ce9c4da1d24` | published |
 | `v0.2.24+custom.002` | `v0.2.24` | `5c2982a81b46e2142d0143d2f83c1ce9c4da1d24` | published |
+| `v0.2.25+custom.001` | `v0.2.25` | `348997267d756eab5729bb6b78a275a15d18796a` | planned |
 
 `v0.2.15+custom.003` records the integrated official main snapshot in the
 Official Commit column. Its tagged official baseline remains
