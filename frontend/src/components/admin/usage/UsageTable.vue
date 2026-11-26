@@ -881,7 +881,7 @@ const getRequestTypeBadgeClass = (row: AdminUsageLog): string => {
   if (requestType === 'live') return 'bg-emerald-100/[0.15] text-emerald-800 dark:bg-emerald-900/25 dark:text-emerald-200'
   if (requestType === 'ws_v2') return 'bg-violet-100/[0.15] text-violet-800 dark:bg-violet-900/25 dark:text-violet-200'
   if (requestType === 'stream') return 'bg-blue-100/[0.15] text-blue-800 dark:bg-blue-900/25 dark:text-blue-200'
-  if (requestType === 'sync') return 'surface-inset text-gray-800 dark:surface-inset dark:text-gray-200'
+  if (requestType === 'sync') return 'surface-inset text-gray-800 dark:text-gray-200'
   return 'bg-amber-100/[0.15] text-amber-800 dark:bg-amber-900/25 dark:text-amber-200'
 }
 

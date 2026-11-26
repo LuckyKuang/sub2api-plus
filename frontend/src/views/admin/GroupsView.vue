@@ -76,7 +76,7 @@
               </button>
               <div
                 v-if="showColumnDropdown"
-                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
+                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-[var(--surface-edge)] p-1 shadow-lg surface-panel"
               >
                 <button
                   v-for="col in toggleableColumns"
@@ -176,7 +176,7 @@
                   'inline-block rounded-md px-2 py-0.5 text-xs font-medium',
                   row.subscription_type === 'subscription'
                     ? 'bg-violet-100/[0.15] text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'
-                    : 'surface-inset text-gray-600 dark:surface-inset dark:text-gray-300',
+                    : 'surface-inset text-gray-600 dark:text-gray-300',
                 ]"
               >
                 {{
@@ -714,7 +714,7 @@
             </div>
             <div
               v-if="createForm.platform === 'openai'"
-              class="space-y-3 rounded-lg border border-gray-200 surface-inset p-3 dark:border-dark-600"
+              class="space-y-3 rounded-lg border border-[var(--surface-edge)] surface-inset p-3"
             >
               <div>
                 <label class="input-label">{{
@@ -738,7 +738,7 @@
                   v-model="createForm.quota_reset_include_monthly"
                   data-testid="create-quota-reset-monthly"
                   type="checkbox"
-                  class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-500 dark:bg-dark-700"
+                  class="mt-0.5 h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500 dark:bg-dark-700"
                   :disabled="!canIncludeMonthlyReset(createForm)"
                 />
                 <span>
@@ -768,11 +768,11 @@
           </div>
           <div
             v-if="createModelAllowlistState.enabled"
-            class="overflow-hidden rounded-lg border border-gray-200 surface-inset dark:border-dark-600"
+            class="overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset"
           >
             <div
               v-if="!createModelAllowlistLoading && createModelAllowlistState.items.length > 0"
-              class="flex items-center justify-between gap-2 border-b border-gray-200 surface-inset px-3 py-2 text-xs dark:border-dark-600"
+              class="flex items-center justify-between gap-2 border-b border-[var(--surface-edge)] surface-inset px-3 py-2 text-xs"
             >
               <span class="surface-muted">
                 {{
@@ -814,12 +814,12 @@
               <div
                 v-for="(item, index) in createModelAllowlistState.items"
                 :key="item.id"
-                class="flex items-center gap-2 rounded border border-gray-200 surface-inset px-3 py-2 dark:border-dark-600"
+                class="flex items-center gap-2 rounded border border-[var(--surface-edge)] surface-inset px-3 py-2"
               >
                 <input
                   v-model="item.selected"
                   type="checkbox"
-                  class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
                 />
                 <span class="min-w-0 flex-1 break-all text-sm surface-muted">
                   {{ item.id }}
@@ -848,13 +848,13 @@
                 </button>
               </div>
             </div>
-            <div class="border-t border-gray-200 px-3 py-2 dark:border-dark-600">
+            <div class="border-t border-[var(--surface-edge)] px-3 py-2">
               <div class="flex items-center gap-2">
                 <input
                   v-model="createAllowlistCustomEntry"
                   type="text"
                   :placeholder="t('admin.groups.modelAllowlist.customPlaceholder')"
-                  class="min-w-0 flex-1 rounded border border-gray-300 surface-inset px-2 py-1.5 text-sm focus:border-primary-500 focus:outline-none dark:border-dark-500 surface-muted"
+                  class="min-w-0 flex-1 rounded border border-[var(--surface-edge)] surface-inset px-2 py-1.5 text-sm focus:border-primary-500 focus:outline-none surface-muted"
                   @keydown.enter.prevent="submitCreateAllowlistCustomEntry"
                 />
                 <button
@@ -893,7 +893,7 @@
               <input
                 v-model="createForm.allow_image_generation"
                 type="checkbox"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
               />
               {{ t(imagePricingI18nKey(createForm.platform, "allowImageGeneration")) }}
             </label>
@@ -901,7 +901,7 @@
               <input
                 v-model="createForm.image_rate_independent"
                 type="checkbox"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
               />
               {{ t(imagePricingI18nKey(createForm.platform, "independentMultiplier")) }}
             </label>
@@ -915,7 +915,7 @@
               <input
                 v-model="createForm.image_count_billing"
                 type="checkbox"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
               />
               {{ t("admin.groups.imagePricing.perImageBilling") }}
             </label>
@@ -988,14 +988,14 @@
             </div>
             <p class="mt-2">{{ t("admin.groups.pricingReferenceHint") }}</p>
           </div>
-          <div v-if="createForm.platform === 'gemini' && createForm.allow_image_generation && createForm.subscription_type !== 'subscription'" class="mt-4 border-t border-dashed border-gray-200 pt-4 dark:border-dark-700">
+          <div v-if="createForm.platform === 'gemini' && createForm.allow_image_generation && createForm.subscription_type !== 'subscription'" class="mt-4 border-t border-dashed border-[var(--surface-edge)] pt-4">
             <label
               class="flex items-center gap-2 text-sm font-medium surface-muted"
             >
               <input
                 v-model="createForm.allow_batch_image_generation"
                 type="checkbox"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
               />
               {{ t("admin.groups.imagePricing.allowBatchImageGeneration") }}
             </label>
@@ -1036,7 +1036,7 @@
           </div>
           <p
             v-else-if="createForm.platform !== 'gemini'"
-            class="mt-4 border-t border-dashed border-gray-200 pt-4 text-xs dark:border-dark-700 surface-muted"
+            class="mt-4 border-t border-dashed border-[var(--surface-edge)] pt-4 text-xs surface-muted"
           >
             {{ t("admin.groups.imagePricing.batchGeminiOnlyHint") }}
           </p>
@@ -1060,7 +1060,7 @@
               <input
                 v-model="createForm.video_rate_independent"
                 type="checkbox"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
               />
               {{ t(videoPricingI18nKey("independentMultiplier")) }}
             </label>
@@ -1117,7 +1117,7 @@
             </div>
           </div>
           <div
-            class="mt-4 border-t border-dashed border-gray-200 pt-4 dark:border-dark-700"
+            class="mt-4 border-t border-dashed border-[var(--surface-edge)] pt-4"
             data-testid="create-grok-video-model-prices"
           >
             <p class="text-sm font-medium surface-muted">
@@ -1181,7 +1181,7 @@
               <input
                 v-model="createForm.peak_rate_enabled"
                 type="checkbox"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
               />
               <span>{{ t("admin.groups.peakRate.enable") }}</span>
             </label>
@@ -1227,7 +1227,7 @@
             <input
               v-model="createForm.profit_control_enabled"
               type="checkbox"
-              class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
             />
             <span>{{ t("admin.groups.profitControl.enable") }}</span>
           </label>
@@ -1290,7 +1290,7 @@
                 type="checkbox"
                 :checked="createForm.supported_model_scopes.includes('claude')"
                 @change="toggleCreateScope('claude')"
-                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-700"
+                class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500 dark:bg-dark-700"
               />
               <span class="text-sm surface-muted">{{
                 t("admin.groups.supportedScopes.claude")
@@ -1303,7 +1303,7 @@
                   createForm.supported_model_scopes.includes('gemini_text')
                 "
                 @change="toggleCreateScope('gemini_text')"
-                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-700"
+                class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500 dark:bg-dark-700"
               />
               <span class="text-sm surface-muted">{{
                 t("admin.groups.supportedScopes.geminiText")
@@ -1316,7 +1316,7 @@
                   createForm.supported_model_scopes.includes('gemini_image')
                 "
                 @change="toggleCreateScope('gemini_image')"
-                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-700"
+                class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500 dark:bg-dark-700"
               />
               <span class="text-sm surface-muted">{{
                 t("admin.groups.supportedScopes.geminiImage")
@@ -1398,7 +1398,7 @@
         <!-- Codex 网页搜索按次计费（仅 openai 平台） -->
         <div
           v-if="createForm.platform === 'openai'"
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
+          class="border-t border-[var(--surface-edge)] dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium mb-3 surface-muted">
             {{ t("admin.groups.webSearchPricing.title") }}
@@ -1432,7 +1432,7 @@
         </div>
 
 
-        <div class="border-t border-gray-200 pt-4 mt-4 dark:border-dark-400">
+        <div class="border-t border-[var(--surface-edge)] pt-4 mt-4 dark:border-dark-400">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <h4 class="text-sm font-medium surface-muted">{{ t("admin.groups.modelPricing.title") }}</h4>
@@ -1458,7 +1458,7 @@
         <!-- Grok Voice 显式定价（仅 grok 平台） -->
         <div
           v-if="createForm.platform === 'grok'"
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
+          class="border-t border-[var(--surface-edge)] dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium mb-1 surface-muted">
             {{ t("admin.groups.explicitPricing.title") }}
@@ -1520,7 +1520,7 @@
         <!-- OpenAI Fast 开关（OpenAI 与 Composite 平台） -->
         <div
           v-if="supportsGroupOpenAIFast(createForm.platform)"
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
+          class="border-t border-[var(--surface-edge)] dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium mb-3 surface-muted">
             {{ t("admin.groups.openaiFast.title") }}
@@ -1569,7 +1569,7 @@
         <!-- Codex Live 开关（OpenAI 与 Composite 平台） -->
         <div
           v-if="supportsLivePlatform(createForm.platform)"
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
+          class="border-t border-[var(--surface-edge)] dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium mb-3 surface-muted">
             {{ t("admin.groups.openaiLive.title") }}
@@ -1590,7 +1590,7 @@
         <!-- OpenAI Messages 调度配置（OpenAI 与 Composite 平台） -->
         <div
           v-if="supportsMessagesDispatchPlatform(createForm.platform)"
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
+          class="border-t border-[var(--surface-edge)] dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium mb-3 surface-muted">
             {{ t("admin.groups.openaiMessages.title") }}
@@ -1617,10 +1617,10 @@
             class="mt-3"
           >
             <div
-              class="relative overflow-hidden rounded-xl border border-gray-200 surface-inset shadow-sm dark:border-dark-600"
+              class="relative overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset shadow-sm"
             >
               <div
-                class="border-b border-gray-100 surface-inset px-4 py-3 dark:border-dark-700"
+                class="border-b border-[var(--surface-edge)] surface-inset px-4 py-3"
               >
                 <div class="flex items-center gap-2">
                   <div class="h-2 w-2 rounded-full bg-blue-500"></div>
@@ -1681,7 +1681,7 @@
             </div>
 
             <div
-              class="mt-5 relative overflow-hidden rounded-xl border border-primary-200 surface-inset shadow-sm dark:border-primary-900/50"
+              class="mt-5 relative overflow-hidden rounded-lg border border-primary-200 surface-inset shadow-sm dark:border-primary-900/50"
             >
               <div
                 class="border-b border-primary-100 bg-primary-50/80 px-4 py-3 dark:border-primary-900/40 dark:bg-primary-900/20"
@@ -1709,7 +1709,7 @@
               <div class="p-4 surface-inset">
                 <div
                   v-if="createForm.exact_model_mappings.length === 0"
-                  class="flex items-center justify-between gap-3 rounded-xl border-2 border-dashed border-primary-200 surface-inset px-5 py-4 text-sm text-primary-700 transition-colors hover:border-primary-300 dark:border-primary-900/40 dark:text-primary-300 dark:hover:border-primary-800"
+                  class="flex items-center justify-between gap-3 rounded-lg border-2 border-dashed border-primary-200 surface-inset px-5 py-4 text-sm text-primary-700 transition-colors hover:border-primary-300 dark:border-primary-900/40 dark:text-primary-300 dark:hover:border-primary-800"
                 >
                   <span>{{
                     t("admin.groups.openaiMessages.noExactMappings")
@@ -1728,7 +1728,7 @@
                   <div
                     v-for="row in createForm.exact_model_mappings"
                     :key="getCreateMessagesDispatchRowKey(row)"
-                    class="group relative rounded-xl border border-gray-200 surface-inset p-4 shadow-sm transition-all hover:border-primary-300 hover:shadow-md dark:border-dark-600 dark:hover:border-primary-700"
+                    class="group relative rounded-lg border border-[var(--surface-edge)] surface-inset p-4 shadow-sm transition-all hover:border-primary-300 hover:shadow-md dark:hover:border-primary-700"
                   >
                     <div class="flex items-center gap-4">
                       <div
@@ -1746,7 +1746,7 @@
                                 'admin.groups.openaiMessages.claudeModelPlaceholder',
                               )
                             "
-                            class="input surface-inset focus:bg-white dark:focus:bg-dark-900"
+                            class="input"
                           />
                         </div>
                         <div
@@ -1770,7 +1770,7 @@
                                 'admin.groups.openaiMessages.targetModelPlaceholder',
                               )
                             "
-                            class="input surface-inset focus:bg-white dark:focus:bg-dark-900"
+                            class="input"
                           />
                         </div>
                       </div>
@@ -1790,7 +1790,7 @@
                   <button
                     type="button"
                     @click="addCreateMessagesDispatchMapping"
-                    class="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 py-3 text-sm font-medium transition-all hover:border-primary-300 hover:bg-primary-50/50 hover:text-primary-600 dark:border-dark-600 dark:hover:border-primary-800 dark:hover:bg-primary-900/20 dark:hover:text-primary-400 surface-control surface-muted"
+                    class="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[var(--surface-edge)] py-3 text-sm font-medium transition-all hover:border-primary-300 hover:bg-primary-50/50 hover:text-primary-600 dark:hover:border-primary-800 dark:hover:bg-primary-900/20 dark:hover:text-primary-400 surface-control surface-muted"
                   >
                     <Icon name="plus" size="sm" />
                     {{ t("admin.groups.openaiMessages.addExactMapping") }}
@@ -1808,7 +1808,7 @@
               createForm.platform,
             )
           "
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4 space-y-4"
+          class="border-t border-[var(--surface-edge)] dark:border-dark-400 pt-4 mt-4 space-y-4"
         >
           <h4 class="text-sm font-medium mb-3 surface-muted">
             {{ t("admin.groups.accountFilters.title") }}
@@ -1916,7 +1916,7 @@
             <div
               v-for="rule in createModelRoutingRules"
               :key="getCreateRuleRenderKey(rule)"
-              class="rounded-lg border border-gray-200 p-3 dark:border-dark-600"
+              class="rounded-lg border border-[var(--surface-edge)] p-3"
             >
               <div class="flex items-start gap-3">
                 <div class="flex-1 space-y-2">
@@ -1980,7 +1980,7 @@
                           accountSearchResults[getCreateRuleSearchKey(rule)]
                             ?.length > 0
                         "
-                        class="absolute z-50 mt-1 max-h-48 w-full space-y-0.5 overflow-auto border p-1 shadow-lg dark:border-dark-600 surface-panel"
+                        class="absolute z-50 mt-1 max-h-48 w-full space-y-0.5 overflow-auto border p-1 shadow-lg border-[var(--surface-edge)] surface-panel"
                       >
                         <button
                           v-for="account in accountSearchResults[
@@ -2330,7 +2330,7 @@
             </div>
             <div
               v-if="editForm.platform === 'openai'"
-              class="space-y-3 rounded-lg border border-gray-200 surface-inset p-3 dark:border-dark-600"
+              class="space-y-3 rounded-lg border border-[var(--surface-edge)] surface-inset p-3"
             >
               <div>
                 <label class="input-label">{{
@@ -2381,7 +2381,7 @@
                   v-model="editForm.quota_reset_include_monthly"
                   data-testid="edit-quota-reset-monthly"
                   type="checkbox"
-                  class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-500 dark:bg-dark-700"
+                  class="mt-0.5 h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500 dark:bg-dark-700"
                   :disabled="!canIncludeMonthlyReset(editForm)"
                 />
                 <span>
@@ -2411,11 +2411,11 @@
           </div>
           <div
             v-if="editModelAllowlistState.enabled"
-            class="overflow-hidden rounded-lg border border-gray-200 surface-inset dark:border-dark-600"
+            class="overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset"
           >
             <div
               v-if="!editModelAllowlistLoading && editModelAllowlistState.items.length > 0"
-              class="flex items-center justify-between gap-2 border-b border-gray-200 surface-inset px-3 py-2 text-xs dark:border-dark-600"
+              class="flex items-center justify-between gap-2 border-b border-[var(--surface-edge)] surface-inset px-3 py-2 text-xs"
             >
               <span class="surface-muted">
                 {{
@@ -2457,12 +2457,12 @@
               <div
                 v-for="(item, index) in editModelAllowlistState.items"
                 :key="item.id"
-                class="flex items-center gap-2 rounded border border-gray-200 surface-inset px-3 py-2 dark:border-dark-600"
+                class="flex items-center gap-2 rounded border border-[var(--surface-edge)] surface-inset px-3 py-2"
               >
                 <input
                   v-model="item.selected"
                   type="checkbox"
-                  class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
                 />
                 <span class="min-w-0 flex-1 break-all text-sm surface-muted">
                   {{ item.id }}
@@ -2491,13 +2491,13 @@
                 </button>
               </div>
             </div>
-            <div class="border-t border-gray-200 px-3 py-2 dark:border-dark-600">
+            <div class="border-t border-[var(--surface-edge)] px-3 py-2">
               <div class="flex items-center gap-2">
                 <input
                   v-model="editAllowlistCustomEntry"
                   type="text"
                   :placeholder="t('admin.groups.modelAllowlist.customPlaceholder')"
-                  class="min-w-0 flex-1 rounded border border-gray-300 surface-inset px-2 py-1.5 text-sm focus:border-primary-500 focus:outline-none dark:border-dark-500 surface-muted"
+                  class="min-w-0 flex-1 rounded border border-[var(--surface-edge)] surface-inset px-2 py-1.5 text-sm focus:border-primary-500 focus:outline-none surface-muted"
                   @keydown.enter.prevent="submitEditAllowlistCustomEntry"
                 />
                 <button
@@ -2536,7 +2536,7 @@
               <input
                 v-model="editForm.allow_image_generation"
                 type="checkbox"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
               />
               {{ t(imagePricingI18nKey(editForm.platform, "allowImageGeneration")) }}
             </label>
@@ -2544,7 +2544,7 @@
               <input
                 v-model="editForm.image_rate_independent"
                 type="checkbox"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
               />
               {{ t(imagePricingI18nKey(editForm.platform, "independentMultiplier")) }}
             </label>
@@ -2558,7 +2558,7 @@
               <input
                 v-model="editForm.image_count_billing"
                 type="checkbox"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
               />
               {{ t("admin.groups.imagePricing.perImageBilling") }}
             </label>
@@ -2631,14 +2631,14 @@
             </div>
             <p class="mt-2">{{ t("admin.groups.pricingReferenceHint") }}</p>
           </div>
-          <div v-if="editForm.platform === 'gemini' && editForm.allow_image_generation && editForm.subscription_type !== 'subscription'" class="mt-4 border-t border-dashed border-gray-200 pt-4 dark:border-dark-700">
+          <div v-if="editForm.platform === 'gemini' && editForm.allow_image_generation && editForm.subscription_type !== 'subscription'" class="mt-4 border-t border-dashed border-[var(--surface-edge)] pt-4">
             <label
               class="flex items-center gap-2 text-sm font-medium surface-muted"
             >
               <input
                 v-model="editForm.allow_batch_image_generation"
                 type="checkbox"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
               />
               {{ t("admin.groups.imagePricing.allowBatchImageGeneration") }}
             </label>
@@ -2679,7 +2679,7 @@
           </div>
           <p
             v-else-if="editForm.platform !== 'gemini'"
-            class="mt-4 border-t border-dashed border-gray-200 pt-4 text-xs dark:border-dark-700 surface-muted"
+            class="mt-4 border-t border-dashed border-[var(--surface-edge)] pt-4 text-xs surface-muted"
           >
             {{ t("admin.groups.imagePricing.batchGeminiOnlyHint") }}
           </p>
@@ -2703,7 +2703,7 @@
               <input
                 v-model="editForm.video_rate_independent"
                 type="checkbox"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
               />
               {{ t(videoPricingI18nKey("independentMultiplier")) }}
             </label>
@@ -2760,7 +2760,7 @@
             </div>
           </div>
           <div
-            class="mt-4 border-t border-dashed border-gray-200 pt-4 dark:border-dark-700"
+            class="mt-4 border-t border-dashed border-[var(--surface-edge)] pt-4"
             data-testid="edit-grok-video-model-prices"
           >
             <p class="text-sm font-medium surface-muted">
@@ -2824,7 +2824,7 @@
               <input
                 v-model="editForm.peak_rate_enabled"
                 type="checkbox"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
               />
               <span>{{ t("admin.groups.peakRate.enable") }}</span>
             </label>
@@ -2870,7 +2870,7 @@
             <input
               v-model="editForm.profit_control_enabled"
               type="checkbox"
-              class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              class="rounded border-[var(--surface-edge)] text-blue-600 focus:ring-blue-500"
             />
             <span>{{ t("admin.groups.profitControl.enable") }}</span>
           </label>
@@ -2933,7 +2933,7 @@
                 type="checkbox"
                 :checked="editForm.supported_model_scopes.includes('claude')"
                 @change="toggleEditScope('claude')"
-                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-700"
+                class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500 dark:bg-dark-700"
               />
               <span class="text-sm surface-muted">{{
                 t("admin.groups.supportedScopes.claude")
@@ -2946,7 +2946,7 @@
                   editForm.supported_model_scopes.includes('gemini_text')
                 "
                 @change="toggleEditScope('gemini_text')"
-                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-700"
+                class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500 dark:bg-dark-700"
               />
               <span class="text-sm surface-muted">{{
                 t("admin.groups.supportedScopes.geminiText")
@@ -2959,7 +2959,7 @@
                   editForm.supported_model_scopes.includes('gemini_image')
                 "
                 @change="toggleEditScope('gemini_image')"
-                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-700"
+                class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500 dark:bg-dark-700"
               />
               <span class="text-sm surface-muted">{{
                 t("admin.groups.supportedScopes.geminiImage")
@@ -3041,7 +3041,7 @@
         <!-- Codex 网页搜索按次计费（仅 openai 平台） -->
         <div
           v-if="editForm.platform === 'openai'"
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
+          class="border-t border-[var(--surface-edge)] dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium mb-3 surface-muted">
             {{ t("admin.groups.webSearchPricing.title") }}
@@ -3085,7 +3085,7 @@
         />
 
 
-        <div class="border-t border-gray-200 pt-4 mt-4 dark:border-dark-400">
+        <div class="border-t border-[var(--surface-edge)] pt-4 mt-4 dark:border-dark-400">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <h4 class="text-sm font-medium surface-muted">{{ t("admin.groups.modelPricing.title") }}</h4>
@@ -3111,7 +3111,7 @@
         <!-- Grok Voice 显式定价（仅 grok 平台） -->
         <div
           v-if="editForm.platform === 'grok'"
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
+          class="border-t border-[var(--surface-edge)] dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium mb-1 surface-muted">
             {{ t("admin.groups.explicitPricing.title") }}
@@ -3173,7 +3173,7 @@
         <!-- OpenAI Fast 开关（OpenAI 与 Composite 平台） -->
         <div
           v-if="supportsGroupOpenAIFast(editForm.platform)"
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
+          class="border-t border-[var(--surface-edge)] dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium mb-3 surface-muted">
             {{ t("admin.groups.openaiFast.title") }}
@@ -3222,7 +3222,7 @@
         <!-- Codex Live 开关（OpenAI 与 Composite 平台） -->
         <div
           v-if="supportsLivePlatform(editForm.platform)"
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
+          class="border-t border-[var(--surface-edge)] dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium mb-3 surface-muted">
             {{ t("admin.groups.openaiLive.title") }}
@@ -3243,7 +3243,7 @@
         <!-- OpenAI Messages 调度配置（OpenAI 与 Composite 平台） -->
         <div
           v-if="supportsMessagesDispatchPlatform(editForm.platform)"
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
+          class="border-t border-[var(--surface-edge)] dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium mb-3 surface-muted">
             {{ t("admin.groups.openaiMessages.title") }}
@@ -3269,10 +3269,10 @@
             class="mt-3"
           >
             <div
-              class="relative overflow-hidden rounded-xl border border-gray-200 surface-inset shadow-sm dark:border-dark-600"
+              class="relative overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset shadow-sm"
             >
               <div
-                class="border-b border-gray-100 surface-inset px-4 py-3 dark:border-dark-700"
+                class="border-b border-[var(--surface-edge)] surface-inset px-4 py-3"
               >
                 <div class="flex items-center gap-2">
                   <div class="h-2 w-2 rounded-full bg-blue-500"></div>
@@ -3333,7 +3333,7 @@
             </div>
 
             <div
-              class="mt-5 relative overflow-hidden rounded-xl border border-primary-200 surface-inset shadow-sm dark:border-primary-900/50"
+              class="mt-5 relative overflow-hidden rounded-lg border border-primary-200 surface-inset shadow-sm dark:border-primary-900/50"
             >
               <div
                 class="border-b border-primary-100 bg-primary-50/80 px-4 py-3 dark:border-primary-900/40 dark:bg-primary-900/20"
@@ -3361,7 +3361,7 @@
               <div class="p-4 surface-inset">
                 <div
                   v-if="editForm.exact_model_mappings.length === 0"
-                  class="flex items-center justify-between gap-3 rounded-xl border-2 border-dashed border-primary-200 surface-inset px-5 py-4 text-sm text-primary-700 transition-colors hover:border-primary-300 dark:border-primary-900/40 dark:text-primary-300 dark:hover:border-primary-800"
+                  class="flex items-center justify-between gap-3 rounded-lg border-2 border-dashed border-primary-200 surface-inset px-5 py-4 text-sm text-primary-700 transition-colors hover:border-primary-300 dark:border-primary-900/40 dark:text-primary-300 dark:hover:border-primary-800"
                 >
                   <span>{{
                     t("admin.groups.openaiMessages.noExactMappings")
@@ -3380,7 +3380,7 @@
                   <div
                     v-for="row in editForm.exact_model_mappings"
                     :key="getEditMessagesDispatchRowKey(row)"
-                    class="group relative rounded-xl border border-gray-200 surface-inset p-4 shadow-sm transition-all hover:border-primary-300 hover:shadow-md dark:border-dark-600 dark:hover:border-primary-700"
+                    class="group relative rounded-lg border border-[var(--surface-edge)] surface-inset p-4 shadow-sm transition-all hover:border-primary-300 hover:shadow-md dark:hover:border-primary-700"
                   >
                     <div class="flex items-center gap-4">
                       <div
@@ -3398,7 +3398,7 @@
                                 'admin.groups.openaiMessages.claudeModelPlaceholder',
                               )
                             "
-                            class="input surface-inset focus:bg-white dark:focus:bg-dark-900"
+                            class="input"
                           />
                         </div>
                         <div
@@ -3422,7 +3422,7 @@
                                 'admin.groups.openaiMessages.targetModelPlaceholder',
                               )
                             "
-                            class="input surface-inset focus:bg-white dark:focus:bg-dark-900"
+                            class="input"
                           />
                         </div>
                       </div>
@@ -3442,7 +3442,7 @@
                   <button
                     type="button"
                     @click="addEditMessagesDispatchMapping"
-                    class="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 py-3 text-sm font-medium transition-all hover:border-primary-300 hover:bg-primary-50/50 hover:text-primary-600 dark:border-dark-600 dark:hover:border-primary-800 dark:hover:bg-primary-900/20 dark:hover:text-primary-400 surface-control surface-muted"
+                    class="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[var(--surface-edge)] py-3 text-sm font-medium transition-all hover:border-primary-300 hover:bg-primary-50/50 hover:text-primary-600 dark:hover:border-primary-800 dark:hover:bg-primary-900/20 dark:hover:text-primary-400 surface-control surface-muted"
                   >
                     <Icon name="plus" size="sm" />
                     {{ t("admin.groups.openaiMessages.addExactMapping") }}
@@ -3460,7 +3460,7 @@
               editForm.platform,
             )
           "
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4 space-y-4"
+          class="border-t border-[var(--surface-edge)] dark:border-dark-400 pt-4 mt-4 space-y-4"
         >
           <h4 class="text-sm font-medium mb-3 surface-muted">
             {{ t("admin.groups.accountFilters.title") }}
@@ -3568,7 +3568,7 @@
             <div
               v-for="rule in editModelRoutingRules"
               :key="getEditRuleRenderKey(rule)"
-              class="rounded-lg border border-gray-200 p-3 dark:border-dark-600"
+              class="rounded-lg border border-[var(--surface-edge)] p-3"
             >
               <div class="flex items-start gap-3">
                 <div class="flex-1 space-y-2">
@@ -3632,7 +3632,7 @@
                           accountSearchResults[getEditRuleSearchKey(rule)]
                             ?.length > 0
                         "
-                        class="absolute z-50 mt-1 max-h-48 w-full space-y-0.5 overflow-auto border p-1 shadow-lg dark:border-dark-600 surface-panel"
+                        class="absolute z-50 mt-1 max-h-48 w-full space-y-0.5 overflow-auto border p-1 shadow-lg border-[var(--surface-edge)] surface-panel"
                       >
                         <button
                           v-for="account in accountSearchResults[
@@ -3772,7 +3772,7 @@
           <div
             v-for="group in sortableGroups"
             :key="group.id"
-            class="flex cursor-grab items-center gap-3 rounded-lg border border-gray-200 surface-inset p-3 transition-shadow hover:shadow-md active:cursor-grabbing dark:border-dark-600"
+            class="flex cursor-grab items-center gap-3 rounded-lg border border-[var(--surface-edge)] surface-inset p-3 transition-shadow hover:shadow-md active:cursor-grabbing"
           >
             <div class="surface-muted">
               <Icon name="menu" size="md" />
@@ -3889,7 +3889,7 @@
           </div>
 
           <div
-            class="overflow-hidden rounded-lg border border-gray-200 dark:border-dark-600"
+            class="overflow-hidden rounded-lg border border-[var(--surface-edge)]"
           >
             <div
               v-if="compositeRoutesLoading"
@@ -3904,8 +3904,8 @@
               {{ t("admin.groups.compositeRoutes.empty") }}
             </div>
             <div v-else class="record-table-scroll record-table-dialog-scroll table-container overflow-x-auto">
-              <table class="record-table min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-600">
-                <thead class="surface-inset text-left text-xs font-medium uppercase tracking-wide surface-muted">
+              <table class="record-table min-w-full divide-y divide-[var(--surface-edge)] text-sm">
+                <thead class="text-left text-xs font-medium uppercase tracking-wide surface-muted">
                   <tr>
                     <th class="px-3 py-2">
                       {{ t("admin.groups.compositeRoutes.publicModel") }}
@@ -3921,7 +3921,7 @@
                     </th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100 surface-inset dark:divide-dark-700">
+                <tbody class="divide-y divide-[var(--surface-edge)]">
                   <tr
                     v-for="route in compositeRoutes"
                     :key="route.id"
@@ -4097,7 +4097,7 @@
                 <input
                   v-model="compositeRouteForm.enabled"
                   type="checkbox"
-                  class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-700"
+                  class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500 dark:bg-dark-700"
                 />
                 {{ t("admin.groups.compositeRoutes.enabled") }}
               </label>
@@ -4117,7 +4117,7 @@
             </div>
           </form>
 
-          <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+          <div class="border-t border-[var(--surface-edge)] pt-4">
             <h3 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">
               {{ t("admin.groups.compositeRoutes.preview") }}
             </h3>
@@ -4147,7 +4147,7 @@
 
               <div
                 v-if="compositePreviewDecision"
-                class="rounded-lg border border-gray-200 surface-inset p-3 text-sm dark:border-dark-600"
+                class="rounded-lg border border-[var(--surface-edge)] surface-inset p-3 text-sm"
               >
                 <div class="mb-2 flex items-center gap-2">
                   <span

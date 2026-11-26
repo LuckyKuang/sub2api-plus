@@ -55,7 +55,7 @@
         :aria-label="t('availableChannels.catalog.quoteComparison')"
       >
         <table class="record-table catalog-comparison w-full text-left text-xs surface-muted">
-          <thead class="surface-inset surface-muted">
+          <thead class="surface-muted">
             <tr>
               <th class="px-3 py-2">{{ t('modelPlaza.filters.groupLabel') }}</th>
               <th class="px-3 py-2">{{ t('availableChannels.catalog.effectiveRateLabel') }}</th>

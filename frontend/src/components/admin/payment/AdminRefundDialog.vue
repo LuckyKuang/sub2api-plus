@@ -54,7 +54,7 @@
             id="deduct-balance"
             v-model="form.deduct_balance"
             type="checkbox"
-            class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
           <label for="deduct-balance" class="text-sm surface-muted">
             {{ t('payment.admin.deductBalance') }}
@@ -137,7 +137,7 @@
           id="force-refund"
           v-model="form.force"
           type="checkbox"
-          class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+          class="h-4 w-4 rounded border-[var(--surface-edge)] text-red-600 focus:ring-red-500"
         />
         <label for="force-refund" class="text-sm font-medium text-red-600 dark:text-red-400">
           {{ t('payment.admin.forceRefund') }}

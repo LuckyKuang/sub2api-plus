@@ -279,7 +279,7 @@
       <transition name="modal">
         <div v-if="showDeployGuide" class="fixed inset-0 z-50 flex items-center justify-center p-4" @mousedown.self="showDeployGuide = false">
           <div class="fixed inset-0 surface-overlay" @click="showDeployGuide = false"></div>
-          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl p-6 shadow-2xl surface-panel">
+          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto p-6 shadow-2xl surface-panel">
             <button type="button" class="absolute right-4 top-4 hover:text-gray-600 dark:hover:text-gray-200 surface-control surface-muted" :aria-label="t('common.close')" @click="showDeployGuide = false">
               <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>

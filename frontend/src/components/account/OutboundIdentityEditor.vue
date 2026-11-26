@@ -1,5 +1,5 @@
 <template>
-  <section v-if="visible" class="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-dark-700">
+  <section v-if="visible" class="space-y-3 rounded-lg border border-[var(--surface-edge)] p-4">
     <h3 class="text-sm font-semibold">{{ t('admin.settings.outboundIdentity.title') }}</h3>
     <p v-if="!policy && !policyError" class="text-xs surface-muted">{{ t('common.loading') }}</p>
     <p v-if="policyError" role="alert" class="text-xs text-red-600">{{ t('admin.settings.outboundIdentity.loadFailed') }}</p>

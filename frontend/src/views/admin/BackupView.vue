@@ -135,7 +135,7 @@
         <div class="record-table-scroll table-container overflow-x-auto">
           <table class="record-table w-full min-w-[800px] text-sm">
             <thead>
-              <tr class="border-b border-gray-200 text-left text-xs uppercase tracking-wide dark:border-dark-700 surface-muted">
+              <tr class="border-b border-[var(--surface-edge)] text-left text-xs uppercase tracking-wide surface-muted">
                 <th class="px-4 py-2">ID</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.status') }}</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.fileName') }}</th>
@@ -148,11 +148,11 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="record in backups" :key="record.id" class="border-b border-gray-100 align-top dark:border-dark-800">
-                <td class="px-4 py-3 font-mono text-xs">{{ record.id }}</td>
+              <tr v-for="record in backups" :key="record.id" class="border-b border-[var(--surface-edge)] align-top">
+                <td class="px-4 py-3 font-mono text-xs tabular-nums">{{ record.id }}</td>
                 <td class="py-3 pr-4">
                   <span
-                    class="rounded px-2 py-0.5 text-xs"
+                    class="rounded-md px-2 py-0.5 text-xs"
                     :class="statusClass(record.status)"
                   >
                     {{ record.status === 'running' && record.progress
@@ -161,15 +161,15 @@
                   </span>
                 </td>
                 <td class="py-3 pr-4 text-xs">{{ record.file_name }}</td>
-                <td class="py-3 pr-4 text-xs">{{ formatSize(record.size_bytes) }}</td>
-                <td class="py-3 pr-4 text-xs">{{ record.parts?.length || (record.status === 'running' ? '-' : 1) }}</td>
-                <td class="py-3 pr-4 text-xs">
+                <td class="py-3 pr-4 text-xs tabular-nums">{{ formatSize(record.size_bytes) }}</td>
+                <td class="py-3 pr-4 text-xs tabular-nums">{{ record.parts?.length || (record.status === 'running' ? '-' : 1) }}</td>
+                <td class="py-3 pr-4 text-xs tabular-nums">
                   {{ record.expires_at ? formatDate(record.expires_at) : t('admin.backup.neverExpire') }}
                 </td>
                 <td class="py-3 pr-4 text-xs">
                   {{ record.triggered_by === 'scheduled' ? t('admin.backup.trigger.scheduled') : t('admin.backup.trigger.manual') }}
                 </td>
-                <td class="py-3 pr-4 text-xs">{{ formatDate(record.started_at) }}</td>
+                <td class="py-3 pr-4 text-xs tabular-nums">{{ formatDate(record.started_at) }}</td>
                 <td class="py-3 pr-4 text-xs">
                   <div class="flex flex-wrap gap-1">
                     <button
@@ -216,7 +216,7 @@
       <transition name="modal">
         <div v-if="showR2Guide" class="fixed inset-0 z-50 flex items-center justify-center p-4" @mousedown.self="showR2Guide = false">
           <div class="fixed inset-0 surface-overlay" @click="showR2Guide = false"></div>
-          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl p-6 shadow-2xl surface-panel">
+          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto p-6 shadow-2xl surface-panel">
             <button type="button" class="absolute right-4 top-4 hover:text-gray-600 dark:hover:text-gray-200 surface-control surface-muted" @click="showR2Guide = false">
               <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
@@ -270,10 +270,10 @@
                 <span class="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100/[0.15] text-xs font-bold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">4</span>
                 {{ t('admin.backup.r2Guide.step4.title') }}
               </h3>
-              <div class="record-table-scroll ml-8 overflow-hidden rounded-lg border border-gray-200 dark:border-dark-600">
+              <div class="record-table-scroll ml-8 overflow-hidden rounded-lg border border-[var(--surface-edge)]">
                 <table class="record-table record-table-compact w-full text-sm">
                   <tbody>
-                    <tr v-for="(row, i) in r2ConfigRows" :key="i" class="border-b border-gray-100 dark:border-dark-700 last:border-0">
+                    <tr v-for="(row, i) in r2ConfigRows" :key="i" class="border-b border-[var(--surface-edge)] last:border-0">
                       <td class="whitespace-nowrap surface-inset px-3 py-2 font-medium surface-muted">{{ row.field }}</td>
                       <td class="px-3 py-2 surface-muted"><code class="text-xs">{{ row.value }}</code></td>
                     </tr>
@@ -298,7 +298,7 @@
       <transition name="modal">
         <div v-if="showEncryptionKeyGuide" class="fixed inset-0 z-50 flex items-center justify-center p-4" @mousedown.self="showEncryptionKeyGuide = false">
           <div class="fixed inset-0 surface-overlay" @click="showEncryptionKeyGuide = false"></div>
-          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl p-6 shadow-2xl surface-panel">
+          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto p-6 shadow-2xl surface-panel">
             <button type="button" class="absolute right-4 top-4 hover:text-gray-600 dark:hover:text-gray-200 surface-control surface-muted" :aria-label="t('common.close')" @click="showEncryptionKeyGuide = false">
               <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
@@ -319,7 +319,7 @@
                 :key="mode"
                 type="button"
                 class="rounded-lg px-3 py-1.5 text-sm surface-control"
-                :class="encryptionGuideMode === mode ? 'bg-primary-600 text-white' : 'surface-field text-gray-700 dark:surface-field dark:text-gray-300'"
+                :class="encryptionGuideMode === mode ? 'bg-primary-600 text-white' : 'surface-field text-gray-700 dark:text-gray-300'"
                 @click="encryptionGuideMode = mode"
               >
                 {{ t(`admin.backup.encryptionKeyGuide.${mode}`) }}
@@ -400,7 +400,7 @@
           @mousedown.self="closeDownloadParts"
         >
           <div class="fixed inset-0 surface-overlay" @click="closeDownloadParts"></div>
-          <div class="relative max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl p-6 shadow-2xl surface-panel">
+          <div class="relative max-h-[85vh] w-full max-w-lg overflow-y-auto p-6 shadow-2xl surface-panel">
             <button
               type="button"
               class="absolute right-4 top-4 hover:text-gray-600 dark:hover:text-gray-200 surface-control surface-muted"
@@ -415,7 +415,7 @@
               <div
                 v-for="part in downloadParts"
                 :key="part.index"
-                class="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2 dark:border-dark-600"
+                class="flex items-center justify-between gap-3 rounded-lg border border-[var(--surface-edge)] px-3 py-2"
               >
                 <span class="text-sm surface-muted">
                   {{ t('admin.backup.actions.partLabel', { index: part.index }) }}
@@ -829,7 +829,7 @@ function statusClass(status: string): string {
     case 'failed':
       return 'bg-red-100/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300'
     default:
-      return 'surface-inset surface-muted dark:surface-inset'
+      return 'surface-inset surface-muted'
   }
 }
 

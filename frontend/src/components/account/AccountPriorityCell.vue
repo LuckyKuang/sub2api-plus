@@ -4,7 +4,7 @@
     :class="[
       editing || dirty
         ? 'border-primary-300 bg-primary-50/70 dark:border-primary-700 dark:bg-primary-900/20'
-        : 'border-transparent hover:border-gray-200 hover:surface-hover dark:hover:border-dark-600 dark:hover:surface-hover'
+        : 'border-transparent hover:border-[var(--surface-edge)] hover:surface-hover dark:hover:border-dark-600 dark:hover:surface-hover'
     ]"
     data-testid="account-priority-cell"
   >

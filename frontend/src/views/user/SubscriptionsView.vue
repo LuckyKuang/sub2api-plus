@@ -75,7 +75,7 @@
                   subscription.status === 'active'
                     ? 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                     : subscription.status === 'expired'
-                      ? 'surface-inset text-gray-600 dark:surface-inset dark:text-gray-400'
+                      ? 'surface-inset text-gray-600 dark:text-gray-400'
                       : 'bg-red-100/[0.15] text-red-700 dark:bg-red-900/40 dark:text-red-300'
                 ]"
               >

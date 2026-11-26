@@ -4,7 +4,7 @@
     :class="[platformBorderStrongClass(group.platform)]"
   >
     <!-- 分组头部:名称/平台/倍率徽章/专属/订阅徽章 + 描述 -->
-    <header class="border-b border-gray-100 px-5 py-4 dark:border-dark-700/60">
+    <header class="border-b border-[var(--surface-edge)] px-5 py-4">
       <div class="flex flex-wrap items-center gap-2">
         <GroupBadge
           :name="group.name"

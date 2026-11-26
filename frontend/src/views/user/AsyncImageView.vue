@@ -982,7 +982,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .icon-button {
-  @apply inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:border-primary-300 hover:bg-primary-50/25 hover:text-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 dark:border-dark-600 dark:text-dark-300 dark:hover:border-primary-700 dark:hover:bg-primary-900/20 dark:hover:text-primary-300;
+  @apply inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--surface-edge)] text-gray-600 transition-colors hover:border-primary-300 hover:bg-primary-50/25 hover:text-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 dark:text-dark-300 dark:hover:border-primary-700 dark:hover:bg-primary-900/20 dark:hover:text-primary-300;
 }
 
 .icon-button-danger {

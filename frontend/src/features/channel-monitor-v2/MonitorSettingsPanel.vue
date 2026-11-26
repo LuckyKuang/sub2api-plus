@@ -132,7 +132,7 @@
             >
               <input
                 type="checkbox"
-                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500/40"
+                class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500/40"
                 :checked="draft.group_ids.includes(group.id)"
                 @change="toggleGroup(group.id)"
               />
@@ -160,7 +160,7 @@
             >
               <input
                 type="checkbox"
-                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500/40"
+                class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500/40"
                 :checked="isCategoryIgnored(category)"
                 @change="toggleIgnoredCategory(category)"
               />

@@ -79,6 +79,6 @@ function capacityClass(used: number, max: number): string {
   if (used > 0) {
     return 'bg-yellow-100/[0.15] text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
   }
-  return 'surface-inset surface-muted dark:surface-inset'
+  return 'surface-inset surface-muted'
 }
 </script>

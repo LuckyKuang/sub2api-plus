@@ -50,7 +50,7 @@
               <Icon name="shield" size="sm" />
               {{ t('admin.accounts.setPrivacy') }}
             </button>
-            <div v-if="hasRecoverableState" class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
+            <div v-if="hasRecoverableState" class="my-1 border-t border-[var(--surface-edge)]"></div>
             <button v-if="hasRecoverableState" @click="$emit('recover-state', account); $emit('close')" class="flex w-full items-center gap-2 px-4 py-2 text-sm text-emerald-600 hover:surface-hover surface-control">
               <Icon name="sync" size="sm" />
               {{ t('admin.accounts.recoverState') }}

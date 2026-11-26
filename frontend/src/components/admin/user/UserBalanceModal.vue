@@ -1,7 +1,7 @@
 <template>
   <BaseDialog :show="show" :title="operation === 'add' ? t('admin.users.deposit') : t('admin.users.withdraw')" width="narrow" @close="$emit('close')">
     <form v-if="user" id="balance-form" @submit.prevent="handleBalanceSubmit" class="space-y-5">
-      <div class="flex items-center gap-3 rounded-xl surface-inset p-4">
+      <div class="flex items-center gap-3 rounded-lg surface-inset p-4">
         <div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100/[0.15]"><span class="text-lg font-medium text-primary-700">{{ user.email.charAt(0).toUpperCase() }}</span></div>
         <div class="flex-1"><p class="font-medium text-gray-900 dark:text-gray-100">{{ user.email }}</p><p class="text-sm surface-muted">{{ t('admin.users.currentBalance') }}: ${{ formatBalance(user.balance) }}</p></div>
       </div>
@@ -13,7 +13,7 @@
         </div>
       </div>
       <div><label class="input-label">{{ t('admin.users.notes') }}</label><textarea v-model="form.notes" rows="3" class="input"></textarea></div>
-      <div v-if="form.amount > 0" class="rounded-xl border border-blue-200 bg-blue-50/[0.15] p-4 dark:border-blue-800 dark:bg-blue-950"><div class="flex items-center justify-between text-sm"><span class="surface-muted">{{ t('admin.users.newBalance') }}:</span><span class="font-bold text-gray-900 dark:text-gray-100">${{ formatBalance(calculateNewBalance()) }}</span></div></div>
+      <div v-if="form.amount > 0" class="rounded-lg border border-blue-200 bg-blue-50/[0.15] p-4 dark:border-blue-800 dark:bg-blue-950"><div class="flex items-center justify-between text-sm"><span class="surface-muted">{{ t('admin.users.newBalance') }}:</span><span class="font-bold text-gray-900 dark:text-gray-100">${{ formatBalance(calculateNewBalance()) }}</span></div></div>
     </form>
     <template #footer>
       <div class="flex justify-end gap-3">

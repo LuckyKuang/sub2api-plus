@@ -18,7 +18,7 @@
           <th
             rowspan="2"
             data-header-edge-bottom
-            class="border-r border-gray-100 py-2.5 pl-5 pr-4 text-left align-middle dark:border-dark-700/60"
+            class="border-r border-[var(--surface-edge)] py-2.5 pl-5 pr-4 text-left align-middle"
           >
             {{ t('modelPlaza.table.model') }}
           </th>
@@ -30,7 +30,7 @@
           </th>
           <th
             colspan="3"
-            class="border-l border-gray-100 pt-2 text-center dark:border-dark-700/60"
+            class="border-l border-[var(--surface-edge)] pt-2 text-center"
           >
             <div class="pb-2 surface-muted">
               {{ t('modelPlaza.table.officialPrice') }}
@@ -40,18 +40,18 @@
           <th
             rowspan="2"
             data-header-edge-bottom
-            class="border-l border-gray-100 py-2.5 pl-3 pr-5 text-right align-middle dark:border-dark-700/60"
+            class="border-l border-[var(--surface-edge)] py-2.5 pl-3 pr-5 text-right align-middle"
           >
             {{ t('modelPlaza.table.rate') }}
           </th>
         </tr>
         <tr
-          class="border-b border-gray-200 text-left text-[11px] font-medium uppercase leading-4 tracking-wide dark:border-dark-700 surface-muted"
+          class="border-b border-[var(--surface-edge)] text-left text-[11px] font-medium uppercase leading-4 tracking-wide surface-muted"
         >
           <th class="px-3 py-2 font-medium">{{ t('modelPlaza.table.input') }}</th>
           <th class="px-3 py-2 font-medium">{{ t('modelPlaza.table.output') }}</th>
           <th class="px-3 py-2 font-medium">{{ t('modelPlaza.table.cache') }}</th>
-          <th class="border-l border-gray-100 px-3 py-2 font-medium dark:border-dark-700/60">
+          <th class="border-l border-[var(--surface-edge)] px-3 py-2 font-medium">
             {{ t('modelPlaza.table.input') }}
           </th>
           <th class="px-3 py-2 font-medium">{{ t('modelPlaza.table.output') }}</th>

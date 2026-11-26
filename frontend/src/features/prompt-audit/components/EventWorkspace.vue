@@ -58,9 +58,9 @@
       </div>
     </form>
     <div v-if="error" role="alert" class="workspace-fixed rounded-lg bg-red-50/[0.15] px-4 py-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</div>
-    <div class="record-table-scroll workspace-table-viewport overflow-x-auto rounded-xl border border-gray-200 dark:border-dark-700/60" data-test="event-table-scroll">
+    <div class="record-table-scroll workspace-table-viewport overflow-x-auto rounded-lg border border-[var(--surface-edge)]" data-test="event-table-scroll">
       <table class="record-table min-w-[1420px] w-full text-left text-sm">
-        <thead class="surface-inset text-xs uppercase tracking-wide surface-muted">
+        <thead class="text-xs uppercase tracking-wide surface-muted">
           <tr>
             <th class="w-10 px-3 py-3"><input type="checkbox" :checked="allSelected" :aria-label="t('admin.promptAudit.events.selectAll')" @change="toggleAll" /></th>
             <th class="px-3 py-3 font-medium">{{ t('admin.promptAudit.events.time') }}</th>
@@ -74,7 +74,7 @@
             <th class="px-3 py-3 text-right font-medium">{{ t('admin.promptAudit.common.actions') }}</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+        <tbody class="divide-y divide-[var(--surface-edge)]">
           <tr v-if="loading"><td colspan="10" class="px-4 py-12 text-center surface-muted" aria-busy="true">{{ t('common.loading') }}</td></tr>
           <tr v-else-if="events.length === 0"><td colspan="10" class="px-4 py-12 text-center surface-muted">{{ t('admin.promptAudit.events.empty') }}</td></tr>
           <tr v-for="event in events" v-else :key="event.id" :data-test="`event-${event.id}`" class="align-top hover:surface-hover">

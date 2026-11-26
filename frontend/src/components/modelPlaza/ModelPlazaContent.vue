@@ -288,6 +288,6 @@ watch(groups, (list) => {
 }
 
 .plaza-description :deep(blockquote) {
-  @apply my-2 border-l-4 border-gray-300 pl-3 text-gray-600 dark:border-dark-600 dark:text-dark-300;
+  @apply my-2 border-l-4 border-[var(--surface-edge)] pl-3 text-gray-600 dark:text-dark-300;
 }
 </style>

@@ -1,7 +1,7 @@
 <template>
   <div
     :class="[
-      'animate-pulse surface-inset dark:surface-inset',
+      'animate-pulse surface-inset',
       variant === 'circle' ? 'rounded-full' : 'rounded-lg',
       customClass
     ]"

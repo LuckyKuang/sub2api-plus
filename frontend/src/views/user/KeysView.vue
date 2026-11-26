@@ -210,7 +210,7 @@
                 'inline-flex min-w-8 items-center justify-center rounded px-2 py-1 text-sm font-semibold tabular-nums',
                 (value ?? 0) > 0
                   ? 'bg-emerald-50/[0.15] text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-800'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-dark-400'
+                  : 'surface-inset text-gray-500 dark:text-dark-400'
               ]"
             >
               {{ value ?? 0 }}
@@ -918,7 +918,7 @@
                   'rounded-lg px-3 py-1.5 text-sm transition-colors',
                   formData.expiration_preset === days
                     ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:surface-hover'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:surface-hover'
                 ]"
               >
                 {{ showEditModal ? t('keys.extendDays', { days }) : t('keys.expiresInDays', { days }) }}
@@ -930,7 +930,7 @@
                   'rounded-lg px-3 py-1.5 text-sm transition-colors',
                   formData.expiration_preset === 'custom'
                     ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:surface-hover'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:surface-hover'
                 ]"
               >
                 {{ t('keys.customDate') }}

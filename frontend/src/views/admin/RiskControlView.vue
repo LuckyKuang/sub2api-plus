@@ -855,7 +855,7 @@
                   </span>
                   <span
                     class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border"
-                    :class="isGroupSelected(group.id) ? 'border-primary-500 bg-primary-500 text-white' : 'border-gray-300 text-transparent dark:border-dark-500'"
+                    :class="isGroupSelected(group.id) ? 'border-primary-500 bg-primary-500 text-white' : 'border-[var(--surface-edge)] text-transparent'"
                   >
                     <Icon name="check" size="xs" :stroke-width="2" />
                   </span>
@@ -892,7 +892,7 @@
                       class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border"
                       :class="configForm.model_filter_type === option.value
                         ? 'border-primary-500 bg-primary-500 text-white'
-                        : 'border-gray-300 text-transparent dark:border-dark-500'"
+                        : 'border-[var(--surface-edge)] text-transparent'"
                     >
                       <Icon name="check" size="xs" :stroke-width="2" />
                     </span>
@@ -1192,7 +1192,7 @@
                       class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border"
                       :class="configForm.keyword_blocking_mode === option.value
                         ? 'border-primary-500 bg-primary-500 text-white'
-                        : 'border-gray-300 text-transparent dark:border-dark-500'"
+                        : 'border-[var(--surface-edge)] text-transparent'"
                     >
                       <Icon name="check" size="xs" :stroke-width="2" />
                     </span>

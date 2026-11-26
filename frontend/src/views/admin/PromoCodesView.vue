@@ -318,7 +318,7 @@
         <div
           v-for="usage in usages"
           :key="usage.id"
-          class="flex items-center justify-between rounded-lg border border-gray-200 p-3 dark:border-dark-600"
+          class="flex items-center justify-between rounded-lg border border-[var(--surface-edge)] p-3"
         >
           <div class="flex items-center gap-3">
             <div class="flex h-8 w-8 items-center justify-center rounded-full bg-green-100/[0.15] dark:bg-green-900/30">

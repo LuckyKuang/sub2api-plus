@@ -91,7 +91,7 @@
           <template #header-select>
             <input
               type="checkbox"
-              class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
               :checked="allVisibleSelected"
               :indeterminate="someVisibleSelected"
               @change="toggleAllVisible(($event.target as HTMLInputElement).checked)"
@@ -101,7 +101,7 @@
           <template #cell-select="{ row }">
             <input
               type="checkbox"
-              class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
               :checked="selectedJobIds.has(row.id)"
               @change="toggleJobSelection(row.id, ($event.target as HTMLInputElement).checked)"
               @click.stop
@@ -370,7 +370,7 @@
               <col class="w-[10%]" />
               <col class="w-[26%]" />
             </colgroup>
-            <thead class="surface-inset">
+            <thead>
               <tr>
                 <th class="px-3 py-3 text-center text-sm font-medium surface-muted">{{ t('batchImage.detail.customId') }}</th>
                 <th class="px-3 py-3 text-left text-sm font-medium surface-muted">{{ t('batchImage.detail.prompt') }}</th>
@@ -1979,7 +1979,7 @@ function isRecoveredOriginalFailure(item: BatchImageDetailItem) {
 
 function detailItemRowClass(item: BatchImageDetailItem) {
   if (isRecoveredOriginalFailure(item)) {
-    return 'surface-inset surface-muted hover:surface-hover dark:surface-inset dark:hover:surface-hover'
+    return 'surface-inset surface-muted hover:surface-hover dark:hover:surface-hover'
   }
   return 'hover:surface-hover dark:hover:surface-hover'
 }
@@ -2361,10 +2361,10 @@ function itemResultLabel(item: BatchImageDetailItem) {
 }
 
 function itemResultClass(item: BatchImageDetailItem) {
-  if (isRecoveredOriginalFailure(item)) return 'surface-inset surface-muted ring-gray-200 dark:surface-inset dark:ring-dark-700'
+  if (isRecoveredOriginalFailure(item)) return 'surface-inset surface-muted ring-gray-200 dark:ring-dark-700'
   if (item.error || item.status === 'failed' || item.status === 'cancelled') return 'bg-red-50/[0.15] text-red-700 ring-red-100 dark:bg-red-950/30 dark:text-red-300 dark:ring-red-900/50'
   if (item.status === 'succeeded' || item.status === 'success') return 'bg-emerald-50/[0.15] text-emerald-700 ring-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-900/50'
-  return 'surface-inset surface-muted ring-gray-200 dark:surface-inset dark:ring-dark-700'
+  return 'surface-inset surface-muted ring-gray-200 dark:ring-dark-700'
 }
 
 function friendlyItemError(error: BatchImageItem['error']) {

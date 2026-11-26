@@ -38,6 +38,6 @@ const statusClass = computed(() => {
     return 'bg-yellow-100/[0.15] text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
   }
   // Idle: gray
-  return 'surface-inset surface-muted dark:surface-inset'
+  return 'surface-inset surface-muted'
 })
 </script>

@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+  <div class="rounded-lg border border-[var(--surface-edge)] p-4">
     <div class="flex items-start justify-between gap-3">
       <div>
         <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.accounts.oauth.zhipu.title') }}</p>

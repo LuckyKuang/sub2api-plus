@@ -57,7 +57,7 @@ const concurrencyClass = computed(() => {
   const max = props.account.concurrency
   if (current >= max) return 'bg-red-100/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-400'
   if (current > 0) return 'bg-yellow-100/[0.15] text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-  return 'surface-inset surface-muted dark:surface-inset'
+  return 'surface-inset surface-muted'
 })
 
 // ====== 窗口费用 ======

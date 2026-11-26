@@ -5,7 +5,7 @@
     <div class="relative mb-3">
       <div
         @click="toggleDropdown"
-        class="cursor-pointer rounded-lg border border-gray-300 surface-inset px-3 py-2 dark:border-dark-500"
+        class="cursor-pointer rounded-lg border border-[var(--surface-edge)] surface-inset px-3 py-2"
       >
         <div class="grid grid-cols-2 gap-1.5">
           <span
@@ -26,7 +26,7 @@
             </button>
           </span>
         </div>
-        <div class="mt-2 flex items-center justify-between border-t border-gray-200 pt-2 dark:border-dark-600">
+        <div class="mt-2 flex items-center justify-between border-t border-[var(--surface-edge)] pt-2">
           <span class="text-xs surface-muted">{{ t('admin.accounts.modelCount', { count: modelValue.length }) }}</span>
           <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -36,9 +36,9 @@
       <!-- Dropdown List -->
       <div
         v-if="showDropdown"
-        class="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden border border-gray-200 shadow-lg dark:border-dark-600 surface-panel"
+        class="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden border border-[var(--surface-edge)] shadow-lg surface-panel"
       >
-        <div class="sticky top-0 border-b border-gray-200 surface-inset p-2 dark:border-dark-600">
+        <div class="sticky top-0 border-b border-[var(--surface-edge)] surface-inset p-2">
           <input
             v-model="searchQuery"
             type="text"
@@ -65,7 +65,7 @@
                   'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
                   modelValue.includes(model.value)
                     ? 'border-primary-500 bg-primary-500 text-white'
-                    : 'border-gray-300 dark:border-dark-500'
+                    : 'border-[var(--surface-edge)]'
                 ]"
               >
                 <svg v-if="modelValue.includes(model.value)" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">

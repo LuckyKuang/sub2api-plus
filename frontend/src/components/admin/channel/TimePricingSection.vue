@@ -1,5 +1,5 @@
 <template>
-  <section class="mt-3 border-t border-gray-200 pt-3 dark:border-dark-600">
+  <section class="mt-3 border-t border-[var(--surface-edge)] pt-3">
     <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
       <div class="min-w-0 flex-1 sm:max-w-2xl">
         <label class="block text-xs font-medium surface-muted">
@@ -50,7 +50,7 @@
       <div
         v-for="(period, index) in modelValue.periods"
         :key="index"
-        class="grid grid-cols-1 gap-2 border-t border-gray-200 pt-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_2rem] sm:items-end dark:border-dark-600"
+        class="grid grid-cols-1 gap-2 border-t border-[var(--surface-edge)] pt-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_2rem] sm:items-end"
       >
         <div class="min-w-0">
           <label :for="`${inputIdPrefix}-start-${index}`" class="block text-xs surface-muted">

@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-xl border border-gray-200 surface-inset p-4 dark:border-dark-700">
+  <div class="rounded-lg border border-[var(--surface-edge)] surface-inset p-4">
     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <div class="text-sm font-medium text-gray-900 dark:text-white">
@@ -55,7 +55,7 @@
         </button>
       </div>
 
-      <div v-if="anyOf.length === 0" class="rounded-xl border border-dashed border-gray-300 p-4 text-sm dark:border-dark-600 surface-muted">
+      <div v-if="anyOf.length === 0" class="rounded-lg border border-dashed border-[var(--surface-edge)] p-4 text-sm surface-muted">
         {{ t('admin.announcements.form.targetingCustom') }}: {{ t('admin.announcements.form.addOrGroup') }}
       </div>
 
@@ -89,7 +89,7 @@
           <div
             v-for="(cond, condIndex) in (group.all_of || [])"
             :key="condIndex"
-            class="rounded-xl border border-gray-200 surface-inset p-3 dark:border-dark-700"
+            class="rounded-lg border border-[var(--surface-edge)] surface-inset p-3"
           >
             <div class="flex flex-col gap-3 md:flex-row md:items-end">
               <div class="w-full md:w-52">
@@ -157,7 +157,7 @@
         </div>
       </div>
 
-      <div v-if="validationError" class="rounded-xl border border-red-200 bg-red-50/[0.15] p-3 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-300">
+      <div v-if="validationError" class="rounded-lg border border-red-200 bg-red-50/[0.15] p-3 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-300">
         {{ validationError }}
       </div>
     </div>

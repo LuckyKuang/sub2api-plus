@@ -554,7 +554,7 @@ onUnmounted(() => {
   line-height: 1.7;
   color: inherit;
 }
-.markdown-page-content h1 { @apply text-3xl font-bold mt-8 mb-4 pb-2 border-b border-gray-200 dark:border-dark-600; }
+.markdown-page-content h1 { @apply text-3xl font-bold mt-8 mb-4 pb-2 border-b border-[var(--surface-edge)]; }
 .markdown-page-content h2 { @apply text-2xl font-bold mt-6 mb-3; }
 .markdown-page-content h3 { @apply text-xl font-semibold mt-5 mb-2; }
 .markdown-page-content h4 { @apply text-lg font-semibold mt-4 mb-2; }
@@ -563,15 +563,15 @@ onUnmounted(() => {
 .markdown-page-content ol { @apply list-decimal pl-6 mb-4; }
 .markdown-page-content li { @apply mb-1; }
 .markdown-page-content a { @apply text-primary-500 hover:text-primary-600 underline; }
-.markdown-page-content blockquote { @apply border-l-4 border-gray-300 dark:border-dark-500 pl-4 italic my-4; color: var(--surface-muted); }
+.markdown-page-content blockquote { @apply border-l-4 border-[var(--surface-edge)] pl-4 italic my-4; color: var(--surface-muted); }
 .markdown-page-content img { @apply max-w-full h-auto rounded-lg my-4; }
 .markdown-page-content table { @apply w-full border-collapse my-4; }
-.markdown-page-content th { @apply border border-gray-300 dark:border-dark-500 px-3 py-2 font-semibold text-left;  background-color: var(--surface-soft);}
-.markdown-page-content td { @apply border border-gray-300 dark:border-dark-500 px-3 py-2; }
+.markdown-page-content th { @apply border border-[var(--surface-edge)] px-3 py-2 font-semibold text-left;  background-color: var(--surface-soft);}
+.markdown-page-content td { @apply border border-[var(--surface-edge)] px-3 py-2; }
 .markdown-page-content code { @apply px-1.5 py-0.5 rounded text-sm font-mono;  background-color: var(--surface-soft);}
 .markdown-page-content pre { @apply  p-4 rounded-lg overflow-x-auto my-4 relative;  background-color: var(--surface-soft); color: var(--surface-text);}
 .markdown-page-content pre code { @apply bg-transparent p-0 text-inherit; }
-.markdown-page-content hr { @apply my-6 border-gray-200 dark:border-dark-600; }
+.markdown-page-content hr { @apply my-6 border-[var(--surface-edge)]; }
 
 .copy-btn {
   position: absolute;

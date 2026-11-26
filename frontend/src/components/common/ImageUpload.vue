@@ -3,7 +3,7 @@
     <!-- Preview Box -->
     <div class="flex-shrink-0">
       <div
-        class="flex items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-gray-300 surface-inset dark:border-dark-600 surface-decoration"
+        class="flex items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-[var(--surface-edge)] surface-inset surface-decoration"
         :class="[previewSizeClass, { 'border-solid': !!modelValue }]"
       >
         <!-- SVG mode: render inline -->

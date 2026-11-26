@@ -98,7 +98,7 @@
         </div>
       </div>
 
-      <div class="flex items-center justify-end gap-2 border-t border-gray-200 pt-4 dark:border-dark-700">
+      <div class="flex items-center justify-end gap-2 border-t border-[var(--surface-edge)] pt-4">
         <button
           v-if="order.status === 'PENDING'"
           @click="emit('cancel', order)"

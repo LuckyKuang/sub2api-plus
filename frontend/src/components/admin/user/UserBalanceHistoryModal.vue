@@ -2,7 +2,7 @@
   <BaseDialog :show="show" :title="t('admin.users.balanceHistoryTitle')" width="wide" :close-on-click-outside="true" :z-index="40" @close="$emit('close')">
     <div v-if="user" class="space-y-4">
       <!-- User header: two-row layout with full user info -->
-      <div class="rounded-xl surface-inset p-4">
+      <div class="rounded-lg surface-inset p-4">
         <!-- Row 1: avatar + email/username/created_at (left) + current balance (right) -->
         <div class="flex items-center gap-3">
           <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary-100/[0.15] dark:bg-primary-900/30">
@@ -36,7 +36,7 @@
           </div>
         </div>
         <!-- Row 2: notes + total recharged -->
-        <div class="mt-2.5 flex items-center justify-between border-t border-gray-200/60 pt-2.5 dark:border-dark-600/60">
+        <div class="mt-2.5 flex items-center justify-between border-t border-[var(--surface-edge)] pt-2.5">
           <p class="min-w-0 flex-1 truncate text-xs surface-muted" :title="user.notes || ''">
             <template v-if="user.notes">{{ t('admin.users.notes') }}: {{ user.notes }}</template>
             <template v-else>&nbsp;</template>
@@ -59,7 +59,7 @@
         <button
           v-if="!hideActions"
           @click="emit('deposit')"
-          class="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm transition-colors hover:surface-hover dark:border-dark-600 surface-control surface-muted"
+          class="flex items-center gap-2 rounded-lg border border-[var(--surface-edge)] px-3 py-2 text-sm transition-colors hover:surface-hover surface-control surface-muted"
         >
           <Icon name="plus" size="sm" class="text-emerald-500" :stroke-width="2" />
           {{ t('admin.users.deposit') }}
@@ -68,7 +68,7 @@
         <button
           v-if="!hideActions"
           @click="emit('withdraw')"
-          class="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm transition-colors hover:surface-hover dark:border-dark-600 surface-control surface-muted"
+          class="flex items-center gap-2 rounded-lg border border-[var(--surface-edge)] px-3 py-2 text-sm transition-colors hover:surface-hover surface-control surface-muted"
         >
           <svg class="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
@@ -95,7 +95,7 @@
         <div
           v-for="item in history"
           :key="item.id"
-          class="rounded-xl border border-gray-200 surface-inset p-4 dark:border-dark-600"
+          class="rounded-lg border border-[var(--surface-edge)] surface-inset p-4"
         >
           <div class="flex items-start justify-between">
             <!-- Left: type icon + description -->

@@ -211,7 +211,7 @@ const statusClass = (status: string) => {
     running: 'bg-blue-100/[0.15] text-blue-700 dark:bg-blue-500/20 dark:text-blue-200',
     succeeded: 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200',
     failed: 'bg-rose-100/[0.15] text-rose-700 dark:bg-rose-500/20 dark:text-rose-200',
-    canceled: 'surface-inset surface-muted dark:surface-inset'
+    canceled: 'surface-inset surface-muted'
   }
   return map[status] || 'surface-inset surface-muted'
 }

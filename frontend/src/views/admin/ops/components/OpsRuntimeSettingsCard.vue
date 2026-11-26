@@ -396,7 +396,7 @@ onMounted(() => {
         <div class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.runtime.silencing.title') }}</div>
 
         <label class="inline-flex items-center gap-2 text-sm surface-muted">
-          <input v-model="draftAlert.silencing.enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+          <input v-model="draftAlert.silencing.enabled" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)]" />
           <span>{{ t('admin.ops.runtime.silencing.enabled') }}</span>
         </label>
 
@@ -504,7 +504,7 @@ onMounted(() => {
         <div class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label class="inline-flex items-center gap-2 text-xs surface-muted">
-              <input v-model="draftAlert.distributed_lock.enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+              <input v-model="draftAlert.distributed_lock.enabled" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)]" />
               <span>{{ t('admin.ops.runtime.lockEnabled') }}</span>
             </label>
           </div>

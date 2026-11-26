@@ -488,7 +488,7 @@ function statusClass(status: ClientDisconnectCompletionStatus): string {
   if (status === 'client_disconnected' || status === 'usage_missing') return 'bg-red-100/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300'
   if (status === 'completed') return 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
   if (status === 'pending') return 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-  return 'surface-inset surface-muted dark:surface-inset'
+  return 'surface-inset surface-muted'
 }
 function copyValue(value: string) { void navigator.clipboard?.writeText(value) }
 

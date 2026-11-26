@@ -23,8 +23,8 @@ const statusMap: Record<OrderStatus, { key: string; class: string }> = {
   PAID: { key: 'payment.status.paid', class: 'bg-blue-100/[0.15] text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
   RECHARGING: { key: 'payment.status.recharging', class: 'bg-blue-100/[0.15] text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
   COMPLETED: { key: 'payment.status.completed', class: 'bg-green-100/[0.15] text-green-800 dark:bg-green-900/30 dark:text-green-400' },
-  EXPIRED: { key: 'payment.status.expired', class: 'surface-inset text-gray-800 dark:surface-inset dark:text-gray-400' },
-  CANCELLED: { key: 'payment.status.cancelled', class: 'surface-inset text-gray-800 dark:surface-inset dark:text-gray-400' },
+  EXPIRED: { key: 'payment.status.expired', class: 'surface-inset text-gray-800 dark:text-gray-400' },
+  CANCELLED: { key: 'payment.status.cancelled', class: 'surface-inset text-gray-800 dark:text-gray-400' },
   FAILED: { key: 'payment.status.failed', class: 'bg-red-100/[0.15] text-red-800 dark:bg-red-900/30 dark:text-red-400' },
   REFUND_REQUESTED: { key: 'payment.status.refund_requested', class: 'bg-orange-100/[0.15] text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' },
   REFUNDING: { key: 'payment.status.refunding', class: 'bg-orange-100/[0.15] text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' },
@@ -41,6 +41,6 @@ const statusLabel = computed(() => {
 
 const statusClass = computed(() => {
   const entry = statusMap[props.status]
-  return entry?.class ?? 'surface-inset text-gray-800 dark:surface-inset dark:text-gray-400'
+  return entry?.class ?? 'surface-inset text-gray-800 dark:text-gray-400'
 })
 </script>

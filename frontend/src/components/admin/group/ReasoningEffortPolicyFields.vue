@@ -33,7 +33,7 @@
       <p class="input-hint">{{ t("admin.groups.form.maxReasoningEffortOverLimitHint") }}</p>
     </div>
 
-    <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+    <div class="border-t border-[var(--surface-edge)] pt-4">
       <div class="mb-3 flex items-center justify-between gap-3">
         <div>
           <label class="input-label mb-0">
@@ -57,7 +57,7 @@
         <div
           v-for="group in mappings"
           :key="group.id"
-          class="space-y-3 rounded-lg border border-gray-200 surface-inset p-3 dark:border-dark-600"
+          class="space-y-3 rounded-lg border border-[var(--surface-edge)] surface-inset p-3"
         >
           <div
             class="grid grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,1fr)_1.25rem_minmax(0,1fr)_2.75rem]"

@@ -1,5 +1,5 @@
 <template>
-  <div class="border-t border-gray-100 pt-4 dark:border-dark-700" data-testid="email-blacklist-editor">
+  <div class="border-t border-[var(--surface-edge)] pt-4" data-testid="email-blacklist-editor">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div class="min-w-0">
         <label class="font-medium text-gray-900 dark:text-white">
@@ -133,14 +133,14 @@
             </div>
           </div>
 
-          <div class="mt-2 max-h-80 overflow-y-auto rounded-lg border border-gray-200 dark:border-dark-600">
+          <div class="mt-2 max-h-80 overflow-y-auto rounded-lg border border-[var(--surface-edge)]">
             <p v-if="draft.length === 0" class="p-4 text-sm text-gray-500 dark:text-gray-400">
               {{ t('admin.settings.registration.emailBlacklist.empty') }}
             </p>
             <p v-else-if="filtered.length === 0" class="p-4 text-sm text-gray-500 dark:text-gray-400">
               {{ t('admin.settings.registration.emailBlacklist.noMatch') }}
             </p>
-            <ul v-else class="divide-y divide-gray-100 dark:divide-dark-700">
+            <ul v-else class="divide-y divide-[var(--surface-edge)]">
               <li
                 v-for="email in visible"
                 :key="email"
@@ -223,7 +223,7 @@
           {{ t('admin.settings.registration.emailBlacklist.disableMessage', { count: formatCount(matchedUsers.length) }) }}
         </p>
         <ul
-          class="max-h-72 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 dark:divide-dark-700 dark:border-dark-600"
+          class="max-h-72 divide-y divide-[var(--surface-edge)] overflow-y-auto rounded-lg border border-[var(--surface-edge)]"
           data-testid="email-blacklist-matched-users"
         >
           <li v-for="user in matchedUsers" :key="user.id" class="flex items-center justify-between gap-3 px-3 py-1.5 text-sm">

@@ -397,11 +397,11 @@ onUnmounted(() => {
   line-height: 20px;
   border-radius: var(--surface-radius-control);
   background-color: var(--surface-field);
-  @apply border border-gray-200 dark:border-dark-600;
+  @apply border border-[var(--surface-edge)];
   color: var(--surface-muted);
   @apply transition-all duration-200;
   @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
-  @apply hover:border-gray-300 dark:hover:border-dark-500;
+  @apply hover:border-[var(--surface-edge)] dark:hover:border-dark-500;
   @apply cursor-pointer;
 }
 
@@ -427,7 +427,7 @@ onUnmounted(() => {
   z-index: 100000020;
   background-color: var(--surface-panel);
   border-radius: var(--surface-radius-panel);
-  @apply border border-gray-200 dark:border-dark-700;
+  @apply border border-[var(--surface-edge)];
   @apply shadow-lg shadow-black/10 dark:shadow-black/30;
   overflow-x: hidden;
   overflow-y: auto;
@@ -454,7 +454,7 @@ onUnmounted(() => {
 }
 
 .date-picker-divider {
-  @apply border-t border-gray-100 dark:border-dark-700;
+  @apply border-t border-[var(--surface-edge)];
 }
 
 .date-picker-custom {
@@ -474,7 +474,7 @@ onUnmounted(() => {
   @apply w-full px-2 py-1.5 text-sm;
   border-radius: var(--surface-radius-item);
   background-color: var(--surface-field);
-  @apply border border-gray-200 dark:border-dark-600;
+  @apply border border-[var(--surface-edge)];
   @apply text-gray-900 dark:text-gray-100;
   @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
 }

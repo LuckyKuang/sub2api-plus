@@ -1148,7 +1148,7 @@ function handleToolbarRefresh() {
                         class="rounded px-1.5 py-0.5 text-[9px] font-bold transition-colors sm:px-2 sm:text-[10px] surface-control"
                         :class="realtimeWindow === window
                           ? 'bg-blue-500 text-white'
-                          : 'surface-field text-gray-600 hover:bg-gray-300 dark:surface-field dark:text-gray-400 dark:hover:surface-hover'"
+                          : 'surface-field text-gray-600 hover:bg-gray-300 dark:text-gray-400 dark:hover:surface-hover'"
                         @click="realtimeWindow = window"
                       >
                         {{ window }}

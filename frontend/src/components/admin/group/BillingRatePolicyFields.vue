@@ -1,5 +1,5 @@
 <template>
-  <section class="space-y-4 rounded-xl border border-gray-200 p-4 dark:border-dark-600">
+  <section class="space-y-4 rounded-lg border border-[var(--surface-edge)] p-4">
     <div>
       <h3 class="text-sm font-semibold">{{ t('billingRates.editor.title') }}</h3>
       <p class="input-hint">{{ t('billingRates.editor.hint') }}</p>

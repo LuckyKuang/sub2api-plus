@@ -39,7 +39,7 @@
         <div
           v-for="attr in attributes"
           :key="attr.id"
-          class="flex items-center gap-3 rounded-lg border border-gray-200 surface-inset p-3 dark:border-dark-600"
+          class="flex items-center gap-3 rounded-lg border border-[var(--surface-edge)] surface-inset p-3"
         >
           <!-- Drag Handle -->
           <div class="cursor-move hover:text-gray-600 dark:hover:text-gray-300 surface-muted" :title="t('admin.users.attributes.dragToReorder')">
@@ -197,11 +197,11 @@
       <!-- Required & Enabled -->
       <div class="flex items-center gap-6">
         <label class="flex items-center gap-2">
-          <input v-model="form.required" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600" />
+          <input v-model="form.required" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600" />
           <span class="text-sm surface-muted">{{ t('admin.users.attributes.required') }}</span>
         </label>
         <label class="flex items-center gap-2">
-          <input v-model="form.enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600" />
+          <input v-model="form.enabled" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600" />
           <span class="text-sm surface-muted">{{ t('admin.users.attributes.enabled') }}</span>
         </label>
       </div>

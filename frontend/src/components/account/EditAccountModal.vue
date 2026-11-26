@@ -96,13 +96,13 @@
                 'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
                 editOpenCodeAccountMode === 'zen'
                   ? 'border-amber-500 bg-amber-50/[0.15] dark:bg-amber-900/20'
-                  : 'border-gray-200 hover:border-gray-400 dark:border-dark-600 dark:hover:border-gray-600'
+                  : 'border-[var(--surface-edge)] hover:border-gray-400 dark:hover:border-gray-600'
               ]"
             >
               <div
                 :class="[
                   'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                  editOpenCodeAccountMode === 'zen' ? 'bg-amber-500 text-white' : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  editOpenCodeAccountMode === 'zen' ? 'bg-amber-500 text-white' : 'surface-inset text-gray-500 dark:text-gray-400'
                 ]"
               >
                 <Icon name="creditCard" size="sm" />
@@ -119,13 +119,13 @@
                 'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
                 editOpenCodeAccountMode === 'go'
                   ? 'border-amber-500 bg-amber-50/[0.15] dark:bg-amber-900/20'
-                  : 'border-gray-200 hover:border-gray-400 dark:border-dark-600 dark:hover:border-gray-600'
+                  : 'border-[var(--surface-edge)] hover:border-gray-400 dark:hover:border-gray-600'
               ]"
             >
               <div
                 :class="[
                   'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                  editOpenCodeAccountMode === 'go' ? 'bg-amber-500 text-white' : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  editOpenCodeAccountMode === 'go' ? 'bg-amber-500 text-white' : 'surface-inset text-gray-500 dark:text-gray-400'
                 ]"
               >
                 <Icon name="bolt" size="sm" />
@@ -149,7 +149,7 @@
                 'rounded-lg border-2 px-3 py-1.5 text-xs transition-all',
                 editAccountMode === mode
                   ? 'border-primary-500 bg-primary-50/[0.15] font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                  : 'border-gray-200 text-gray-700 hover:border-gray-400 dark:border-dark-600 dark:text-gray-300 dark:hover:border-gray-600'
+                  : 'border-[var(--surface-edge)] text-gray-700 hover:border-gray-400 dark:text-gray-300 dark:hover:border-gray-600'
               ]"
               @click="editAccountMode = mode"
             >
@@ -169,7 +169,7 @@
                 'rounded-lg border-2 px-3 py-1.5 text-xs transition-all',
                 editAccountMode === opt.value
                   ? 'border-primary-500 bg-primary-50/[0.15] font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                  : 'border-gray-200 text-gray-700 hover:border-gray-400 dark:border-dark-600 dark:text-gray-300 dark:hover:border-gray-600'
+                  : 'border-[var(--surface-edge)] text-gray-700 hover:border-gray-400 dark:text-gray-300 dark:hover:border-gray-600'
               ]"
               @click="editAccountMode = opt.value"
             >
@@ -190,7 +190,7 @@
                 'rounded-lg border-2 px-3 py-1.5 text-xs transition-all',
                 editApiProtocol === opt.value
                   ? 'border-primary-500 bg-primary-50/[0.15] font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                  : 'border-gray-200 text-gray-700 hover:border-gray-400 dark:border-dark-600 dark:text-gray-300 dark:hover:border-gray-600'
+                  : 'border-[var(--surface-edge)] text-gray-700 hover:border-gray-400 dark:text-gray-300 dark:hover:border-gray-600'
               ]"
               @click="editApiProtocol = opt.value"
             >
@@ -262,7 +262,7 @@
         <!-- Model Restriction Section (不适用于 Antigravity) -->
         <div
           v-if="account.platform !== 'antigravity'"
-          class="border-t border-gray-200 pt-4 dark:border-dark-600"
+          class="border-t border-[var(--surface-edge)] pt-4"
           :data-testid="account.platform === 'grok' ? 'grok-model-settings' : undefined"
         >
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
@@ -281,7 +281,7 @@
             <div
               :data-testid="account.platform === 'grok' ? 'grok-model-mode-tabs' : undefined"
               :class="account.platform === 'grok'
-                ? 'mb-4 flex gap-1 rounded-xl bg-gray-100 p-1 dark:bg-dark-900'
+                ? 'mb-4 flex gap-1 rounded-lg border border-[var(--surface-edge)] surface-inset p-1'
                 : 'mb-4 flex gap-2'"
             >
               <button
@@ -290,16 +290,16 @@
                 :aria-pressed="account.platform === 'grok' ? modelRestrictionMode === 'whitelist' : undefined"
                 :class="account.platform === 'grok'
                   ? [
-                      'rounded-lg px-3 py-2 text-sm',
+                      'rounded-md px-3 py-2 text-sm font-medium transition-colors',
                       modelRestrictionMode === 'whitelist'
-                        ? 'bg-white text-cyan-700 shadow-sm dark:bg-dark-800 dark:text-cyan-300'
-                        : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100'
+                        ? 'surface-card text-cyan-700 shadow-sm dark:text-cyan-300'
+                        : 'surface-muted hover:text-gray-900 dark:hover:text-gray-100'
                     ]
                   : [
                       'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                       modelRestrictionMode === 'whitelist'
                         ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                        : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                        : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400'
                     ]"
 
               >
@@ -325,16 +325,16 @@
                 :aria-pressed="account.platform === 'grok' ? modelRestrictionMode === 'mapping' : undefined"
                 :class="account.platform === 'grok'
                   ? [
-                      'rounded-lg px-3 py-2 text-sm',
+                      'rounded-md px-3 py-2 text-sm font-medium transition-colors',
                       modelRestrictionMode === 'mapping'
-                        ? 'bg-white text-purple-700 shadow-sm dark:bg-dark-800 dark:text-purple-300'
-                        : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100'
+                        ? 'surface-card text-purple-700 shadow-sm dark:text-purple-300'
+                        : 'surface-muted hover:text-gray-900 dark:hover:text-gray-100'
                     ]
                   : [
                       'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                       modelRestrictionMode === 'mapping'
                         ? 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                        : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                        : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400'
                     ]"
 
               >
@@ -496,7 +496,7 @@
               :data-testid="account.platform === 'grok' ? 'grok-model-mapping-add' : undefined"
               :class="account.platform === 'grok'
                 ? 'mb-3 inline-flex items-center gap-1 py-2 text-xs text-primary-700 dark:text-primary-300'
-                : 'mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300'"
+                : 'mb-3 w-full rounded-lg border-2 border-dashed border-[var(--surface-edge)] px-4 py-2 text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300'"
 
             >
               <svg
@@ -532,7 +532,7 @@
         </div>
 
         <!-- Pool Mode Section -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="border-t border-[var(--surface-edge)] pt-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.poolMode') }}</label>
@@ -586,7 +586,7 @@
         <!-- Gemini 显式缓存上游开关：仅自定义地址的 Gemini API Key 账号 -->
         <div
           v-if="account.platform === 'gemini' && !isOfficialGeminiBaseUrl(editBaseUrl)"
-          class="border-t border-gray-200 pt-4 dark:border-dark-600"
+          class="border-t border-[var(--surface-edge)] pt-4"
           data-testid="explicit-cache-upstream-section"
         >
           <div class="flex items-center justify-between gap-4">
@@ -626,7 +626,7 @@
         </div>
 
         <!-- Custom Error Codes Section -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="border-t border-[var(--surface-edge)] pt-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.customErrorCodes') }}</label>
@@ -658,7 +658,7 @@
                   'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                   selectedErrorCodes.includes(code.value)
                     ? 'bg-red-100/[0.15] text-red-700 ring-1 ring-red-500 dark:bg-red-900/30 dark:text-red-400'
-                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
                 ]"
               >
                 {{ code.value }} {{ code.label }}
@@ -716,7 +716,7 @@
       <!-- Grok OAuth media generation eligibility override -->
       <div
         v-if="isGrokOAuthAccount"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
         data-testid="grok-media-eligibility-card"
       >
         <div class="space-y-3">
@@ -764,7 +764,7 @@
       <!-- Grok OAuth Custom Upstream URL (仅改写转发端点，OAuth 授权/刷新不受影响) -->
       <div
         v-if="account.platform === 'grok' && account.type === 'oauth'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="mb-3 flex items-center justify-between">
           <div>
@@ -791,7 +791,7 @@
       </div>
 
       <!-- Header Override Section (eligible API-key platforms + grok OAuth) -->
-      <div v-if="headerOverrideCapable" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="headerOverrideCapable" class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.headerOverride.title') }}</label>
@@ -823,7 +823,7 @@
       <!-- OAuth accounts need a model restriction editor outside the API-key fields. -->
       <div
         v-if="(account.platform === 'openai' || account.platform === 'grok' || account.platform === 'stepfun') && account.type === 'oauth'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
         :data-testid="account.platform === 'grok' ? 'grok-model-settings' : undefined"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
@@ -842,7 +842,7 @@
           <div
             :data-testid="account.platform === 'grok' ? 'grok-model-mode-tabs' : undefined"
             :class="account.platform === 'grok'
-              ? 'mb-4 flex gap-1 rounded-xl bg-gray-100 p-1 dark:bg-dark-900'
+              ? 'mb-4 flex gap-1 rounded-lg border border-[var(--surface-edge)] surface-inset p-1'
               : 'mb-4 flex gap-2'"
           >
             <button
@@ -851,16 +851,16 @@
               :aria-pressed="account.platform === 'grok' ? modelRestrictionMode === 'whitelist' : undefined"
               :class="account.platform === 'grok'
                 ? [
-                    'rounded-lg px-3 py-2 text-sm',
+                    'rounded-md px-3 py-2 text-sm font-medium transition-colors',
                     modelRestrictionMode === 'whitelist'
-                      ? 'bg-white text-cyan-700 shadow-sm dark:bg-dark-800 dark:text-cyan-300'
-                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100'
+                      ? 'surface-card text-cyan-700 shadow-sm dark:text-cyan-300'
+                      : 'surface-muted hover:text-gray-900 dark:hover:text-gray-100'
                   ]
                 : [
                     'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                     modelRestrictionMode === 'whitelist'
                       ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                      : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                      : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400'
                   ]"
 
             >
@@ -872,16 +872,16 @@
               :aria-pressed="account.platform === 'grok' ? modelRestrictionMode === 'mapping' : undefined"
               :class="account.platform === 'grok'
                 ? [
-                    'rounded-lg px-3 py-2 text-sm',
+                    'rounded-md px-3 py-2 text-sm font-medium transition-colors',
                     modelRestrictionMode === 'mapping'
-                      ? 'bg-white text-purple-700 shadow-sm dark:bg-dark-800 dark:text-purple-300'
-                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100'
+                      ? 'surface-card text-purple-700 shadow-sm dark:text-purple-300'
+                      : 'surface-muted hover:text-gray-900 dark:hover:text-gray-100'
                   ]
                 : [
                     'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                     modelRestrictionMode === 'mapping'
                       ? 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                      : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                      : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400'
                   ]"
 
             >
@@ -1014,7 +1014,7 @@
               :data-testid="account.platform === 'grok' ? 'grok-model-mapping-add' : undefined"
               :class="account.platform === 'grok'
                 ? 'mb-3 inline-flex items-center gap-1 py-2 text-xs text-primary-700 dark:text-primary-300'
-                : 'mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300'"
+                : 'mb-3 w-full rounded-lg border-2 border-dashed border-[var(--surface-edge)] px-4 py-2 text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300'"
 
             >
               + {{ t('admin.accounts.addMapping') }}
@@ -1110,7 +1110,7 @@
         </div>
 
         <!-- Model Restriction Section for Service Account -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="border-t border-[var(--surface-edge)] pt-4">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <!-- Mode Toggle -->
@@ -1122,7 +1122,7 @@
                 'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                 modelRestrictionMode === 'whitelist'
                   ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
             >
               <svg
@@ -1147,7 +1147,7 @@
                 'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                 modelRestrictionMode === 'mapping'
                   ? 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
             >
               <svg
@@ -1251,7 +1251,7 @@
             <button
               type="button"
               @click="addModelMapping"
-              class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
+              class="mb-3 w-full rounded-lg border-2 border-dashed border-[var(--surface-edge)] px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
             >
               <svg
                 class="mr-1 inline h-4 w-4"
@@ -1350,7 +1350,7 @@
             <input
               v-model="editBedrockForceGlobal"
               type="checkbox"
-              class="rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-500"
+              class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
             />
             <span class="text-sm surface-muted">{{ t('admin.accounts.bedrockForceGlobal') }}</span>
           </label>
@@ -1358,7 +1358,7 @@
         </div>
 
         <!-- Model Restriction for Bedrock -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="border-t border-[var(--surface-edge)] pt-4">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <!-- Mode Toggle -->
@@ -1370,7 +1370,7 @@
                 'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                 modelRestrictionMode === 'whitelist'
                   ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
             >
               {{ t('admin.accounts.modelWhitelist') }}
@@ -1382,7 +1382,7 @@
                 'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                 modelRestrictionMode === 'mapping'
                   ? 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
             >
               {{ t('admin.accounts.modelMapping') }}
@@ -1427,7 +1427,7 @@
         </div>
 
         <!-- Pool Mode Section for Bedrock -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="border-t border-[var(--surface-edge)] pt-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.poolMode') }}</label>
@@ -1481,7 +1481,7 @@
 
       <div
         v-if="account.platform === 'antigravity' && account.type === 'oauth'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <label class="input-label">{{ t('admin.accounts.antigravityProjectIdLabel') }}</label>
         <input
@@ -1496,7 +1496,7 @@
 
       <!-- Antigravity model restriction (applies to all antigravity types) -->
       <!-- Antigravity 只支持模型映射模式，不支持白名单模式 -->
-      <div v-if="account.platform === 'antigravity'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="account.platform === 'antigravity'" class="border-t border-[var(--surface-edge)] pt-4">
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
         <!-- Mapping Mode Only (no toggle for Antigravity) -->
@@ -1573,7 +1573,7 @@
           <button
             type="button"
             @click="addAntigravityModelMapping"
-            class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
+            class="mb-3 w-full rounded-lg border-2 border-dashed border-[var(--surface-edge)] px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
           >
             <svg class="mr-1 inline h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -1596,7 +1596,7 @@
       </div>
 
       <!-- Temp Unschedulable Rules -->
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4">
+      <div class="border-t border-[var(--surface-edge)] pt-4 space-y-4">
         <div class="mb-3 flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.tempUnschedulable.title') }}</label>
@@ -1633,7 +1633,7 @@
             <div
               v-for="(rule, index) in tempUnschedRules"
               :key="getTempUnschedRuleKey(rule)"
-              class="rounded-lg border border-gray-200 p-3 dark:border-dark-600"
+              class="rounded-lg border border-[var(--surface-edge)] p-3"
             >
               <div class="mb-2 flex items-center justify-between">
                 <span class="text-xs font-medium surface-muted">
@@ -1709,13 +1709,13 @@
                         'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
                         rule.scope === option.value
                           ? 'border-primary-500 bg-primary-50/[0.15] dark:bg-primary-900/20'
-                          : 'border-gray-200 hover:border-gray-400 dark:border-dark-600 dark:hover:border-gray-600'
+                          : 'border-[var(--surface-edge)] hover:border-gray-400 dark:hover:border-gray-600'
                       ]"
                     >
                       <span
                         :class="[
                           'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2',
-                          rule.scope === option.value ? 'border-primary-500' : 'border-gray-300 dark:border-dark-500'
+                          rule.scope === option.value ? 'border-primary-500' : 'border-[var(--surface-edge)]'
                         ]"
                       >
                         <span v-if="rule.scope === option.value" class="console-data-mark h-1.5 w-1.5 rounded-full bg-primary-500" />
@@ -1754,7 +1754,7 @@
           <button
             type="button"
             @click="addTempUnschedRule()"
-            class="w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-sm transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
+            class="w-full rounded-lg border-2 border-dashed border-[var(--surface-edge)] px-4 py-2 text-sm transition-colors hover:border-gray-400 hover:text-gray-700 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
           >
             <svg
               class="mr-1 inline h-4 w-4"
@@ -1772,7 +1772,7 @@
 
       <div
         v-if="supportsAccountSchedulingThresholdOverride"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
         data-testid="account-scheduling-threshold-section"
       >
         <div class="mb-3 flex items-center justify-between">
@@ -1786,7 +1786,7 @@
             v-model="accountSchedulingThresholdOverrideEnabled"
             data-testid="account-scheduling-threshold-override-enabled"
             type="checkbox"
-            class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div v-if="accountSchedulingThresholdOverrideEnabled">
@@ -1806,7 +1806,7 @@
       <!-- Intercept Warmup Requests (Anthropic/Antigravity) -->
       <div
         v-if="account?.platform === 'anthropic' || account?.platform === 'antigravity'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -1871,7 +1871,7 @@
           <p class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
         </div>
       </div>
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div class="border-t border-[var(--surface-edge)] pt-4">
         <label class="input-label">{{ t('admin.accounts.expiresAt') }}</label>
         <DateTimePicker :aria-label="t('admin.accounts.expiresAt')" v-model="expiresAtInput" type="datetime-local" class="input" />
         <div class="mt-2 flex gap-2">
@@ -1891,7 +1891,7 @@
       <!-- OpenAI 自动透传开关（OAuth/API Key） -->
       <div
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -1911,7 +1911,7 @@
             v-model="openaiPassthroughModelFilterEnabled"
             type="checkbox"
             data-testid="edit-openai-passthrough-model-filter"
-            class="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="mt-1 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
           <span class="text-sm">
             {{ t('admin.accounts.openai.passthroughModelFilter') }}
@@ -1924,7 +1924,7 @@
 
       <div
         v-if="account?.platform === 'openai' && !isSparkShadow"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <label class="input-label" for="edit-openai-account-user-agent">
           {{ t('admin.accounts.openai.accountUserAgent') }}
@@ -1951,7 +1951,7 @@
 
       <div
         v-if="account?.platform === 'openai' && account?.type === 'oauth' && !isSparkShadow"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -1972,7 +1972,7 @@
       <!-- OpenAI Codex namespace 工具摊平（兼容开关，仅 OAuth） -->
       <div
         v-if="account?.platform === 'openai' && account?.type === 'oauth'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -1991,7 +1991,7 @@
       <!-- OpenAI Codex hosted image_generation bridge policy -->
       <div
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="overflow-hidden rounded-lg border border-sky-100 bg-sky-50/60 shadow-sm dark:border-sky-900/50 dark:bg-sky-950/20">
           <div class="flex items-start gap-3 px-4 py-3">
@@ -2025,7 +2025,7 @@
                   'group flex min-h-[62px] items-start gap-2 rounded-lg border px-3 py-2 text-left transition-all',
                   codexImageToolMode === option.value
                     ? option.selectedCardClass
-                    : 'border-transparent bg-transparent text-slate-600 hover:border-gray-200 hover:surface-hover dark:text-slate-300 dark:hover:border-dark-500 dark:hover:surface-hover'
+                    : 'border-transparent bg-transparent text-slate-600 hover:border-[var(--surface-edge)] hover:surface-hover dark:text-slate-300 dark:hover:border-dark-500 dark:hover:surface-hover'
                 ]"
               >
                 <span
@@ -2033,7 +2033,7 @@
                     'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors',
                     codexImageToolMode === option.value
                       ? option.selectedDotClass
-                      : 'border-gray-300 text-transparent group-hover:border-gray-400 dark:border-dark-500'
+                      : 'border-[var(--surface-edge)] text-transparent group-hover:border-gray-400'
                   ]"
                 >
                   <Icon name="check" size="xs" :stroke-width="2" />
@@ -2051,7 +2051,7 @@
       <!-- OpenAI WS Mode 三态（off/ctx_pool/passthrough） -->
       <div
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -2072,7 +2072,7 @@
       <!-- OpenAI APIKey Responses API support mode -->
       <div
         v-if="account?.platform === 'openai' && account?.type === 'apikey'"
-        class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="space-y-4 border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -2121,11 +2121,11 @@
             <label
               v-for="option in openAIEndpointCapabilityOptions"
               :key="option.value"
-              class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-dark-600"
+              class="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--surface-edge)] px-3 py-2 text-sm"
             >
               <input
                 type="checkbox"
-                class="rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-500"
+                class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
                 :data-testid="`openai-endpoint-capability-${option.value}`"
                 :checked="openAIEndpointCapabilities.includes(option.value)"
                 @change="toggleOpenAIEndpointCapability(option.value, $event)"
@@ -2140,7 +2140,7 @@
       <!-- OpenAI images: size tier routing -->
       <div
         v-if="account?.platform === 'openai'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <OpenAIImageSizeTiersField v-model="openAIImageSizeTiers" />
       </div>
@@ -2154,7 +2154,7 @@
       <!-- Anthropic API Key 自动透传开关 -->
       <div
         v-if="account?.platform === 'anthropic' && account?.type === 'apikey'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -2171,7 +2171,7 @@
 
       <div
         v-if="account?.platform === 'anthropic' && account?.type === 'apikey'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -2193,7 +2193,7 @@
       <!-- Anthropic / OpenAI API Key: Web Search Emulation (hidden when global disabled) -->
       <div
         v-if="(account?.platform === 'anthropic' || account?.platform === 'openai') && account?.type === 'apikey' && webSearchGlobalEnabled"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -2215,7 +2215,7 @@
       <!-- 配额控制 (Anthropic apikey/bedrock: 配额限制 + 亲和) -->
       <div
         v-if="account?.platform === 'anthropic' && (account?.type === 'apikey' || account?.type === 'bedrock')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="border-t border-[var(--surface-edge)] pt-4 space-y-4"
       >
         <div class="mb-3">
           <h3 class="input-label mb-0 text-base font-semibold">{{ t('admin.accounts.quotaControl.title') }}</h3>
@@ -2266,7 +2266,7 @@
       <!-- 配额控制 (非 Anthropic apikey/bedrock，以及 Vertex service_account) -->
       <div
         v-else-if="supportsAccountQuota(account?.type)"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="border-t border-[var(--surface-edge)] pt-4 space-y-4"
       >
         <div class="mb-3">
           <h3 class="input-label mb-0 text-base font-semibold">{{ t('admin.accounts.quotaControl.title') }}</h3>
@@ -2318,7 +2318,7 @@
       <!-- OpenAI API 长上下文计费开关 -->
       <div
         v-if="account?.platform === 'openai' && !isSparkShadow && !hideAccountLongContextBilling && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -2336,7 +2336,7 @@
 
       <div
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -2354,7 +2354,7 @@
       <!-- Codex 指纹收敛模式（仅 OpenAI OAuth） -->
       <div
         v-if="account?.platform === 'openai' && account?.type === 'oauth' && !isSparkShadow"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between gap-4">
           <div class="min-w-0">
@@ -2372,7 +2372,7 @@
       <!-- Codex 可见时区对齐（仅 OpenAI OAuth） -->
       <div
         v-if="account?.platform === 'openai' && account?.type === 'oauth' && !isSparkShadow"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="space-y-2">
           <div>
@@ -2405,7 +2405,7 @@
       <!-- OpenAI 订阅档位手动覆盖（Plus/Pro/Free），仅 OAuth 非影子账号 -->
       <div
         v-if="account?.platform === 'openai' && account?.type === 'oauth' && !isSparkShadow"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between gap-4">
           <div class="min-w-0">
@@ -2422,7 +2422,7 @@
 
       <div
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="border-t border-[var(--surface-edge)] pt-4 space-y-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -2496,7 +2496,7 @@
 
       <div
         v-if="account?.platform === 'openai'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="border-t border-[var(--surface-edge)] pt-4 space-y-4"
       >
         <div class="space-y-2">
           <div class="flex items-center justify-between">
@@ -2550,7 +2550,7 @@
 
       <div
         v-if="account?.platform === 'openai' && account?.type === 'oauth' && !isSparkShadow"
-        class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="space-y-4 border-t border-[var(--surface-edge)] pt-4"
         data-testid="auto-reset-credit-settings"
       >
         <div class="flex items-center justify-between gap-4">
@@ -2599,7 +2599,7 @@
       <!-- 配额控制 (Anthropic OAuth/SetupToken: 亲和 + 窗口费用 + 会话 + RPM 等) -->
       <div
         v-if="account?.platform === 'anthropic' && (account?.type === 'oauth' || account?.type === 'setup-token')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="border-t border-[var(--surface-edge)] pt-4 space-y-4"
       >
         <div class="mb-3">
           <h3 class="input-label mb-0 text-base font-semibold">{{ t('admin.accounts.quotaControl.title') }}</h3>
@@ -2609,7 +2609,7 @@
         </div>
 
         <!-- Window Cost Limit -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.windowCost.label') }}</label>
@@ -2657,7 +2657,7 @@
         </div>
 
         <!-- Session Limit -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.sessionLimit.label') }}</label>
@@ -2702,7 +2702,7 @@
         </div>
 
         <!-- RPM Limit -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.rpmLimit.label') }}</label>
@@ -2740,7 +2740,7 @@
                     'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all',
                     rpmStrategy === 'tiered'
                       ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                      : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                      : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
                   ]"
                 >
                   <div class="text-center">
@@ -2755,7 +2755,7 @@
                     'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all',
                     rpmStrategy === 'sticky_exempt'
                       ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                      : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                      : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
                   ]"
                 >
                   <div class="text-center">
@@ -2794,7 +2794,7 @@
                   'px-3 py-1.5 text-sm rounded-md border transition-colors',
                   userMsgQueueMode === opt.value
                     ? 'bg-primary-600 text-white border-primary-600'
-                    : 'surface-inset dark:surface-inset surface-muted border-gray-300 dark:border-dark-500 hover:surface-hover dark:hover:surface-hover'
+                    : 'surface-inset surface-muted border-[var(--surface-edge)] hover:surface-hover dark:hover:surface-hover'
                 ]">
                 {{ opt.label }}
               </button>
@@ -2803,7 +2803,7 @@
         </div>
 
         <!-- TLS Fingerprint -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.tlsFingerprint.label') }}</label>
@@ -2826,7 +2826,7 @@
         </div>
 
         <!-- Session ID Masking -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.sessionIdMasking.label') }}</label>
@@ -2841,7 +2841,7 @@
         </div>
 
         <!-- Cache TTL Override -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.cacheTTLOverride.label') }}</label>
@@ -2868,7 +2868,7 @@
         </div>
 
         <!-- Custom Base URL Relay -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.customBaseUrl.label') }}</label>
@@ -2891,7 +2891,7 @@
         </div>
       </div>
 
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div class="border-t border-[var(--surface-edge)] pt-4">
         <div>
           <label class="input-label">{{ t('common.status') }}</label>
           <Select v-model="form.status" :options="statusOptions" />
@@ -2904,7 +2904,7 @@
               type="checkbox"
               v-model="mixedScheduling"
               disabled
-              class="h-4 w-4 cursor-not-allowed rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
+              class="h-4 w-4 cursor-not-allowed rounded border-[var(--surface-edge)] text-primary-500 focus:ring-primary-500"
             />
             <span class="text-sm font-medium surface-muted">
               {{ t('admin.accounts.mixedScheduling') }}
@@ -2917,7 +2917,7 @@
             <input
               type="checkbox"
               v-model="allowOverages"
-              class="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
+              class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-500 focus:ring-primary-500"
             />
             <span class="text-sm font-medium surface-muted">
               {{ t('admin.accounts.allowOverages') }}
@@ -3847,7 +3847,7 @@ const codexImageToolBadgeClass = computed(() => {
     case 'block':
       return 'bg-rose-100/[0.15] text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
     default:
-      return 'surface-inset text-slate-600 dark:surface-inset dark:text-slate-300'
+      return 'surface-inset text-slate-600 dark:text-slate-300'
   }
 })
 const openAICompactModeOptions = computed(() => [

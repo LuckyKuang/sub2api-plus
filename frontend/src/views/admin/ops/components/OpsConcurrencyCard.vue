@@ -356,7 +356,7 @@ watch(
           class="flex items-center justify-center rounded-lg px-2 py-1 transition-colors surface-control"
           :class="showByUser
             ? 'bg-blue-100/[0.15] text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-            : 'surface-field text-gray-500 hover:surface-hover hover:text-gray-700 dark:surface-field dark:text-gray-400 dark:hover:surface-hover dark:hover:text-gray-300'"
+            : 'surface-field text-gray-500 hover:surface-hover hover:text-gray-700 dark:text-gray-400 dark:hover:surface-hover dark:hover:text-gray-300'"
           :title="showByUser ? t('admin.ops.concurrency.switchToPlatform') : t('admin.ops.concurrency.switchToUser')"
           @click="showByUser = !showByUser"
         >

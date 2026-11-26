@@ -16,7 +16,7 @@
       </div>
 
       <!-- 操作区：添加用户 -->
-      <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+      <div class="rounded-lg border border-[var(--surface-edge)] p-3">
         <h4 class="mb-2 text-sm font-medium surface-muted">
           {{ t('admin.groups.addUserRpm') }}
         </h4>
@@ -33,7 +33,7 @@
             />
             <div
               v-if="showDropdown && searchResults.length > 0"
-              class="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-gray-200 shadow-lg dark:border-dark-500 surface-panel"
+              class="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-[var(--surface-edge)] shadow-lg surface-panel"
             >
               <button
                 v-for="user in searchResults"
@@ -69,7 +69,7 @@
           </button>
         </div>
 
-        <div v-if="localEntries.length > 0" class="mt-3 flex items-center justify-end border-t border-gray-100 pt-3 dark:border-dark-600">
+        <div v-if="localEntries.length > 0" class="mt-3 flex items-center justify-end border-t border-[var(--surface-edge)] pt-3">
           <button
             type="button"
             :disabled="clearing"
@@ -101,11 +101,11 @@
         </div>
 
         <div v-else>
-          <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-dark-600">
+          <div class="overflow-hidden rounded-lg border border-[var(--surface-edge)]">
             <div class="record-table-scroll max-h-[420px] overflow-auto">
               <table class="record-table w-full min-w-max text-sm">
                 <thead class="sticky top-0 z-[1]">
-                  <tr class="border-b border-gray-200 surface-inset dark:border-dark-600">
+                  <tr class="border-b border-[var(--surface-edge)] surface-inset">
                     <th class="px-3 py-2 text-left text-xs font-medium surface-muted">{{ t('admin.groups.columns.userEmail') }}</th>
                     <th class="px-3 py-2 text-left text-xs font-medium surface-muted">ID</th>
                     <th class="px-3 py-2 text-left text-xs font-medium surface-muted">{{ t('admin.groups.columns.userName') }}</th>
@@ -115,7 +115,7 @@
                     <th class="w-10 px-2 py-2"></th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100 dark:divide-dark-600">
+                <tbody class="divide-y divide-[var(--surface-edge)]">
                   <tr
                     v-for="entry in paginatedLocalEntries"
                     :key="entry.user_id"
@@ -131,7 +131,7 @@
                           'inline-flex rounded-md px-2 py-0.5 text-xs font-medium',
                           entry.user_status === 'active'
                             ? 'bg-green-100/[0.15] text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                            : 'surface-inset text-gray-600 dark:surface-inset dark:text-gray-400'
+                            : 'surface-inset text-gray-600 dark:text-gray-400'
                         ]"
                       >
                         {{ entry.user_status }}
@@ -144,7 +144,7 @@
                         min="0"
                         autocomplete="off"
                         :value="entry.rpm_override"
-                        class="hide-spinner w-20 rounded border border-gray-200 surface-inset px-2 py-1 text-center text-sm font-medium transition-colors focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500/20 dark:border-dark-500"
+                        class="hide-spinner w-20 rounded border border-[var(--surface-edge)] surface-inset px-2 py-1 text-center text-sm font-medium transition-colors focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500/20"
                         @change="updateLocalRpm(entry.user_id, ($event.target as HTMLInputElement).value)"
                       />
                     </td>
@@ -174,7 +174,7 @@
       </div>
 
       <!-- 底部 -->
-      <div class="flex items-center gap-3 border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div class="flex items-center gap-3 border-t border-[var(--surface-edge)] pt-4">
         <template v-if="isDirty">
           <span class="text-xs text-amber-600 dark:text-amber-400">{{ t('admin.groups.unsavedChanges') }}</span>
           <button

@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-wrap items-center gap-2 text-xs surface-muted">
-    <button v-if="switchVisible" type="button" role="switch" :aria-checked="state.enabled.value" class="surface-control inline-flex min-h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 dark:border-dark-600" @click="state.setEnabled(!state.enabled.value)">
+    <button v-if="switchVisible" type="button" role="switch" :aria-checked="state.enabled.value" class="surface-control inline-flex min-h-9 items-center gap-2 rounded-lg border border-[var(--surface-edge)] px-3" @click="state.setEnabled(!state.enabled.value)">
       <span class="refresh-switch-track h-4 w-7 rounded-full transition-colors" :class="state.enabled.value ? 'bg-primary-500' : 'bg-gray-400'"><span class="block h-3 w-3 rounded-full surface-opaque transition-transform" :class="state.enabled.value ? 'translate-x-3' : ''" /></span>
       {{ t('common.autoRefresh.title') }}
     </button>

@@ -214,7 +214,7 @@ onMounted(async () => {
 }
 
 .legal-document-content :deep(h1) {
-  @apply mb-4 mt-8 border-b border-gray-200 pb-3 text-3xl font-bold dark:border-dark-700;
+  @apply mb-4 mt-8 border-b border-[var(--surface-edge)] pb-3 text-3xl font-bold;
 }
 
 .legal-document-content :deep(h2) {
@@ -250,7 +250,7 @@ onMounted(async () => {
 }
 
 .legal-document-content :deep(blockquote) {
-  @apply my-5 border-l-4 border-gray-300 pl-4 text-gray-600 dark:border-dark-600 dark:text-dark-300;
+  @apply my-5 border-l-4 border-[var(--surface-edge)] pl-4 text-gray-600 dark:text-dark-300;
 }
 
 .legal-document-content :deep(code) {
@@ -272,12 +272,12 @@ onMounted(async () => {
 }
 
 .legal-document-content :deep(th) {
-  @apply border border-gray-300 px-3 py-2 text-left font-semibold dark:border-dark-600;
+  @apply border border-[var(--surface-edge)] px-3 py-2 text-left font-semibold;
   background-color: var(--surface-soft);
 }
 
 .legal-document-content :deep(td) {
-  @apply border border-gray-300 px-3 py-2 dark:border-dark-600;
+  @apply border border-[var(--surface-edge)] px-3 py-2;
 }
 
 .legal-document-content :deep(img) {
@@ -285,6 +285,6 @@ onMounted(async () => {
 }
 
 .legal-document-content :deep(hr) {
-  @apply my-7 border-gray-200 dark:border-dark-700;
+  @apply my-7 border-[var(--surface-edge)];
 }
 </style>

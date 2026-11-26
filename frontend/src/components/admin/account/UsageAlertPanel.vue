@@ -30,14 +30,14 @@
           </button>
         </div>
 
-        <div v-if="rules.length === 0" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm dark:border-dark-600 surface-muted">
+        <div v-if="rules.length === 0" class="rounded-lg border border-dashed border-[var(--surface-edge)] p-6 text-center text-sm surface-muted">
           {{ t('admin.usageAlert.emptyRules') }}
         </div>
 
         <div
           v-for="(rule, index) in rules"
           :key="rule._key"
-          class="space-y-3 rounded-lg border border-gray-200 p-4 dark:border-dark-700"
+          class="space-y-3 rounded-lg border border-[var(--surface-edge)] p-4"
         >
           <div class="flex items-center justify-between gap-3">
             <div class="text-sm font-medium text-gray-800 dark:text-gray-100">
@@ -257,7 +257,7 @@
 
           <div
             v-if="rule.next_run_at || rule.last_run_at || rule.threshold_next_run_at || rule.last_threshold_alert_at || rule.last_error"
-            class="rounded-lg border border-gray-200 surface-inset p-3 text-xs dark:border-dark-700"
+            class="rounded-lg border border-[var(--surface-edge)] surface-inset p-3 text-xs"
           >
             <div v-if="rule.next_run_at" class="surface-muted">
               {{ t('admin.usageAlert.nextRun') }}: {{ formatTime(rule.next_run_at) }}

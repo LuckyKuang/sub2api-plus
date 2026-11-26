@@ -213,7 +213,7 @@
                 <input
                   type="checkbox"
                   v-model="form.restrict_models"
-                  class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
                 />
                 <span class="input-label mb-0">{{ t('admin.channels.form.restrictModels', 'Restrict Models') }}</span>
               </label>
@@ -241,12 +241,12 @@
                   class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors"
                   :class="activePlatforms.includes(p)
                     ? 'bg-primary-50/[0.15] border-primary-300 dark:bg-primary-900/20 dark:border-primary-700'
-                    : 'border-gray-200 hover:surface-hover dark:border-dark-600 dark:hover:surface-hover'"
+                    : 'border-[var(--surface-edge)] hover:surface-hover dark:hover:surface-hover'"
                 >
                   <input
                     type="checkbox"
                     :checked="activePlatforms.includes(p)"
-                    class="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    class="h-3.5 w-3.5 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
                     @change="togglePlatform(p)"
                   />
                   <PlatformIcon :platform="p" size="xs" :class="platformTextClass(p)" />
@@ -256,7 +256,7 @@
             </div>
 
             <!-- Apply Pricing to Account Stats (toggle only in basic settings) -->
-            <div class="border-t border-gray-200 pt-4 dark:border-dark-700">
+            <div class="border-t border-[var(--surface-edge)] pt-4">
               <div class="flex items-center justify-between">
                 <div>
                   <label class="text-sm font-medium surface-muted">
@@ -293,7 +293,7 @@
                   ({{ t('admin.channels.form.selectedCount', { count: section.group_ids.length }) }})
                 </span>
               </label>
-              <div class="max-h-40 overflow-auto rounded-lg border border-gray-200 surface-inset p-2 dark:border-dark-600">
+              <div class="max-h-40 overflow-auto rounded-lg border border-[var(--surface-edge)] surface-inset p-2">
                 <div v-if="groupsLoading" class="py-2 text-center text-xs surface-muted">
                   {{ t('common.loading', 'Loading...') }}
                 </div>
@@ -304,7 +304,7 @@
                   <label
                     v-for="group in getGroupsForPlatform(section.platform)"
                     :key="group.id"
-                    class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-gray-200 px-2 py-1 text-xs transition-colors hover:surface-hover dark:border-dark-600"
+                    class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[var(--surface-edge)] px-2 py-1 text-xs transition-colors hover:surface-hover"
                     :class="[
                       section.group_ids.includes(group.id) ? 'bg-primary-50/[0.15] border-primary-300 dark:bg-primary-900/20 dark:border-primary-700' : '',
                       isGroupInOtherChannel(group.id, section.platform) ? 'opacity-40' : ''
@@ -314,7 +314,7 @@
                       type="checkbox"
                       :checked="section.group_ids.includes(group.id)"
                       :disabled="isGroupInOtherChannel(group.id, section.platform)"
-                      class="h-3 w-3 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      class="h-3 w-3 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
                       @change="toggleGroupInSection(sIdx, group.id)"
                     />
                     <span :class="['font-medium', platformTextClass(group.platform)]">{{ group.name }}</span>
@@ -333,7 +333,7 @@
 
             <template v-if="section.platform !== 'composite'">
             <!-- Web Search Emulation (platform whitelist, hidden when global disabled) -->
-            <div v-if="WEB_SEARCH_EMULATION_PLATFORMS.has(section.platform) && webSearchGlobalEnabled" class="border-t border-gray-200 pt-3 dark:border-dark-600">
+            <div v-if="WEB_SEARCH_EMULATION_PLATFORMS.has(section.platform) && webSearchGlobalEnabled" class="border-t border-[var(--surface-edge)] pt-3">
               <div class="flex items-center justify-between gap-4">
                 <div>
                   <label class="text-xs font-medium surface-muted">
@@ -348,7 +348,7 @@
             </div>
 
             <!-- Codex Image Generation Bridge (OpenAI only) -->
-            <div v-if="section.platform === 'openai'" class="border-t border-gray-200 pt-3 dark:border-dark-600">
+            <div v-if="section.platform === 'openai'" class="border-t border-[var(--surface-edge)] pt-3">
               <div class="flex items-center justify-between gap-4">
                 <div>
                   <label class="text-xs font-medium surface-muted">
@@ -363,7 +363,7 @@
             </div>
 
             <!-- Bedrock CC Compatibility (Anthropic only) -->
-            <div v-if="section.platform === 'anthropic'" class="border-t border-gray-200 pt-3 dark:border-dark-600">
+            <div v-if="section.platform === 'anthropic'" class="border-t border-[var(--surface-edge)] pt-3">
               <div class="flex items-center justify-between gap-4">
                 <div>
                   <label class="text-xs font-medium surface-muted">
@@ -387,7 +387,7 @@
               </div>
               <div
                 v-if="Object.keys(section.model_mapping).length === 0"
-                class="rounded border border-dashed border-gray-300 p-2 text-center text-xs dark:border-dark-500 surface-muted"
+                class="rounded border border-dashed border-[var(--surface-edge)] p-2 text-center text-xs surface-muted"
               >
                 {{ t('admin.channels.form.noMappingRules', 'No mapping rules. Click "Add" to create one.') }}
               </div>
@@ -446,7 +446,7 @@
               </div>
               <div
                 v-if="section.model_pricing.length === 0"
-                class="rounded border border-dashed border-gray-300 p-2 text-center text-xs dark:border-dark-500 surface-muted"
+                class="rounded border border-dashed border-[var(--surface-edge)] p-2 text-center text-xs surface-muted"
               >
                 {{ t('admin.channels.form.noPricingRules', 'No pricing rules yet. Click "Add" to create one.') }}
               </div>
@@ -468,7 +468,7 @@
             <GroupModelRateLink :groups="allGroups.filter(group => section.group_ids.includes(group.id))" />
 
             <!-- Account Stats Pricing Rules (per-platform, always visible) -->
-            <div class="mt-4 border-t border-gray-200 pt-4 dark:border-dark-700 space-y-3">
+            <div class="mt-4 border-t border-[var(--surface-edge)] pt-4 space-y-3">
               <div class="flex items-center justify-between">
                 <h4 class="text-sm font-medium surface-muted">
                   {{ t('admin.channels.form.accountStatsPricingRules') }}
@@ -493,7 +493,7 @@
               <div
                 v-for="(rule, ruleIndex) in section.account_stats_pricing_rules"
                 :key="ruleIndex"
-                class="space-y-3 rounded-lg border border-gray-200 p-4 dark:border-dark-600"
+                class="space-y-3 rounded-lg border border-[var(--surface-edge)] p-4"
               >
                 <div class="flex items-center justify-between">
                   <input
@@ -515,9 +515,9 @@
                       class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors"
                       :class="rule.group_ids.includes(gid)
                         ? 'border-primary-300 bg-primary-50/[0.15] dark:border-primary-700 dark:bg-primary-900/20'
-                        : 'border-gray-200 hover:surface-hover dark:border-dark-600 dark:hover:surface-hover'"
+                        : 'border-[var(--surface-edge)] hover:surface-hover dark:hover:surface-hover'"
                     >
-                      <input type="checkbox" :checked="rule.group_ids.includes(gid)" class="h-3 w-3 rounded border-gray-300 text-primary-600 focus:ring-primary-500" @change="rule.group_ids.includes(gid) ? rule.group_ids.splice(rule.group_ids.indexOf(gid), 1) : rule.group_ids.push(gid)" />
+                      <input type="checkbox" :checked="rule.group_ids.includes(gid)" class="h-3 w-3 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500" @change="rule.group_ids.includes(gid) ? rule.group_ids.splice(rule.group_ids.indexOf(gid), 1) : rule.group_ids.push(gid)" />
                       <span :class="['font-medium', platformTextClass(section.platform)]">{{ getGroupNameById(gid) }}</span>
                     </label>
                   </div>
@@ -554,7 +554,7 @@
                     <!-- Search results dropdown -->
                     <div
                       v-if="showRuleAccountDropdown[`${section.platform}-${ruleIndex}`] && (ruleAccountSearchResults[`${section.platform}-${ruleIndex}`]?.length ?? 0) > 0"
-                      class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg dark:border-dark-600 surface-panel"
+                      class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg border-[var(--surface-edge)] surface-panel"
                     >
                       <button
                         v-for="account in ruleAccountSearchResults[`${section.platform}-${ruleIndex}`]"
@@ -582,7 +582,7 @@
                       + {{ t('common.add') }}
                     </button>
                   </div>
-                  <div v-if="rule.pricing.length === 0" class="rounded border border-dashed border-gray-300 p-2 text-center text-xs dark:border-dark-500 surface-muted">
+                  <div v-if="rule.pricing.length === 0" class="rounded border border-dashed border-[var(--surface-edge)] p-2 text-center text-xs surface-muted">
                     {{ t('admin.channels.form.noPricingRules') }}
                   </div>
                   <div v-else class="space-y-2">

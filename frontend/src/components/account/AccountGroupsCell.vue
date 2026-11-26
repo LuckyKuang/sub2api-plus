@@ -37,7 +37,7 @@
         <div
           v-if="showPopover"
           ref="popoverRef"
-          class="fixed z-50 min-w-48 max-w-96 rounded-lg border border-gray-200 p-3 shadow-lg dark:border-dark-600 surface-panel"
+          class="fixed z-50 min-w-48 max-w-96 rounded-lg border border-[var(--surface-edge)] p-3 shadow-lg surface-panel"
           :style="popoverStyle"
           role="dialog"
         >

@@ -51,7 +51,7 @@
             class="rounded-md border px-2 py-0.5 transition-colors surface-control"
             :class="hasExtraProtocol(row, option.value)
               ? 'border-primary-300 bg-primary-50/[0.15] text-primary-700 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-              : 'border-gray-200 text-gray-500 hover:border-gray-300 dark:border-dark-600 dark:text-gray-400 dark:hover:border-dark-500'"
+              : 'border-[var(--surface-edge)] text-gray-500 hover:border-[var(--surface-edge)] dark:text-gray-400 dark:hover:border-dark-500'"
             :aria-pressed="hasExtraProtocol(row, option.value)"
             :data-testid="`opencode-go-protocol-extra-${index}-${option.value}`"
             @click="toggleExtraProtocol(row, option.value)"
@@ -62,7 +62,7 @@
       </div>
     </div>
     <div
-      class="mb-2 flex items-center gap-2 rounded-lg border border-dashed border-gray-200 surface-inset px-3 py-2 text-xs dark:border-dark-600 surface-muted"
+      class="mb-2 flex items-center gap-2 rounded-lg border border-dashed border-[var(--surface-edge)] surface-inset px-3 py-2 text-xs surface-muted"
       data-testid="opencode-go-protocol-fallback"
     >
       <span class="flex-1 font-mono">*</span>
@@ -70,7 +70,7 @@
     </div>
     <button
       type="button"
-      class="w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
+      class="w-full rounded-lg border-2 border-dashed border-[var(--surface-edge)] px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
       data-testid="opencode-go-protocol-add-rule"
       @click="addRow"
     >

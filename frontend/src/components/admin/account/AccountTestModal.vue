@@ -9,7 +9,7 @@
       <!-- Account Info Card -->
       <div
         v-if="account"
-        class="flex items-center justify-between rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100 p-3 dark:border-dark-500 dark:from-dark-700 dark:to-dark-600"
+        class="surface-subcard flex items-center justify-between p-3"
       >
         <div class="flex items-center gap-3">
           <div
@@ -21,7 +21,7 @@
             <div class="font-semibold text-gray-900 dark:text-gray-100">{{ account.name }}</div>
             <div class="flex items-center gap-1.5 text-xs surface-muted">
               <span
-                class="rounded surface-inset px-1.5 py-0.5 text-[10px] font-medium uppercase dark:bg-dark-500"
+                class="rounded surface-inset px-1.5 py-0.5 text-[10px] font-medium uppercase"
               >
                 {{ account.type }}
               </span>
@@ -34,7 +34,7 @@
             'rounded-md px-2.5 py-1 text-xs font-semibold',
             account.status === 'active'
               ? 'bg-green-100/[0.15] text-green-700 dark:bg-green-500/20 dark:text-green-400'
-              : 'surface-inset text-gray-600 dark:surface-inset dark:text-gray-400'
+              : 'surface-inset surface-muted'
           ]"
         >
           {{ account.status }}
@@ -129,11 +129,11 @@
           />
         </div>
         <p class="text-xs surface-muted">{{ imageUploadHint }}</p>
-        <div v-if="uploadImagePreview" class="overflow-hidden rounded-lg border border-gray-200 dark:border-dark-500">
+        <div v-if="uploadImagePreview" class="overflow-hidden rounded-lg border border-[var(--surface-edge)]">
           <img
             :src="uploadImagePreview"
             :alt="t('admin.accounts.grok.uploadPreviewAlt')"
-            class="max-h-40 w-full object-contain bg-gray-50 dark:bg-dark-700"
+            class="max-h-40 w-full surface-inset object-contain"
           />
         </div>
       </div>
@@ -174,7 +174,7 @@
       <div class="group relative">
         <div
           ref="terminalRef"
-          class="max-h-[240px] min-h-[120px] overflow-y-auto rounded-xl border border-gray-700 surface-inset p-4 font-mono text-sm dark:border-gray-800 dark:bg-black"
+          class="max-h-[240px] min-h-[120px] overflow-y-auto rounded-lg border border-gray-700 surface-inset p-4 font-mono text-sm dark:border-gray-800 dark:bg-black"
         >
           <!-- Status Line -->
           <div v-if="status === 'idle'" class="flex items-center gap-2 surface-muted">
@@ -232,7 +232,7 @@
           <div
             v-for="(image, index) in generatedImages"
             :key="`${image.url}-${index}`"
-            class="group/img relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 surface-inset shadow-sm transition hover:border-primary-300 hover:shadow-md dark:border-dark-500"
+            class="group/img relative cursor-pointer overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset shadow-sm transition hover:border-primary-300 hover:shadow-md"
             @click="previewImageUrl = image.url"
           >
             <img
@@ -243,7 +243,7 @@
             <div class="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover/img:bg-black/20">
               <Icon name="eye" size="lg" class="text-white opacity-0 drop-shadow-lg transition-opacity group-hover/img:opacity-100" :stroke-width="2" />
             </div>
-            <div class="border-t border-gray-100 px-3 py-1.5 text-xs dark:border-dark-500 surface-muted">
+            <div class="border-t border-[var(--surface-edge)] px-3 py-1.5 text-xs surface-muted">
               {{ image.mimeType || 'image/*' }}
             </div>
           </div>
@@ -257,7 +257,7 @@
         <div
           v-for="(audio, index) in generatedAudios"
           :key="`audio-${index}`"
-          class="rounded-xl border border-gray-200 surface-inset p-3 dark:border-dark-500"
+          class="rounded-lg border border-[var(--surface-edge)] surface-inset p-3"
         >
           <audio :src="audio.url" controls class="w-full" :type="audio.mimeType" />
           <div class="mt-1 text-xs surface-muted">{{ audio.mimeType || 'audio/*' }}</div>
@@ -271,10 +271,10 @@
         <div
           v-for="(video, index) in generatedVideos"
           :key="`video-${index}`"
-          class="overflow-hidden rounded-xl border border-gray-200 bg-black dark:border-dark-500"
+          class="overflow-hidden rounded-lg border border-[var(--surface-edge)] bg-black"
         >
           <video :src="video.url" controls class="max-h-[360px] w-full" :type="video.mimeType" />
-          <div class="border-t border-gray-100 surface-inset px-3 py-1.5 text-xs dark:border-dark-500 surface-muted">
+          <div class="border-t border-[var(--surface-edge)] surface-inset px-3 py-1.5 text-xs surface-muted">
             {{ video.mimeType || 'video/*' }}
           </div>
         </div>

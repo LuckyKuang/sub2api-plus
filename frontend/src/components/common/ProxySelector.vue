@@ -354,14 +354,14 @@ onUnmounted(() => {
   @apply absolute z-[100] mt-2 w-full;
   background-color: var(--surface-panel);
   border-radius: var(--surface-radius-panel);
-  @apply border border-gray-200 dark:border-dark-700;
+  @apply border border-[var(--surface-edge)];
   @apply shadow-lg shadow-black/10 dark:shadow-black/30;
   @apply overflow-hidden;
 }
 
 .select-header {
   @apply flex items-center gap-2 px-3 py-2;
-  @apply border-b border-gray-100 dark:border-dark-700;
+  @apply border-b border-[var(--surface-edge)];
 }
 
 .select-search {

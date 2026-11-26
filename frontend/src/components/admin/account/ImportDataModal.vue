@@ -22,7 +22,7 @@
           class="flex items-center justify-between gap-3 rounded-lg border border-dashed px-4 py-3 transition-colors"
           :class="dragActive
             ? 'border-primary-400 bg-primary-50/70 dark:border-primary-500 dark:bg-primary-900/20'
-            : 'border-gray-300 surface-inset dark:border-dark-600 dark:surface-inset'"
+            : 'border-[var(--surface-edge)] surface-inset'"
           @dragenter.prevent="handleDragEnter"
           @dragover.prevent
           @dragleave.prevent="handleDragLeave"
@@ -53,7 +53,7 @@
 
       <div
         v-if="result"
-        class="space-y-2 rounded-xl border border-gray-200 p-4 dark:border-dark-700"
+        class="space-y-2 rounded-lg border border-[var(--surface-edge)] p-4"
       >
         <div class="text-sm font-medium text-gray-900 dark:text-white">
           {{ t('admin.accounts.dataImportResult') }}

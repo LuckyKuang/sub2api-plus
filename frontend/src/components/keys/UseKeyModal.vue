@@ -81,7 +81,7 @@
               :class="[
                 'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 codexAuthMode === 'legacy'
-                  ? 'surface-inset text-primary-700 shadow-sm dark:surface-inset dark:text-primary-300'
+                  ? 'surface-inset text-primary-700 shadow-sm dark:text-primary-300'
                   : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
               ]"
               @click="codexAuthMode = 'legacy'"
@@ -96,7 +96,7 @@
               :class="[
                 'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 codexAuthMode === 'api-key'
-                  ? 'surface-inset text-primary-700 shadow-sm dark:surface-inset dark:text-primary-300'
+                  ? 'surface-inset text-primary-700 shadow-sm dark:text-primary-300'
                   : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
               ]"
               @click="codexAuthMode = 'api-key'"

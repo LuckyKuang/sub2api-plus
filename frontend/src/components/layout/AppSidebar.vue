@@ -926,6 +926,18 @@ const adminNavItems = computed((): NavItem[] => {
         { path: '/admin/orders/plans', label: t('nav.paymentPlans'), icon: CreditCardIcon },
       ],
     },
+    {
+      path: '/admin/security-audit',
+      label: t('nav.securityAudit'),
+      icon: ShieldIcon,
+      expandOnly: true,
+      section: 'governance',
+      children: [
+        { path: '/admin/risk-control', label: t('nav.contentModeration'), icon: ShieldIcon, featureFlag: flagRiskControl },
+        { path: '/admin/prompt-audit', label: t('nav.promptAudit'), icon: ShieldIcon, featureFlag: flagRiskControl },
+        { path: '/admin/ip-access-control', label: t('nav.ipAccessControl'), icon: ShieldIcon, featureFlag: flagGlobalIpAccessControl },
+      ],
+    },
     { path: '/admin/redeem', label: t('nav.redeemCodes'), icon: TicketIcon, hideInSimpleMode: true, section: 'commerce' },
     { path: '/admin/promo-codes', label: t('nav.promoCodes'), icon: GiftIcon, hideInSimpleMode: true, section: 'commerce' },
     {
@@ -943,18 +955,6 @@ const adminNavItems = computed((): NavItem[] => {
       ],
     },
     { path: '/admin/announcements', label: t('nav.announcements'), icon: BellIcon, section: 'commerce' },
-    {
-      path: '/admin/security-audit',
-      label: t('nav.securityAudit'),
-      icon: ShieldIcon,
-      expandOnly: true,
-      section: 'governance',
-      children: [
-        { path: '/admin/risk-control', label: t('nav.contentModeration'), icon: ShieldIcon, featureFlag: flagRiskControl },
-        { path: '/admin/prompt-audit', label: t('nav.promptAudit'), icon: ShieldIcon, featureFlag: flagRiskControl },
-        { path: '/admin/ip-access-control', label: t('nav.ipAccessControl'), icon: ShieldIcon, featureFlag: flagGlobalIpAccessControl },
-      ],
-    },
     { path: '/admin/audit-logs', label: t('nav.auditLogs'), icon: ShieldIcon, hideInSimpleMode: true, section: 'governance' },
   ]
 

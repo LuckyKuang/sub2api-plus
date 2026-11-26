@@ -1,7 +1,7 @@
 <template>
   <section
     data-testid="grok-model-diagnostics"
-    class="min-w-0 max-w-full overflow-hidden rounded-xl border border-gray-200 surface-panel text-sm text-gray-700 dark:border-dark-600 dark:text-gray-200"
+    class="surface-subcard min-w-0 max-w-full overflow-hidden text-sm text-gray-700 dark:text-gray-200"
   >
     <div
       data-testid="grok-diagnostics-summary"
@@ -111,7 +111,7 @@
       </div>
     </div>
 
-    <div class="border-t border-gray-200 dark:border-dark-600">
+    <div class="border-t border-[var(--surface-edge)]">
       <button
         type="button"
         data-testid="grok-diagnostics-details-toggle"
@@ -132,7 +132,7 @@
         v-if="detailsOpen"
         :id="detailsId"
         data-testid="grok-diagnostics-details"
-        class="border-t border-gray-200 p-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] p-4"
       >
         <dl class="space-y-3 text-xs">
           <div>

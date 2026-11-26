@@ -1,5 +1,5 @@
 <template>
-    <section class="catalog-quote min-w-0 space-y-4 rounded-xl border border-gray-200 p-4 text-sm dark:border-dark-700 surface-muted">
+    <section class="catalog-quote min-w-0 space-y-4 rounded-lg border border-[var(--surface-edge)] p-4 text-sm surface-muted">
       <div>
         <div class="catalog-quote-header flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
           <h3 v-if="group" class="min-w-0 break-words text-sm font-semibold [overflow-wrap:anywhere]">{{ group.name }}<span v-if="group.is_exclusive" class="whitespace-nowrap text-purple-700 dark:text-purple-300">{{ ' ' + t('availableChannels.exclusive') }}</span></h3>
@@ -27,7 +27,7 @@
         <CatalogPriceTable :pricing="offer.pricing" :rate="rate" :token="offer.billing_unit === 'token'" />
         <p v-if="offer.pricing.intervals.length" class="text-xs surface-muted">{{ t('availableChannels.catalog.wholeRequest') }}</p>
         <div v-if="offer.media_tiers?.length" class="flex flex-wrap gap-3">
-          <div v-for="tier in offer.media_tiers" :key="tier.label" class="rounded-lg border border-gray-200 px-3 py-2 dark:border-dark-700">
+          <div v-for="tier in offer.media_tiers" :key="tier.label" class="rounded-lg border border-[var(--surface-edge)] px-3 py-2">
             {{ tier.label }} <strong class="ml-2 font-mono">{{ catalogMoney(tier.price, rate) }}</strong><span class="ml-1 text-xs">{{ t(`availableChannels.catalog.units.${tier.unit}`) }}</span>
           </div>
         </div>
@@ -35,7 +35,7 @@
         <div v-if="offer.service_tier_pricing?.length" class="space-y-3">
           <h4 class="font-medium">{{ t('availableChannels.catalog.serviceTiers') }}</h4>
           <p class="text-xs surface-muted">{{ t('availableChannels.catalog.serviceTierNote') }}</p>
-          <details v-for="tier in offer.service_tier_pricing" :key="tier.name" :open="openTiers.has(tier.name)" class="space-y-2 rounded-lg border border-gray-200 p-3 dark:border-dark-700">
+          <details v-for="tier in offer.service_tier_pricing" :key="tier.name" :open="openTiers.has(tier.name)" class="space-y-2 rounded-lg border border-[var(--surface-edge)] p-3">
             <summary class="cursor-pointer font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500" @click.prevent="toggleTier(tier.name)">{{ t(`availableChannels.catalog.tiers.${tier.name}`) }}</summary>
             <CatalogPriceTable v-if="openTiers.has(tier.name)" :pricing="tier.pricing" :rate="rate" />
           </details>

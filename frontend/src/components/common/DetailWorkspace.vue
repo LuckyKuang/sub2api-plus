@@ -2,7 +2,7 @@
   <div ref="root" class="detail-workspace" :class="{ 'detail-workspace-open': show && docked, 'detail-workspace-contained': workspace }">
     <div class="detail-workspace-content min-w-0"><slot /></div>
     <aside v-if="show && docked" ref="panel" tabindex="-1" class="detail-workspace-panel card focus:outline-none" :aria-label="title">
-      <div class="detail-workspace-header flex items-center justify-between gap-3 border-b border-gray-200 p-4 dark:border-dark-700">
+      <div class="detail-workspace-header flex items-center justify-between gap-3 border-b border-[var(--surface-edge)] p-4">
         <h2 class="font-semibold">{{ title }}</h2>
         <button type="button" class="btn btn-ghost btn-icon" :aria-label="t('inspection.close')" @click="emit('close')"><Icon name="x" size="md" /></button>
       </div>

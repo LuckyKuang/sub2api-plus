@@ -12,7 +12,7 @@
         <p class="mb-2 text-sm font-medium text-gray-900 dark:text-gray-100">
           {{ t('admin.subscriptions.bulk.confirmTargets', { count: targets.length }) }}
         </p>
-        <ul class="max-h-48 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 dark:divide-dark-700 dark:border-dark-600">
+        <ul class="max-h-48 divide-y divide-[var(--surface-edge)] overflow-y-auto rounded-lg border border-[var(--surface-edge)]">
           <li v-for="subscription in targets" :key="subscription.id" class="px-3 py-2 text-sm">
             <div class="break-all text-gray-900 dark:text-gray-100">
               {{ subscription.email || `#${subscription.id}` }}
@@ -57,7 +57,7 @@
                 v-model="windows[window]"
                 :name="window"
                 type="checkbox"
-                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
                 :disabled="parametersLocked"
               />
               {{ t(`admin.subscriptions.${window}`) }}

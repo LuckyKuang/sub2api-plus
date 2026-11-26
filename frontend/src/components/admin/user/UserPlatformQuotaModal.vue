@@ -19,7 +19,7 @@
       <div v-else class="record-table-scroll record-table-dialog-scroll table-container overflow-x-auto">
         <table class="record-table min-w-full text-sm">
           <thead>
-            <tr class="border-b border-gray-200 dark:border-dark-700 surface-muted">
+            <tr class="border-b border-[var(--surface-edge)] surface-muted">
               <th class="px-3 py-2 text-left font-medium">{{ t('admin.users.platformQuota.columns.platform') }}</th>
               <th class="px-3 py-2 text-left font-medium">{{ t('admin.users.platformQuota.columns.daily') }}</th>
               <th class="px-3 py-2 text-left font-medium">{{ t('admin.users.platformQuota.columns.weekly') }}</th>
@@ -28,7 +28,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in quotas" :key="row.platform" class="border-b border-gray-100 dark:border-dark-800">
+            <tr v-for="row in quotas" :key="row.platform" class="border-b border-[var(--surface-edge)]">
               <td class="px-3 py-2 font-mono text-gray-900 dark:text-white">{{ row.platform }}</td>
               <td class="px-3 py-2">
                 <div class="flex items-center gap-1">
