@@ -90,12 +90,12 @@
           </div>
 
           <!-- Empty State -->
-          <div v-else class="flex flex-col items-center justify-center px-4 py-10 text-center">
-            <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-[var(--surface-radius-panel)] surface-inset surface-muted">
-              <Icon name="inbox" size="lg" />
-            </div>
-            <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('announcements.empty') }}</p>
-            <p class="mt-1 text-xs surface-muted">{{ t('announcements.emptyDescription') }}</p>
+          <div v-else class="px-4 py-6">
+            <EmptyState
+              size="sm"
+              :title="t('announcements.empty')"
+              :description="t('announcements.emptyDescription')"
+            />
           </div>
         </div>
       </transition>
@@ -162,6 +162,7 @@ import type { UserAnnouncement } from '@/types'
 import Icon from '@/components/icons/Icon.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import '@/styles/announcement-markdown.css'
 
 const { t } = useI18n()

@@ -221,6 +221,13 @@ export default {
     promptAudit: 'Prompt Audit',
     ipAccessControl: 'IP Access Control',
     auditLogs: 'Audit Logs',
+    sectionOverview: 'Overview',
+    sectionResources: 'Resources',
+    sectionCommerce: 'Billing & Growth',
+    sectionGovernance: 'Security & System',
+    sectionWorkspace: 'Workspace',
+    sectionBilling: 'Billing & Rewards',
+    sectionAccount: 'Account',
   },
 
   // Auth

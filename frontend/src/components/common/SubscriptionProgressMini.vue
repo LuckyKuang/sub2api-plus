@@ -3,7 +3,7 @@
     <!-- Mini Progress Display -->
     <button
       @click="toggleTooltip"
-      class="flex cursor-pointer items-center gap-2 rounded-lg bg-purple-50/[0.15] px-3 py-1.5 transition-colors hover:bg-purple-100/25 dark:bg-purple-900/20 dark:hover:bg-purple-900/30"
+      class="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--surface-edge)] bg-purple-50/[0.15] px-3 py-1.5 transition-colors hover:bg-purple-100/25 dark:bg-purple-900/20 dark:hover:bg-purple-900/30"
       :title="t('subscriptionProgress.viewDetails')"
     >
       <Icon name="creditCard" size="sm" class="text-purple-600 dark:text-purple-400" />
@@ -17,7 +17,7 @@
             :class="getProgressDotClass(sub)"
           ></div>
         </div>
-        <span class="text-xs font-medium text-purple-700 dark:text-purple-300">
+        <span class="tabular-nums text-xs font-medium text-purple-700 dark:text-purple-300">
           {{ activeSubscriptions.length }}
         </span>
       </div>
@@ -30,7 +30,7 @@
         class="glass-surface z-50 mt-2 overflow-hidden"
         :class="inline ? 'w-full' : 'absolute right-0 w-[340px] max-w-[calc(100vw-24px)]'"
       >
-        <div class="border-b border-gray-100 p-3 dark:border-dark-700">
+        <div class="border-b border-[var(--surface-edge)] p-3">
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
             {{ t('subscriptionProgress.title') }}
           </h3>
@@ -43,7 +43,7 @@
           <div
             v-for="subscription in displaySubscriptions"
             :key="subscription.id"
-            class="border-b border-gray-50 p-3 last:border-b-0 dark:border-dark-700/50"
+            class="border-b border-[var(--surface-edge)] p-3 last:border-b-0"
           >
             <div class="mb-2 flex items-center justify-between">
               <span class="text-sm font-medium text-gray-900 dark:text-white">
@@ -180,11 +180,11 @@
           </div>
         </div>
 
-        <div class="border-t border-gray-100 p-2 dark:border-dark-700">
+        <div class="border-t border-[var(--surface-edge)] p-2">
           <router-link
             to="/subscriptions"
             @click="closeTooltip"
-            class="block w-full py-1 text-center text-xs text-primary-600 hover:underline dark:text-primary-400"
+            class="block w-full rounded-lg py-1.5 text-center text-xs font-medium text-primary-600 transition-colors hover:surface-hover dark:text-primary-400"
           >
             {{ t('subscriptionProgress.viewAll') }}
           </router-link>
