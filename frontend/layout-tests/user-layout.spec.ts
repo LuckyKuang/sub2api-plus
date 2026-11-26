@@ -1,11 +1,64 @@
 import { expect, test } from '@playwright/test'
 import { wheelScroll } from './wheel'
+import { group, offer } from '../src/components/channels/__tests__/catalogFixtures'
 
-// Approved UI audit: 16/24px on narrow screens; 94%, capped at 1600px,
+// Approved UI audit: 12/16px on narrow screens; 94%, capped at 1600px,
 // centered within the desktop main viewport regardless of sidebar width.
 // Exercise the real AppLayout, sidebar, header, Select and production CSS.
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/**', route => route.fulfill({ json: { code: 0, data: { items: [], total: 0, pages: 0, enabled: false } } }))
+})
+
+test('model plaza shows two complete mobile cards and opens price details from the card surface', async ({ page }, info) => {
+  const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
+  const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
+  const models = ['atlas', 'nebula', 'horizon', 'nova'].map(name => offer(name))
+  await page.route(url => url.pathname === '/api/v1/model-plaza', route => route.fulfill({ json: { code: 0, data: {
+    description: 'Rates apply to the selected group.',
+    groups: [group(1, models, { name: 'Standard' }), group(2, [models[0]], { name: 'Priority', rate_multiplier: 2 })],
+  } } }))
+  await page.route(url => url.pathname === '/api/v1/image-tasks/modes', route => route.fulfill({ json: { code: 0, data: {
+    ordinary: { enabled: false, can_view: false, can_submit: false },
+    batch: { enabled: false, can_view: false, can_submit: false },
+  } } }))
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async (value: string) => sessionStorage.setItem('copied-model', value),
+    } })
+  })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto(`/layout-tests/index.html?view=user-layout&auditPage=model-plaza&embedded=1&product=1&theme=${theme}&locale=${locale}`)
+
+  const cards = page.locator('main').getByRole('article')
+  await expect(cards).toHaveCount(4, { timeout: 60_000 })
+  const header = page.locator('.app-header')
+  await expect(header).toBeInViewport()
+  await expect(cards.nth(0)).toBeInViewport({ ratio: 1 })
+  await expect(cards.nth(1)).toBeInViewport({ ratio: 1 })
+  const firstBox = (await cards.first().boundingBox())!
+  const headerBox = (await header.boundingBox())!
+  expect(firstBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height)
+  expect((await cards.nth(1).boundingBox())!.y).toBeGreaterThanOrEqual(firstBox.y + firstBox.height)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+
+  const atlas = cards.filter({ has: page.getByRole('heading', { name: /atlas/ }) })
+  await atlas.getByRole('button', { name: locale === 'zh' ? '复制模型 ID atlas' : 'Copy model ID atlas', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('copied-model'))).toBe('atlas')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  const atlasBox = (await atlas.boundingBox())!
+  await atlas.click({ position: { x: 18, y: atlasBox.height - 15 } })
+  const detail = page.getByRole('dialog', { name: 'atlas' })
+  await expect(detail).toBeVisible()
+  await expect.poll(() => detail.locator('.modal-content').boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 })
+  await page.keyboard.press('Escape')
+  await expect(detail).toHaveCount(0)
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const boxes = await cards.evaluateAll(items => items.map(el => el.getBoundingClientRect().toJSON()))
+  expect(boxes[0].top).toBe(boxes[2].top)
+  expect(boxes[1].left).toBeGreaterThanOrEqual(boxes[0].right)
+  expect(boxes[2].left).toBeGreaterThanOrEqual(boxes[1].right)
+  expect(boxes[3].top).toBeGreaterThanOrEqual(boxes[0].bottom)
 })
 
 test('user content stays centered with natural page scrolling and portal theme', async ({ page }, info) => {

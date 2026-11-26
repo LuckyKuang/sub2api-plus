@@ -65,6 +65,7 @@
         :video-rate-multiplier="group.video_rate_multiplier"
         :peak-window="peakWindow"
         :peak-rate-multiplier="group.peak_rate_multiplier"
+        @open="$emit('open', $event)"
       />
       <p v-else class="px-5 py-4 text-center text-sm surface-muted">
         {{ t('modelPlaza.detail.noModels') }}
@@ -79,7 +80,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
 import PlazaModelPricingTable from './PlazaModelPricingTable.vue'
-import type { ModelPlazaGroup } from '@/api/modelPlaza'
+import type { ModelPlazaGroup, PlazaModel } from '@/api/modelPlaza'
 import type { GroupPlatform, SubscriptionType } from '@/types'
 import { platformBorderStrongClass } from '@/utils/platformColors'
 import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
@@ -88,6 +89,7 @@ import { useAppStore } from '@/stores/app'
 const props = defineProps<{
   group: ModelPlazaGroup
 }>()
+defineEmits<{ open: [model: PlazaModel] }>()
 
 const { t } = useI18n()
 const appStore = useAppStore()

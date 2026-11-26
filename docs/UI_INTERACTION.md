@@ -641,8 +641,8 @@ unavailable, the API validates midnight without a browser-local assumption.
 ## User and public presentation
 
 User pages (including admin support views and embedded Model Plaza) use an explicit
-`appearance="user"` on AppLayout. Below 768px the final horizontal inset is 1rem;
-from 768px to 1023px it is 1.5rem, counting existing shell reservations once.
+`appearance="user"` on AppLayout. The shared shell supplies the horizontal
+inset of 12px below 768px and 16px from 768px to 1023px.
 From 1024px the shared page occupies 94% of the main content viewport, capped at
 100rem (1600px at the default root size), with equal automatic side margins.
 This follows Café Shop's centered content-width limit and adds proportional

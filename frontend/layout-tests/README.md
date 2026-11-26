@@ -41,7 +41,7 @@ and the complete saved key detail, matching the production response contracts.
 JSDOM component tests cannot establish these geometry requirements.
 
 The user layout fixture mounts the real AppLayout, sidebar, header and Select.
-It checks independent narrow-screen inset expectations (16/24 CSS px) and desktop
+It checks independent narrow-screen inset expectations (12/16 CSS px) and desktop
 centered content (94% of the main viewport, capped at 1600 CSS px) at 320,
 390, 767, 768, 1023, 1024, 1440, 1920 and 3072px, expanded/collapsed sidebars,
 natural user-page scrolling in a 600px window, fixed user record workspaces, ordinary pages and empty/partial
@@ -49,6 +49,9 @@ card groups. Actual DataTable cases cover content-sized left-aligned columns,
 single-line model/group labels, wrapping actions and complete first-column hover
 and empty-row borders. Dense-record fallbacks retain multiple field columns on
 desktop, one on phones, and full-width selection and action rows.
+The embedded Model Plaza checks that two complete cards fit below the header
+at 390×844, that copying a model ID and opening its full-screen details use
+distinct click targets, and that the 1440px catalog has three cards per row.
 Administrator fixed-scroll ownership remains covered. The unified image-task
 case mounts the real mode cards and ordinary history at phone widths in both
 themes/languages, checks their viewport bounds and confirms that disabled new
