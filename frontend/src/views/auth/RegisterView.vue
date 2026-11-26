@@ -14,7 +14,7 @@
       <!-- Registration Disabled Message -->
       <div
         v-if="!registrationEnabled && settingsLoaded"
-        class="rounded-xl border border-amber-200 bg-amber-50/[0.15] p-4 dark:border-amber-800/50 dark:bg-amber-900/20"
+        class="rounded-lg border border-amber-200 bg-amber-50/[0.15] p-4 dark:border-amber-800/50 dark:bg-amber-900/20"
       >
         <div class="flex items-start gap-3">
           <div class="flex-shrink-0">
@@ -76,7 +76,7 @@
               type="button"
               :disabled="registrationActionDisabled"
               @click="showPassword = !showPassword"
-              class="absolute inset-y-0 right-0 flex items-center pr-3.5 transition-colors hover:text-gray-600 dark:hover:text-dark-300 surface-control surface-muted"
+              class="absolute inset-y-0 right-0 flex items-center pr-3.5 transition-colors hover:text-gray-600 dark:hover:text-dark-300 surface-muted"
             >
               <Icon v-if="showPassword" name="eyeOff" size="md" />
               <Icon v-else name="eye" size="md" />
@@ -111,7 +111,7 @@
               type="button"
               :disabled="registrationActionDisabled"
               @click="showConfirmPassword = !showConfirmPassword"
-              class="absolute inset-y-0 right-0 flex items-center pr-3.5 transition-colors hover:text-gray-600 dark:hover:text-dark-300 surface-control surface-muted"
+              class="absolute inset-y-0 right-0 flex items-center pr-3.5 transition-colors hover:text-gray-600 dark:hover:text-dark-300 surface-muted"
             >
               <Icon v-if="showConfirmPassword" name="eyeOff" size="md" />
               <Icon v-else name="eye" size="md" />
@@ -306,11 +306,11 @@
 
       <div v-if="showOAuthLogin" class="space-y-3 pt-1">
         <div class="flex items-center gap-3">
-          <div class="h-px flex-1 surface-inset"></div>
+          <div class="h-px flex-1 bg-[var(--surface-edge)]"></div>
           <span class="text-xs surface-muted">
             {{ t('auth.oauthOrContinue') }}
           </span>
-          <div class="h-px flex-1 surface-inset"></div>
+          <div class="h-px flex-1 bg-[var(--surface-edge)]"></div>
         </div>
 
         <EmailOAuthButtons

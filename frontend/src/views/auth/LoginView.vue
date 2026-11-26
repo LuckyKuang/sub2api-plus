@@ -60,7 +60,7 @@
               type="button"
               @click="showPassword = !showPassword"
               :disabled="authActionDisabled"
-              class="absolute inset-y-0 right-0 flex items-center pr-3.5 transition-colors hover:text-gray-600 dark:hover:text-dark-300 surface-control surface-muted"
+              class="absolute inset-y-0 right-0 flex items-center pr-3.5 transition-colors hover:text-gray-900 dark:hover:text-white surface-muted"
             >
               <Icon v-if="showPassword" name="eyeOff" size="md" />
               <Icon v-else name="eye" size="md" />
@@ -141,11 +141,11 @@
 
         <div v-if="showPasskeyLogin || showOAuthLogin" class="space-y-3 pt-1">
           <div class="flex items-center gap-3">
-            <div class="h-px flex-1 surface-inset"></div>
+            <div class="h-px flex-1 bg-[var(--surface-edge)]"></div>
             <span class="text-xs surface-muted">
               {{ t('auth.oauthOrContinue') }}
             </span>
-            <div class="h-px flex-1 surface-inset"></div>
+            <div class="h-px flex-1 bg-[var(--surface-edge)]"></div>
           </div>
 
           <button

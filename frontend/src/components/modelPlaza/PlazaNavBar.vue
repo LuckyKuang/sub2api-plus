@@ -2,12 +2,12 @@
   <header
     class="shell-surface sticky top-[var(--shell-inset-top)] z-30"
   >
-    <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
       <!-- 左:站点 logo + 名称 -->
-      <div class="flex min-w-0 items-center gap-3">
+      <RouterLink to="/home" class="flex min-w-0 items-center gap-3">
         <template v-if="settings">
           <span
-            class="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg surface-inset shadow-sm ring-1 ring-gray-200 dark:ring-dark-700"
+            class="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset p-1"
           >
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </span>
@@ -16,36 +16,51 @@
           </span>
         </template>
         <template v-else>
-          <span class="h-9 w-9 flex-shrink-0 animate-pulse rounded-lg bg-gray-200 dark:bg-dark-700" aria-hidden="true"></span>
-          <span class="h-5 w-28 animate-pulse rounded bg-gray-200 dark:bg-dark-700" aria-hidden="true"></span>
+          <span class="h-9 w-9 flex-shrink-0 animate-pulse rounded-lg surface-inset" aria-hidden="true"></span>
+          <span class="h-5 w-28 animate-pulse rounded surface-inset" aria-hidden="true"></span>
         </template>
-      </div>
+      </RouterLink>
 
-      <!-- 右:登录 / 回到后台 -->
-      <RouterLink
-        v-if="isAuthenticated"
-        :to="backTarget"
-        class="inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-primary-500 to-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-primary-500/25 transition-all duration-200 hover:from-primary-600 hover:to-primary-700 hover:shadow-lg hover:shadow-primary-500/30 active:scale-[0.98] dark:shadow-primary-500/20"
-      >
-        {{ t('modelPlaza.nav.backToDashboard') }}
-      </RouterLink>
-      <RouterLink
-        v-else
-        :to="{ path: '/login', query: { redirect: '/model-plaza' } }"
-        class="inline-flex flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-r from-primary-500 to-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-primary-500/25 transition-all duration-200 hover:from-primary-600 hover:to-primary-700 hover:shadow-lg hover:shadow-primary-500/30 active:scale-[0.98] dark:shadow-primary-500/20"
-      >
-        {{ t('modelPlaza.nav.login') }}
-      </RouterLink>
+      <!-- 右:工具栏 + 登录 / 回到后台 -->
+      <div class="flex shrink-0 items-center gap-2">
+        <LocaleSwitcher />
+        <button
+          type="button"
+          class="theme-toggle flex h-9 w-9 items-center justify-center rounded-lg surface-control transition-colors"
+          :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
+          :aria-label="isDark ? t('home.switchToLight') : t('home.switchToDark')"
+          @click="toggleTheme"
+        >
+          <Icon v-if="isDark" name="sun" size="md" />
+          <Icon v-else name="moon" size="md" />
+        </button>
+        <RouterLink
+          v-if="isAuthenticated"
+          :to="backTarget"
+          class="btn btn-primary shrink-0"
+        >
+          {{ t('modelPlaza.nav.backToDashboard') }}
+        </RouterLink>
+        <RouterLink
+          v-else
+          :to="{ path: '/login', query: { redirect: '/model-plaza' } }"
+          class="btn btn-primary shrink-0"
+        >
+          {{ t('modelPlaza.nav.login') }}
+        </RouterLink>
+      </div>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { sanitizeUrl } from '@/utils/url'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -58,4 +73,11 @@ const siteLogo = computed(() =>
 )
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const backTarget = computed(() => (authStore.isAdmin ? '/admin/dashboard' : '/dashboard'))
+const isDark = ref(document.documentElement.classList.contains('dark'))
+
+function toggleTheme() {
+  isDark.value = !isDark.value
+  document.documentElement.classList.toggle('dark', isDark.value)
+  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+}
 </script>

@@ -1,30 +1,32 @@
 <template>
-  <div class="relative flex min-h-screen flex-col gap-[var(--shell-gap)] bg-canvas p-[var(--shell-gutter)] dark:surface-inset">
+  <div class="home-page relative flex min-h-screen flex-col gap-[var(--shell-gap)] p-[var(--shell-gutter)]">
     <!-- Header (same pattern as HomeView) -->
-    <header class="shell-surface relative z-20 px-4 py-4 sm:px-6">
+    <header class="shell-surface sticky top-[var(--shell-inset-top)] z-20 px-4 py-3.5 sm:px-6">
       <nav class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
         <router-link to="/home" class="flex min-w-0 items-center gap-3">
-          <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg shadow-md">
+          <div class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset p-1">
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </div>
-          <span class="truncate text-lg font-semibold tracking-tight text-gray-900 dark:text-white">{{ siteName }}</span>
+          <span class="truncate text-base font-semibold tracking-tight text-gray-950 dark:text-white">{{ siteName }}</span>
         </router-link>
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
           <LocaleSwitcher />
           <a
             v-if="docUrl"
             :href="docUrl"
             target="_blank"
             rel="noopener noreferrer"
-            class="rounded-lg p-2 transition-colors hover:surface-hover hover:text-gray-700 dark:hover:text-white surface-muted"
+            class="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white surface-muted"
             :title="t('home.viewDocs')"
           >
             <Icon name="book" size="md" />
           </a>
           <button
+            type="button"
             @click="toggleTheme"
-            class="theme-toggle rounded-lg p-2 transition-colors surface-control"
+            class="theme-toggle flex h-9 w-9 items-center justify-center rounded-lg transition-colors surface-control"
             :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
+            :aria-label="isDark ? t('home.switchToLight') : t('home.switchToDark')"
           >
             <Icon v-if="isDark" name="sun" size="md" />
             <Icon v-else name="moon" size="md" />
@@ -36,21 +38,21 @@
     <!-- Main Content -->
     <main class="mx-auto flex w-full min-w-0 max-w-5xl flex-1 flex-col gap-[var(--shell-gap)]">
       <!-- Hero -->
-      <div class="card px-4 py-6 text-center sm:p-8">
-        <h1 class="text-3xl sm:text-4xl font-bold tracking-tight mb-3 text-gray-900 dark:text-white">
+      <div class="card px-5 py-7 text-center sm:p-8">
+        <h1 class="mb-2.5 text-2xl font-bold tracking-tight text-gray-950 dark:text-white sm:text-4xl">
           {{ t('keyUsage.title') }}
         </h1>
-        <p class="text-base max-w-md mx-auto surface-muted">
+        <p class="mx-auto max-w-md text-sm leading-relaxed sm:text-base surface-muted">
           {{ t('keyUsage.subtitle') }}
         </p>
       </div>
 
       <!-- Input Section -->
-      <div class="card mx-auto w-full min-w-0 max-w-xl p-4 sm:p-6">
+      <div class="card mx-auto w-full min-w-0 max-w-2xl p-4 sm:p-6">
         <div class="flex flex-col gap-3 sm:flex-row">
           <div class="relative min-w-0 flex-1">
-            <div class="absolute left-4 top-1/2 -translate-y-1/2 surface-muted">
-              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <div class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 surface-muted">
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
               </svg>
             </div>
@@ -58,69 +60,73 @@
               v-model="apiKey"
               :type="keyVisible ? 'text' : 'password'"
               :placeholder="t('keyUsage.placeholder')"
-              class="input-ring w-full h-12 pl-12 pr-12 rounded-lg border border-gray-200 surface-inset text-sm text-gray-900 placeholder:text-gray-400 transition-all dark:border-dark-700 dark:text-white dark:placeholder:text-dark-500"
+              class="input-ring h-11 w-full rounded-lg border border-[var(--surface-edge)] surface-inset pl-10 pr-10 text-sm text-gray-900 placeholder:text-gray-400 transition-all dark:text-white dark:placeholder:text-dark-500"
               @keydown.enter="queryKey"
             />
             <button
+              type="button"
               @click="keyVisible = !keyVisible"
-              class="absolute right-4 top-1/2 -translate-y-1/2 hover:text-gray-700 dark:hover:text-white transition-colors surface-control surface-muted"
+              class="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 surface-muted transition-colors hover:text-gray-900 dark:hover:text-white"
             >
-              <svg v-if="!keyVisible" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-if="!keyVisible" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
                 <line x1="1" y1="1" x2="23" y2="23"/>
               </svg>
-              <svg v-else class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-else class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
               </svg>
             </button>
           </div>
           <button
+            type="button"
             @click="queryKey"
             :disabled="isQuerying"
-            class="h-12 px-7 rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-medium text-sm transition-all active:scale-[0.97] flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-60"
+            class="btn btn-primary h-11 px-6 whitespace-nowrap"
           >
-            <svg v-if="isQuerying" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+            <svg v-if="isQuerying" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
               <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
             </svg>
-            <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg v-else class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
             {{ isQuerying ? t('keyUsage.querying') : t('keyUsage.query') }}
           </button>
         </div>
-        <p class="text-xs mt-3 text-center surface-muted">
+        <p class="mt-3 text-center text-xs surface-muted">
           {{ t('keyUsage.privacyNote') }}
         </p>
 
         <!-- Date Range Picker -->
-        <div v-if="showDatePicker" class="mt-4">
-          <div class="flex flex-wrap items-center gap-2 justify-center">
+        <div v-if="showDatePicker" class="mt-4 border-t border-[var(--surface-edge)] pt-4">
+          <div class="flex flex-wrap items-center justify-center gap-2">
             <span class="text-xs surface-muted">{{ t('keyUsage.dateRange') }}</span>
             <button
               v-for="range in dateRanges"
               :key="range.key"
+              type="button"
               @click="setDateRange(range.key)"
-              class="text-xs px-3 py-1.5 rounded-lg border transition-all surface-control"
+              class="rounded-lg border px-3 py-1.5 text-xs font-medium transition-all"
               :class="currentRange === range.key
-                ? 'bg-primary-500 text-white border-primary-500'
-                : 'border-gray-200 surface-field text-gray-700 dark:border-dark-700 dark:surface-field dark:text-dark-200 hover:border-primary-300 dark:hover:border-dark-600'"
+                ? 'border-primary-500 bg-primary-500 text-white'
+                : 'border-[var(--surface-edge)] surface-inset text-gray-700 hover:border-primary-400 dark:text-dark-200'"
             >{{ range.label }}</button>
             <div v-if="currentRange === 'custom'" class="flex max-w-full flex-wrap items-center justify-center gap-2">
               <DateTimePicker :aria-label="t('dates.startDate')"
                 v-model="customStartDate"
                 type="date"
-                class="input-ring text-xs px-2 py-1.5 rounded-lg border border-gray-200 surface-inset text-gray-900 dark:border-dark-700 dark:text-white"
+                class="input-ring rounded-lg border border-[var(--surface-edge)] surface-inset px-2 py-1.5 text-xs text-gray-900 dark:text-white"
               />
               <span class="text-xs surface-muted">-</span>
               <DateTimePicker :aria-label="t('dates.endDate')"
                 v-model="customEndDate"
                 type="date"
-                class="input-ring text-xs px-2 py-1.5 rounded-lg border border-gray-200 surface-inset text-gray-900 dark:border-dark-700 dark:text-white"
+                class="input-ring rounded-lg border border-[var(--surface-edge)] surface-inset px-2 py-1.5 text-xs text-gray-900 dark:text-white"
               />
               <button
+                type="button"
                 @click="queryKey"
-                class="text-xs px-3 py-1.5 rounded-lg bg-primary-500 text-white hover:bg-primary-600"
+                class="rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600"
               >{{ t('keyUsage.apply') }}</button>
             </div>
           </div>
@@ -156,7 +162,7 @@
         <div v-else-if="resultData" class="space-y-6">
           <!-- Status Badge -->
           <div v-if="statusInfo" class="fade-up flex items-center justify-center mb-2">
-            <div class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-gray-200 surface-inset shadow-sm dark:border-dark-700">
+            <div class="inline-flex items-center gap-2 rounded-lg border border-[var(--surface-edge)] surface-inset px-5 py-2.5 shadow-sm">
               <span
                 class="console-data-mark w-2.5 h-2.5 rounded-full pulse-dot"
                 :class="statusInfo.isActive ? 'bg-emerald-500' : 'bg-rose-500'"
@@ -241,14 +247,14 @@
             v-if="detailRows.length > 0"
             class="card fade-up fade-up-delay-3 overflow-hidden"
           >
-            <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
+            <div class="border-b border-[var(--surface-edge)] px-5 py-4 sm:px-8 sm:py-5">
               <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.detailInfo') }}</h3>
             </div>
-            <div class="divide-y divide-gray-100 dark:divide-dark-800">
+            <div class="divide-y divide-[var(--surface-edge)]">
               <div
                 v-for="(row, i) in detailRows"
                 :key="i"
-                class="px-8 py-4 flex items-center justify-between"
+                class="flex items-center justify-between gap-4 px-5 py-4 sm:px-8"
               >
                 <div class="flex items-center gap-3">
                   <div class="w-8 h-8 rounded-lg flex items-center justify-center" :class="row.iconBg">
@@ -274,14 +280,14 @@
             v-if="usageStatCells.length > 0"
             class="card fade-up fade-up-delay-3 overflow-hidden"
           >
-            <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
+            <div class="border-b border-[var(--surface-edge)] px-5 py-4 sm:px-8 sm:py-5">
               <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.tokenStats') }}</h3>
             </div>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-px surface-inset">
+            <div class="grid grid-cols-2 gap-px bg-[var(--surface-edge)] md:grid-cols-4">
               <div
                 v-for="(cell, i) in usageStatCells"
                 :key="i"
-                class="surface-inset px-6 py-4"
+                class="surface-inset px-5 py-4 sm:px-6"
               >
                 <div class="text-xs mb-1 surface-muted">{{ cell.label }}</div>
                 <div class="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
@@ -296,14 +302,14 @@
             v-if="showDailyUsage"
             class="card fade-up fade-up-delay-4 overflow-hidden"
           >
-            <div class="flex flex-col gap-3 px-8 py-5 border-b border-gray-200 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-col gap-3 border-b border-[var(--surface-edge)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-5">
               <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.dailyDetail') }}</h3>
-              <div class="inline-flex rounded-lg border border-gray-200 surface-inset p-0.5 dark:border-dark-700">
+              <div class="inline-flex rounded-lg border border-[var(--surface-edge)] surface-inset p-0.5">
                 <button
                   v-for="option in dailyUsageOptions"
                   :key="option.value"
                   @click="setDailyUsageDays(option.value)"
-                  class="min-w-12 rounded-md px-3 py-1.5 text-xs font-medium transition-colors surface-control"
+                  class="min-w-12 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
                   :class="dailyUsageDays === option.value
                     ? 'bg-primary-500 text-white'
                     : 'text-gray-600 hover:surface-hover dark:text-dark-300 dark:hover:surface-hover'"
@@ -315,7 +321,7 @@
             <div v-if="dailyUsageRows.length > 0" class="record-table-scroll table-container overflow-x-auto">
               <table class="record-table w-full">
                 <thead>
-                  <tr class="border-b border-gray-200 surface-inset dark:border-dark-700">
+                  <tr class="border-b border-[var(--surface-edge)] surface-inset">
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.date') }}</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.requests') }}</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.inputTokens') }}</th>
@@ -329,7 +335,7 @@
                   <tr
                     v-for="row in dailyUsageRows"
                     :key="row.date"
-                    class="border-b border-gray-100 last:border-b-0 dark:border-dark-800"
+                    class="border-b border-[var(--surface-edge)] last:border-b-0"
                   >
                     <td class="px-4 py-3 text-sm font-medium whitespace-nowrap text-gray-900 dark:text-white">{{ row.date }}</td>
                     <td class="px-4 py-3 text-sm tabular-nums text-right surface-muted">{{ fmtNum(row.requests) }}</td>
@@ -352,13 +358,13 @@
             v-if="modelStats.length > 0"
             class="card fade-up fade-up-delay-4 overflow-hidden"
           >
-            <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
+            <div class="border-b border-[var(--surface-edge)] px-5 py-4 sm:px-8 sm:py-5">
               <h3 class="text-sm font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.modelStats') }}</h3>
             </div>
             <div class="record-table-scroll table-container overflow-x-auto">
               <table class="record-table w-full">
                 <thead>
-                  <tr class="border-b border-gray-200 surface-inset dark:border-dark-700">
+                  <tr class="border-b border-[var(--surface-edge)] surface-inset">
                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.model') }}</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.requests') }}</th>
                     <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider surface-muted">{{ t('keyUsage.inputTokens') }}</th>
@@ -373,7 +379,7 @@
                   <tr
                     v-for="(m, i) in modelStats"
                     :key="i"
-                    class="border-b border-gray-100 last:border-b-0 dark:border-dark-800"
+                    class="border-b border-[var(--surface-edge)] last:border-b-0"
                   >
                     <td class="px-4 py-3 text-sm font-medium whitespace-nowrap text-gray-900 dark:text-white">{{ m.model || '-' }}</td>
                     <td class="px-4 py-3 text-sm tabular-nums text-right surface-muted">{{ fmtNum(m.requests) }}</td>

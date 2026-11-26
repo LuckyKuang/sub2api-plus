@@ -1,6 +1,6 @@
 <template>
-  <div class="min-h-screen surface-inset px-4 py-10">
-    <div class="mx-auto max-w-2xl">
+  <div class="auth-layout flex min-h-screen items-center justify-center px-4 py-10">
+    <div class="w-full max-w-2xl">
       <div v-if="isProcessing" class="card p-6 text-center">
         <div class="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"></div>
         <h1 class="mt-4 text-lg font-semibold text-gray-900 dark:text-white">

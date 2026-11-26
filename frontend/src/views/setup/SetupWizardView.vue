@@ -1,6 +1,6 @@
 <template>
   <div
-    class="flex min-h-screen items-center justify-center bg-canvas p-[var(--shell-gutter)] dark:surface-inset"
+    class="home-page flex min-h-screen items-center justify-center p-[var(--shell-gutter)]"
   >
     <div class="flex w-full min-w-0 max-w-2xl flex-col gap-[var(--shell-gap)]">
       <!-- Title -->
@@ -46,7 +46,7 @@
             <div
               v-if="index < steps.length - 1"
               class="mx-2 h-0.5 w-6 sm:mx-3 sm:w-12"
-              :class="currentStep > index ? 'bg-primary-500' : 'bg-gray-200 dark:bg-dark-700'"
+              :class="currentStep > index ? 'bg-primary-500' : 'bg-[var(--surface-edge)]'"
             ></div>
           </template>
         </div>
@@ -229,7 +229,7 @@
             </div>
           </div>
 
-          <div class="flex items-center justify-between rounded-xl border border-gray-200 p-3 dark:border-dark-700">
+          <div class="surface-subcard flex items-center justify-between p-3">
             <div>
               <p class="text-sm font-medium text-gray-900 dark:text-white">
                 {{ t("setup.redis.enableTls") }}
@@ -356,7 +356,7 @@
           </div>
 
           <div class="space-y-4">
-            <div class="rounded-xl surface-inset p-4">
+            <div class="surface-subcard p-4">
               <h3 class="mb-2 text-sm font-medium surface-muted">
                 {{ t('setup.ready.database') }}
               </h3>
@@ -367,7 +367,7 @@
               </p>
             </div>
 
-            <div class="rounded-xl surface-inset p-4">
+            <div class="surface-subcard p-4">
               <h3 class="mb-2 text-sm font-medium surface-muted">
                 {{ t('setup.ready.redis') }}
               </h3>
@@ -376,7 +376,7 @@
               </p>
             </div>
 
-            <div class="rounded-xl surface-inset p-4">
+            <div class="surface-subcard p-4">
               <h3 class="mb-2 text-sm font-medium surface-muted">
                 {{ t('setup.ready.adminEmail') }}
               </h3>
@@ -388,7 +388,7 @@
         <!-- Error Message -->
         <div
           v-if="errorMessage"
-          class="mt-6 rounded-xl border border-red-200 bg-red-50/[0.15] p-4 dark:border-red-800/50 dark:bg-red-900/20"
+          class="mt-6 rounded-lg border border-red-200 bg-red-50/[0.15] p-4 dark:border-red-800/50 dark:bg-red-900/20"
         >
           <div class="flex items-start gap-3">
             <Icon name="exclamationCircle" size="md" class="flex-shrink-0 text-red-500" />
@@ -399,7 +399,7 @@
         <!-- Success Message -->
         <div
           v-if="installSuccess"
-          class="mt-6 rounded-xl border border-green-200 bg-green-50/[0.15] p-4 dark:border-green-800/50 dark:bg-green-900/20"
+          class="mt-6 rounded-lg border border-green-200 bg-green-50/[0.15] p-4 dark:border-green-800/50 dark:bg-green-900/20"
         >
           <div class="flex items-start gap-3">
             <svg

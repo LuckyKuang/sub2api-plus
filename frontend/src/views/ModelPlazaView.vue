@@ -5,7 +5,7 @@
   </AppLayout>
 
   <!-- 独立形态:自带导航条(logo/站名 + 登录/回后台) -->
-  <div v-else class="flex min-h-screen flex-col gap-[var(--shell-gap)] bg-canvas p-[var(--shell-gutter)] dark:surface-inset">
+  <div v-else class="home-page flex min-h-screen flex-col gap-[var(--shell-gap)] p-[var(--shell-gutter)]">
     <PlazaNavBar />
     <main class="mx-auto w-full min-w-0 max-w-7xl">
       <ModelPlazaContent :response="data" :loading="loading" :error="loadFailed" />
