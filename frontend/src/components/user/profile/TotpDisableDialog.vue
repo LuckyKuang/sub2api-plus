@@ -3,7 +3,7 @@
     <div class="flex min-h-full items-center justify-center p-4">
       <div class="fixed inset-0 transition-opacity surface-overlay" @click="$emit('close')"></div>
 
-      <div class="relative w-full max-w-md transform rounded-xl p-6 shadow-xl transition-all surface-panel">
+      <div class="relative w-full max-w-md transform rounded-xl border border-[var(--surface-edge)] p-6 shadow-xl transition-all surface-panel">
         <!-- Header -->
         <div class="mb-6">
           <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100/[0.15] dark:bg-red-900/30">

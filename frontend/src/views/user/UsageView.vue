@@ -1,35 +1,36 @@
 <template>
   <AppLayout appearance="user" workspace>
     <div class="workspace-page usage-workspace">
-      <div class="card workspace-fixed usage-date p-4">
-        <div class="filter-bar">
-          <!-- A labelled control is one pair, so the label centres on the
-               trigger instead of bottom-aligning with the filter row. -->
-          <div class="filter-pair">
-            <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
-            <div class="filter-field filter-field--date">
-              <DateRangePicker
-                v-model:start-date="startDate"
-                v-model:end-date="endDate"
-                @change="onDateRangeChange"
-              />
+      <section class="workspace-body usage-records-workspace" data-testid="usage-records-panel">
+      <div class="card workspace-fixed overflow-hidden">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--surface-edge)] pr-3 sm:pr-4">
+        <div class="usage-detail-tabs card-tabs workspace-fixed" role="tablist" :aria-label="t('usage.tabs.usage')">
+          <button type="button" role="tab" class="card-tab" :aria-selected="activeTab === 'usage'" @click="selectRecordTab('usage')">
+            {{ t('usage.tabs.usage') }}
+          </button>
+          <button v-if="errorViewEnabled" type="button" role="tab" class="card-tab" :aria-selected="activeTab === 'errors'" @click="switchToErrors">
+            {{ t('usage.tabs.errors') }}
+          </button>
+        </div>
+        <div class="usage-date py-2 pl-3 sm:pl-0">
+          <div class="filter-bar">
+            <!-- A labelled control is one pair, so the label centres on the
+                 trigger instead of bottom-aligning with the filter row. -->
+            <div class="filter-pair">
+              <span class="text-sm font-medium surface-muted">{{ t('admin.dashboard.timeRange') }}:</span>
+              <div class="filter-field filter-field--date">
+                <DateRangePicker
+                  v-model:start-date="startDate"
+                  v-model:end-date="endDate"
+                  @change="onDateRangeChange"
+                />
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <section class="workspace-body usage-records-workspace" data-testid="usage-records-panel">
-      <div class="card workspace-fixed overflow-hidden">
-      <div class="usage-detail-tabs card-tabs workspace-fixed" role="tablist" :aria-label="t('usage.tabs.usage')">
-        <button type="button" role="tab" class="card-tab" :aria-selected="activeTab === 'usage'" @click="selectRecordTab('usage')">
-          {{ t('usage.tabs.usage') }}
-        </button>
-        <button v-if="errorViewEnabled" type="button" role="tab" class="card-tab" :aria-selected="activeTab === 'errors'" @click="switchToErrors">
-          {{ t('usage.tabs.errors') }}
-        </button>
-      </div>
-
-      <div class="usage-workspace-filters workspace-fixed border-b border-gray-100 p-4 dark:border-dark-700/50">
+      <div class="usage-workspace-filters workspace-fixed p-4">
         <div class="usage-filter-layout flex flex-wrap items-end justify-between gap-4">
           <div v-if="activeTab === 'errors'" class="usage-filter-fields filter-bar flex-1">
             <div class="filter-field">
@@ -78,7 +79,7 @@
               <label class="input-label">{{ t('usage.compactionFilter') }}</label>
               <Select v-model="filters.native_compaction_v2" :options="compactionOptions" @change="applyFilters" />
             </div>
-            <div v-if="subscriptionFeatureEnabled" class="w-full sm:w-auto sm:min-w-[200px]">
+            <div v-if="subscriptionFeatureEnabled" class="filter-field">
               <label class="input-label">{{ t('admin.usage.billingType') }}</label>
               <Select v-model="filters.billing_type" :options="billingTypeOptions" @change="applyFilters" />
             </div>
@@ -111,7 +112,7 @@
               <Transition name="dropdown">
               <div
                 v-if="showColumnDropdown"
-                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
+                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-[var(--surface-edge)] p-1 shadow-lg surface-panel"
                 :style="columnDropdownStyle"
                 data-testid="usage-column-menu"
                 @click.stop
@@ -128,7 +129,7 @@
                   <span>{{ col.label }}</span>
                   <Icon v-if="isCurrentColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
                 </button>
-                <button type="button" class="w-full rounded-[var(--surface-radius-item)] border-t px-3 py-2 text-left text-sm text-primary-600 hover:surface-hover surface-control" @click="restoreRecommendedColumns">{{ t('inspection.resetColumns') }}</button>
+                <button type="button" class="w-full rounded-[var(--surface-radius-item)] border-t border-[var(--surface-edge)] px-3 py-2 text-left text-sm text-primary-600 hover:surface-hover surface-control" @click="restoreRecommendedColumns">{{ t('inspection.resetColumns') }}</button>
               </div>
               </Transition>
               </Teleport>
@@ -834,13 +835,13 @@ useLocaleRefresh(() => Promise.all([loadLogs(), loadFilterOptions()]))
 @media (min-width: 1024px) {
   .usage-detail-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
   .usage-detail-tabs > button { flex: none; white-space: nowrap; }
-  .usage-date, .usage-workspace-filters { padding: 10px 14px; }
+  .usage-workspace-filters { padding: 12px 14px; }
   .usage-filter-layout { flex-direction: column; align-items: stretch; gap: 8px; }
   .usage-filter-fields .input-label { min-height: 16px; margin-bottom: 4px; font-size: 12px; line-height: 16px; }
   .usage-filter-actions { width: 100%; gap: 8px; }
 }
 @media (min-width: 1024px) and (max-height: 799px) {
-  .usage-date, .usage-workspace-filters { padding: 8px 12px; }
+  .usage-workspace-filters { padding: 8px 12px; }
   .usage-filter-layout { gap: 6px; }
   .usage-filter-fields .input-label { margin-bottom: 2px; }
   .usage-filter-fields :deep(.select-trigger) { min-height: 32px; padding-top: 5px; padding-bottom: 5px; }

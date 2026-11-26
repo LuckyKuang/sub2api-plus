@@ -8,7 +8,7 @@
     @close="close"
   >
     <form v-support-readonly id="bulk-edit-keys-form" class="space-y-5" @submit.prevent="submit">
-      <div class="space-y-1 text-sm">
+      <div class="surface-subcard space-y-1 px-3.5 py-2.5 text-sm">
         <p class="font-medium text-gray-900 dark:text-white">
           {{ t('keys.bulkEdit.selectedCount', { count: pendingKeys.length }) }}
         </p>

@@ -1,11 +1,10 @@
 <template>
   <div
     :class="[
-      'subscription-plan-card group relative flex min-w-0 flex-col overflow-hidden rounded-xl border transition-all',
+      'subscription-plan-card card group relative flex min-w-0 flex-col overflow-hidden transition-all',
       { 'subscription-plan-catalog': catalog },
       'hover:shadow-xl hover:-translate-y-0.5',
       borderClass,
-      'surface-inset dark:surface-inset',
     ]"
   >
     <div class="plan-content flex min-w-0 flex-1 flex-col p-4">
@@ -25,7 +24,7 @@
         <div class="plan-price shrink-0 text-right">
           <div class="flex items-baseline gap-1">
             <span class="text-xs surface-muted">{{ planCurrencySymbol }}</span>
-            <span :class="['text-2xl font-extrabold tracking-tight', textClass]">{{ plan.price }}</span>
+            <span :class="['text-2xl font-extrabold tracking-tight tabular-nums', textClass]">{{ plan.price }}</span>
             <span v-if="plan.currency" class="text-xs font-medium surface-muted">{{ plan.currency }}</span>
           </div>
           <div class="flex items-center justify-end gap-1">
@@ -42,7 +41,7 @@
       </div>
 
       <!-- Group quota info: rate tag top-left, then one labelled bar per limit -->
-      <div class="plan-quota mb-3 space-y-2 rounded-lg surface-inset px-3 py-2.5 text-xs">
+      <div class="plan-quota surface-subcard mb-3 space-y-2 px-3 py-2.5 text-xs">
         <div class="flex items-center gap-2">
           <span class="surface-muted">{{ t('payment.planCard.rate') }}</span>
           <span

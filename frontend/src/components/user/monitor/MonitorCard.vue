@@ -1,7 +1,7 @@
 <template>
   <button
     type="button"
-    class="glass-surface group text-left p-5 min-h-[280px] w-full border border-gray-200/80 shadow-card dark:border-dark-700/70 hover:-translate-y-1 hover:shadow-card-hover dark:hover:border-primary-500/30 hover:border-gray-300 transition-all duration-300 ease-out flex flex-col"
+    class="glass-surface group text-left p-5 min-h-[280px] w-full border border-[var(--surface-edge)] shadow-card hover:-translate-y-0.5 hover:shadow-card-hover hover:border-primary-300 dark:hover:border-primary-500/40 transition-all duration-200 ease-out flex flex-col"
     @click="emit('click')"
   >
     <!-- Header: icon + name/model + status chip -->
@@ -60,7 +60,7 @@
     <MonitorQuotaView v-if="quotaVisible" :snapshot="item.latest_quota" class="mt-2" />
 
     <!-- Divider -->
-    <div class="mt-4 border-t border-gray-100 dark:border-dark-700/60"></div>
+    <div class="mt-4 border-t border-[var(--surface-edge)]"></div>
 
     <!-- Availability row -->
     <MonitorAvailabilityRow

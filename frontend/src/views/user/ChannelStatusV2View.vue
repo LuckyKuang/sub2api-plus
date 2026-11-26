@@ -5,7 +5,7 @@
       <section
         class="channel-monitor-toolbar card workspace-shell workspace-fixed p-0"
       >
-        <header class="page-header mb-0 flex flex-wrap items-start justify-between gap-4 px-5 py-4 sm:px-6">
+        <header class="page-header mb-0 flex flex-wrap items-start justify-between gap-4 border-b border-[var(--surface-edge)] px-5 py-4 sm:px-6">
           <div class="min-w-0">
             <h1 class="page-title flex items-center gap-2 text-xl font-black text-gray-900 dark:text-white">
               <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50/[0.15] text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
@@ -244,7 +244,7 @@
         <div
           v-for="i in (showThroughput ? 5 : 4)"
           :key="i"
-          class="h-24 animate-pulse rounded-xl bg-gray-50 dark:bg-dark-900/30"
+          class="card h-24 animate-pulse"
         />
       </section>
 
@@ -340,12 +340,12 @@
             <div
               v-for="row in errorRows"
               :key="row.category"
-              class="rounded-xl surface-inset p-4 text-sm"
+              class="surface-subcard p-4 text-sm"
               :class="row.ignored ? 'opacity-60' : ''"
             >
               <button
                 type="button"
-                class="grid w-full grid-cols-[minmax(100px,200px)_1fr_auto_auto] items-center gap-3 text-left surface-control"
+                class="grid w-full grid-cols-[minmax(100px,200px)_1fr_auto_auto] items-center gap-3 text-left"
                 @click="toggleError(row.category)"
               >
                 <span class="flex min-w-0 items-center gap-1.5 truncate surface-muted">
@@ -365,12 +365,12 @@
                 >{{ formatPercent(row.rate) }}</small>
                 <Icon name="chevronDown" size="sm" :class="['text-gray-400 transition-transform', expandedErrors.has(row.category) ? 'rotate-180' : '']" />
               </button>
-              <div v-if="expandedErrors.has(row.category)" class="mt-3 space-y-2 border-t border-gray-100 pt-3 dark:border-dark-700">
+              <div v-if="expandedErrors.has(row.category)" class="mt-3 space-y-2 border-t border-[var(--surface-edge)] pt-3">
                 <template v-if="isAdmin && (row.details || []).length">
                   <div
                     v-for="(detail, index) in row.details || []"
                     :key="`${row.category}:${index}:${detail.message}`"
-                    class="rounded-lg surface-inset px-3 py-2 text-xs surface-muted"
+                    class="rounded-lg border border-[var(--surface-edge)] surface-inset px-3 py-2 text-xs surface-muted"
                   >
                     <div class="mb-1 flex flex-wrap items-center gap-2">
                       <span class="badge badge-gray !px-1.5 !py-0 text-[10px]">{{ detail.platform || '-' }}</span>

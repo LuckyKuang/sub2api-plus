@@ -12,23 +12,23 @@
               <Icon name="dollar" size="sm" class="text-primary-500" />
               {{ t('affiliate.stats.rebateRate') }}
             </p>
-            <p class="mt-2 text-2xl font-semibold text-primary-600 dark:text-primary-400">
+            <p class="mt-2 text-2xl font-semibold tabular-nums text-primary-600 dark:text-primary-400">
               {{ formattedRebateRate }}<span class="ml-0.5 text-base font-medium">%</span>
             </p>
             <p class="mt-1 text-xs surface-muted">{{ t('affiliate.stats.rebateRateHint') }}</p>
           </div>
           <div class="card p-5">
             <p class="text-sm surface-muted">{{ t('affiliate.stats.invitedUsers') }}</p>
-            <p class="mt-2 text-2xl font-semibold">{{ formatCount(detail.aff_count) }}</p>
+            <p class="mt-2 text-2xl font-semibold tabular-nums">{{ formatCount(detail.aff_count) }}</p>
           </div>
           <div class="card p-5">
             <p class="text-sm surface-muted">{{ t('affiliate.stats.availableQuota') }}</p>
-            <p class="mt-2 text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{{ formatCurrency(detail.aff_quota) }}</p>
+            <p class="mt-2 text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{{ formatCurrency(detail.aff_quota) }}</p>
           </div>
           <div class="card p-5">
             <p class="text-sm surface-muted">{{ t('affiliate.stats.totalQuota') }}</p>
-            <p class="mt-2 text-2xl font-semibold">{{ formatCurrency(detail.aff_history_quota) }}</p>
-            <p v-if="detail.aff_frozen_quota > 0" class="mt-1 text-xs text-amber-600 dark:text-amber-400">
+            <p class="mt-2 text-2xl font-semibold tabular-nums">{{ formatCurrency(detail.aff_history_quota) }}</p>
+            <p v-if="detail.aff_frozen_quota > 0" class="mt-1 text-xs tabular-nums text-amber-600 dark:text-amber-400">
               {{ t('affiliate.stats.frozenQuota') }}: {{ formatCurrency(detail.aff_frozen_quota) }}
             </p>
           </div>
@@ -41,7 +41,7 @@
             <div class="mt-4 grid gap-4 md:grid-cols-2">
               <div class="min-w-0 space-y-2">
                 <p class="text-sm font-medium surface-muted">{{ t('affiliate.yourCode') }}</p>
-                <div class="flex flex-col items-stretch gap-2 rounded-lg border border-gray-200 surface-inset px-3 py-2 dark:border-dark-700 sm:flex-row sm:items-center">
+                <div class="surface-subcard flex flex-col items-stretch gap-2 px-3 py-2 sm:flex-row sm:items-center">
                   <code class="min-w-0 break-all text-xs font-semibold sm:flex-1 sm:truncate">{{ detail.aff_code }}</code>
                   <button class="btn btn-secondary btn-sm w-full sm:w-auto sm:shrink-0" @click="copyCode">
                     <Icon name="copy" size="sm" /><span>{{ t('affiliate.copyCode') }}</span>
@@ -50,7 +50,7 @@
               </div>
               <div class="min-w-0 space-y-2">
                 <p class="text-sm font-medium surface-muted">{{ t('affiliate.inviteLink') }}</p>
-                <div class="flex flex-col items-stretch gap-2 rounded-lg border border-gray-200 surface-inset px-3 py-2 dark:border-dark-700 sm:flex-row sm:items-center">
+                <div class="surface-subcard flex flex-col items-stretch gap-2 px-3 py-2 sm:flex-row sm:items-center">
                   <code class="min-w-0 break-all text-xs sm:flex-1 sm:truncate surface-muted">{{ inviteLink }}</code>
                   <button class="btn btn-secondary btn-sm w-full sm:w-auto sm:shrink-0" @click="copyInviteLink">
                     <Icon name="copy" size="sm" /><span>{{ t('affiliate.copyLink') }}</span>
@@ -80,10 +80,10 @@
           </section>
         </div>
 
-        <section class="workspace-fixed affiliate-guide" :aria-label="t('affiliate.tips.title')">
+        <section class="card workspace-fixed affiliate-guide p-5" :aria-label="t('affiliate.tips.title')">
           <h3 class="mb-3 text-sm font-semibold">{{ t('affiliate.tips.title') }}</h3>
           <ul class="affiliate-guide-grid">
-            <li v-for="(tip, index) in affiliateTips" :key="tip.body" class="card affiliate-guide-card">
+            <li v-for="(tip, index) in affiliateTips" :key="tip.body" class="surface-subcard affiliate-guide-card">
               <div class="affiliate-guide-top">
                 <span class="affiliate-guide-icon"><Icon :name="tip.icon" size="md" /></span>
                 <span class="affiliate-guide-step">{{ String(index + 1).padStart(2, '0') }}</span>
@@ -97,13 +97,13 @@
         <section class="card workspace-table-card affiliate-invitees">
           <header class="affiliate-invitees-heading workspace-fixed">
             <h3 class="text-[15px] font-semibold">{{ t('affiliate.invitees.title') }}</h3>
-            <span class="text-xs surface-muted">{{ t('common.total') }}: {{ detail.invitees.length }}</span>
+            <span class="text-xs tabular-nums surface-muted">{{ t('common.total') }}: {{ detail.invitees.length }}</span>
           </header>
           <div v-if="detail.invitees.length === 0" class="p-6 text-center text-sm surface-muted">{{ t('affiliate.invitees.empty') }}</div>
           <div v-else ref="inviteeViewport" class="record-table-scroll workspace-table-viewport affiliate-invitees-viewport">
             <table class="record-table w-full min-w-[560px] text-left text-sm">
               <thead>
-                <tr class="border-b border-gray-200 dark:border-dark-700 surface-muted">
+                <tr class="border-b border-[var(--surface-edge)] surface-muted">
                   <th class="px-3 py-2 font-medium">{{ t('affiliate.invitees.columns.email') }}</th>
                   <th class="px-3 py-2 font-medium">{{ t('affiliate.invitees.columns.username') }}</th>
                   <th class="px-3 py-2 font-medium text-right">{{ t('affiliate.invitees.columns.rebate') }}</th>
@@ -111,11 +111,11 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in pagedInvitees" :key="item.user_id" class="border-b border-gray-100 last:border-b-0 dark:border-dark-800">
+                <tr v-for="item in pagedInvitees" :key="item.user_id" class="border-b border-[var(--surface-edge)] last:border-b-0">
                   <td class="px-3 py-3">{{ item.email || '-' }}</td>
                   <td class="px-3 py-3 surface-muted">{{ item.username || '-' }}</td>
-                  <td class="px-3 py-3 text-right font-medium text-emerald-600 dark:text-emerald-400">{{ formatCurrency(item.total_rebate) }}</td>
-                  <td class="px-3 py-3 surface-muted">{{ formatDateTime(item.created_at) || '-' }}</td>
+                  <td class="px-3 py-3 text-right font-medium tabular-nums text-emerald-600 dark:text-emerald-400">{{ formatCurrency(item.total_rebate) }}</td>
+                  <td class="px-3 py-3 tabular-nums surface-muted">{{ formatDateTime(item.created_at) || '-' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -252,8 +252,8 @@ onMounted(() => {
 .affiliate-transfer-value { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin-top: 14px; }
 .affiliate-transfer-value strong { font-size: 30px; line-height: 1.3; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
 .affiliate-transfer-value span { color: var(--surface-muted); font-size: 12px; }
-.affiliate-guide-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-.affiliate-guide-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 16px 20px; border-radius: var(--surface-radius); }
+.affiliate-guide-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.affiliate-guide-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 14px 16px; border-radius: var(--surface-radius-item); }
 .affiliate-guide-top { display: flex; align-items: center; justify-content: space-between; }
 .affiliate-guide-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: var(--surface-radius-control); background: var(--surface-soft); color: var(--console-accent-readable); }
 .affiliate-guide-step { color: var(--surface-muted); opacity: .65; font: 500 12px/1.5 ui-monospace, monospace; }

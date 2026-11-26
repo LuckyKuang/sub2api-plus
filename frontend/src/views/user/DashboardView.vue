@@ -21,7 +21,9 @@
           <UserDashboardCharts workspace :show-toolbar="false" v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="changeCharts" @granularityChange="changeCharts" @refresh="refreshAll" />
         </section>
         <section class="dashboard-section user-dashboard-details" data-testid="dashboard-quotas-panel">
-          <h2 class="text-base font-semibold">{{ t('workspace.platformsQuotas') }}</h2>
+          <div class="card flex items-center justify-between px-4 py-2.5">
+            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('workspace.platformsQuotas') }}</h2>
+          </div>
           <UserDashboardStats section="details" :stats="stats" :balance="user?.balance || 0" :frozen-balance="user?.frozen_balance" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
         </section>
         <section class="dashboard-section" data-testid="dashboard-recent-panel">

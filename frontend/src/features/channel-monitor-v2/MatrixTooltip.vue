@@ -69,14 +69,13 @@ defineExpose({ show, move, hide })
   max-height: calc(100vh - 1.5rem);
   overflow: hidden;
   border-radius: var(--surface-radius-panel);
-  border: 1px solid rgb(229 231 235);
+  border: 1px solid var(--surface-edge);
   background: var(--surface-panel);
   padding: 0.5rem 0.625rem;
   box-shadow: 0 18px 40px -12px rgb(0 0 0 / 0.28);
   overflow-wrap: anywhere;
 }
 :global(.dark) .matrix-floating-tooltip {
-  border-color: rgb(55 65 81);
   color: rgb(229 231 235);
 }
 .matrix-floating-tooltip-line {

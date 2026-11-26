@@ -10,8 +10,8 @@
             <Icon name="check" size="lg" class="text-green-500" />
           </div>
           <p class="text-lg font-bold text-gray-900 dark:text-white">{{ props.orderType === 'subscription' ? t('payment.result.subscriptionSuccess') : t('payment.result.success') }}</p>
-          <div v-if="paidOrder" class="w-full rounded-xl surface-inset p-4">
-            <div class="space-y-2 text-sm">
+          <div v-if="paidOrder" class="surface-subcard w-full p-4">
+            <div class="space-y-2 text-sm tabular-nums">
               <div class="flex justify-between">
                 <span class="surface-muted">{{ t('payment.orders.orderId') }}</span>
                 <span class="font-medium text-gray-900 dark:text-white">#{{ paidOrder.id }}</span>
@@ -117,7 +117,7 @@
               <p class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('payment.qr.alipayFallbackTitle') }}</p>
               <p class="mt-1 text-sm surface-muted">{{ t('payment.qr.alipayFallbackHint') }}</p>
             </div>
-            <div class="w-full space-y-2 border-y border-gray-100 py-3 text-sm dark:border-dark-600">
+            <div class="w-full space-y-2 border-y border-[var(--surface-edge)] py-3 text-sm tabular-nums">
               <div class="flex items-start justify-between gap-4">
                 <span class="surface-muted">{{ t('payment.orders.payAmount') }}</span>
                 <span class="font-semibold text-gray-900 dark:text-white">{{ displayPaymentAmount }}</span>
@@ -304,7 +304,7 @@ const showQRCode = computed(() => !!qrUrl.value && (!isMobileAlipayDeepLink.valu
 const qrBorderClass = computed(() => {
   if (isAlipay.value) return 'border-[#00AEEF] bg-blue-50/[0.15] dark:border-[#00AEEF]/70 dark:bg-blue-950/20'
   if (isWxpay.value) return 'border-[#2BB741] bg-green-50/[0.15] dark:border-[#2BB741]/70 dark:bg-green-950/20'
-  return 'border-gray-200 surface-inset dark:border-dark-600 dark:surface-inset'
+  return 'border-[var(--surface-edge)] surface-inset'
 })
 
 const qrLogoBgClass = computed(() => {

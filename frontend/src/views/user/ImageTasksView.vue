@@ -7,7 +7,7 @@
             v-for="card in modeCards"
             :key="card.key"
             type="button"
-            class="mode-card surface-control"
+            class="mode-card"
             :class="{ 'mode-card-active': mode === card.key }"
             :aria-pressed="mode === card.key"
             :data-testid="'image-task-mode-' + card.key"
@@ -22,12 +22,12 @@
         </div>
       </div>
 
-      <p v-if="loading" role="status" class="surface-muted" data-testid="image-tasks-loading">{{ t('common.loading') }}</p>
+      <p v-if="loading" role="status" class="card p-6 text-center text-sm surface-muted" data-testid="image-tasks-loading">{{ t('common.loading') }}</p>
       <p v-else-if="requestedUnavailable" role="status" class="card p-4 surface-muted" data-testid="image-tasks-requested-unavailable">
         {{ t('imageTasks.requestedUnavailable', { mode: t('imageTasks.modes.' + requestedMode + '.title'), reason: reasonLabel(requestedReason) }) }}
       </p>
-      <div v-if="!loading && anyAvailable" class="flex flex-col gap-2">
-        <h2 v-if="!showSwitcher" class="text-lg font-medium">{{ t('imageTasks.modes.' + mode + '.title') }}</h2>
+      <div v-if="!loading && anyAvailable" class="card flex flex-col gap-1.5 px-4 py-3">
+        <h2 v-if="!showSwitcher" class="text-base font-semibold">{{ t('imageTasks.modes.' + mode + '.title') }}</h2>
         <p class="text-sm surface-muted">{{ t('imageTasks.ownership.' + mode) }}</p>
         <p v-if="!canSubmit" role="status" class="text-sm surface-muted" data-testid="image-tasks-readonly">
           {{ t('imageTasks.readOnly', { reason: reasonLabel(modes?.[mode]?.reason) }) }}

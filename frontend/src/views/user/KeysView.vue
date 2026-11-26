@@ -47,13 +47,13 @@
                 </button>
                 <div
                   v-if="showColumnDropdown"
-                  class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
+                  class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 space-y-0.5 overflow-y-auto rounded-xl border border-[var(--surface-edge)] p-1 shadow-lg surface-panel"
                 >
                   <button
                     v-for="col in toggleableColumns"
                     :key="col.key"
                     @click="toggleColumn(col.key)"
-                    class="flex w-full items-center justify-between rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
+                    class="flex w-full items-center justify-between rounded-[var(--surface-radius-item)] px-3 py-2 text-left text-sm transition-colors hover:surface-hover surface-muted"
                   >
                     <span>{{ col.label }}</span>
                     <Icon
@@ -80,21 +80,23 @@
             :api-base-url="publicSettings?.api_base_url || ''"
             :custom-endpoints="publicSettings?.custom_endpoints || []"
           />
-          <div v-if="selectedIds.length" class="flex flex-wrap items-center gap-3 text-sm">
-            <span class="surface-muted">
+          <div v-if="selectedIds.length" class="surface-subcard flex flex-wrap items-center justify-between gap-3 px-3.5 py-2 text-sm">
+            <span class="font-medium text-gray-900 dark:text-white">
               {{ t('keys.bulkEdit.selectedCount', { count: selectedIds.length }) }}
             </span>
-            <button
-              class="btn btn-primary btn-sm"
-              :disabled="loading"
-              data-test="bulk-edit-keys"
-              @click="showBulkEditModal = true"
-            >
-              {{ t('keys.bulkEdit.title') }}
-            </button>
-            <button class="btn btn-secondary btn-sm" @click="selectedIds = []">
-              {{ t('keys.bulkEdit.clearSelection') }}
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                class="btn btn-primary btn-sm"
+                :disabled="loading"
+                data-test="bulk-edit-keys"
+                @click="showBulkEditModal = true"
+              >
+                {{ t('keys.bulkEdit.title') }}
+              </button>
+              <button class="btn btn-secondary btn-sm" @click="selectedIds = []">
+                {{ t('keys.bulkEdit.clearSelection') }}
+              </button>
+            </div>
           </div>
         </div>
       </template>
@@ -127,7 +129,7 @@
               </code>
               <button
                 @click="copyToClipboard(value, row.id)"
-                class="rounded-lg p-1 transition-colors hover:surface-hover surface-control"
+                class="rounded-lg p-1 transition-colors hover:surface-hover"
                 :class="
                   copiedKeyId === row.id
                     ? 'text-green-500'
@@ -490,7 +492,7 @@
                 @change="selectCreateProvider(provider.value)"
               />
               <span
-                class="flex h-full flex-col items-center gap-2 rounded-lg border border-gray-200 surface-inset px-2 py-3 text-center transition-colors peer-checked:border-primary-500 peer-checked:bg-primary-50/60 peer-checked:ring-1 peer-checked:ring-primary-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary-500 peer-disabled:opacity-40 dark:border-dark-600 dark:peer-checked:bg-primary-500/10"
+                class="flex h-full flex-col items-center gap-2 rounded-lg border border-[var(--surface-edge)] surface-inset px-2 py-3 text-center transition-colors peer-checked:border-primary-500 peer-checked:bg-primary-50/60 peer-checked:ring-1 peer-checked:ring-primary-500 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary-500 peer-disabled:opacity-40 dark:peer-checked:bg-primary-500/10"
                 :class="provider.count > 0 && 'hover:border-primary-300 dark:hover:border-primary-700'"
               >
                 <span class="flex h-8 items-center justify-center gap-1.5" aria-hidden="true">
@@ -610,7 +612,7 @@
               </GroupOptionItem>
             </template>
           </Select>
-          <GroupRateSummary v-if="formData.group_id" class="mt-3 rounded-lg surface-inset p-3" :group="quoteFor(formData.group_id)" :loading="quotesLoading" :failed="quotesFailed" @retry="refreshQuotes" />
+          <GroupRateSummary v-if="formData.group_id" class="mt-3 surface-subcard p-3" :group="quoteFor(formData.group_id)" :loading="quotesLoading" :failed="quotesFailed" @retry="refreshQuotes" />
         </div>
 
         <NativeAccessFields v-if="formData.group_binding_mode === 'single' && groups.find(group => group.id === formData.group_id)?.platform === 'composite'" ref="nativeAccessFields" v-model:conversion-enabled="formData.conversion_enabled" v-model:client="formData.default_client" v-model:endpoint="formData.default_endpoint" :group-id="formData.group_id" :base-url="publicSettings?.api_base_url" />
@@ -1082,34 +1084,34 @@
       <div class="space-y-4">
         <p class="text-sm surface-muted">
           {{ t('keys.ccsClientSelect.description') }}
-	        </p>
-	        <div class="grid grid-cols-2 gap-3">
-	          <button
-	            @click="handleCcsClientSelect('claude')"
-	            class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 dark:border-dark-600 hover:border-primary-500 hover:bg-primary-50/25 dark:hover:bg-primary-900/20 transition-all surface-control"
-	          >
-	            <Icon name="terminal" size="xl" class="surface-muted" />
-	            <span class="font-medium text-gray-900 dark:text-white">{{
-	              t('keys.ccsClientSelect.claudeCode')
-	            }}</span>
-	            <span class="text-xs surface-muted">{{
-	              t('keys.ccsClientSelect.claudeCodeDesc')
-	            }}</span>
-	          </button>
-	          <button
-	            @click="handleCcsClientSelect('gemini')"
-	            class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 dark:border-dark-600 hover:border-primary-500 hover:bg-primary-50/25 dark:hover:bg-primary-900/20 transition-all surface-control"
-	          >
-	            <Icon name="sparkles" size="xl" class="surface-muted" />
-	            <span class="font-medium text-gray-900 dark:text-white">{{
-	              t('keys.ccsClientSelect.geminiCli')
-	            }}</span>
-	            <span class="text-xs surface-muted">{{
-	              t('keys.ccsClientSelect.geminiCliDesc')
-	            }}</span>
-	          </button>
-	        </div>
-	      </div>
+        </p>
+        <div class="grid grid-cols-2 gap-3">
+          <button
+            @click="handleCcsClientSelect('claude')"
+            class="surface-subcard flex flex-col items-center gap-2 p-4 transition-all hover:border-primary-500 hover:bg-primary-50/25 dark:hover:bg-primary-900/20"
+          >
+            <Icon name="terminal" size="xl" class="surface-muted" />
+            <span class="font-medium text-gray-900 dark:text-white">{{
+              t('keys.ccsClientSelect.claudeCode')
+            }}</span>
+            <span class="text-xs surface-muted">{{
+              t('keys.ccsClientSelect.claudeCodeDesc')
+            }}</span>
+          </button>
+          <button
+            @click="handleCcsClientSelect('gemini')"
+            class="surface-subcard flex flex-col items-center gap-2 p-4 transition-all hover:border-primary-500 hover:bg-primary-50/25 dark:hover:bg-primary-900/20"
+          >
+            <Icon name="sparkles" size="xl" class="surface-muted" />
+            <span class="font-medium text-gray-900 dark:text-white">{{
+              t('keys.ccsClientSelect.geminiCli')
+            }}</span>
+            <span class="text-xs surface-muted">{{
+              t('keys.ccsClientSelect.geminiCliDesc')
+            }}</span>
+          </button>
+        </div>
+      </div>
       <template #footer>
         <div class="flex justify-end">
           <button @click="closeCcsClientSelect" class="btn btn-secondary">
@@ -1125,7 +1127,7 @@
         v-if="groupSelectorKeyId !== null && dropdownPosition"
         data-test="key-inline-group-selector"
         ref="dropdownRef"
-        class="animate-in fade-in slide-in-from-top-2 fixed z-[100000020] w-max max-w-[calc(100vw-16px)] overflow-hidden rounded-xl shadow-lg ring-1 ring-black/5 duration-200 sm:min-w-[380px] dark:ring-white/10 surface-panel"
+        class="animate-in fade-in slide-in-from-top-2 fixed z-[100000020] w-max max-w-[calc(100vw-16px)] overflow-hidden rounded-xl border border-[var(--surface-edge)] shadow-lg duration-200 sm:min-w-[380px] surface-panel"
         style="pointer-events: auto !important;"
         :style="{
           top: dropdownPosition.top !== undefined ? dropdownPosition.top + 'px' : undefined,
@@ -1134,7 +1136,7 @@
         }"
       >
         <!-- Search box -->
-        <div class="border-b border-gray-100 p-2 dark:border-dark-700">
+        <div class="border-b border-[var(--surface-edge)] p-2">
           <div class="relative">
             <svg class="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -1142,7 +1144,7 @@
             <input
               v-model="groupSearchQuery"
               type="text"
-              class="w-full rounded-lg border border-gray-200 surface-inset py-1.5 pl-8 pr-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-primary-300 focus:ring-1 focus:ring-primary-300 dark:border-dark-600 dark:text-white dark:placeholder-gray-500 dark:focus:border-primary-600 dark:focus:ring-primary-600"
+              class="w-full rounded-lg border border-[var(--surface-edge)] surface-inset py-1.5 pl-8 pr-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-primary-300 focus:ring-1 focus:ring-primary-300 dark:text-white dark:placeholder-gray-500 dark:focus:border-primary-600 dark:focus:ring-primary-600"
               :placeholder="t('keys.searchGroup')"
               @click.stop
             />
@@ -1156,7 +1158,7 @@
             @click="changeGroup(selectedKeyForGroup!, option.value)"
             :class="[
               'flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors',
-              'border-b border-gray-100 last:border-0 dark:border-dark-700',
+              'border-b border-[var(--surface-edge)] last:border-0',
               selectedKeyForGroup?.group_id === option.value ||
               (!selectedKeyForGroup?.group_id && option.value === null)
                 ? 'bg-primary-50/[0.15] dark:bg-primary-900/20'

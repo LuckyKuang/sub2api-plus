@@ -19,7 +19,7 @@
         <span class="hidden text-[11px] sm:inline surface-muted">{{ t('channelMonitorV2.matrix.wheelZoomX') }}</span>
         <button
           type="button"
-          class="inline-flex shrink-0 items-center rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 dark:border-dark-700 surface-control surface-muted"
+          class="btn btn-secondary btn-xs shrink-0"
           :disabled="!zoomed"
           @click="resetMatrixZoom"
         >
@@ -31,7 +31,7 @@
     <div class="card-body min-h-0 flex-1 !p-0">
       <div
         v-if="rows.length"
-        class="matrix-frame max-h-[min(42vh,420px)] max-w-full rounded-xl surface-inset p-2"
+        class="matrix-frame max-h-[min(42vh,420px)] max-w-full rounded-lg border border-[var(--surface-edge)] surface-inset p-2"
         @wheel="onMatrixWheel"
       >
         <div ref="headerRailRef" class="matrix-header-rail" :style="headerRailStyle" @scroll="onHeaderScroll">
@@ -68,7 +68,7 @@
             :data-index="entry.index"
             :data-row-key="entry.key"
             :style="{ transform: `translateY(${entry.start}px)` }"
-            class="matrix-data-row matrix-row absolute inset-x-0 top-0 border-b border-gray-100/80 dark:border-dark-700/60"
+            class="matrix-data-row matrix-row absolute inset-x-0 top-0 border-b border-[var(--surface-edge)]"
             :class="showThroughput ? 'matrix-row--with-tps' : ''"
           >
             <div class="dimension-cell flex min-w-0 items-center gap-2 surface-inset" :title="rowLabel(entry.row)">

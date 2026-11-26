@@ -1,6 +1,6 @@
 <template>
   <div v-support-readonly class="card">
-    <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+    <div class="border-b border-[var(--surface-edge)] px-6 py-4">
       <h2 class="text-lg font-medium text-gray-900 dark:text-white">
         {{ t('profile.balanceNotify.title') }}
       </h2>
@@ -50,7 +50,7 @@
           <!-- Saved email entries -->
           <div v-if="emailEntries.length > 0" class="space-y-2 mb-3">
             <div v-for="(entry, idx) in emailEntries" :key="idx"
-              class="flex flex-col items-stretch justify-between gap-2 px-3 py-2 surface-inset rounded-lg sm:flex-row sm:items-center">
+              class="surface-subcard flex flex-col items-stretch justify-between gap-2 px-3.5 py-2.5 sm:flex-row sm:items-center">
               <div class="flex items-center gap-2 min-w-0 flex-1">
                 <Toggle :model-value="!entry.disabled" :aria-label="entry.email" @update:model-value="handleEmailToggle(entry)" />
                 <span class="text-sm truncate surface-muted">{{ entry.email }}</span>
@@ -63,29 +63,29 @@
                       v-model="verifyCode"
                       type="text"
                       maxlength="6"
-                      class="w-20 rounded border border-gray-300 px-2 py-1 text-xs dark:border-dark-500 dark:surface-inset"
+                      class="w-20 rounded-lg border border-[var(--surface-edge)] surface-inset px-2 py-1 text-xs"
                       :placeholder="t('profile.balanceNotify.codePlaceholder')"
                     />
-                    <button @click="verifySavedEmail(entry.email)" :disabled="!verifyCode || verifyCode.length !== 6 || verifyingSaved" class="text-xs text-primary-600 hover:text-primary-700 surface-control">
+                    <button @click="verifySavedEmail(entry.email)" :disabled="!verifyCode || verifyCode.length !== 6 || verifyingSaved" class="btn btn-ghost btn-xs text-primary-600 hover:text-primary-700">
                       {{ t('profile.balanceNotify.verify') }}
                     </button>
                     <span v-if="verifyCountdown > 0" class="text-xs surface-muted">{{ verifyCountdown }}s</span>
-                    <button v-else @click="sendCodeForSaved(entry.email)" :disabled="sendingSavedCode" class="text-xs hover:text-gray-700 surface-control surface-muted">
+                    <button v-else @click="sendCodeForSaved(entry.email)" :disabled="sendingSavedCode" class="btn btn-ghost btn-xs surface-muted">
                       {{ t('profile.balanceNotify.resend') }}
                     </button>
-                    <button @click="verifyingEmail = ''" class="text-xs hover:text-gray-600 surface-control surface-muted">
+                    <button @click="verifyingEmail = ''" class="btn btn-ghost btn-xs surface-muted">
                       {{ t('common.cancel') }}
                     </button>
                   </template>
                   <template v-else>
-                    <button @click="sendCodeForSaved(entry.email)" :disabled="sendingSavedCode" class="text-xs text-primary-600 hover:text-primary-700 surface-control">
+                    <button @click="sendCodeForSaved(entry.email)" :disabled="sendingSavedCode" class="btn btn-ghost btn-xs text-primary-600 hover:text-primary-700">
                       {{ t('profile.balanceNotify.verify') }}
                     </button>
                     <span class="text-xs text-yellow-500">{{ t('profile.balanceNotify.unverified') }}</span>
                   </template>
                 </template>
                 <span v-else class="text-xs text-green-500">{{ t('profile.balanceNotify.verified') }}</span>
-                <button @click="handleRemoveEmail(entry.email)" class="text-red-500 hover:text-red-700 text-xs surface-control">
+                <button @click="handleRemoveEmail(entry.email)" class="btn btn-ghost btn-xs text-red-500 hover:text-red-700">
                   {{ t('profile.balanceNotify.removeEmail') }}
                 </button>
               </div>
@@ -95,13 +95,13 @@
           <!-- Pending (unverified) emails in verification flow -->
           <div v-if="pendingEmails.length > 0" class="space-y-2 mb-3">
             <div v-for="(pe, idx) in pendingEmails" :key="pe.email" data-testid="pending-notify-email"
-              class="flex flex-col items-stretch gap-2 px-3 py-2 bg-yellow-50/[0.15] dark:bg-yellow-900/10 rounded-lg border border-yellow-200 dark:border-yellow-800 sm:flex-row sm:items-center">
+              class="flex flex-col items-stretch gap-2 rounded-lg border border-amber-500/30 bg-amber-50/[0.15] px-3.5 py-2.5 dark:bg-amber-900/15 sm:flex-row sm:items-center">
               <span class="min-w-0 flex-1 break-all text-sm surface-muted">{{ pe.email }}</span>
               <div v-if="!pe.codeSent" class="flex flex-wrap items-center gap-1">
-                <button @click="sendCodeFor(idx)" :disabled="pe.sending" class="text-xs text-primary-600 hover:text-primary-700 surface-control">
+                <button @click="sendCodeFor(idx)" :disabled="pe.sending" class="btn btn-ghost btn-xs text-primary-600 hover:text-primary-700">
                   {{ t('profile.balanceNotify.sendCode') }}
                 </button>
-                <button @click="pendingEmails.splice(idx, 1)" class="text-xs text-red-500 hover:text-red-700 ml-1 surface-control">
+                <button @click="pendingEmails.splice(idx, 1)" class="btn btn-ghost btn-xs text-red-500 hover:text-red-700">
                   {{ t('profile.balanceNotify.removeEmail') }}
                 </button>
               </div>
@@ -110,14 +110,14 @@
                   v-model="pe.code"
                   type="text"
                   maxlength="6"
-                  class="w-20 rounded border border-gray-300 px-2 py-1 text-xs dark:border-dark-500 dark:surface-inset"
+                  class="w-20 rounded-lg border border-[var(--surface-edge)] surface-inset px-2 py-1 text-xs"
                   :placeholder="t('profile.balanceNotify.codePlaceholder')"
                 />
-                <button @click="verifyPending(idx)" :disabled="!pe.code || pe.code.length !== 6 || pe.verifying" class="text-xs text-primary-600 hover:text-primary-700 surface-control">
+                <button @click="verifyPending(idx)" :disabled="!pe.code || pe.code.length !== 6 || pe.verifying" class="btn btn-ghost btn-xs text-primary-600 hover:text-primary-700">
                   {{ t('profile.balanceNotify.verify') }}
                 </button>
                 <span v-if="pe.countdown > 0" class="text-xs surface-muted">{{ pe.countdown }}s</span>
-                <button v-else @click="sendCodeFor(idx)" :disabled="pe.sending" class="text-xs hover:text-gray-700 surface-control surface-muted">
+                <button v-else @click="sendCodeFor(idx)" :disabled="pe.sending" class="btn btn-ghost btn-xs surface-muted">
                   {{ t('profile.balanceNotify.resend') }}
                 </button>
               </div>

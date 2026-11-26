@@ -1,7 +1,7 @@
 <template>
   <div class="mt-5 grid grid-cols-2 gap-2">
     <div
-      class="rounded-xl p-3 surface-inset border border-gray-100 dark:border-dark-700/50"
+      class="surface-subcard p-3"
     >
       <div
         class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider surface-muted"
@@ -14,7 +14,7 @@
       </div>
     </div>
     <div
-      class="rounded-xl p-3 surface-inset border border-gray-100 dark:border-dark-700/50"
+      class="surface-subcard p-3"
     >
       <div
         class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider surface-muted"

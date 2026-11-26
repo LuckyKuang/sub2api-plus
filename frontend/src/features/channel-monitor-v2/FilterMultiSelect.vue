@@ -43,7 +43,7 @@
         >
           <button
             type="button"
-            class="dropdown-item select-option select-option-group flex w-full items-center justify-between border-b border-gray-100 px-4 py-2 text-left text-sm font-semibold hover:surface-hover dark:border-dark-700 surface-control surface-muted"
+            class="dropdown-item select-option select-option-group flex w-full items-center justify-between border-b border-[var(--surface-edge)] px-4 py-2 text-left text-sm font-semibold hover:surface-hover surface-muted"
             @click="clear"
           >
             <span>{{ allLabel }}</span>
@@ -55,7 +55,7 @@
             :key="option.value"
             type="button"
             role="option"
-            class="dropdown-item select-option flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm hover:surface-hover surface-control surface-muted"
+            class="dropdown-item select-option flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm hover:surface-hover surface-muted"
             :class="modelValue.includes(option.value) ? 'select-option-selected' : ''"
             :aria-selected="modelValue.includes(option.value)"
             @click="toggle(option.value)"

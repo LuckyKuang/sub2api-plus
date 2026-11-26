@@ -3,7 +3,7 @@
     <div class="flex min-h-full items-center justify-center p-4">
       <div class="fixed inset-0 transition-opacity surface-overlay" @click="$emit('close')"></div>
 
-      <div class="relative w-full max-w-md transform rounded-xl p-6 shadow-xl transition-all surface-panel">
+      <div class="relative w-full max-w-md transform rounded-xl border border-[var(--surface-edge)] p-6 shadow-xl transition-all surface-panel">
         <!-- Header -->
         <div class="mb-6 text-center">
           <h3 class="text-xl font-semibold text-gray-900 dark:text-white">
@@ -82,7 +82,7 @@
           <!-- QR Code and Secret -->
           <template v-if="setupData">
             <div class="flex justify-center">
-              <div class="max-w-full rounded-lg border border-gray-200 p-4 surface-opaque dark:border-dark-600">
+              <div class="max-w-full rounded-lg border border-[var(--surface-edge)] p-4 surface-opaque">
                 <img :src="qrCodeDataUrl" alt="QR Code" class="aspect-square h-auto w-48 max-w-full" />
               </div>
             </div>
@@ -140,7 +140,7 @@
                   maxlength="1"
                   inputmode="numeric"
                   pattern="[0-9]"
-                  class="h-12 min-w-0 max-w-10 flex-1 rounded-lg border border-gray-300 text-center text-lg font-semibold focus:border-primary-500 focus:ring-primary-500 dark:border-dark-600 dark:surface-inset"
+                  class="h-12 min-w-0 max-w-10 flex-1 rounded-lg border border-[var(--surface-edge)] surface-inset text-center text-lg font-semibold focus:border-primary-500 focus:ring-primary-500"
                   @input="handleCodeInput($event, index)"
                   @keydown="handleKeydown($event, index)"
                   @paste="handlePaste"

@@ -1,5 +1,5 @@
 <template>
-  <div class="mt-4 pt-3 border-t border-gray-100 dark:border-dark-700/60">
+  <div class="mt-4 pt-3 border-t border-[var(--surface-edge)]">
     <div
       class="flex justify-between text-[10px] font-semibold uppercase tracking-widest mb-2 surface-muted"
     >
@@ -9,7 +9,7 @@
 
     <div
       v-if="maintenance"
-      class="flex h-5 w-full items-center justify-center rounded border border-dashed border-gray-300 dark:border-dark-600 text-[10px] uppercase tracking-widest surface-muted"
+      class="flex h-5 w-full items-center justify-center rounded border border-dashed border-[var(--surface-edge)] text-[10px] uppercase tracking-widest surface-muted"
     >
       {{ t('monitorCommon.maintenancePaused') }}
     </div>

@@ -6,7 +6,7 @@
     @close="emit('close')"
   >
     <div v-if="apiKey" class="space-y-4">
-      <div class="rounded-xl border border-gray-200 p-4 dark:border-dark-600" data-testid="key-test-summary">
+      <div class="surface-subcard p-4" data-testid="key-test-summary">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ apiKey.name }}</p>
@@ -110,7 +110,7 @@
 
           <section
             v-if="result?.status === 'success'"
-            class="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-dark-600"
+            class="surface-subcard space-y-3 p-4"
             :aria-label="t('keys.testModal.response')"
           >
             <h4 class="text-sm font-medium text-gray-900 dark:text-white">{{ t('keys.testModal.response') }}</h4>
