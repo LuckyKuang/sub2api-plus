@@ -39,6 +39,9 @@ test('mobile user-management records keep short fields on the same line and natu
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 })
     await page.goto(`/layout-tests/index.html?view=admin-layout&users=1&theme=${theme}&locale=${locale}`)
+    // Wait for the cold production view import before checking record content
+    // and geometry with their normal assertion limits.
+    await expect(page.locator('.app-layout-admin')).toBeVisible({ timeout: 60_000 })
     const fields = page.locator('.record-card-fields')
     await expect(fields).toHaveCount(3)
     const first = fields.first()
