@@ -305,6 +305,13 @@ CGO_ENABLED=1 go test -C backend -race -tags=integration ./internal/repository -
 Run the focused tests for the changed package or component inside the same
 platform validation container while iterating.
 
+For Vue component suites affected by guest clock corrections, freeze `Date`
+before mounting with `vi.useFakeTimers({ toFake: ['Date'] })` and restore it
+after each test. A backward correction can otherwise make Vue reject
+an event as older than its listener, even when the prior action was awaited.
+Keep scheduling timers real unless the scenario requires timer control; the
+account-creation suite includes a regression against a backward system clock.
+
 The [seven-provider matrix](docs/SEVEN_PROVIDER_TEST_MATRIX.md) maps the critical
 provider scenarios to their observable assertions. The full validation profile
 also runs its unit, integration and frontend gates. These execute the required tests and
