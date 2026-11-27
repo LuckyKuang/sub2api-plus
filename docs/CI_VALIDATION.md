@@ -44,6 +44,9 @@ Admin CLI regressions run the real command against loopback HTTP fixtures in
 both local full validation and the CI repository-policy lane. They cover the
 JWT/password/TOTP export contract, body-only scope, output privacy and failures;
 they never operate a deployed instance.
+Validation operations/workspace regressions also run in repository policy and
+the local full profile. They cover scoped cleanup, WSL lifecycle/encoding,
+download failure, live progress, exact source isolation and PR proof ordering.
 
 The image resolves Go, Node, pnpm, lint, GoReleaser, govulncheck and PyYAML from repository
 declarations. Node uses an exact Node 24 LTS pin in
@@ -71,6 +74,11 @@ Release frontend builds share the `frontend` cache lane with default-branch CI
 under the same exact OS, architecture, toolchain and lock generation. They still
 run frozen installation and the complete production build; other release lanes
 retain their separate cache ownership.
+Production builds force `vue-tsc -b --force` so restored incremental compiler
+state cannot bypass the full compiler or conceal heap exhaustion. Lane execution
+writes private JSON summaries with exact head/base/toolchain/cache identity,
+initial dependency-cache presence, step timing and aggregate container counters.
+These summaries neither establish remote cache hits nor replace submission proof.
 
 ## Containers and platform coverage
 
@@ -88,6 +96,11 @@ GitHub runners and exhaust the heap during the full production `vue-tsc` build.
 The fixed budget applies to local and CI containers and cannot be replaced by
 host `NODE_OPTIONS`. It is a per-process old-space limit, not a total RSS cap;
 the 8-GiB container limit and existing heavy-step serialization remain in force.
+WSL local full checks use disposable exact-commit Linux checkouts to avoid Windows
+bind-mount source I/O; direct-bind diagnosis remains available. Local and CI checks
+share streaming output, report mounts and scoped cleanup. See
+[validation operations](VALIDATION_OPERATIONS.md) for lifecycle, benchmarks,
+network handling and evidence retention.
 
 The Apple lifecycle tests use fake runtime fixtures. Running them inside Linux
 containers does not claim live Apple Containers/WSL integration. Record any

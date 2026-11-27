@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 import json
 import platform
 import re
@@ -28,6 +28,7 @@ if str(TOOLS) not in sys.path:
 import validation_runtime
 import release_validation
 import validation_checks
+import validation_output
 
 DEFAULT_REMOTE = "origin"
 EXPECTED_REPOSITORY = "LuckyKuang/sub2api-plus"
@@ -90,18 +91,18 @@ def run_command(
 ) -> subprocess.CompletedProcess[str]:
     actual_cwd = ROOT if cwd is None else cwd
     try:
-        return subprocess.run(
+        result = subprocess.run(
             [str(item) for item in command],
             cwd=actual_cwd,
             check=False,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
             stdout=subprocess.PIPE if capture else None,
             stderr=(subprocess.STDOUT if merge_stderr else subprocess.PIPE)
             if capture
             else None,
         )
+        return subprocess.CompletedProcess(result.args, result.returncode,
+                                           validation_runtime.decode_output(result.stdout),
+                                           validation_runtime.decode_output(result.stderr))
     except FileNotFoundError as error:
         raise PushCliError(f"required command is unavailable: {error.filename}") from error
 
@@ -380,6 +381,9 @@ def launch_in_validation(
     *,
     base_ref: str | None = None,
     serial: bool = False,
+    exact_head: str | None = None,
+    exact_base: str | None = None,
+    source_mode: str = "bind",
 ) -> None:
     repo = validation_runtime.mount_root(runtime, ROOT)
     script = validation_runtime.container_path(SCRIPT, runtime, ROOT)
@@ -397,6 +401,11 @@ def launch_in_validation(
         argv.extend(["--base-ref", base_ref])
     if serial:
         argv.append("--serial")
+    if runtime.name == "wsl2-docker" and source_mode == "linux":
+        if not exact_head or not exact_base:
+            raise PushCliError("Linux validation workspace requires exact base/head inputs")
+        argv = ["python3", f"{repo}/tools/validation_workspace.py", "run",
+                "--source", repo, "--head", exact_head, "--base", exact_base, "--", *argv]
     try:
         validation_runtime.launch_in_validation(
             runtime,
@@ -404,6 +413,7 @@ def launch_in_validation(
             root=ROOT,
             capture=capture,
             run_step=lambda name, command: run_step(name, command),
+            reports=exact_head is not None,
         )
     except validation_runtime.ValidationRuntimeError as error:
         raise PushCliError(str(error)) from error
@@ -416,17 +426,25 @@ def run_step(
     *,
     lane: str | None = None,
     capture_output: bool = False,
+    queued_seconds: float = 0,
 ) -> None:
     label = f"{lane}: {name}" if lane else name
     with OUTPUT_LOCK:
         print(f"\n[{label}]")
         print(f"$ {display(command)}")
     started = time.monotonic()
-    result = run_command(command, cwd=cwd, capture=capture_output)
+    streamed = capture_output
+    if streamed:
+        try:
+            result = validation_output.stream(command, cwd=cwd or ROOT, lock=OUTPUT_LOCK, label=label)
+        except FileNotFoundError as error:
+            raise PushCliError(f"required command is unavailable: {error.filename}") from error
+    else:
+        result = run_command(command, cwd=cwd, capture=False)
     elapsed = time.monotonic() - started
+    if validation_output.ACTIVE_REPORT:
+        validation_output.ACTIVE_REPORT.step(name, lane, elapsed, result.returncode, queued_seconds)
     with OUTPUT_LOCK:
-        if capture_output and result.stdout:
-            print(result.stdout.rstrip())
         outcome = "completed" if result.returncode == 0 else "failed"
         print(f"[{label}] {outcome} in {elapsed:.1f}s")
     if result.returncode != 0:
@@ -561,6 +579,7 @@ def run_local_checks(
                         print(f"\n[Lane {lane_name}] stopped before {step.name}")
                     return
                 try:
+                    queued_at = time.monotonic()
                     with memory_slot if step.name in memory_steps else nullcontext():
                         if stop_requested.is_set():
                             return
@@ -570,6 +589,7 @@ def run_local_checks(
                             step.cwd,
                             lane=lane_name,
                             capture_output=True,
+                            queued_seconds=time.monotonic() - queued_at,
                         )
                 except Exception:
                     stop_requested.set()
@@ -823,6 +843,23 @@ def default_pr_body(branch: str, proof: ValidationProof) -> str:
     )
 
 
+def verify_pull_request_proof(repository: str, url: str, proof: ValidationProof) -> None:
+    match = re.fullmatch(r"https://github\.com/" + re.escape(repository) + r"/pull/(\d+)", url)
+    if not match:
+        raise PushCliError("GitHub did not return a pull request in the expected repository")
+    try:
+        pr = json.loads(capture(["gh", "api", f"repos/{repository}/pulls/{match.group(1)}"]))
+        markers = VALIDATION_MARKER_RE.findall(str(pr.get("body") or ""))
+        if (pr.get("head", {}).get("sha") != proof.head
+                or pr.get("base", {}).get("sha") != proof.base
+                or len(markers) != 1
+                or json.loads(markers[0]) != json.loads(VALIDATION_MARKER_RE.search(validation_marker(proof)).group(1))
+                or (pr.get("state") != "open" and not pr.get("merged"))):
+            raise PushCliError("pull-request proof changed before publishing local success")
+    except (ValueError, AttributeError, TypeError) as error:
+        raise PushCliError("GitHub returned an invalid pull-request proof") from error
+
+
 def create_or_update_pull_request(
     repository: str,
     branch: str,
@@ -853,26 +890,24 @@ def create_or_update_pull_request(
             )
         body = with_validation_marker(str(pr.get("body") or supplied_body), proof)
         number = str(pr.get("number"))
-        run_step(
-            "Update pull-request validation marker",
-            [
-                "gh",
-                "api",
-                "--method",
-                "PATCH",
-                f"repos/{repository}/pulls/{number}",
-                "-f",
-                f"body={body}",
-            ],
-        )
-        url = str(pr.get("url") or number)
-        print(f"Pull request ready: {url}")
+        with tempfile.TemporaryDirectory(prefix="sub2api-pr-") as directory:
+            payload = Path(directory) / "payload.json"
+            payload.write_text(json.dumps({"body": body}), encoding="utf-8")
+            run_step("Update pull-request validation marker", [
+                "gh", "api", "--method", "PATCH", f"repos/{repository}/pulls/{number}",
+                "--silent", "--input", str(payload),
+            ])
+        url = str(pr.get("url") or f"https://github.com/{repository}/pull/{number}")
+        verify_pull_request_proof(repository, url, proof)
+        print(f"Pull-request proof verified: {url}")
         return url
 
     pr_title = title or capture(["git", "log", "-1", "--format=%s"])
     body = with_validation_marker(supplied_body, proof)
-    url = capture(
-        [
+    with tempfile.TemporaryDirectory(prefix="sub2api-pr-") as directory:
+        body_path = Path(directory) / "body.md"
+        body_path.write_text(body, encoding="utf-8")
+        url = capture([
             "gh",
             "pr",
             "create",
@@ -884,12 +919,12 @@ def create_or_update_pull_request(
             branch,
             "--title",
             pr_title,
-            "--body",
-            body,
-        ]
-    )
+            "--body-file",
+            str(body_path),
+        ])
     if not url:
         raise PushCliError("gh pr create did not return a pull-request URL")
+    verify_pull_request_proof(repository, url, proof)
     print(f"Pull request created: {url}")
     return url
 
@@ -1040,13 +1075,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="confirm deleting all local Sub2API validation images, caches, and containers (only for clean)",
     )
+    parser.add_argument("--wsl-workspace", choices=("linux", "bind"), default="linux",
+                        help="WSL full validation source storage; bind is the diagnostic comparison mode")
     return parser.parse_args()
 
 
 def main() -> int:
     global ROOT
+    validation_output.configure_console()
     args = parse_args()
     ROOT = args.repo_root.resolve()
+    sessions = ExitStack()
     try:
         if args.in_validation:
             if validation_runtime.host_os_forbids_in_validation():
@@ -1063,25 +1102,30 @@ def main() -> int:
                 raise PushCliError("in-container execution only supports check")
             branch = current_branch()
             check_toolchains()
-            run_local_checks(
-                args.remote,
-                branch,
-                Runtime("in-validation", compose_required=False),
-                base_ref=args.base_ref,
-                serial=args.serial,
-            )
+            with validation_output.report_scope(ROOT, base=args.base_ref):
+                run_local_checks(
+                    args.remote,
+                    branch,
+                    Runtime("in-validation", compose_required=False),
+                    base_ref=args.base_ref,
+                    serial=args.serial,
+                )
             print("\nIn-container push checks passed.")
             return 0
 
+        if args.action == "clean" and not args.yes:
+            print(
+                "push-cli clean 需要 --yes 确认;该操作会删除本机所有 "
+                "Sub2API 验证镜像、缓存与容器。",
+                file=sys.stderr,
+            )
+            return 1
+
+        repository = github_gate(args.remote)
+        default_branch = repository_default_branch(repository)
         if args.action == "clean":
-            if not args.yes:
-                print(
-                    "push-cli clean 需要 --yes 确认;该操作会删除本机所有 "
-                    "Sub2API 验证镜像、缓存与容器。",
-                    file=sys.stderr,
-                )
-                return 1
             runtime = probe_runtime()
+            sessions.enter_context(validation_runtime.runtime_session(runtime))
             validation_runtime.purge_validation_resources(
                 runtime,
                 root=ROOT,
@@ -1091,7 +1135,6 @@ def main() -> int:
             print("\n已删除本机所有 Sub2API 验证镜像、缓存与容器。")
             return 0
 
-        repository = github_gate(args.remote)
         if args.action != "submit-pr" and (
             args.profile != FULL_PROFILE or args.tag is not None
         ):
@@ -1106,6 +1149,7 @@ def main() -> int:
             raise PushCliError("release-finalization does not run the full serial matrix")
         if args.action == "ensure":
             runtime = probe_runtime()
+            sessions.enter_context(validation_runtime.runtime_session(runtime))
             validation_runtime.cleanup_validation_runtime(
                 runtime,
                 root=ROOT,
@@ -1121,7 +1165,6 @@ def main() -> int:
             watch_actions(repository, branch)
             return 0
 
-        default_branch = repository_default_branch(repository)
         if args.action in {"push", "submit-pr"}:
             require_working_branch(branch, default_branch)
             require_no_git_operation()
@@ -1151,6 +1194,7 @@ def main() -> int:
             run_release_finalization_checks(proof, branch, args.remote)
         else:
             runtime = probe_runtime()
+            sessions.enter_context(validation_runtime.runtime_session(runtime))
             validation_runtime.cleanup_validation_runtime(
                 runtime,
                 root=ROOT,
@@ -1161,8 +1205,11 @@ def main() -> int:
             launch_in_validation(
                 runtime,
                 args.remote,
-                base_ref=base_ref,
+                base_ref=proof.base if proof else capture(["git", "rev-parse", base_ref or f"{args.remote}/{default_branch}"]),
                 serial=args.serial,
+                exact_head=proof.head if proof else capture(["git", "rev-parse", "HEAD"]),
+                exact_base=proof.base if proof else capture(["git", "rev-parse", base_ref or f"{args.remote}/{default_branch}"]),
+                source_mode=args.wsl_workspace,
             )
             run_runtime_final_gate(runtime)
         ensure_clean_after_checks()
@@ -1173,7 +1220,6 @@ def main() -> int:
             assert proof is not None
             require_unchanged_proof(proof, args.remote, default_branch)
             push_branch(args.remote, branch)
-            publish_validation_status(repository, proof)
             create_or_update_pull_request(
                 repository,
                 branch,
@@ -1182,10 +1228,13 @@ def main() -> int:
                 title=args.title,
                 body_file=args.body_file,
             )
+            publish_validation_status(repository, proof)
         return 0
-    except PushCliError as error:
+    except (PushCliError, validation_runtime.ValidationRuntimeError) as error:
         print(f"push-cli stopped: {error}", file=sys.stderr)
         return 1
+    finally:
+        sessions.close()
 
 
 if __name__ == "__main__":

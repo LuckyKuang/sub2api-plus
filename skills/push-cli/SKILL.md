@@ -8,8 +8,8 @@ description: >-
   local matrix. submit-pr is the only final promotion boundary: its default
   full profile requires the latest default-branch base, runs every check inside
   the platform validation container, binds the result to exact base/head SHAs,
-  pushes, publishes the local-validation commit status, and creates or reuses
-  the pull request. The release-finalization profile is reserved for
+  pushes, creates or reuses and verifies the pull request, then publishes the
+  local-validation commit status. The release-finalization profile is reserved for
   release-cli and requires a verified tag plus an exactly regenerated metadata
   tree. Never push the repository default branch.
 ---
@@ -46,9 +46,10 @@ the current GitHub default branch, requires that commit to be contained by the
 candidate branch, records the exact base and head, and runs the complete local
 matrix inside the platform validation container. After the matrix it refetches
 the default branch and requires the worktree, base, and head to be unchanged.
-It then pushes the exact head, publishes the profile-specific
-`sub2api/local-validation=success`, and creates or reuses one pull request to
-the default branch.
+It then pushes the exact head, creates or reuses one pull request to the default
+branch, reads back its exact base/head/typed marker, and finally publishes the
+profile-specific `sub2api/local-validation=success`. Auto-merge may act immediately
+after success; no open-PR lookup follows that final mutation.
 
 `release-cli finalize` alone invokes `submit-pr --profile
 release-finalization --tag <tag>`. That path requires the deterministic branch,
@@ -87,7 +88,9 @@ Git transfers only `HEAD:<current-branch>`. Never use `--force`, `--all`,
 Only `check`, `submit-pr`, `ensure`, and `clean` access the validation runtime.
 
 - macOS: Apple Containers only; no Docker, Colima, or host-toolchain fallback.
-- Windows: Docker inside a running WSL2 Debian or Ubuntu distribution only.
+- Windows: Docker inside WSL2 Debian or Ubuntu only. The launcher starts an
+  installed supported distribution if stopped and owns its foreground session
+  until the action ends.
 - Linux: directly reachable Docker Engine and Compose plugin.
 
 Every full-profile Go, frontend, Python policy, installer, and lifecycle check
@@ -98,6 +101,10 @@ same container environment; there is no host-validation exception.
 The shared launcher fixes the Go and Node memory budgets described in
 [CI validation](../../docs/CI_VALIDATION.md#containers-and-platform-coverage),
 so local and CI builds do not inherit different host defaults.
+WSL full checks use an exact-commit disposable Linux checkout; `--wsl-workspace
+bind` is the diagnostic comparison mode. Complete commands, progress/report
+retention, proxy handling and scoped BuildKit ownership are in
+[validation operations](../../docs/VALIDATION_OPERATIONS.md).
 After every container validation attempt, push-cli relies on `--rm` to remove
 the one-shot container and its writable snapshot. It retains only the current
 deterministic project validation image and dependency-cache generation, and
@@ -108,8 +115,10 @@ projects or runtime resources. Validation containers carry the label
 image/cache cleanup before ensuring the image. Docker also removes stopped
 project containers by label and status, including leftovers from a hard kill.
 Apple Containers relies on `--rm`; inspect and remove only leftover project
-validation containers after an interrupted run. `clean --yes` removes all
-project validation images/caches and, on Docker, project validation containers.
+validation containers after an interrupted run. `clean --yes` authenticates
+before deletion, releases labelled project containers before deleting their
+images, removes current/historical dependency caches and precisely owned
+validation BuildKit records, and retains diagnostic summaries.
 
 ## Pull-Request Proof
 
