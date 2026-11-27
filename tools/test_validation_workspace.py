@@ -83,6 +83,16 @@ class WorkspaceTests(unittest.TestCase):
         with workspace.snapshot(self.source, self.head, self.head) as target:
             self.assertEqual(path.read_bytes(), (target / "frontend/source.txt").read_bytes())
 
+    def test_mixed_clean_line_endings_do_not_invalidate_the_io_comparison(self):
+        workspace.git(self.source, "config", "core.autocrlf", "true")
+        # Existing LF files are still Git-clean on Windows, while a fresh
+        # checkout converts them. Measure the same physical bytes on both sides.
+        report = workspace.benchmark(self.source, self.head, self.head)
+        self.assertEqual(2, report["checkout_representation_files"])
+        self.assertEqual(report["samples"]["bind"][0]["sha256"],
+                         report["samples"]["linux"][0]["sha256"])
+        self.assertEqual(b"accepted source\n", (self.source / "frontend/source.txt").read_bytes())
+
     def test_cli_rewrites_source_arguments_and_cleans_up_after_child_failure(self):
         script = self.source / "child.py"
         evidence = Path(self.temporary.name) / "child.json"

@@ -51,8 +51,11 @@ python3 tools/validation_workspace.py benchmark --source /workspace \
 
 Mount `/tmp/sub2api-validation-report` to the persistent report directory if the
 comparison must survive container deletion. The comparison reads the same tracked
-bytes in both locations, verifies their content digest and alternates order for
-three paired rounds. It measures first-pass/repeated file reads, not clean OS
+bytes in both locations and alternates order for three paired rounds. An initial
+parity pass reads both trees, synchronizes only LF/CRLF representation differences
+in the disposable benchmark tree, and rejects other differences. Each measured
+pair must have the same content digest. The report records preparation time and
+the number of representation corrections. It measures repeated file reads, not clean OS
 caches, application speed, network throughput or IOPS. Do not flush global OS
 caches or extrapolate this ratio into an end-to-end speed claim. Compare full
 matrix summaries for the latter, retaining toolchain, head, limits and dependency

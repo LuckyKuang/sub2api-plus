@@ -83,6 +83,25 @@ def benchmark(source: Path, head: str, base: str, *, rounds: int = 3) -> dict[st
     paths = git(source, "ls-files", "-z").rstrip("\0").split("\0")
     measurements: dict[str, list[dict[str, object]]] = {"bind": [], "linux": []}
     with snapshot(source, head, base) as target:
+        preparation_started = time.monotonic()
+        representation_files = 0
+        # A clean Windows tree can contain a mix of LF and CRLF even when
+        # core.autocrlf=true. Match those representations only for the I/O
+        # experiment; reject every difference beyond checkout line endings.
+        for relative in paths:
+            original, checked_out = source / relative, target / relative
+            if original.is_symlink() or checked_out.is_symlink():
+                if not (original.is_symlink() and checked_out.is_symlink()
+                        and os.readlink(original) == os.readlink(checked_out)):
+                    raise RuntimeError("I/O comparison contains differing symlinks")
+                continue
+            content, candidate = original.read_bytes(), checked_out.read_bytes()
+            if content != candidate:
+                if b"\0" in content or content.replace(b"\r\n", b"\n") != candidate.replace(b"\r\n", b"\n"):
+                    raise RuntimeError("I/O comparison differs beyond checkout line endings")
+                checked_out.write_bytes(content)
+                representation_files += 1
+        preparation_seconds = time.monotonic() - preparation_started
         for index in range(rounds):
             # Alternate order to reduce the advantage of warming the other side.
             order = (("bind", source), ("linux", target))
@@ -91,6 +110,9 @@ def benchmark(source: Path, head: str, base: str, *, rounds: int = 3) -> dict[st
                 measurements[name].append(measurement)
                 print(json.dumps({"event": "io_sample", "storage": name,
                                   "round": index + 1, **measurement}), flush=True)
+            pair = [measurements[name][-1]["sha256"] for name in ("bind", "linux")]
+            if pair[0] != pair[1]:
+                raise RuntimeError("I/O comparison source content changed or differs")
     digests = {item["sha256"] for samples in measurements.values() for item in samples}
     if len(digests) != 1:
         raise RuntimeError("I/O comparison source content changed or differs")
@@ -98,7 +120,9 @@ def benchmark(source: Path, head: str, base: str, *, rounds: int = 3) -> dict[st
                for name, samples in measurements.items()}
     return {"head": head, "base": base, "rounds": rounds, "samples": measurements,
             "median_seconds": medians, "bind_to_linux_ratio": medians["bind"] / medians["linux"],
-            "cache_scope": "first pass and repeated reads; OS caches are not flushed"}
+            "preparation_seconds": preparation_seconds,
+            "checkout_representation_files": representation_files,
+            "cache_scope": "parity preparation reads both trees before repeated reads; OS caches are not flushed"}
 
 
 def main() -> int:
