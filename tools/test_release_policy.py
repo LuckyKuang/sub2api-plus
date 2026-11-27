@@ -152,7 +152,7 @@ class ReleaseContainerTests(unittest.TestCase):
     command = [sys.executable, "tools/check_release.py", "--tag", TAG]
 
     def test_validation_container_forwards_proxy_names_without_values(self) -> None:
-        runtime = validation_runtime.Runtime("linux-docker", (), None)
+        runtime = validation_runtime.Runtime("docker", (), None)
         with tempfile.TemporaryDirectory() as directory, mock.patch.dict(
             os.environ,
             {
@@ -1061,17 +1061,6 @@ class ReleaseDocumentTests(unittest.TestCase):
                 f"Immutable release, for example `{old_oci}`",
                 f"Git/GitHub: {old}",
                 f"GHCR: ghcr.io/luckykuang/sub2api-plus:{old_oci}",
-            ),
-            "deploy/APPLE_CONTAINER.md": (
-                f"Git/GitHub: {old}",
-                f"Application: {old_application}",
-                f"Apple/OCI image: ghcr.io/luckykuang/sub2api-plus:{old_oci}",
-                f"--build-arg VERSION={old_application} \\",
-                f"--tag ghcr.io/luckykuang/sub2api-plus:{old_oci} \\",
-                f"APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/luckykuang/sub2api-plus:{old_oci}",
-            ),
-            "deploy/.env.example": (
-                f"this source revision is tagged sub2api-plus:{old_oci}; use that value",
             ),
             "UPSTREAM.md": (
                 f"Git/GitHub: {old}",

@@ -121,9 +121,9 @@ untracked while durable behavior is committed to its owning documentation and
 tests. Preserve secret handling, generated-code, migration, pnpm,
 default-branch, container-only validation, protected PR, immutable tag,
 publication authorization, and upstream-merge rules. Every validation command,
-including focused iteration checks, must run in Apple Containers on macOS,
-Docker inside WSL2 Debian or Ubuntu on Windows, or Docker on Linux; host-side
-validation is forbidden, including focused release metadata and deterministic
+including focused iteration checks, must run in Colima Docker containers on macOS,
+Docker inside WSL2 Debian or Ubuntu on Windows, or Docker on Linux. macOS
+deployments also use Colima Docker. Host-side validation is forbidden, including focused release metadata and deterministic
 finalization checks. `Submit PR` references this same environment for both
 profiles. After every validation attempt, remove project
 validation containers, temporary resources, and historical writable snapshots.

@@ -31,15 +31,8 @@ APPLICATION_MAPPING_RE = re.compile(
 GHCR_IMAGE_RE = re.compile(
     rf"(ghcr\.io/luckykuang/sub2api-plus:)({OCI_TAG_TEXT})()"
 )
-APPLE_CONTAINER_SOURCE_IMAGE_RE = re.compile(
-    rf"(this source revision is tagged sub2api-plus:)({OCI_TAG_TEXT})(; use that value)"
-)
 OCI_EXAMPLE_RE = re.compile(
     rf"(for example `)({OCI_TAG_TEXT})(`)"
-)
-DOCKER_BUILD_VERSION_RE = re.compile(
-    rf"(--build-arg VERSION=)({APPLICATION_VERSION_TEXT})(\s+\\)$",
-    re.MULTILINE,
 )
 
 GIT_TAG_VALUE = "git-tag"
@@ -88,42 +81,6 @@ DOCUMENT_RULES = (
             ),
             CurrentValueRule(GHCR_IMAGE_RE, 1, OCI_TAG_VALUE, "GHCR image mapping"),
             CurrentValueRule(OCI_EXAMPLE_RE, 1, OCI_TAG_VALUE, "OCI tag example"),
-        ),
-    ),
-    DocumentRule(
-        "deploy/APPLE_CONTAINER.md",
-        0,
-        0,
-        (
-            CurrentValueRule(
-                GIT_TAG_MAPPING_RE, 1, GIT_TAG_VALUE, "Git/GitHub release mapping"
-            ),
-            CurrentValueRule(
-                APPLICATION_MAPPING_RE,
-                1,
-                APPLICATION_VERSION_VALUE,
-                "application version mapping",
-            ),
-            CurrentValueRule(GHCR_IMAGE_RE, 3, OCI_TAG_VALUE, "Apple/OCI image"),
-            CurrentValueRule(
-                DOCKER_BUILD_VERSION_RE,
-                1,
-                APPLICATION_VERSION_VALUE,
-                "Docker build version",
-            ),
-        ),
-    ),
-    DocumentRule(
-        "deploy/.env.example",
-        0,
-        0,
-        (
-            CurrentValueRule(
-                APPLE_CONTAINER_SOURCE_IMAGE_RE,
-                1,
-                OCI_TAG_VALUE,
-                "Apple Container image example",
-            ),
         ),
     ),
     DocumentRule(

@@ -32,10 +32,24 @@ SH
 chmod +x "$fixture_dir/bin/curl" "$fixture_dir/bin/openssl"
 export PATH="$fixture_dir/bin:$PATH"
 
+# Exercise the actual command renderer without initializing an installation.
+source <(sed '/^main "\$@"$/d' "$repo_root/deploy/docker-deploy.sh")
+uname() { printf 'Darwin\n'; }
+[[ "$(SUB2API_COLIMA_PROFILE=default deployment_docker_command)" == 'docker --context colima' ]]
+[[ "$(SUB2API_COLIMA_PROFILE=quality deployment_docker_command)" == 'docker --context colima-quality' ]]
+[[ "$(SUB2API_COLIMA_PROFILE= deployment_docker_command)" == 'docker --context colima' ]]
+if SUB2API_COLIMA_PROFILE='../foreign' deployment_docker_command >/dev/null 2>&1; then
+  echo 'Invalid Colima profile must fail before preparing files' >&2
+  exit 1
+fi
+unset -f uname
+
 for installation in first second; do
   (cd "$fixture_dir/$installation" && bash "$repo_root/deploy/docker-deploy.sh" > setup.log 2>&1)
   grep -Eq '^ADMIN_EMAIL=admin-[0-9a-f]{12}@sub2api\.local$' "$fixture_dir/$installation/.env"
   grep -Fxq 'ADMIN_PASSWORD=' "$fixture_dir/$installation/.env"
+  grep -Fq 'compose --env-file .env -f docker-compose.yml up -d' "$fixture_dir/$installation/setup.log"
+  [[ -f "$fixture_dir/$installation/docker-compose.yml" ]]
 done
 first_email=$(sed -n 's/^ADMIN_EMAIL=//p' "$fixture_dir/first/.env")
 second_email=$(sed -n 's/^ADMIN_EMAIL=//p' "$fixture_dir/second/.env")

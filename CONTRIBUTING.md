@@ -213,14 +213,14 @@ Two-to-four way view switches use `.segmented-control`/`.segmented-option` with
 `aria-pressed`.
 
 All validation, including focused checks while iterating, must run in the
-platform validation container: Apple Containers on macOS, Docker inside WSL2
+platform validation container: Colima Docker containers on macOS, Docker inside WSL2
 Debian or Ubuntu on Windows, and Docker on Linux. Do not run tests, lint,
 typechecking, builds, policy checks, or other validation on the host.
 After every validation attempt, successful or failed, remove the one-shot
 project validation container, temporary resources, and historical writable
 snapshots. Retain the Sub2API validation image whose deterministic identity
 matches the current resolved Go, Node, pnpm, golangci-lint, GoReleaser,
-govulncheck and PyYAML pins.
+govulncheck, Compose and PyYAML pins.
 Retain dependency caches only for the generation matching that image and the
 current Go and pnpm lock inputs. Remove stale Sub2API validation generations;
 never prune unrelated projects or global runtime, builder, image, volume, or
@@ -231,13 +231,14 @@ On Windows the launcher initializes the WSL cache root and enumerates direct
 child paths without newline-valued command arguments, so cleanup also works
 on a fresh installation and across the Windows/WSL command boundary.
 The launcher cleans up stale validation images and caches before each run.
-On Docker it also sweeps stopped project containers by the
+On every platform it also sweeps stopped project containers by the
 `sub2api-validation` label, including those left by a hard kill that `--rm`
-could not reclaim. Apple Containers relies on `--rm`; after an interrupted
-run, inspect its containers and remove only leftover project validation
-containers. On macOS the cross-project Apple Builder cache stays under
-`deploy/APPLE_CONTAINER.md` manual guidance and is never touched. To reclaim
-validation images and caches, plus project containers on Docker, run
+could not reclaim. Colima builds and cleanup use the verified profile's Docker
+context and its matching Buildx builder. Named Colima profiles have separate
+host dependency-cache roots so cleanup cannot remove another profile's active
+mounts; see [scoped cleanup](docs/VALIDATION_OPERATIONS.md#scoped-cleanup).
+To reclaim resources in the selected runtime/profile,
+including validation images, caches and labelled containers, run
 `python3 skills/push-cli/scripts/push_cli.py clean --yes`; it is manual only,
 and it deletes the current generation, so the next validation rebuilds the
 toolchain and redownloads dependencies.
@@ -403,7 +404,7 @@ python3 skills/push-cli/scripts/push_cli.py submit-pr
 ```
 
 `submit-pr` defaults to the `full` profile. It requires the latest
-default-branch base and runs the complete matrix inside Apple Containers on
+default-branch base and runs the complete matrix inside Colima Docker containers on
 macOS, Docker inside WSL2 Debian or Ubuntu on Windows, and Docker on Linux.
 Backend tests run before backend lint/policy while the frontend lane runs
 concurrently within the 4-CPU/8-GiB container and report step/lane wall-clock durations; no check is
@@ -457,10 +458,12 @@ credentials use the same `SUB2API_TEST_REDIS_USERNAME` / password bindings.
 These variables are also forwarded by name. Never share its database with the
 repository suite: both suites write and truncate fixtures independently.
 
-Supply disposable databases reachable from the validation container. For Apple
-Containers, `SUB2API_VALIDATION_APPLE_NETWORK` explicitly selects an existing
-named network; the default leaves runtime networking unchanged. It is rejected
-on other runtimes. Reusing PostgreSQL requires dedicated test databases and
+Supply disposable databases reachable from the validation container.
+`SUB2API_VALIDATION_DOCKER_NETWORK` selects an existing project-owned Docker
+network on Colima, WSL2 or Linux; reserved `host`, `none` and `bridge` values are
+rejected. Unset leaves Docker networking unchanged.
+See [network configuration](docs/VALIDATION_OPERATIONS.md#macos-colima).
+Reusing PostgreSQL requires dedicated test databases and
 credentials. Redis logical databases do not isolate Pub/Sub: suites exercising
 invalidation must use a dedicated temporary Redis process, which may run inside
 the existing Redis container on a separate port with persistence disabled.
@@ -477,13 +480,13 @@ exit and socket/port closure before deleting its configuration and credentials.
 An accepted `SHUTDOWN NOSAVE` command alone does not prove cleanup succeeded.
 
 Use `redis-cli -e` for every scripted health or cleanup command: the default CLI
-can return zero on `WRONGPASS`, `NOAUTH` or `NOPERM`. For Apple exec, do not rely
-on `--env`/`--env-file` replacing an existing `REDISCLI_AUTH`; supply the secret
-through stdin and export it in the child shell. For a test-owned process only:
+can return zero on `WRONGPASS`, `NOAUTH` or `NOPERM`. For a test-owned process,
+supply the selected credential through stdin and export it in the child shell.
+The Colima example uses the explicitly verified context:
 
 ```bash
 printf '%s\n' "$validation_redis_password" | \
-  container exec --interactive "$validation_redis_container" sh -c '
+  docker --context colima exec --interactive "$validation_redis_container" sh -c '
 IFS= read -r REDISCLI_AUTH || exit 1
 if [ -n "$REDISCLI_AUTH" ]; then
     export REDISCLI_AUTH

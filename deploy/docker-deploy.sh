@@ -9,7 +9,7 @@
 #   - Creates necessary data directories
 #
 # After running this script, you can start services with:
-#   docker-compose up -d
+#   docker compose up -d (macOS: docker --context colima compose up -d)
 # =============================================================================
 
 set -e
@@ -59,8 +59,28 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Print commands for the selected runtime; preparation never starts services.
+deployment_docker_command() {
+    if [[ "$(uname -s)" != Darwin ]]; then
+        echo docker
+        return
+    fi
+    local profile="${SUB2API_COLIMA_PROFILE:-default}"
+    if [[ ! "$profile" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+        print_error "Invalid SUB2API_COLIMA_PROFILE" >&2
+        return 1
+    fi
+    local context=colima
+    if [[ "$profile" != default ]]; then
+        context="colima-${profile}"
+    fi
+    echo "docker --context ${context}"
+}
+
 # Main installation function
 main() {
+    local docker_command
+    docker_command=$(deployment_docker_command) || exit 1
     echo ""
     echo "=========================================="
     echo "  Sub2API Plus Deployment Preparation"
@@ -167,10 +187,10 @@ main() {
     echo "Next steps:"
     echo "  1. (Optional) Edit .env to customize configuration"
     echo "  2. Start services:"
-    echo "     docker-compose up -d"
+    echo "     ${docker_command} compose --env-file .env -f docker-compose.yml up -d"
     echo ""
     echo "  3. View logs:"
-    echo "     docker-compose logs -f sub2api"
+    echo "     ${docker_command} compose --env-file .env -f docker-compose.yml logs -f sub2api"
     echo ""
     echo "  4. Access Web UI:"
     echo "     http://localhost:8080"

@@ -6,6 +6,50 @@ then run `skills/push-cli/scripts/push_cli.py submit-pr` once on that candidate.
 A new head or default-branch base requires a new full proof. CI may run alongside
 the local matrix for the same candidate; neither result substitutes for the other.
 
+## macOS Colima
+
+macOS validation and deployment use Colima with the Docker runtime, Compose and
+Buildx. Prepare the runtime as described in [the Colima guide](../deploy/COLIMA.md).
+Use at least four CPUs and ten GiB VM memory; the validation container keeps its
+existing four-CPU/eight-GiB limit, Go memory target and Node heap budget.
+
+```bash
+colima start --runtime docker --cpus 4 --memory 10 --activate=false
+python3 skills/push-cli/scripts/push_cli.py ensure
+```
+
+`SUB2API_COLIMA_PROFILE` selects a profile (default `default`, including an empty
+value). The launcher reads `colima --profile <profile> status --json`, requires a
+running Docker runtime and sufficient VM resources, and checks the profile's
+`docker_socket` against its Docker context endpoint. Context names follow
+Colima's [profile convention](https://colima.run/docs/profiles/): `colima` for
+`default`, `colima-<profile>` otherwise. Every image, run, Compose and cleanup
+operation uses explicit `docker --context <context>`; builds and Buildx cache
+operations select the matching builder explicitly. Global Docker context,
+`DOCKER_HOST`, `DOCKER_CONTEXT`, `BUILDX_BUILDER` and `BUILDKIT_HOST` cannot redirect
+these operations. The launcher neither changes the global context nor starts,
+resizes or stops a profile. An unavailable/wrong runtime, mismatched endpoint or
+missing Compose/Buildx is a hard failure. Buildx must use the `docker` driver
+with exactly one running node on that context/socket; a stored builder sharing
+the context name cannot substitute a foreign endpoint.
+
+For a named profile, start it explicitly and bind the same name to the launcher:
+
+```bash
+colima start validation --runtime docker --cpus 4 --memory 10 --activate=false
+SUB2API_COLIMA_PROFILE=validation python3 skills/push-cli/scripts/push_cli.py ensure
+```
+
+For isolated PostgreSQL/Redis fixtures, create a project-owned Docker network in
+that context and pass its name as `SUB2API_VALIDATION_DOCKER_NETWORK`. The
+launcher attaches the validation container to it; forward fixture DSNs and
+Redis bindings by environment name as usual. The variable defaults to unset
+(the Docker default network), accepts a single project-owned network name and cannot be
+combined with `SUB2API_VALIDATION_WSL_NETWORK`. Remove owned fixture services
+and their network after each attempt. Never use a running application's data
+or print full Docker/Compose inspection output. Reserved `host`, `none` and
+`bridge` values are rejected; WSL host networking keeps its dedicated option.
+
 ## WSL lifecycle and arguments
 
 On Windows, the launcher selects only installed WSL2 Debian/Ubuntu distributions,
@@ -106,6 +150,13 @@ privacy policy and is not covered by this layout-only command.
 
 ## Network and image preparation
 
+Compose configuration checks run inside the pinned image, using the official
+binary pinned in `.tool-versions` and all four maintained Compose templates.
+Only the tracked `.env.example` is loaded, with inert external-service values
+for the standalone template; the parser receives no Docker socket
+or private deployment environment. Host-side Compose parsing is not a validation
+exception. Deployments continue to use the selected runtime's `docker compose`.
+
 Reuse an image only when its deterministic toolchain/Dockerfile identity matches.
 Missing images require downloads. The pinned lint binary comes from its official
 versioned GitHub archive; a failed download stops the install before the completion
@@ -127,7 +178,12 @@ proxy credentials. A successful probe does not guarantee the subsequent transfer
 `push-cli clean --yes` first passes the authenticated repository gate, then stops
 and removes only labelled validation containers before deleting their images.
 WSL dependencies live in `~/.cache/sub2api-validation/<generation>` on Linux
-storage so session restarts do not discard them. The launcher prepares all Go,
+storage so session restarts do not discard them. The default Colima profile
+uses the same path under the macOS home. Named Colima profiles use
+`~/.cache/sub2api-validation-colima-<profile>/<generation>` so another profile's
+cleanup cannot delete caches mounted by an active validation. Image, container,
+BuildKit and dependency cleanup affect only the selected profile; switching
+profiles does not clean another VM's resources. The launcher prepares all Go,
 pnpm and node_modules mounts through `cache_mounts`; the command builder
 consumes that supplied list and does not create an implicit dependency overlay.
 Cache and home-resolution test fixtures use private temporary homes. Test a
@@ -151,12 +207,13 @@ Ordinary cleanup retains the current home generation and removes the historical
 `/tmp/sub2api-validation-cache` root.
 It also prunes precisely identified BuildKit record IDs rooted in the validation
 Dockerfile's `/etc/sub2api-validation` marker, with its installation ancestors and
-known browser/package-manager/workspace continuation. Generic base-image records
+known browser/package-manager/Compose/workspace continuation. Generic base-image records
 and unrelated descendants are retained. Records shared with retained images also
 keep their reusable build metadata; pruning them would not reclaim layer storage.
 See Docker's [Shared record semantics](https://docs.docker.com/reference/cli/docker/buildx/du/).
 Unknown ownership is not permission to
-delete a record. Apple Builder's shared cache remains outside automatic cleanup.
+delete a record. Colima inspection/pruning stays on the verified context and
+its matching builder; records from other projects remain outside ownership.
 
 Ordinary cleanup defers all deletion while another labelled validation is running.
 Otherwise it preserves the current image/dependency generation, removes stopped

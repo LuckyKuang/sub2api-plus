@@ -3,7 +3,8 @@
 本轮从 `fix/seven-platforms-main-sync@27c5e62f4` 完成 B0–B5 七平台能力补齐：保留合并
 `85fb3c82c` 中目标 `2dab72aac` 与 surgeonfish 检查点 `e2bbc80dc` 的实现，新增首批 Files、
 Start 权益和可选 off-peak 持久恢复。完整后端 unit/integration/lint、前端检查和构建、
-扩展关键门禁、14 条 Chromium 管理链及定向 race 已在 Apple Containers 通过。
+扩展关键门禁、14 条 Chromium 管理链及定向 race 先前已在 Apple Containers 通过。
+后续 macOS 验证及部署统一使用 Colima Docker；这里保留历史运行环境，不改写既有证据。
 各项适用范围、断言与实际结果见[七平台测试矩阵](SEVEN_PROVIDER_TEST_MATRIX.md#capability-completion-verification)。
 旧提交的通过记录只对各自源码树有效，不代替新增能力的验证。
 本清单描述网关验收行为；具体使用哪一层测试证明，以矩阵和实际运行记录为准。

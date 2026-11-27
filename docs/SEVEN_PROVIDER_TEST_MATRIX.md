@@ -1,5 +1,10 @@
 # Seven-provider business regression matrix
 
+Current macOS validation and deployment use Colima Docker under
+[validation operations](VALIDATION_OPERATIONS.md#macos-colima). Dated Apple
+Containers results below describe their historical runs and are not current
+runtime instructions or proof for a changed source tree.
+
 ## v0.2.25 import requirements
 
 - OpenAI. `TestAnthropicUpstreamBuildersReportIdentity` drives the production

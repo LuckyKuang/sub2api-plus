@@ -85,5 +85,27 @@ RUN pnpm dlx "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium \
 # Keep the pinned package manager available when runtime networking is disabled.
 RUN corepack prepare "pnpm@${PNPM_VERSION}" --activate
 
+# Parse deployment configuration inside this image, without a Docker socket.
+ARG DOCKER_COMPOSE_VERSION=5.6.0
+RUN set -eu; \
+    case "${TARGETARCH:-$(uname -m)}" in \
+        amd64|x86_64) compose_arch=x86_64 ;; \
+        arm64|aarch64) compose_arch=aarch64 ;; \
+        *) echo "unsupported Compose architecture" >&2; exit 1 ;; \
+    esac; \
+    compose_file="docker-compose-linux-${compose_arch}"; \
+    cd /tmp; \
+    curl -fsSL --retry 3 --connect-timeout 20 --max-time 180 \
+        "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/${compose_file}" \
+        -o "${compose_file}"; \
+    curl -fsSL --retry 3 --connect-timeout 20 --max-time 180 \
+        "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/${compose_file}.sha256" \
+        -o "${compose_file}.sha256"; \
+    sha256sum -c "${compose_file}.sha256"; \
+    mv "${compose_file}" /usr/local/bin/docker-compose; \
+    rm "${compose_file}.sha256"; \
+    chmod 755 /usr/local/bin/docker-compose; \
+    test "$(docker-compose version --short)" = "${DOCKER_COMPOSE_VERSION}"
+
 WORKDIR /workspace
 CMD ["python3", "--version"]

@@ -42,7 +42,7 @@ The default `full` `submit-pr` performs this fail-closed sequence:
 2. Require that exact base commit to be an ancestor of HEAD.
 3. Record the 40-character base and head SHAs.
 4. Probe and launch the required platform validation container.
-5. Run the complete matrix and the runtime-specific final gate.
+5. Run the complete in-container matrix, including the shared Compose configuration gate.
 6. Require a clean worktree and unchanged HEAD.
 7. Refetch the default branch and require the same base SHA.
 8. Push exactly `HEAD:<current-branch>`.
@@ -86,8 +86,8 @@ the local proof remains required. CI full suites do not produce local success.
   identity, and migration checks against the validated default-branch base.
 - Shared CI-coverage, validation operations/workspace regressions, release archive/OCI/pricing/workflow regressions,
   image-script syntax and Go test build-tag regressions.
-- Installer syntax, Docker deployment security/resources, Caddy cache policy,
-  and the Apple Container lifecycle fixture.
+- Installer syntax, pinned Compose configuration parsing, Docker deployment security/resources, Caddy cache policy,
+  and the Colima runtime/deployment regressions.
 
 The backend-test lane keeps module tidiness before unit and integration tests.
 The backend-lint/policy lane starts after the backend-test lane finishes,
@@ -109,12 +109,16 @@ four-CPU container; `--serial` uses four. Every command and lane reports elapsed
 monotonic time. A failure stops new steps and joins already-running commands;
 neither scheduling mode can publish a partial proof.
 
-Apple Containers reports Docker Compose parsing as not applicable. WSL2 Docker
-and Linux Docker must parse `deploy/docker-compose.dev.yml` successfully.
+Colima Docker, WSL2 Docker and Linux Docker all run the same Compose
+configuration gate inside the pinned validation image. It parses all four
+maintained Compose definitions with the tracked `.env.example` using
+`deploy/tests/docker-compose-config-test.sh`. It needs neither a daemon socket
+nor private deployment configuration. macOS uses the verified Colima context
+and matching builder for image builds, runs and cleanup.
 After each validation attempt, successful or failed, validation containers use
 `--rm`, so their writable VM/container snapshots are removed. The launcher
 retains the `sub2api-validation:<toolchain-digest>` image matching the resolved
-Go, Node, pnpm, golangci-lint, GoReleaser, govulncheck and PyYAML pins. Dependency caches use a
+Go, Node, pnpm, golangci-lint, GoReleaser, govulncheck, Compose and PyYAML pins. Dependency caches use a
 separate generation derived from that image plus the current Go and pnpm lock
 inputs. Cleanup removes only stale Sub2API validation image and cache
 generations and does not run a global container, image, builder, volume, or
@@ -129,13 +133,13 @@ hard-killed `--rm` container is reclaimed without a forbidden global prune.
 If another labelled validation is running, defer automatic cleanup entirely.
 Docker cleanup also prunes precisely owned validation BuildKit records; generic
 base-image records and unrelated descendants are retained.
-Apple Containers has no label-filtered container listing here, so it is not
-swept automatically and keeps relying on `--rm`.
 
 `push-cli clean --yes` is the explicit, manual full purge: it deletes every
 `sub2api-validation` image, every dependency-cache generation, and all project
-containers, on macOS only images and caches (containers rely on `--rm`) and
-never touching the cross-project Apple Builder cache (`deploy/APPLE_CONTAINER.md`).
+containers in the selected runtime/profile. Named Colima profiles have separate
+host dependency-cache roots under the [validation operations policy](../../../docs/VALIDATION_OPERATIONS.md#scoped-cleanup).
+Other projects and shared generic builder
+records remain untouched.
 It is never run automatically because deleting the current generation forces
 the next validation to rebuild the whole toolchain and re-download every
 dependency.

@@ -1,6 +1,6 @@
 # Sub2API Plus Deployment Files
 
-This directory contains files for deploying Sub2API Plus on Linux servers and Apple-silicon Macs.
+This directory contains deployment files for Linux, WSL2, and macOS with Colima.
 
 ## Release Version Mapping
 
@@ -71,11 +71,11 @@ are not required.
 | Method | Best For | Setup Wizard |
 |--------|----------|--------------|
 | **Docker Compose** | Quick setup, all-in-one | Not needed (auto-setup) |
-| **Apple container** | Native local stack on macOS 26 | Not needed (auto-setup) |
+| **Colima + Docker Compose** | Local macOS deployment and builds | Not needed (auto-setup) |
 | **Binary Install** | Production servers, systemd | Web-based wizard |
 
 The optional [managed Codex CLI bridge and task modes](../docs/CODEX_CLI.md) work with
-binary, Docker and Apple-container installations. Install its pinned runtime
+binary and Docker/Colima installations. Install its pinned runtime
 through the running gateway's Outbound identity settings and retain the
 application data volume. Runtime files and private task homes live under
 `DATA_DIR/codex` (default `./data/codex`). The service user requires write and
@@ -105,9 +105,8 @@ are refused. Runtime readiness remains visible separately from global permission
 |------|-------------|
 | `docker-compose.yml` | Docker Compose configuration (named volumes) |
 | `docker-compose.local.yml` | Docker Compose configuration (local directories, easy migration) |
-| `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
-| `apple-container.sh` | Native Apple `container` lifecycle script |
-| `APPLE_CONTAINER.md` | Apple `container` deployment and operations guide |
+| `docker-deploy.sh` | New Compose deployment initialization helper |
+| `COLIMA.md` | macOS Colima/Docker deployment, builds and operations guide |
 | `DEPLOYMENT_LIFECYCLE.md` | Cross-platform local deployment, recovery, and image-retention contract |
 | `.env.example` | Container environment variables template |
 | `DOCKER.md` | GHCR image and Docker deployment documentation |
@@ -122,49 +121,23 @@ are refused. Runtime readiness remains visible separately from global permission
 
 ---
 
-## Apple container Deployment
+## macOS Colima Deployment
 
-Apple-silicon Macs running macOS 26 can run the complete Sub2API Plus, PostgreSQL, and Redis stack with Apple `container` 1.1.0 or newer:
-
-```bash
-./apple-container.sh init
-```
-
-```bash
-./apple-container.sh up
-```
-
-```bash
-./apple-container.sh status
-```
-
-```bash
-./apple-container.sh logs app -f
-```
-
-The script uses Apple named volumes by default, starts dependencies in order,
-replaces the application container on every `up` so its writable layer does
-not accumulate, and performs live readiness checks. Use
-`./apple-container.sh upgrade` to update only the application image while
-retaining one rollback image, and `./apple-container.sh disk-usage` to inspect
-Apple Containers disk use. Set the optional `APPLE_CONTAINER_*_DATA_DIR`
-variables in `.env` to replace an individual named volume with a host bind
-mount; leaving them empty preserves the original named-volume behavior.
-Persistent mounts are never cleared by application redeployment. The
-application container supervises the Sub2API process so the Web UI's
-update-and-restart flow can relaunch an updated binary. It does not provide
-host-level automatic startup; run `./apple-container.sh up` after a host
-reboot. Docker Compose remains the recommended production deployment path.
-
-See [APPLE_CONTAINER.md](./APPLE_CONTAINER.md) for configuration, upgrades, persistence, networking behavior, and limitations.
+Use Colima with its Docker runtime and Compose for macOS deployment, builds
+and repository validation. Follow [COLIMA.md](COLIMA.md) to prepare the profile,
+verify its Docker context, and use the shared Compose lifecycle. Version and
+image mappings remain owned by [DOCKER.md](DOCKER.md).
+For every Docker command below on macOS, use `docker --context colima` (or the
+verified named profile's context); builds also require `--builder <context>`.
 
 ---
 
 ## Docker Deployment (Recommended)
 
-### Method 1: One-Click Deployment (Recommended)
+### Method 1: Prepare a New Deployment
 
-Use the automated preparation script for the easiest setup:
+Use the initialization helper in a new deployment directory. For an existing
+deployment, follow [the replacement lifecycle](DEPLOYMENT_LIFECYCLE.md).
 
 ```bash
 # Download and run the preparation script
@@ -186,13 +159,13 @@ chmod +x docker-deploy.sh
 **After running the script:**
 ```bash
 # Start services
-docker compose -f docker-compose.local.yml up -d
+docker compose --env-file .env -f docker-compose.yml up -d
 
 # View logs
-docker compose -f docker-compose.local.yml logs -f sub2api
+docker compose --env-file .env -f docker-compose.yml logs -f sub2api
 
 # If admin email/password were auto-generated, find them in logs:
-docker compose -f docker-compose.local.yml logs sub2api | grep "Generated admin"
+docker compose --env-file .env -f docker-compose.yml logs sub2api | grep "Generated admin"
 
 # Access Web UI
 # http://localhost:8080
@@ -455,9 +428,8 @@ replace the broad `https:` item in `security.csp.policy` with explicit HTTPS
 origins. CSP is a deployment boundary and intentionally has no administrator
 system-setting control.
 
-Compose enables `no-new-privileges:true` for the application service. Apple
-Containers still relies on its entrypoint to drop to the `sub2api` user; it is
-not assumed to provide the same runtime hardening flag.
+Compose enables `no-new-privileges:true` for the application service on Colima,
+WSL2 Docker and Linux Docker. Its entrypoint drops to the `sub2api` user.
 
 ### Easy Migration (Local Directory Version)
 

@@ -1,6 +1,8 @@
 # =============================================================================
 # Sub2API Plus Docker Compose - Local Directory Version
 # =============================================================================
+# macOS: use docker --context colima (or the verified named profile context).
+# See COLIMA.md before building or starting services.
 # This configuration uses local directories for data storage instead of named
 # volumes, making it easy to migrate the entire deployment by simply copying
 # the deploy directory.
@@ -8,15 +10,15 @@
 # Quick Start:
 #   1. Copy .env.example to .env and configure
 #   2. mkdir -p data postgres_data redis_data
-#   3. docker-compose -f docker-compose.local.yml up -d
-#   4. Check logs: docker-compose -f docker-compose.local.yml logs -f sub2api
+#   3. docker compose -f docker-compose.local.yml up -d
+#   4. Check logs: docker compose -f docker-compose.local.yml logs -f sub2api
 #   5. Access: http://localhost:8080
 #
 # Migration to New Server:
-#   1. docker-compose -f docker-compose.local.yml down
+#   1. docker compose -f docker-compose.local.yml down
 #   2. tar czf sub2api-deploy.tar.gz deploy/
 #   3. Transfer to new server and extract
-#   4. docker-compose -f docker-compose.local.yml up -d
+#   4. docker compose -f docker-compose.local.yml up -d
 # =============================================================================
 
 services:

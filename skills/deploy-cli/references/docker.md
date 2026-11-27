@@ -1,4 +1,4 @@
-# Docker and WSL2 Local Deployment
+# Docker Compose Local Deployment
 
 Read [deploy/README.md](../../../deploy/README.md) and
 [DOCKER.md](../../../deploy/DOCKER.md) for Compose configuration, storage,
@@ -7,7 +7,9 @@ startup, and backups. Follow the shared
 
 ## Select the runtime and project
 
-On Linux, use local Docker Engine and Compose v2. On Windows, first inspect
+On macOS, first verify Colima using [the Colima reference](colima.md), and apply
+its explicit context/builder to every Docker command below. On Linux, use local
+Docker Engine and the Compose plugin. On Windows, first inspect
 `wsl.exe -l -v` and select the existing WSL2 Debian/Ubuntu distribution. Start
 it if stopped. Run Docker, Compose, builds, filesystem operations, and internal
 health probes inside that distribution. Verify `docker info` and
@@ -33,7 +35,7 @@ inspection; do not print environment contents or raw resolved Compose output.
 ## Prepare the image
 
 For current-code deployment, build at the repository root in the selected
-Linux/WSL environment:
+Colima/Linux/WSL environment:
 
 ```bash
 deployment_version=$(cat backend/cmd/server/VERSION)
@@ -96,8 +98,8 @@ confirmation prompt for the already stopped selected service. Do not use
 containers, or global orphan removal.
 
 Bound Web readiness to 180 seconds. Check its running/health state and the
-internal probe, then probe the configured published endpoint from Linux or
-the selected WSL distribution. If the requested client is Windows, also
+internal probe, then probe the configured published endpoint from macOS, Linux
+or the selected WSL distribution. If the requested client is Windows, also
 verify its published endpoint from Windows before claiming Windows access
 works. A container-only check does not prove published-port reachability.
 

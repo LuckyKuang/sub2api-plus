@@ -176,17 +176,18 @@ class OperationsTests(unittest.TestCase):
             self.assertTrue(processes[0].stdin.closed)
 
     def test_cache_ownership_never_comes_from_age_size_or_generic_workdir(self):
-        base, apt, tools, browser, final, other = (character * 25 for character in "abcdef")
+        base, apt, tools, browser, final, other, compose = (character * 25 for character in "abcdefg")
         records = [
             {"ID": base, "Description": "pulled from debian", "Parents": []},
             {"ID": apt, "Description": "RUN apt install", "Parents": [base]},
             {"ID": tools, "Description": "RUN printf marker >/etc/sub2api-validation", "Parents": [apt]},
             {"ID": browser, "Description": "RUN install /opt/sub2api-playwright", "Parents": [tools]},
-            {"ID": final, "Description": "[6/6] WORKDIR /workspace", "Parents": [browser]},
+            {"ID": compose, "Description": "RUN curl https://github.com/docker/compose/releases/download/v5.6.0/parser", "Parents": [browser]},
+            {"ID": final, "Description": "[7/7] WORKDIR /workspace", "Parents": [compose]},
             {"ID": other, "Description": "RUN unrelated application", "Parents": [tools]},
             {"ID": "z" * 25, "Description": "WORKDIR /workspace", "Parents": []},
         ]
-        self.assertEqual(sorted([apt, tools, browser, final]), runtime.validation_build_cache_ids(records))
+        self.assertEqual(sorted([apt, tools, browser, compose, final]), runtime.validation_build_cache_ids(records))
         self.assertEqual([], runtime.validation_build_cache_ids(records[-2:]))
 
     def test_download_failure_aborts_actual_validation_image_install_step(self):

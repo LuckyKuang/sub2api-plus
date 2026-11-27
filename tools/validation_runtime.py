@@ -77,7 +77,7 @@ class Runtime:
     name: str
     prefix: tuple[str, ...] = ()
     compose_root: str | None = None
-    compose_required: bool = True
+    docker_context: str | None = None
 
 
 def display(command: Sequence[str]) -> str:
@@ -164,8 +164,11 @@ def probe_docker(
     prefix: Sequence[str] = (),
     *,
     optional_capture: OptionalCapture,
+    context: str | None = None,
 ) -> tuple[bool, str]:
     docker_command = [*prefix, "docker"]
+    if context:
+        docker_command.extend(["--context", context])
     info_ok, info_output = optional_capture([*docker_command, "info"])
     if not info_ok:
         return False, info_output
@@ -259,33 +262,60 @@ def probe_macos_runtime(
     optional_capture: OptionalCapture,
     which: Callable[[str], str | None] = shutil.which,
 ) -> Runtime:
-    if not which("container"):
+    if not which("colima") or not which("docker"):
         raise ValidationRuntimeError(
-            "macOS push validation requires Apple Containers. Install the "
-            "container CLI and ensure `container --version` and `container ls` "
-            "succeed. Colima/Docker Desktop fallback is forbidden"
+            "macOS validation requires Colima, Docker CLI, Compose and Buildx. "
+            "Other runtimes and host validation fallback are forbidden"
         )
-
-    version_ok, version = optional_capture(["container", "--version"])
-    if not version_ok:
-        detail = version[-500:] if version else "container --version failed"
+    profile = os.environ.get("SUB2API_COLIMA_PROFILE", "").strip() or "default"
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", profile):
+        raise ValidationRuntimeError("invalid SUB2API_COLIMA_PROFILE")
+    status_ok, output = optional_capture(["colima", "--profile", profile, "status", "--json"])
+    if not status_ok:
         raise ValidationRuntimeError(
-            "Apple Containers is the mandatory macOS runtime, but its CLI is "
-            "not usable; Colima/Docker fallback is forbidden: "
-            f"{detail}"
+            f"Colima profile {profile} is not ready; start or repair it and retry. "
+            "Other runtimes and host validation fallback are forbidden"
         )
-    list_ok, list_output = optional_capture(["container", "ls"])
-    if not list_ok:
-        detail = list_output[-500:] if list_output else "container ls failed"
+    try:
+        status = json.loads(output)
+        socket = status["docker_socket"]
+        if status["runtime"] != "docker" or not isinstance(socket, str) or not socket.startswith("unix:///"):
+            raise ValueError("Docker runtime with a local socket required")
+        if (type(status["cpu"]) is not int or type(status["memory"]) is not int
+                or status["cpu"] < 4 or status["memory"] < 10 * 1024 ** 3):
+            raise ValueError("at least 4 CPUs and 10 GiB VM memory required")
+    except (ValueError, TypeError, KeyError) as error:
         raise ValidationRuntimeError(
-            "Apple Containers is the mandatory macOS runtime, but its service "
-            "is not ready; start or repair Apple Containers and retry. "
-            "Colima/Docker fallback is forbidden: "
-            f"{detail}"
+            "Colima must report a Docker runtime, local socket, at least 4 CPUs "
+            "and 10 GiB VM memory for the 4-CPU/8-GiB validation container"
+        ) from error
+    context = "colima" if profile == "default" else f"colima-{profile}"
+    engine = ["docker", "--context", context]
+    context_ok, endpoint = optional_capture([
+        *engine, "context", "inspect", context, "--format", "{{.Endpoints.docker.Host}}",
+    ])
+    if not context_ok or endpoint.strip() != socket:
+        raise ValidationRuntimeError(
+            "Docker context does not match the selected Colima socket; "
+            "refusing a foreign Docker endpoint"
         )
-    version_label = version.splitlines()[0] if version else "version available"
-    print(f"Runtime: Apple Containers ({version_label})")
-    return Runtime("apple-containers", compose_required=False)
+    docker_ok, detail = probe_docker(optional_capture=optional_capture, context=context)
+    if not docker_ok:
+        raise ValidationRuntimeError("Colima Docker daemon and Compose must both be usable")
+    builder_ok, builder = optional_capture([*engine, "buildx", "inspect", context])
+    # A stored Buildx instance can shadow a context with the same name. Check
+    # its driver/node as well as its name before building or pruning anything.
+    drivers = re.findall(r"^Driver:\s+(\S+)\s*$", builder, re.MULTILINE)
+    endpoints = re.findall(r"^Endpoint:\s+(\S+)\s*$", builder, re.MULTILINE)
+    states = re.findall(r"^Status:\s+(\S+)\s*$", builder, re.MULTILINE)
+    if (not builder_ok or drivers != ["docker"]
+            or endpoints not in ([context], [socket]) or states != ["running"]):
+        raise ValidationRuntimeError(
+            "Colima Buildx must be usable with the Docker driver and exactly "
+            "one running node on the selected Colima endpoint"
+        )
+    print(f"Runtime: Colima/Docker (profile {profile}; {detail})")
+    return Runtime("colima-docker", docker_context=context)
 
 
 def probe_runtime(
@@ -393,6 +423,7 @@ def declared_validation_pins(root: Path) -> dict[str, str]:
         "GOLANGCI_LINT_VERSION": declared_tool_version(root, "golangci-lint"),
         "GORELEASER_VERSION": declared_tool_version(root, "goreleaser"),
         "GOVULNCHECK_VERSION": declared_tool_version(root, "govulncheck"),
+        "DOCKER_COMPOSE_VERSION": declared_tool_version(root, "docker-compose"),
         "PYYAML_VERSION": yaml_match.group(1),
         **({"PLAYWRIGHT_VERSION": package["devDependencies"]["@playwright/test"]}
            if "@playwright/test" in package.get("devDependencies", {}) else {}),
@@ -400,8 +431,12 @@ def declared_validation_pins(root: Path) -> dict[str, str]:
 
 
 def engine_command(runtime: Runtime) -> list[str]:
-    if runtime.name == "apple-containers":
-        return ["container"]
+    if runtime.name == "colima-docker":
+        if not runtime.docker_context:
+            raise ValidationRuntimeError("Colima validation requires an explicit Docker context")
+        return ["docker", "--context", runtime.docker_context]
+    if runtime.name not in {"docker", "wsl2-docker"}:
+        raise ValidationRuntimeError(f"unsupported validation runtime: {runtime.name}")
     return [*runtime.prefix, "docker"]
 
 
@@ -437,6 +472,20 @@ def wsl_home_directory(runtime: Runtime, *, capture: Capture) -> str:
     return posixpath.normpath(value)
 
 
+def host_cache_root(runtime: Runtime) -> Path:
+    # Named Colima VMs cannot see one another's active containers. Give each
+    # profile a separate host cache root so cleanup cannot delete a live peer's
+    # mounts. Keep the default profile's deterministic dependency cache reusable.
+    name = "sub2api-validation"
+    if runtime.name == "colima-docker":
+        context = runtime.docker_context or ""
+        if not re.fullmatch(r"colima(?:-[A-Za-z0-9][A-Za-z0-9_.-]*)?", context):
+            raise ValidationRuntimeError("invalid Colima cache context")
+        if context != "colima":
+            name += f"-{context}"
+    return home_directory() / ".cache" / name
+
+
 def cache_mounts(
     runtime: Runtime,
     *,
@@ -464,7 +513,7 @@ def cache_mounts(
             (f"{base}/pnpm", f"{CONTAINER_HOME}/pnpm"),
             (f"{base}/frontend-node-modules", f"{mount_root(runtime, root)}/frontend/node_modules"),
         ]
-    base = home_directory() / ".cache" / "sub2api-validation" / generation
+    base = host_cache_root(runtime) / generation
     (base / "go").mkdir(parents=True, exist_ok=True)
     (base / "pnpm").mkdir(parents=True, exist_ok=True)
     (base / "go" / "golangci-lint").mkdir(parents=True, exist_ok=True)
@@ -479,14 +528,10 @@ def cache_mounts(
 
 def image_inspect_command(runtime: Runtime, image: str) -> list[str]:
     engine = engine_command(runtime)
-    if runtime.name == "apple-containers":
-        return [*engine, "image", "inspect", image]
     return [*engine, "image", "inspect", image]
 
 
 def bind_mount_args(runtime: Runtime, source: str, target: str) -> list[str]:
-    if runtime.name == "apple-containers":
-        return ["--mount", f"type=bind,source={source},target={target}"]
     return ["--volume", f"{source}:{target}"]
 
 
@@ -520,14 +565,17 @@ def worktree_git_mount(runtime: Runtime, root: Path) -> list[str]:
 
 
 def validation_network_args(runtime: Runtime) -> list[str]:
-    apple_network = os.environ.get("SUB2API_VALIDATION_APPLE_NETWORK", "").strip()
-    if apple_network:
-        if runtime.name != "apple-containers" or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", apple_network):
-            raise ValidationRuntimeError(
-                "SUB2API_VALIDATION_APPLE_NETWORK requires an Apple Containers network name"
-            )
-        return ["--network", apple_network]
+    network = os.environ.get("SUB2API_VALIDATION_DOCKER_NETWORK", "").strip()
     mode = os.environ.get("SUB2API_VALIDATION_WSL_NETWORK", "").strip()
+    if network:
+        if (mode or network in {"host", "none", "bridge"}
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", network)):
+            raise ValidationRuntimeError(
+                "SUB2API_VALIDATION_DOCKER_NETWORK requires one project-owned network name "
+                "(not host, none or bridge) "
+                "and cannot be combined with SUB2API_VALIDATION_WSL_NETWORK"
+            )
+        return ["--network", network]
     if not mode:
         return []
     if mode != "host" or runtime.name != "wsl2-docker":
@@ -548,9 +596,11 @@ def image_build_command(runtime: Runtime, root: Path, image: str) -> list[str]:
         "-f",
         dockerfile,
     ]
+    if runtime.docker_context:
+        command.extend(["--builder", runtime.docker_context])
     if runtime.name == "wsl2-docker":
         command.extend(validation_network_args(runtime))
-    for name in PROXY_ENV_NAMES if runtime.name != "apple-containers" else ():
+    for name in PROXY_ENV_NAMES:
         if os.environ.get(name):
             # Docker's predefined proxy arguments are inherited by name. Their
             # values must not appear in argv, logs, Dockerfile ENV or image IDs.
@@ -822,25 +872,22 @@ def cleanup_validation_runtime(
             f"invalid validation cache generation: {cache_generation!r}"
         )
     engine = engine_command(runtime)
-    image_delete = "delete" if runtime.name == "apple-containers" else "rm"
     current_tag = image.rsplit(":", 1)[-1]
     if not VALIDATION_GENERATION_RE.fullmatch(current_tag):
         raise ValidationRuntimeError(f"invalid validation image reference: {image!r}")
-    if runtime.name != "apple-containers":
-        active = capture([*engine, "container", "ls", "--quiet", "--filter",
-                          "label=sub2api-validation", "--filter", "status=running"])
-        if active.strip():
-            print("Validation cleanup deferred: another project validation is running.")
-            return
-        # Remove orphan references before attempting any stale image deletion.
-        for status in ("exited", "created"):
-            listed = capture([*engine, "container", "ls", "--all", "--quiet",
-                              "--filter", "label=sub2api-validation", "--filter", f"status={status}"])
-            for container_id in listed.split():
-                run_step("Remove orphan validation container", [*engine, "container", "rm", container_id])
+    active = capture([*engine, "container", "ls", "--quiet", "--filter",
+                      "label=sub2api-validation", "--filter", "status=running"])
+    if active.strip():
+        print("Validation cleanup deferred: another project validation is running.")
+        return
+    # Remove orphan references before attempting any stale image deletion.
+    for status in ("exited", "created"):
+        listed = capture([*engine, "container", "ls", "--all", "--quiet",
+                          "--filter", "label=sub2api-validation", "--filter", f"status={status}"])
+        for container_id in listed.split():
+            run_step("Remove orphan validation container", [*engine, "container", "rm", container_id])
     image_list_command = [*engine, "image", "list"]
-    if runtime.name != "apple-containers":
-        image_list_command.extend(["--format", "table {{.Repository}}\t{{.Tag}}"])
+    image_list_command.extend(["--format", "table {{.Repository}}\t{{.Tag}}"])
     image_list = capture(image_list_command)
     for line in image_list.splitlines()[1:]:
         fields = line.split()
@@ -856,7 +903,7 @@ def cleanup_validation_runtime(
             continue
         run_step(
             "Remove stale validation image",
-            [*engine, "image", image_delete, reference],
+            [*engine, "image", "rm", reference],
         )
 
     if runtime.name == "wsl2-docker":
@@ -899,7 +946,7 @@ def cleanup_validation_runtime(
             *runtime.prefix, "rm", "-rf", "/tmp/sub2api-validation-cache",
         ])
     else:
-        cache_root = home_directory() / ".cache" / "sub2api-validation"
+        cache_root = host_cache_root(runtime)
         if cache_root.exists():
             for path in cache_root.iterdir():
                 if path.name == cache_generation:
@@ -940,6 +987,7 @@ def validation_build_cache_ids(records: Sequence[dict]) -> list[str]:
             description = entry.get("Description", "")
             continuation = ("/opt/sub2api-playwright" in description
                             or "corepack prepare" in description
+                            or "github.com/docker/compose/releases/download/" in description
                             or description.endswith("WORKDIR /workspace"))
             if key not in owned and continuation and any(parent in owned for parent in entry.get("Parents") or []):
                 owned.add(key)
@@ -951,10 +999,9 @@ def validation_build_cache_ids(records: Sequence[dict]) -> list[str]:
 
 def prune_validation_build_cache(runtime: Runtime, *, capture: Capture,
                                  run_step: Callable[[str, Sequence[str]], None]) -> None:
-    if runtime.name == "apple-containers":
-        return  # Apple Builder cache is shared across projects.
     engine = engine_command(runtime)
-    output = capture([*engine, "buildx", "du", "--format=json"])
+    builder = ["--builder", runtime.docker_context] if runtime.docker_context else []
+    output = capture([*engine, "buildx", "du", *builder, "--format=json"])
     try:
         records = [json.loads(line) for line in output.splitlines() if line.strip()]
         ids = validation_build_cache_ids(records)
@@ -962,7 +1009,7 @@ def prune_validation_build_cache(runtime: Runtime, *, capture: Capture,
         raise ValidationRuntimeError("cannot safely identify validation BuildKit records") from error
     if ids:
         run_step("Remove owned validation build cache", [
-            *engine, "buildx", "prune", "--all", "--force", "--filter",
+            *engine, "buildx", "prune", *builder, "--all", "--force", "--filter",
             "id~=^(" + "|".join(ids) + ")$",
         ])
 
@@ -981,23 +1028,23 @@ def purge_validation_resources(
     current generation forces the next run to rebuild the whole toolchain and
     re-download every dependency, so it is never automatic. Scope stays inside
     sub2api-validation resources; no global prune (container/image/builder/
-    volume/system) is ever invoked. Apple Containers only clears images and the
-    cache use --rm for containers.
+    volume/system) is ever invoked.
     """
 
     engine = engine_command(runtime)
     # Release references before removing images. Manual clean explicitly owns
     # all project containers; ordinary cleanup still sweeps stopped ones only.
-    if runtime.name != "apple-containers":
-        listed = capture([*engine, "container", "ls", "--all", "--quiet",
-                          "--filter", "label=sub2api-validation"])
-        for container_id in listed.split():
-            run_step("Stop validation container", [*engine, "container", "stop", container_id])
+    listed = capture([*engine, "container", "ls", "--all", "--quiet",
+                      "--filter", "label=sub2api-validation"])
+    for container_id in listed.split():
+        run_step("Stop validation container", [*engine, "container", "stop", container_id])
+        # --rm containers disappear when stopped; remove only surviving refs.
+        remaining = capture([*engine, "container", "ls", "--all", "--quiet",
+                             "--filter", "label=sub2api-validation", "--filter", f"id={container_id}"])
+        if container_id in remaining.split():
             run_step("Remove validation container", [*engine, "container", "rm", container_id])
-    image_delete = "delete" if runtime.name == "apple-containers" else "rm"
     list_command = [*engine, "image", "list"]
-    if runtime.name != "apple-containers":
-        list_command.extend(["--format", "table {{.Repository}}\t{{.Tag}}"])
+    list_command.extend(["--format", "table {{.Repository}}\t{{.Tag}}"])
     for line in capture(list_command).splitlines()[1:]:
         fields = line.split()
         if len(fields) < 2:
@@ -1007,7 +1054,7 @@ def purge_validation_resources(
             continue
         run_step(
             "Remove validation image",
-            [*engine, "image", image_delete, f"{repository}:{tag}"],
+            [*engine, "image", "rm", f"{repository}:{tag}"],
         )
     if runtime.name == "wsl2-docker":
         linux_home = wsl_home_directory(runtime, capture=capture)
@@ -1020,5 +1067,5 @@ def purge_validation_resources(
             [*runtime.prefix, "rm", "-rf", "/tmp/sub2api-validation-cache"],
         )
     else:
-        remove_validation_cache(home_directory() / ".cache" / "sub2api-validation")
+        remove_validation_cache(host_cache_root(runtime))
     prune_validation_build_cache(runtime, capture=capture, run_step=run_step)

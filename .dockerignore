@@ -11,8 +11,8 @@
 *.md
 !deploy/DOCKER.md
 # admin-compliance gate (LegalDocumentView.vue) build-time imports these files.
-# Do not exclude the docs/ parent and then re-include docs/legal/: Apple
-# Builder's remote context sender rejects that pattern as out-of-order changes.
+# Keep the docs/ parent available while re-including docs/legal/ Markdown
+# so Docker context filters can send the required build-time sources.
 # Re-include only the required Markdown files while leaving other documents
 # excluded by the global *.md rule.
 !docs/legal/*.md
@@ -77,7 +77,7 @@ deploy/data/
 deploy/postgres_data/
 deploy/redis_data/
 # Local release binaries and build diagnostics are not part of the runtime
-# image. Excluding them keeps Apple container context synchronization bounded.
+# image. Excluding them keeps Docker build contexts bounded.
 deploy/.local/
 
 # GoReleaser
