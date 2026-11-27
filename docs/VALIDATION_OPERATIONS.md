@@ -32,6 +32,11 @@ but owns its index, refs, source and build outputs. The frozen Linux dependency
 generation remains reusable. Checkout conversion follows the source repository's
 Git settings to preserve byte parity and cache identities on Windows.
 Post-matrix host worktree/base/head checks still run.
+The private checkout path depends only on the resolved source location, preserving
+Go build-cache identity across disposable containers without changing compiler
+flags. Each invocation creates the directory exclusively; an existing active or
+stale path is rejected, never reused or removed by a competing invocation. Separate
+containers have isolated writable layers at the same path.
 The checkout is removed in `finally` and lives in the `--rm` container writable
 layer, so a stopped-container sweep also reclaims interrupted snapshots.
 

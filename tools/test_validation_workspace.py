@@ -64,6 +64,47 @@ class WorkspaceTests(unittest.TestCase):
                 raise RuntimeError("child failure")
         self.assertFalse(target.exists())
 
+    def test_fresh_snapshots_preserve_go_build_cache_identity(self):
+        # Real Go export IDs include the absolute source path without -trimpath.
+        # Rebuilding unchanged source must reuse its identity across fresh trees.
+        (self.source / "go.mod").write_text("module example.com/sample\n\ngo 1.23\n")
+        (self.source / "sample.go").write_text("package sample\nfunc Add(a, b int) int { return a + b }\n")
+        workspace.git(self.source, "add", ".")
+        workspace.git(self.source, "commit", "-qm", "Go cache fixture")
+        head = workspace.git(self.source, "rev-parse", "HEAD")
+        env = dict(os.environ, GOCACHE=str(Path(self.temporary.name) / "go-cache"), GOFLAGS="", GOWORK="off")
+        build_ids = []
+        for _ in range(2):
+            with workspace.snapshot(self.source, head, self.head) as target:
+                self.assertFalse((target / "previous-run").exists())
+                build_ids.append(subprocess.check_output(
+                    ["go", "list", "-export", "-f", "{{.BuildID}}"], cwd=target, env=env, text=True).strip())
+                (target / "previous-run").write_text("must not survive")
+            self.assertFalse(target.exists())
+        self.assertTrue(build_ids[0])
+        self.assertEqual(build_ids[0], build_ids[1], "fresh checkout paths invalidate the Go build cache")
+
+    def test_active_or_stale_snapshot_is_never_reused_or_deleted(self):
+        with workspace.snapshot(self.source, self.head, self.head) as target:
+            sentinel = target.parent / "owner"
+            sentinel.write_text("active")
+            with self.assertRaises(FileExistsError):
+                with workspace.snapshot(self.source, self.head, self.head):
+                    self.fail("overlapping source snapshot was accepted")
+            self.assertEqual("active", sentinel.read_text())
+        # Simulate a prior interrupted invocation in this same container.
+        directory = target.parent
+        directory.mkdir()
+        sentinel.write_text("stale")
+        try:
+            with self.assertRaises(FileExistsError):
+                with workspace.snapshot(self.source, self.head, self.head):
+                    self.fail("historical writable snapshot was reused")
+            self.assertEqual("stale", sentinel.read_text())
+        finally:
+            sentinel.unlink()
+            directory.rmdir()
+
     def test_comparison_measures_identical_bytes_in_both_locations(self):
         report = workspace.benchmark(self.source, self.head, self.head)
         self.assertEqual(3, report["rounds"])

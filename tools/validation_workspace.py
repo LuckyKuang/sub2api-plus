@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import statistics
 import subprocess
 import tempfile
@@ -37,8 +38,14 @@ def snapshot(source: Path, head: str, base: str) -> Iterator[Path]:
     branch = git(source, "branch", "--show-current")
     if not branch:
         raise RuntimeError("validation source must be on a working branch")
-    with tempfile.TemporaryDirectory(prefix="sub2api-validation-source-") as directory:
-        target = Path(directory) / "repo"
+    # Go's default build identity includes absolute source paths. Keep the path
+    # stable across containers while creating a new private tree every time.
+    # Different sources (including nested test fixtures) get separate locations.
+    identity = hashlib.sha256(os.fsencode(source)).hexdigest()[:16]
+    directory = Path(tempfile.gettempdir()) / f"sub2api-validation-source-{identity}"
+    directory.mkdir(mode=0o700)  # Existing/active/stale paths must never be reused.
+    try:
+        target = directory / "repo"
         subprocess.run(["git", "clone", "--quiet", "--shared", "--no-checkout",
                         "--", str(source), str(target)], check=True)
         # Checkout conversion is part of the source representation. In
@@ -60,6 +67,8 @@ def snapshot(source: Path, head: str, base: str) -> Iterator[Path]:
                           "tree": git(target, "rev-parse", "HEAD^{tree}"),
                           "storage": "container-linux-filesystem"}), flush=True)
         yield target
+    finally:
+        shutil.rmtree(directory)
 
 
 def scan(root: Path, paths: Sequence[str]) -> dict[str, object]:
