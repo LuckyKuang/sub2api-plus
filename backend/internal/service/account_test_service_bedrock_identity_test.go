@@ -22,7 +22,7 @@ func TestAccountTestServiceBedrockIdentityIsSigned(t *testing.T) {
 			upstream := &queuedHTTPUpstream{responses: []*http.Response{newJSONResponse(http.StatusOK, `{"content":[{"text":"hello"}]}`)}}
 			svc := &AccountTestService{httpUpstream: upstream}
 			c, recorder := newTestContext()
-			require.NoError(t, svc.testBedrockAccountConnection(c, context.Background(), account, "claude-sonnet-4-5"))
+			require.NoError(t, svc.testBedrockAccountConnection(c, context.Background(), account, "claude-sonnet-4-5", ""))
 			require.Contains(t, recorder.Body.String(), `"success":true`)
 			require.Len(t, upstream.requests, 1)
 			req := upstream.requests[0]

@@ -7,14 +7,14 @@ not automatically sweep all historical development images.
 
 ## Runtime and ownership
 
-Use Apple Containers on macOS, Docker inside a running WSL2 Debian/Ubuntu
-distribution on Windows, and local Docker Engine with Compose v2 on Linux.
-Builds and application checks run in containers; host processes orchestrate
-the runtime and may probe the published application endpoint.
+Use Colima Docker on macOS, Docker inside a running WSL2 Debian/Ubuntu
+distribution on Windows, and local Docker Engine with the Compose plugin on Linux.
+The macOS Docker context must match the selected Colima socket; use that
+context and its matching builder for every operation. Builds and application
+checks run in containers; host processes orchestrate the runtime and may probe the published application endpoint.
 
-Scope operations to the selected deployment. Apple uses the owned
-`sub2api-apple` Web container; Docker uses the selected Compose project's
-`sub2api` service. Confirm ownership before replacement. Reuse the selected
+Scope operations to the selected Compose project's `sub2api` service. Confirm
+ownership before replacement. Reuse the selected
 environment file, project identity, storage mounts, and port bindings. Existing
 development/production deployments are separate targets, not duplicates to
 delete by name prefix.

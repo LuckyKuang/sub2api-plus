@@ -35,6 +35,11 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/ent/promocode"
 	"github.com/LuckyKuang/sub2api-plus/ent/promocodeusage"
 	"github.com/LuckyKuang/sub2api-plus/ent/proxy"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionplan"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionquarantine"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionquestion"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionresult"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionrun"
 	"github.com/LuckyKuang/sub2api-plus/ent/redeemcode"
 	"github.com/LuckyKuang/sub2api-plus/ent/securitysecret"
 	"github.com/LuckyKuang/sub2api-plus/ent/setting"
@@ -808,6 +813,141 @@ func (f TraverseProxy) Traverse(ctx context.Context, q ent.Query) error {
 	return fmt.Errorf("unexpected query type %T. expect *ent.ProxyQuery", q)
 }
 
+// The QualityInspectionPlanFunc type is an adapter to allow the use of ordinary function as a Querier.
+type QualityInspectionPlanFunc func(context.Context, *ent.QualityInspectionPlanQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f QualityInspectionPlanFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.QualityInspectionPlanQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.QualityInspectionPlanQuery", q)
+}
+
+// The TraverseQualityInspectionPlan type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseQualityInspectionPlan func(context.Context, *ent.QualityInspectionPlanQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseQualityInspectionPlan) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseQualityInspectionPlan) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.QualityInspectionPlanQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.QualityInspectionPlanQuery", q)
+}
+
+// The QualityInspectionQuarantineFunc type is an adapter to allow the use of ordinary function as a Querier.
+type QualityInspectionQuarantineFunc func(context.Context, *ent.QualityInspectionQuarantineQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f QualityInspectionQuarantineFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.QualityInspectionQuarantineQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.QualityInspectionQuarantineQuery", q)
+}
+
+// The TraverseQualityInspectionQuarantine type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseQualityInspectionQuarantine func(context.Context, *ent.QualityInspectionQuarantineQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseQualityInspectionQuarantine) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseQualityInspectionQuarantine) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.QualityInspectionQuarantineQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.QualityInspectionQuarantineQuery", q)
+}
+
+// The QualityInspectionQuestionFunc type is an adapter to allow the use of ordinary function as a Querier.
+type QualityInspectionQuestionFunc func(context.Context, *ent.QualityInspectionQuestionQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f QualityInspectionQuestionFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.QualityInspectionQuestionQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.QualityInspectionQuestionQuery", q)
+}
+
+// The TraverseQualityInspectionQuestion type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseQualityInspectionQuestion func(context.Context, *ent.QualityInspectionQuestionQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseQualityInspectionQuestion) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseQualityInspectionQuestion) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.QualityInspectionQuestionQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.QualityInspectionQuestionQuery", q)
+}
+
+// The QualityInspectionResultFunc type is an adapter to allow the use of ordinary function as a Querier.
+type QualityInspectionResultFunc func(context.Context, *ent.QualityInspectionResultQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f QualityInspectionResultFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.QualityInspectionResultQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.QualityInspectionResultQuery", q)
+}
+
+// The TraverseQualityInspectionResult type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseQualityInspectionResult func(context.Context, *ent.QualityInspectionResultQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseQualityInspectionResult) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseQualityInspectionResult) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.QualityInspectionResultQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.QualityInspectionResultQuery", q)
+}
+
+// The QualityInspectionRunFunc type is an adapter to allow the use of ordinary function as a Querier.
+type QualityInspectionRunFunc func(context.Context, *ent.QualityInspectionRunQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f QualityInspectionRunFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.QualityInspectionRunQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.QualityInspectionRunQuery", q)
+}
+
+// The TraverseQualityInspectionRun type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseQualityInspectionRun func(context.Context, *ent.QualityInspectionRunQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseQualityInspectionRun) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseQualityInspectionRun) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.QualityInspectionRunQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.QualityInspectionRunQuery", q)
+}
+
 // The RedeemCodeFunc type is an adapter to allow the use of ordinary function as a Querier.
 type RedeemCodeFunc func(context.Context, *ent.RedeemCodeQuery) (ent.Value, error)
 
@@ -1214,6 +1354,16 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.PromoCodeUsageQuery, predicate.PromoCodeUsage, promocodeusage.OrderOption]{typ: ent.TypePromoCodeUsage, tq: q}, nil
 	case *ent.ProxyQuery:
 		return &query[*ent.ProxyQuery, predicate.Proxy, proxy.OrderOption]{typ: ent.TypeProxy, tq: q}, nil
+	case *ent.QualityInspectionPlanQuery:
+		return &query[*ent.QualityInspectionPlanQuery, predicate.QualityInspectionPlan, qualityinspectionplan.OrderOption]{typ: ent.TypeQualityInspectionPlan, tq: q}, nil
+	case *ent.QualityInspectionQuarantineQuery:
+		return &query[*ent.QualityInspectionQuarantineQuery, predicate.QualityInspectionQuarantine, qualityinspectionquarantine.OrderOption]{typ: ent.TypeQualityInspectionQuarantine, tq: q}, nil
+	case *ent.QualityInspectionQuestionQuery:
+		return &query[*ent.QualityInspectionQuestionQuery, predicate.QualityInspectionQuestion, qualityinspectionquestion.OrderOption]{typ: ent.TypeQualityInspectionQuestion, tq: q}, nil
+	case *ent.QualityInspectionResultQuery:
+		return &query[*ent.QualityInspectionResultQuery, predicate.QualityInspectionResult, qualityinspectionresult.OrderOption]{typ: ent.TypeQualityInspectionResult, tq: q}, nil
+	case *ent.QualityInspectionRunQuery:
+		return &query[*ent.QualityInspectionRunQuery, predicate.QualityInspectionRun, qualityinspectionrun.OrderOption]{typ: ent.TypeQualityInspectionRun, tq: q}, nil
 	case *ent.RedeemCodeQuery:
 		return &query[*ent.RedeemCodeQuery, predicate.RedeemCode, redeemcode.OrderOption]{typ: ent.TypeRedeemCode, tq: q}, nil
 	case *ent.SecuritySecretQuery:

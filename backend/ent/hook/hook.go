@@ -321,6 +321,66 @@ func (f ProxyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProxyMutation", m)
 }
 
+// The QualityInspectionPlanFunc type is an adapter to allow the use of ordinary
+// function as QualityInspectionPlan mutator.
+type QualityInspectionPlanFunc func(context.Context, *ent.QualityInspectionPlanMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f QualityInspectionPlanFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.QualityInspectionPlanMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.QualityInspectionPlanMutation", m)
+}
+
+// The QualityInspectionQuarantineFunc type is an adapter to allow the use of ordinary
+// function as QualityInspectionQuarantine mutator.
+type QualityInspectionQuarantineFunc func(context.Context, *ent.QualityInspectionQuarantineMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f QualityInspectionQuarantineFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.QualityInspectionQuarantineMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.QualityInspectionQuarantineMutation", m)
+}
+
+// The QualityInspectionQuestionFunc type is an adapter to allow the use of ordinary
+// function as QualityInspectionQuestion mutator.
+type QualityInspectionQuestionFunc func(context.Context, *ent.QualityInspectionQuestionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f QualityInspectionQuestionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.QualityInspectionQuestionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.QualityInspectionQuestionMutation", m)
+}
+
+// The QualityInspectionResultFunc type is an adapter to allow the use of ordinary
+// function as QualityInspectionResult mutator.
+type QualityInspectionResultFunc func(context.Context, *ent.QualityInspectionResultMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f QualityInspectionResultFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.QualityInspectionResultMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.QualityInspectionResultMutation", m)
+}
+
+// The QualityInspectionRunFunc type is an adapter to allow the use of ordinary
+// function as QualityInspectionRun mutator.
+type QualityInspectionRunFunc func(context.Context, *ent.QualityInspectionRunMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f QualityInspectionRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.QualityInspectionRunMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.QualityInspectionRunMutation", m)
+}
+
 // The RedeemCodeFunc type is an adapter to allow the use of ordinary
 // function as RedeemCode mutator.
 type RedeemCodeFunc func(context.Context, *ent.RedeemCodeMutation) (ent.Value, error)

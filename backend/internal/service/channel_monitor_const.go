@@ -9,8 +9,6 @@ import (
 // ChannelMonitor 全局常量。
 // 这些是 MVP 阶段的硬编码值，按需可以提到 config 中。
 const (
-	// monitorRequestTimeout 单次模型请求总超时（含 Body 读取）。
-	monitorRequestTimeout = 45 * time.Second
 	// monitorPingTimeout HEAD 请求 endpoint origin 的超时。
 	monitorPingTimeout = 8 * time.Second
 	// monitorDegradedThreshold 主请求成功但耗时超过该阈值视为 degraded。
@@ -130,15 +128,13 @@ const (
 	// monitorChallengeMaxTokens 单次 challenge 请求的 max_tokens（足够回答个位数算术）。
 	monitorChallengeMaxTokens = 50
 
-	// monitorRunOneBuffer runOne 的总超时缓冲（除请求超时与 ping 超时外的额外裕量）。
+	// monitorRunOneBuffer 留给整轮探测的额外处理时间。
 	monitorRunOneBuffer = 10 * time.Second
 
 	// monitorIdleConnTimeout HTTP transport 空闲连接关闭超时。
 	monitorIdleConnTimeout = 30 * time.Second
 	// monitorTLSHandshakeTimeout HTTP transport TLS 握手超时。
 	monitorTLSHandshakeTimeout = 10 * time.Second
-	// monitorResponseHeaderTimeout HTTP transport 等待响应头超时。
-	monitorResponseHeaderTimeout = 30 * time.Second
 	// monitorPingDiscardMaxBytes ping 时丢弃响应体的最大字节数。
 	monitorPingDiscardMaxBytes = 1024
 

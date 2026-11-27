@@ -1491,6 +1491,203 @@ var (
 			},
 		},
 	}
+	// QualityInspectionPlansColumns holds the columns for the "quality_inspection_plans" table.
+	QualityInspectionPlansColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "group_id", Type: field.TypeInt64},
+		{Name: "name", Type: field.TypeString, Size: 120},
+		{Name: "platform", Type: field.TypeString, Size: 32, Default: ""},
+		{Name: "model", Type: field.TypeString, Size: 160},
+		{Name: "endpoint", Type: field.TypeString, Size: 32, Default: "any"},
+		{Name: "effort", Type: field.TypeString, Size: 16, Default: "medium"},
+		{Name: "enabled", Type: field.TypeBool, Default: false},
+		{Name: "schedule_enabled", Type: field.TypeBool, Default: false},
+		{Name: "interval_minutes", Type: field.TypeInt, Default: 60},
+		{Name: "pause_start", Type: field.TypeString, Size: 5, Default: "22:00"},
+		{Name: "pause_end", Type: field.TypeString, Size: 5, Default: "09:00"},
+		{Name: "timezone", Type: field.TypeString, Size: 64, Default: "Asia/Shanghai"},
+		{Name: "max_accounts", Type: field.TypeInt, Default: 1},
+		{Name: "max_saved_rounds", Type: field.TypeInt, Default: 20},
+		{Name: "quarantine_enabled", Type: field.TypeBool, Default: false},
+		{Name: "quarantine_cooldown_minutes", Type: field.TypeInt, Default: 60},
+		{Name: "quarantine_fail_rounds", Type: field.TypeInt, Default: 2},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// QualityInspectionPlansTable holds the schema information for the "quality_inspection_plans" table.
+	QualityInspectionPlansTable = &schema.Table{
+		Name:       "quality_inspection_plans",
+		Columns:    QualityInspectionPlansColumns,
+		PrimaryKey: []*schema.Column{QualityInspectionPlansColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "qualityinspectionplan_group_id_model",
+				Unique:  true,
+				Columns: []*schema.Column{QualityInspectionPlansColumns[3], QualityInspectionPlansColumns[6]},
+			},
+			{
+				Name:    "qualityinspectionplan_enabled_schedule_enabled",
+				Unique:  false,
+				Columns: []*schema.Column{QualityInspectionPlansColumns[9], QualityInspectionPlansColumns[10]},
+			},
+		},
+	}
+	// QualityInspectionQuarantinesColumns holds the columns for the "quality_inspection_quarantines" table.
+	QualityInspectionQuarantinesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "plan_id", Type: field.TypeInt64},
+		{Name: "account_id", Type: field.TypeInt64},
+		{Name: "state", Type: field.TypeString, Size: 24, Default: "cooling"},
+		{Name: "generation", Type: field.TypeInt, Default: 0},
+		{Name: "evidence_run_id", Type: field.TypeInt64, Default: 0},
+		{Name: "recheck_run_id", Type: field.TypeInt64, Default: 0},
+		{Name: "fail_rounds", Type: field.TypeInt, Default: 0},
+		{Name: "due_at", Type: field.TypeTime, Nullable: true},
+		{Name: "attempts", Type: field.TypeInt, Default: 0},
+		{Name: "error_code", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "actor", Type: field.TypeString, Size: 64, Default: ""},
+	}
+	// QualityInspectionQuarantinesTable holds the schema information for the "quality_inspection_quarantines" table.
+	QualityInspectionQuarantinesTable = &schema.Table{
+		Name:       "quality_inspection_quarantines",
+		Columns:    QualityInspectionQuarantinesColumns,
+		PrimaryKey: []*schema.Column{QualityInspectionQuarantinesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "qualityinspectionquarantine_account_id",
+				Unique:  true,
+				Columns: []*schema.Column{QualityInspectionQuarantinesColumns[4]},
+			},
+			{
+				Name:    "qualityinspectionquarantine_state_due_at",
+				Unique:  false,
+				Columns: []*schema.Column{QualityInspectionQuarantinesColumns[5], QualityInspectionQuarantinesColumns[10]},
+			},
+		},
+	}
+	// QualityInspectionQuestionsColumns holds the columns for the "quality_inspection_questions" table.
+	QualityInspectionQuestionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "plan_id", Type: field.TypeInt64},
+		{Name: "question_id", Type: field.TypeString, Size: 40},
+		{Name: "title", Type: field.TypeString, Size: 80, Default: ""},
+		{Name: "kind", Type: field.TypeString, Size: 16, Default: "number"},
+		{Name: "prompt", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "instructions", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "expected", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "choices", Type: field.TypeJSON, Nullable: true},
+		{Name: "unit", Type: field.TypeString, Size: 16, Default: ""},
+		{Name: "rounds", Type: field.TypeInt, Default: 1},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "version", Type: field.TypeString, Size: 32, Default: ""},
+		{Name: "position", Type: field.TypeInt, Default: 0},
+	}
+	// QualityInspectionQuestionsTable holds the schema information for the "quality_inspection_questions" table.
+	QualityInspectionQuestionsTable = &schema.Table{
+		Name:       "quality_inspection_questions",
+		Columns:    QualityInspectionQuestionsColumns,
+		PrimaryKey: []*schema.Column{QualityInspectionQuestionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "qualityinspectionquestion_plan_id_question_id",
+				Unique:  true,
+				Columns: []*schema.Column{QualityInspectionQuestionsColumns[1], QualityInspectionQuestionsColumns[2]},
+			},
+			{
+				Name:    "qualityinspectionquestion_plan_id_position",
+				Unique:  false,
+				Columns: []*schema.Column{QualityInspectionQuestionsColumns[1], QualityInspectionQuestionsColumns[13]},
+			},
+		},
+	}
+	// QualityInspectionResultsColumns holds the columns for the "quality_inspection_results" table.
+	QualityInspectionResultsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "run_id", Type: field.TypeInt64},
+		{Name: "plan_id", Type: field.TypeInt64},
+		{Name: "account_id", Type: field.TypeInt64},
+		{Name: "question_id", Type: field.TypeString, Size: 40},
+		{Name: "kind", Type: field.TypeString, Size: 16, Default: ""},
+		{Name: "status", Type: field.TypeString, Size: 16, Default: "unknown"},
+		{Name: "answer", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "expected", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "response", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "artifact_key", Type: field.TypeString, Size: 512, Default: ""},
+		{Name: "artifact_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "artifact_truncated", Type: field.TypeBool, Default: false},
+		{Name: "first_token_ms", Type: field.TypeInt, Nullable: true},
+		{Name: "duration_ms", Type: field.TypeInt, Nullable: true},
+		{Name: "failure_class", Type: field.TypeString, Size: 16, Default: ""},
+		{Name: "error_code", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "bank_version", Type: field.TypeString, Size: 32, Default: ""},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// QualityInspectionResultsTable holds the schema information for the "quality_inspection_results" table.
+	QualityInspectionResultsTable = &schema.Table{
+		Name:       "quality_inspection_results",
+		Columns:    QualityInspectionResultsColumns,
+		PrimaryKey: []*schema.Column{QualityInspectionResultsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "qualityinspectionresult_plan_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{QualityInspectionResultsColumns[2], QualityInspectionResultsColumns[18]},
+			},
+			{
+				Name:    "qualityinspectionresult_run_id",
+				Unique:  false,
+				Columns: []*schema.Column{QualityInspectionResultsColumns[1]},
+			},
+			{
+				Name:    "qualityinspectionresult_plan_id_question_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{QualityInspectionResultsColumns[2], QualityInspectionResultsColumns[4], QualityInspectionResultsColumns[18]},
+			},
+		},
+	}
+	// QualityInspectionRunsColumns holds the columns for the "quality_inspection_runs" table.
+	QualityInspectionRunsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "plan_id", Type: field.TypeInt64},
+		{Name: "plan_revision", Type: field.TypeInt64, Default: 0},
+		{Name: "trigger", Type: field.TypeString, Size: 16, Default: "manual"},
+		{Name: "slot", Type: field.TypeInt64, Default: 0},
+		{Name: "status", Type: field.TypeString, Size: 32, Default: "queued"},
+		{Name: "account_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "model", Type: field.TypeString, Size: 160, Default: ""},
+		{Name: "effort", Type: field.TypeString, Size: 16, Default: "medium"},
+		{Name: "request_count", Type: field.TypeInt, Default: 0},
+		{Name: "stats", Type: field.TypeJSON, Nullable: true},
+		{Name: "message", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "resolved_platform", Type: field.TypeString, Size: 32, Default: ""},
+		{Name: "resolved_upstream_model", Type: field.TypeString, Size: 160, Default: ""},
+		{Name: "resolved_endpoint", Type: field.TypeString, Size: 32, Default: ""},
+		{Name: "resolved_source", Type: field.TypeString, Size: 32, Default: ""},
+		{Name: "started_at", Type: field.TypeTime, Nullable: true},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true},
+	}
+	// QualityInspectionRunsTable holds the schema information for the "quality_inspection_runs" table.
+	QualityInspectionRunsTable = &schema.Table{
+		Name:       "quality_inspection_runs",
+		Columns:    QualityInspectionRunsColumns,
+		PrimaryKey: []*schema.Column{QualityInspectionRunsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "qualityinspectionrun_plan_id_trigger_slot",
+				Unique:  true,
+				Columns: []*schema.Column{QualityInspectionRunsColumns[1], QualityInspectionRunsColumns[3], QualityInspectionRunsColumns[4]},
+			},
+			{
+				Name:    "qualityinspectionrun_plan_id_started_at",
+				Unique:  false,
+				Columns: []*schema.Column{QualityInspectionRunsColumns[1], QualityInspectionRunsColumns[16]},
+			},
+		},
+	}
 	// RedeemCodesColumns holds the columns for the "redeem_codes" table.
 	RedeemCodesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -2179,6 +2376,11 @@ var (
 		PromoCodesTable,
 		PromoCodeUsagesTable,
 		ProxiesTable,
+		QualityInspectionPlansTable,
+		QualityInspectionQuarantinesTable,
+		QualityInspectionQuestionsTable,
+		QualityInspectionResultsTable,
+		QualityInspectionRunsTable,
 		RedeemCodesTable,
 		SecuritySecretsTable,
 		SettingsTable,
@@ -2294,6 +2496,21 @@ func init() {
 	ProxiesTable.ForeignKeys[0].RefTable = ProxiesTable
 	ProxiesTable.Annotation = &entsql.Annotation{
 		Table: "proxies",
+	}
+	QualityInspectionPlansTable.Annotation = &entsql.Annotation{
+		Table: "quality_inspection_plans",
+	}
+	QualityInspectionQuarantinesTable.Annotation = &entsql.Annotation{
+		Table: "quality_inspection_quarantines",
+	}
+	QualityInspectionQuestionsTable.Annotation = &entsql.Annotation{
+		Table: "quality_inspection_questions",
+	}
+	QualityInspectionResultsTable.Annotation = &entsql.Annotation{
+		Table: "quality_inspection_results",
+	}
+	QualityInspectionRunsTable.Annotation = &entsql.Annotation{
+		Table: "quality_inspection_runs",
 	}
 	RedeemCodesTable.ForeignKeys[0].RefTable = GroupsTable
 	RedeemCodesTable.ForeignKeys[1].RefTable = UsersTable

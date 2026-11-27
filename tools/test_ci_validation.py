@@ -65,6 +65,19 @@ class FullCoverageTests(unittest.TestCase):
             ROOT, lane, python="python3", base=BASE,
         )]
 
+    def test_macos_deployment_sources_and_skills_follow_colima(self) -> None:
+        # User requirement: all future macOS validation and deployment uses Colima.
+        for retired in ("deploy/apple-container.sh", "deploy/APPLE_CONTAINER.md",
+                        "deploy/tests/apple-container-test.sh", "skills/deploy-cli/references/apple-containers.md"):
+            self.assertFalse((ROOT / retired).exists(), retired)
+        for name in ("README.md", "README_CN.md", "README_JA.md", "docs/README.md"):
+            self.assertIn("deploy/COLIMA.md", (ROOT / name).read_text())
+        for name in ("deploy/COLIMA.md", "skills/deploy-cli/references/colima.md"):
+            self.assertTrue((ROOT / name).is_file())
+        self.assertNotIn("APPLE_CONTAINER_", (ROOT / "deploy/.env.example").read_text())
+        self.assertIn("Colima Docker", (ROOT / "AGENTS.md").read_text())
+        self.assertIn("Colima Docker", (ROOT / "skills/deploy-cli/SKILL.md").read_text())
+
     def test_full_frontend_coverage_includes_test_suite_and_production_build(self) -> None:
         # Requirement: replacing local full must preserve full tests and build.
         self.assertEqual(self.commands("frontend"), [
@@ -85,6 +98,30 @@ class FullCoverageTests(unittest.TestCase):
                   for command in self.commands(lane)]
         self.assertEqual(expected, set(actual))
         self.assertEqual(len(actual), len(set(actual)), "duplicate full-profile CI ownership")
+
+    def test_compose_parser_runs_in_the_shared_local_and_ci_container_gate(self) -> None:
+        command = ("sh", "deploy/tests/docker-compose-config-test.sh")
+        self.assertIn(command, self.commands("deployment-config"))
+        self.assertIn(command, [tuple(step.command) for step in validation_checks.full_steps(
+            ROOT, python="python3", migration_base=BASE,
+        )])
+
+    def test_pinned_compose_parses_without_a_daemon_and_rejects_invalid_configuration(self) -> None:
+        # The configuration gate must not require a host/VM socket or accept
+        # invalid Compose just because no deployment is started.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".env").write_text("")
+            compose = root / "compose.yml"
+            environment = dict(os.environ, DOCKER_HOST="unix:///absent/docker.sock",
+                               DOCKER_CONTEXT="absent-context")
+            for content, succeeds in (("services:\n  web:\n    image: example.invalid/app:test\n", True),
+                                      ("services:\n  web:\n    unsupported_field: true\n", False)):
+                compose.write_text(content)
+                result = subprocess.run([
+                    "docker-compose", "--env-file", str(root / ".env"), "-f", str(compose), "config", "--quiet",
+                ], env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                self.assertEqual(succeeds, result.returncode == 0, result.stdout.decode())
 
     def test_full_backend_preserves_tidy_unit_integration_and_lint(self) -> None:
         self.assertEqual(self.commands("test-unit"),
@@ -215,7 +252,7 @@ class ContainerAndProfileTests(unittest.TestCase):
                        "--target-release", "v1.2.3+custom.009"], commands)
 
     def test_generic_launch_uses_managed_container_cleanup(self) -> None:
-        selected = validation_runtime.Runtime("apple-containers")
+        selected = validation_runtime.Runtime("colima-docker", docker_context="colima")
         with mock.patch.object(ci_validation, "selected_runtime", return_value=selected), \
              mock.patch.object(validation_runtime, "ensure_validation_image", return_value="image") as ensure, \
              mock.patch.object(validation_runtime, "launch_in_validation") as launch:
@@ -224,9 +261,9 @@ class ContainerAndProfileTests(unittest.TestCase):
         self.assertEqual(launch.call_args.args, (selected, ["python3", "tools/check_release.py"]))
 
     def test_docker_socket_is_not_enabled_outside_isolated_linux_ci(self) -> None:
-        selected = validation_runtime.Runtime("apple-containers")
+        selected = validation_runtime.Runtime("colima-docker", docker_context="colima")
         def launch(_runtime, _argv, **kwargs):
-            kwargs["run_step"]("In-container validation", ["container", "run", "image"])
+            kwargs["run_step"]("In-container validation", ["docker", "--context", "colima", "run", "image"])
         with mock.patch.object(ci_validation, "selected_runtime", return_value=selected), \
              mock.patch.object(validation_runtime, "ensure_validation_image", return_value="image"), \
              mock.patch.object(validation_runtime, "launch_in_validation", side_effect=launch), \

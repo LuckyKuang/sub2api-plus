@@ -1,5 +1,12 @@
 # Database Migrations
 
+Migration `318_quality_inspection.sql` adds the model quality inspection tables:
+plans (single group + single model, `unique(group_id, model)`), per-plan question
+snapshots, runs (one per schedule slot, `unique(plan_id, trigger, slot)`), per-question
+results, and account-level quarantine records (`unique(account_id)`). Artifacts live in
+the async-image object bucket, so only `artifact_key` is stored. See
+[MODEL_QUALITY_INSPECTION.md](../../docs/MODEL_QUALITY_INSPECTION.md).
+
 Migration `316_channel_pricing_ultrafast_multiplier.sql` adds an optional
 channel-level multiplier for the OpenAI ultrafast service tier. `NULL` keeps the
 model-owned default, including the GPT-6.2 introductory rate; a positive value

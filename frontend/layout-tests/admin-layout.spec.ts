@@ -492,3 +492,63 @@ test('settings save dock remains reachable without covering the final field in b
     await update
   }
 })
+
+// CONTRIBUTING console contract: shared dialogs/menus and numbered pagination;
+// MODEL_QUALITY_INSPECTION: real billable requests require explicit confirmation.
+test('quality inspection shares console controls without viewport overflow', async ({ page }, info) => {
+  const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
+  const zh = info.project.use.locale?.startsWith('zh') ?? false
+  const locale = zh ? 'zh' : 'en'
+  const question = { id: 'numeric', title: 'Calculation', kind: 'number', prompt: '17 * 19', instructions: '', expected: '323', choices: [], unit: '', rounds: 1, enabled: true }
+  const plans = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, name: `Plan ${i + 1}`, group_id: 1, group_name: 'Quality review group', platform: 'openai', model: 'gpt-5.1-codex', endpoint: 'any', effort: 'medium', enabled: true, schedule_enabled: false, interval_minutes: 60, pause_start: '22:00', pause_end: '09:00', timezone: 'Asia/Shanghai', max_accounts: 1, max_saved_rounds: 20, quarantine_enabled: false, quarantine_cooldown_minutes: 60, quarantine_fail_rounds: 2, revision: 1, questions: [question], estimated_requests: 1 }))
+  let billableRequests = 0
+  await page.route('**/api/v1/admin/quality-inspections**', async route => {
+    const url = new URL(route.request().url())
+    if (url.pathname.endsWith('/run')) billableRequests++
+    await route.fulfill({ json: { code: 0, data: { plans, questions: [question], settings: { enabled: true, quarantine_enabled: false, quarantine_cooldown_minutes: 60, max_requests_per_round: 30, stability_rounds: 5 } } } })
+  })
+  await page.route('**/api/v1/admin/groups?**', route => route.fulfill({ json: { code: 0, data: { items: Array.from({ length: 7 }, (_, i) => ({ id: i + 1, name: `Quality group ${i + 1} with a complete translated label`, platform: 'openai' })) } } }))
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto(`/layout-tests/index.html?view=admin-layout&qualityInspection=1&theme=${theme}&locale=${locale}`)
+    const view = page.getByTestId('quality-inspection')
+    await expect(view).toBeVisible({ timeout: 30_000 })
+    await expect(view.locator('table tbody tr')).toHaveCount(10)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+    // Numbered page controls must reach records after the first ten.
+    await view.locator('.pagination-container').getByRole('button', { name: zh ? '跳转到第 2 页' : 'Go to page 2', exact: true }).filter({ visible: true }).click()
+    await expect(view.locator('table tbody tr')).toHaveCount(2)
+    await expect(view.locator('table tbody')).toContainText('Plan 11')
+    const row = view.locator('table tbody tr').first()
+    const more = row.getByRole('button', { name: zh ? '更多' : 'More', exact: true })
+    // A person scrolls the narrow table before tapping its off-screen action.
+    // Drain that scroll event before opening a menu that closes on scrolling.
+    await more.scrollIntoViewIfNeeded()
+    await more.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+    await more.click()
+    const menu = page.getByRole('menu')
+    await expect(menu).toBeVisible()
+    const menuBounds = await menu.boundingBox()
+    expect(menuBounds!.x).toBeGreaterThanOrEqual(0)
+    expect(menuBounds!.x + menuBounds!.width).toBeLessThanOrEqual(width)
+    await menu.getByRole('menuitem', { name: zh ? '运行一轮' : 'Run one round' }).click()
+    const confirmation = page.getByRole('dialog')
+    await expect(confirmation).toContainText(zh ? '真实请求并产生费用' : 'billable requests')
+    await confirmation.getByRole('button', { name: zh ? '取消' : 'Cancel', exact: true }).click()
+    expect(billableRequests).toBe(0)
+    await view.getByRole('button', { name: zh ? '新建计划' : 'New plan', exact: true }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+    const groupTrigger = dialog.locator('.select-trigger').first()
+    await groupTrigger.click()
+    const dropdown = page.locator('.select-dropdown-portal')
+    await expect(dropdown).toBeVisible()
+    const bounds = await dropdown.boundingBox()
+    expect(bounds!.x).toBeGreaterThanOrEqual(0)
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width)
+    await dropdown.getByRole('option').last().click()
+    await expect(groupTrigger).toContainText('Quality group 7')
+    await dialog.getByRole('button', { name: zh ? '取消' : 'Cancel', exact: true }).click()
+  }
+})

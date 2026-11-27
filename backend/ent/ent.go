@@ -38,6 +38,11 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/ent/promocode"
 	"github.com/LuckyKuang/sub2api-plus/ent/promocodeusage"
 	"github.com/LuckyKuang/sub2api-plus/ent/proxy"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionplan"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionquarantine"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionquestion"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionresult"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionrun"
 	"github.com/LuckyKuang/sub2api-plus/ent/redeemcode"
 	"github.com/LuckyKuang/sub2api-plus/ent/securitysecret"
 	"github.com/LuckyKuang/sub2api-plus/ent/setting"
@@ -137,6 +142,11 @@ func checkColumn(t, c string) error {
 			promocode.Table:                     promocode.ValidColumn,
 			promocodeusage.Table:                promocodeusage.ValidColumn,
 			proxy.Table:                         proxy.ValidColumn,
+			qualityinspectionplan.Table:         qualityinspectionplan.ValidColumn,
+			qualityinspectionquarantine.Table:   qualityinspectionquarantine.ValidColumn,
+			qualityinspectionquestion.Table:     qualityinspectionquestion.ValidColumn,
+			qualityinspectionresult.Table:       qualityinspectionresult.ValidColumn,
+			qualityinspectionrun.Table:          qualityinspectionrun.ValidColumn,
 			redeemcode.Table:                    redeemcode.ValidColumn,
 			securitysecret.Table:                securitysecret.ValidColumn,
 			setting.Table:                       setting.ValidColumn,

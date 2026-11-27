@@ -1,5 +1,6 @@
 <template>
-  <SettingsView v-if="settings" />
+  <QualityInspectionView v-if="qualityInspection" />
+  <SettingsView v-else-if="settings" />
   <OpsDashboardView v-else-if="ops" />
   <UsersView v-else-if="users" />
   <GroupsView v-else-if="groups" />
@@ -51,6 +52,8 @@ import type { User } from '../src/types'
 import { useAppStore } from '../src/stores/app'
 import { useAuthStore } from '../src/stores/auth'
 
+const qualityInspection = new URLSearchParams(location.search).get('qualityInspection') === '1'
+const QualityInspectionView = defineAsyncComponent(() => import('../src/views/admin/QualityInspectionView.vue'))
 const settings = new URLSearchParams(location.search).get('settings') === '1'
 const SettingsView = defineAsyncComponent(() => import('../src/views/admin/SettingsView.vue'))
 const ops = new URLSearchParams(location.search).get('ops') === '1'
@@ -77,7 +80,7 @@ app.siteName = 'Admin layout review'
 app.sidebarCollapsed = false
 const auth = useAuthStore()
 auth.user = { id: 9998, role: 'admin', email: 'fixture@example.test', username: 'Reviewer', balance: 0 } as User
-if (settings || usage || promptAudit || users || groups || ipAccessControl || riskControl || proxies || emptyWide || ops) auth.token = 'browser-fixture-token'
+if (qualityInspection || settings || usage || promptAudit || users || groups || ipAccessControl || riskControl || proxies || emptyWide || ops) auth.token = 'browser-fixture-token'
 localStorage.setItem('admin_guide', 'true')
 localStorage.setItem('admin_guide_9998_admin_v4_interactive', 'true')
 const { t } = useI18n()

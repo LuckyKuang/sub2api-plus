@@ -1,5 +1,10 @@
 # Seven-provider business regression matrix
 
+Current macOS validation and deployment use Colima Docker under
+[validation operations](VALIDATION_OPERATIONS.md#macos-colima). Dated Apple
+Containers results below describe their historical runs and are not current
+runtime instructions or proof for a changed source tree.
+
 ## v0.2.25 import requirements
 
 - OpenAI. `TestAnthropicUpstreamBuildersReportIdentity` drives the production
@@ -645,6 +650,14 @@ inside the pinned platform validation container. Full backend unit tests include
 the network fixtures; PostgreSQL/Redis cases require the integration environment.
 Frontend changes require lint, typecheck, relevant Vitest and locale checks.
 Identity changes also retain the complete existing Codex identity regressions.
+
+The critical Go gate uses five-minute unit and ten-minute integration package
+deadlines. The integration deadline matches the ordinary Go suite and leaves
+room for the StepFun business matrix's eight-minute trusted-CA subprocess.
+Storage checks use the same integration deadline. Every required parent and
+child must still execute and pass; missing, skipped, failed and unfinished cases
+reject the gate. A Go package timeout reports a stable diagnostic without
+printing captured test payloads or credentials.
 
 ### Post-commit branch verification
 

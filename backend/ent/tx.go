@@ -66,6 +66,16 @@ type Tx struct {
 	PromoCodeUsage *PromoCodeUsageClient
 	// Proxy is the client for interacting with the Proxy builders.
 	Proxy *ProxyClient
+	// QualityInspectionPlan is the client for interacting with the QualityInspectionPlan builders.
+	QualityInspectionPlan *QualityInspectionPlanClient
+	// QualityInspectionQuarantine is the client for interacting with the QualityInspectionQuarantine builders.
+	QualityInspectionQuarantine *QualityInspectionQuarantineClient
+	// QualityInspectionQuestion is the client for interacting with the QualityInspectionQuestion builders.
+	QualityInspectionQuestion *QualityInspectionQuestionClient
+	// QualityInspectionResult is the client for interacting with the QualityInspectionResult builders.
+	QualityInspectionResult *QualityInspectionResultClient
+	// QualityInspectionRun is the client for interacting with the QualityInspectionRun builders.
+	QualityInspectionRun *QualityInspectionRunClient
 	// RedeemCode is the client for interacting with the RedeemCode builders.
 	RedeemCode *RedeemCodeClient
 	// SecuritySecret is the client for interacting with the SecuritySecret builders.
@@ -249,6 +259,11 @@ func (tx *Tx) init() {
 	tx.PromoCode = NewPromoCodeClient(tx.config)
 	tx.PromoCodeUsage = NewPromoCodeUsageClient(tx.config)
 	tx.Proxy = NewProxyClient(tx.config)
+	tx.QualityInspectionPlan = NewQualityInspectionPlanClient(tx.config)
+	tx.QualityInspectionQuarantine = NewQualityInspectionQuarantineClient(tx.config)
+	tx.QualityInspectionQuestion = NewQualityInspectionQuestionClient(tx.config)
+	tx.QualityInspectionResult = NewQualityInspectionResultClient(tx.config)
+	tx.QualityInspectionRun = NewQualityInspectionRunClient(tx.config)
 	tx.RedeemCode = NewRedeemCodeClient(tx.config)
 	tx.SecuritySecret = NewSecuritySecretClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)

@@ -1,10 +1,16 @@
 # =============================================================================
 # Sub2API Docker Compose - Local Development Build
 # =============================================================================
+# macOS: use docker --context colima (or the verified named profile context).
+# See COLIMA.md before building or starting services.
 # Build from local source code for testing changes.
 #
 # Usage:
 #   cd deploy
+#   macOS (default profile):
+#   docker --context colima compose -f docker-compose.dev.yml build --builder colima
+#   docker --context colima compose -f docker-compose.dev.yml up --no-build
+#   Linux / WSL2 Docker:
 #   docker compose -f docker-compose.dev.yml up --build
 # =============================================================================
 

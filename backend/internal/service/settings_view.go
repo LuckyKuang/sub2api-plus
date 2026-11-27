@@ -203,14 +203,23 @@ type SystemSettings struct {
 	OpsQueryModeDefault          string
 	OpsMetricsIntervalSeconds    int
 
+	// Model Quality Inspection feature
+	ModelQualityInspectionEnabled              bool `json:"model_quality_inspection_enabled"`
+	QualityInspectionQuarantineEnabled         bool `json:"quality_inspection_quarantine_enabled"`
+	QualityInspectionQuarantineCooldownMinutes int  `json:"quality_inspection_quarantine_cooldown_minutes"`
+	QualityInspectionMaxRequestsPerRound       int  `json:"quality_inspection_max_requests_per_round"`
+	QualityInspectionStabilityRounds           int  `json:"quality_inspection_stability_rounds"`
+
 	// Channel Monitor feature
-	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`
-	ChannelMonitorMode                   string `json:"channel_monitor_mode"`
-	ChannelMonitorDefaultIntervalSeconds int    `json:"channel_monitor_default_interval_seconds"`
-	ChannelMonitorHideThroughput         bool   `json:"channel_monitor_hide_throughput"`
-	ChannelMonitorV1Enabled              bool   `json:"channel_monitor_v1_enabled"`
-	ChannelMonitorShowQuota              bool   `json:"channel_monitor_show_quota"`
-	ChannelMonitorHideUserRanking        bool   `json:"channel_monitor_hide_user_ranking"`
+	ChannelMonitorEnabled                           bool   `json:"channel_monitor_enabled"`
+	ChannelMonitorMode                              string `json:"channel_monitor_mode"`
+	ChannelMonitorDefaultIntervalSeconds            int    `json:"channel_monitor_default_interval_seconds"`
+	ChannelMonitorProbeResponseHeaderTimeoutSeconds int    `json:"channel_monitor_probe_response_header_timeout_seconds"`
+	ChannelMonitorProbeTotalTimeoutSeconds          int    `json:"channel_monitor_probe_total_timeout_seconds"`
+	ChannelMonitorHideThroughput                    bool   `json:"channel_monitor_hide_throughput"`
+	ChannelMonitorV1Enabled                         bool   `json:"channel_monitor_v1_enabled"`
+	ChannelMonitorShowQuota                         bool   `json:"channel_monitor_show_quota"`
+	ChannelMonitorHideUserRanking                   bool   `json:"channel_monitor_hide_user_ranking"`
 
 	// Grok model mapping policy (admin settings; empty mapping falls back to these).
 	GrokDefaultTextModel           string `json:"grok_default_text_model"`
@@ -406,6 +415,10 @@ type PublicSettings struct {
 	AccountQuotaNotifyEnabled   bool
 	BalanceLowNotifyThreshold   float64
 	BalanceLowNotifyRechargeURL string
+
+	// Model Quality Inspection feature (admin-only surface; flag only drives the
+	// admin sidebar entry, never data authorization).
+	ModelQualityInspectionEnabled bool `json:"model_quality_inspection_enabled"`
 
 	// Channel Monitor feature
 	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`

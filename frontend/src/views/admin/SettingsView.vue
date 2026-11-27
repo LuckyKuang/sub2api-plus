@@ -6813,6 +6813,73 @@
         <div class="card workspace-shell">
           <div class="border-b border-[var(--surface-edge)] px-6 py-4">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.features.qualityInspection.title') }}
+            </h2>
+            <p class="mt-1 text-sm surface-muted">
+              {{ t('admin.settings.features.qualityInspection.description') }}
+            </p>
+            <p class="mt-1.5 text-xs">
+              <router-link
+                to="/admin/quality-inspection"
+                class="inline-flex items-center gap-1 text-primary-600 hover:underline dark:text-primary-400"
+              >
+                {{ t('admin.settings.features.qualityInspection.configureLink') }}
+                <span aria-hidden="true">→</span>
+              </router-link>
+            </p>
+          </div>
+          <div class="space-y-5 p-6">
+            <div class="flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <label class="text-sm font-medium surface-muted">
+                  {{ t('admin.settings.features.qualityInspection.enabled') }}
+                </label>
+                <p class="mt-0.5 text-xs surface-muted">
+                  {{ t('admin.settings.features.qualityInspection.enabledHint') }}
+                </p>
+              </div>
+              <Toggle v-model="form.model_quality_inspection_enabled" />
+            </div>
+
+            <div v-if="form.model_quality_inspection_enabled" class="space-y-5">
+              <div class="flex items-center justify-between gap-4">
+                <div class="min-w-0">
+                  <label class="text-sm font-medium surface-muted">
+                    {{ t('admin.settings.features.qualityInspection.quarantine') }}
+                  </label>
+                  <p class="mt-0.5 text-xs surface-muted">
+                    {{ t('admin.settings.features.qualityInspection.quarantineHint') }}
+                  </p>
+                </div>
+                <Toggle v-model="form.quality_inspection_quarantine_enabled" />
+              </div>
+
+              <div v-if="form.quality_inspection_quarantine_enabled" class="grid gap-4 md:grid-cols-2">
+                <label class="block">
+                  <span class="input-label">{{ t('admin.settings.features.qualityInspection.cooldown') }}</span>
+                  <input v-model.number="form.quality_inspection_quarantine_cooldown_minutes" type="number" min="5" max="10080" class="input" />
+                </label>
+              </div>
+
+              <div class="grid gap-4 md:grid-cols-2">
+                <label class="block">
+                  <span class="input-label">{{ t('admin.settings.features.qualityInspection.maxRequests') }}</span>
+                  <input v-model.number="form.quality_inspection_max_requests_per_round" type="number" min="1" max="200" class="input" />
+                  <span class="mt-1 block text-xs surface-muted">{{ t('admin.settings.features.qualityInspection.maxRequestsHint') }}</span>
+                </label>
+                <label class="block">
+                  <span class="input-label">{{ t('admin.settings.features.qualityInspection.stabilityRounds') }}</span>
+                  <input v-model.number="form.quality_inspection_stability_rounds" type="number" min="3" max="30" class="input" />
+                  <span class="mt-1 block text-xs surface-muted">{{ t('admin.settings.features.qualityInspection.stabilityHint') }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card workspace-shell">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.channelMonitor.title') }}
             </h2>
             <p class="mt-1 text-sm surface-muted">
@@ -6894,6 +6961,40 @@
                 />
                 <p class="mt-1 text-xs surface-muted">
                   {{ t('admin.settings.features.channelMonitor.defaultIntervalHint') }}
+                </p>
+              </div>
+
+              <div v-if="showChannelMonitorProbeTimeouts" class="space-y-2">
+                <div class="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label for="channel-monitor-probe-header-timeout" class="input-label">
+                      {{ t('admin.settings.features.channelMonitor.probeResponseHeaderTimeout') }}
+                    </label>
+                    <input
+                      id="channel-monitor-probe-header-timeout"
+                      v-model.number="form.channel_monitor_probe_response_header_timeout_seconds"
+                      type="number"
+                      min="1"
+                      :max="channelMonitorProbeTimeoutMaxSeconds"
+                      class="input"
+                    />
+                  </div>
+                  <div>
+                    <label for="channel-monitor-probe-total-timeout" class="input-label">
+                      {{ t('admin.settings.features.channelMonitor.probeTotalTimeout') }}
+                    </label>
+                    <input
+                      id="channel-monitor-probe-total-timeout"
+                      v-model.number="form.channel_monitor_probe_total_timeout_seconds"
+                      type="number"
+                      min="1"
+                      :max="channelMonitorProbeTimeoutMaxSeconds"
+                      class="input"
+                    />
+                  </div>
+                </div>
+                <p class="text-xs surface-muted">
+                  {{ t('admin.settings.features.channelMonitor.probeTimeoutsHint') }}
                 </p>
               </div>
 
@@ -8891,6 +8992,7 @@ const appStore = useAppStore();
 const settingsStepUp = useStepUp();
 const adminSettingsStore = useAdminSettingsStore();
 const channelMonitorModes = ['v1', 'v2', 'v3'] as const;
+const channelMonitorProbeTimeoutMaxSeconds = 120;
 const isZhLocale = computed(() => locale.value.startsWith("zh"));
 
 // Codex 全局出口时区/国家下拉选项：首项为空值（关闭/不声明）。
@@ -9889,10 +9991,18 @@ const form = reactive<SettingsForm>({
   subscription_expiry_notify_enabled: true,
   account_quota_notify_enabled: false,
   account_quota_notify_emails: [] as NotifyEmailEntry[],
+  // Model Quality Inspection feature switches
+  model_quality_inspection_enabled: false,
+  quality_inspection_quarantine_enabled: false,
+  quality_inspection_quarantine_cooldown_minutes: 60,
+  quality_inspection_max_requests_per_round: 30,
+  quality_inspection_stability_rounds: 5,
   // Channel Monitor feature switch
   channel_monitor_enabled: true,
   channel_monitor_mode: 'v1' as 'v1' | 'v2' | 'v3',
   channel_monitor_default_interval_seconds: 60,
+  channel_monitor_probe_response_header_timeout_seconds: 30,
+  channel_monitor_probe_total_timeout_seconds: 45,
   channel_monitor_hide_throughput: false,
   channel_monitor_show_quota: false,
   channel_monitor_v1_enabled: false,
@@ -9925,6 +10035,11 @@ function applyCaptchaSelection(provider: CaptchaProviderSelection | null): void 
   form.tencent_captcha_enabled = provider === "tencent";
   form.aliyun_captcha_enabled = provider === "aliyun";
 }
+
+const showChannelMonitorProbeTimeouts = computed(() => form.channel_monitor_enabled && (
+  form.channel_monitor_mode === 'v1' ||
+  (form.channel_monitor_mode === 'v3' && form.channel_monitor_v1_enabled)
+));
 
 // Keep the settings API representation as user IDs; the selector displays emails.
 const riskControlAllowlistedUserIds = computed<number[]>({
@@ -10933,6 +11048,21 @@ async function loadSettings() {
     form.login_agreement_mode =
       settings.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
     form.available_channels_layout = settings.available_channels_layout === "list" ? "list" : "card";
+    form.model_quality_inspection_enabled = Boolean(
+      settings.model_quality_inspection_enabled
+    );
+    form.quality_inspection_quarantine_enabled = Boolean(
+      settings.quality_inspection_quarantine_enabled
+    );
+    form.quality_inspection_quarantine_cooldown_minutes = Number(
+      settings.quality_inspection_quarantine_cooldown_minutes
+    ) || 60;
+    form.quality_inspection_max_requests_per_round = Number(
+      settings.quality_inspection_max_requests_per_round
+    ) || 30;
+    form.quality_inspection_stability_rounds = Number(
+      settings.quality_inspection_stability_rounds
+    ) || 5;
     form.channel_monitor_mode =
       settings.channel_monitor_mode === "v2" || settings.channel_monitor_mode === "v3"
         ? settings.channel_monitor_mode : "v1";
@@ -11177,6 +11307,19 @@ const siteBillingModeHint = computed(() =>
 async function saveSettings() {
   saving.value = true;
   try {
+    const probeHeaderTimeout = Number(form.channel_monitor_probe_response_header_timeout_seconds);
+    const probeTotalTimeout = Number(form.channel_monitor_probe_total_timeout_seconds);
+    if (showChannelMonitorProbeTimeouts.value && (
+      !Number.isInteger(probeHeaderTimeout) || !Number.isInteger(probeTotalTimeout) ||
+      probeHeaderTimeout < 1 || probeTotalTimeout > channelMonitorProbeTimeoutMaxSeconds ||
+      probeHeaderTimeout > probeTotalTimeout
+    )) {
+      appStore.showError(t('admin.settings.features.channelMonitor.probeTimeoutsError', {
+        max: channelMonitorProbeTimeoutMaxSeconds,
+      }));
+      return;
+    }
+
     const normalizedTableDefaultPageSize = Math.floor(
       Number(form.table_default_page_size),
     );
@@ -11649,11 +11792,24 @@ async function saveSettings() {
       account_quota_notify_emails: (
         form.account_quota_notify_emails || []
       ).filter((e) => e.email.trim() !== ""),
+      // Model Quality Inspection feature switches
+      model_quality_inspection_enabled: Boolean(form.model_quality_inspection_enabled),
+      quality_inspection_quarantine_enabled: Boolean(form.quality_inspection_quarantine_enabled),
+      quality_inspection_quarantine_cooldown_minutes:
+        Number(form.quality_inspection_quarantine_cooldown_minutes) || 60,
+      quality_inspection_max_requests_per_round:
+        Number(form.quality_inspection_max_requests_per_round) || 30,
+      quality_inspection_stability_rounds:
+        Number(form.quality_inspection_stability_rounds) || 5,
       // Channel Monitor feature switch
       channel_monitor_enabled: form.channel_monitor_enabled,
       channel_monitor_mode: form.channel_monitor_mode,
       channel_monitor_default_interval_seconds:
         Number(form.channel_monitor_default_interval_seconds) || 60,
+      channel_monitor_probe_response_header_timeout_seconds:
+        showChannelMonitorProbeTimeouts.value ? probeHeaderTimeout : undefined,
+      channel_monitor_probe_total_timeout_seconds:
+        showChannelMonitorProbeTimeouts.value ? probeTotalTimeout : undefined,
       channel_monitor_hide_throughput: Boolean(form.channel_monitor_hide_throughput),
       channel_monitor_show_quota: Boolean(form.channel_monitor_show_quota),
       channel_monitor_v1_enabled: Boolean(form.channel_monitor_v1_enabled),

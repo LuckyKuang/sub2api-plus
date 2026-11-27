@@ -87,6 +87,20 @@ export default {
         sources: { account: 'Account', global: 'Global settings', compiled_default: 'Project default', environment: 'Environment' },
       },
       features: {
+      qualityInspection: {
+        title: 'Model Quality Inspection',
+        description: 'Scheduled per-group inspection of a single model. When disabled it makes no requests and incurs no cost; after enabling you still need a configured plan before any model call happens.',
+        configureLink: 'Configure inspection plans',
+        enabled: 'Enable model quality inspection',
+        enabledHint: 'Disabling stops the scheduler and rejects admin APIs; existing plans and history are kept.',
+        quarantine: 'Automatic quarantine configuration (reserved)',
+        quarantineHint: 'Configuration only in this version: no accounts are removed from scheduling or restored automatically.',
+        cooldown: 'Default cooldown (minutes)',
+        maxRequests: 'Requests per round cap',
+        maxRequestsHint: 'accounts × enabled question rounds must not exceed this; validated on save and on run.',
+        stabilityRounds: 'Stability window (rounds)',
+        stabilityHint: 'Configuration only in this version. The result page currently shows individual rounds; no rolling pass rate is calculated.',
+      },
         channelMonitor: {
           title: 'Channel Monitor',
           description: 'Choose V1 active probes, V2 passive monitoring, or V3 service status. Disabling stops monitoring jobs and hides the user entry.',
@@ -103,6 +117,10 @@ export default {
           modeV3Hint: 'Observes platform availability and service incidents from user requests without active probes.',
           defaultInterval: 'Default check interval (seconds)',
           defaultIntervalHint: 'V1 only: default interval for new monitors (overridable per monitor). Range 15 – 3600 seconds.',
+          probeResponseHeaderTimeout: 'Response header timeout (seconds)',
+          probeTotalTimeout: 'Total probe timeout (seconds)',
+          probeTimeoutsHint: 'Applies to scheduled and manual checks. The total includes waiting for response headers and reading the full response.',
+          probeTimeoutsError: 'Enter whole seconds from 1 to {max}. The response header timeout cannot exceed the total.',
           hideThroughput: 'Hide throughput rates from users (RPM / TPM)',
           hideThroughputHint:
             'When on, the user Channel Monitor page and user APIs omit RPM and TPM so fleet volume cannot be reverse-estimated from rates × window. Admins still see full metrics. Error rates, latency, and cache rates remain visible.',

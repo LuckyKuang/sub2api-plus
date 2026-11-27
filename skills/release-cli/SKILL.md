@@ -50,7 +50,7 @@ CI-only submission remains inactive until the protected trusted-origin cutover
 in [CI validation](../../docs/CI_VALIDATION.md) is verified.
 
 Local metadata and deterministic tree checks use `tools/release_validation.py`
-and the container environment defined in `CONTRIBUTING.md`: Apple Containers on
+and the container environment defined in `CONTRIBUTING.md`: Colima Docker containers on
 macOS, Docker inside WSL2 Debian/Ubuntu on Windows, and Docker on Linux. The
 launcher handles Git/GitHub operations and container management. Missing runtime
 or failed checks stop the operation without a host-validation fallback.

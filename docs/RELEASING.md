@@ -8,7 +8,7 @@ before merging and tagging; post-publication finalization uses a separate,
 strictly deterministic proof profile.
 
 Local release metadata and deterministic finalization checks run in the same
-platform validation container required by `CONTRIBUTING.md`: Apple Containers
+platform validation container required by `CONTRIBUTING.md`: Colima Docker containers
 on macOS, Docker inside WSL2 Debian or Ubuntu on Windows, and Docker on Linux.
 These are focused checks and do not repeat the application matrix. The host
 launcher performs Git/GitHub operations and runtime management. A missing

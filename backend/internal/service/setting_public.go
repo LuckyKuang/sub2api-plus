@@ -229,6 +229,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyBalanceLowNotifyThreshold,
 		SettingKeyBalanceLowNotifyRechargeURL,
 		SettingKeyAccountQuotaNotifyEnabled,
+		SettingKeyModelQualityInspectionEnabled,
 		SettingKeyChannelMonitorEnabled,
 		SettingKeyChannelMonitorMode,
 		SettingKeyChannelMonitorDefaultIntervalSeconds,
@@ -363,6 +364,9 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		BalanceLowNotifyThreshold:           balanceLowNotifyThreshold,
 		BalanceLowNotifyRechargeURL:         settings[SettingKeyBalanceLowNotifyRechargeURL],
 
+		// 仅用于管理员端菜单与开关状态渲染；数据接口由 AdminAuth 单独鉴权。
+		ModelQualityInspectionEnabled: settings[SettingKeyModelQualityInspectionEnabled] == "true",
+
 		ChannelMonitorEnabled:                !isFalseSettingValue(settings[SettingKeyChannelMonitorEnabled]),
 		ChannelMonitorMode:                   normalizeChannelMonitorMode(settings[SettingKeyChannelMonitorMode]),
 		ChannelMonitorDefaultIntervalSeconds: parseChannelMonitorInterval(settings[SettingKeyChannelMonitorDefaultIntervalSeconds]),
@@ -443,6 +447,7 @@ type ChannelMonitorRuntime struct {
 	Enabled                bool
 	Mode                   string // ChannelMonitorModeV1, ChannelMonitorModeV2 or ChannelMonitorModeV3
 	DefaultIntervalSeconds int
+	probeTimeouts          channelMonitorProbeTimeouts
 	// HideThroughput: when true, user-facing V2 APIs omit RPM/TPM scale signals.
 	HideThroughput bool
 	// ShowQuota: when true, user-facing monitor views keep the quota/balance
@@ -480,6 +485,8 @@ func (s *SettingService) GetChannelMonitorRuntime(ctx context.Context) ChannelMo
 		SettingKeyChannelMonitorEnabled,
 		SettingKeyChannelMonitorMode,
 		SettingKeyChannelMonitorDefaultIntervalSeconds,
+		SettingKeyChannelMonitorProbeResponseHeaderTimeoutSeconds,
+		SettingKeyChannelMonitorProbeTotalTimeoutSeconds,
 		SettingKeyChannelMonitorHideThroughput,
 		SettingKeyChannelMonitorV1Enabled,
 		SettingKeyChannelMonitorShowQuota,
@@ -497,6 +504,7 @@ func (s *SettingService) GetChannelMonitorRuntime(ctx context.Context) ChannelMo
 		Enabled:                !isFalseSettingValue(vals[SettingKeyChannelMonitorEnabled]),
 		Mode:                   normalizeChannelMonitorMode(vals[SettingKeyChannelMonitorMode]),
 		DefaultIntervalSeconds: parseChannelMonitorInterval(vals[SettingKeyChannelMonitorDefaultIntervalSeconds]),
+		probeTimeouts:          readChannelMonitorProbeTimeouts(vals),
 		HideThroughput:         !isFalseSettingValue(vals[SettingKeyChannelMonitorHideThroughput]),
 		ShowQuota:              vals[SettingKeyChannelMonitorShowQuota] == "true",
 		V1Enabled:              vals[SettingKeyChannelMonitorV1Enabled] == "true",
@@ -649,6 +657,7 @@ type PublicSettingsInjectionPayload struct {
 	// Feature flags — MUST match the opt-in/opt-out registry in
 	// frontend/src/utils/featureFlags.ts. Missing a field here is the bug
 	// that hid the "可用渠道" menu on page refresh.
+	ModelQualityInspectionEnabled        bool   `json:"model_quality_inspection_enabled"`
 	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`
 	ChannelMonitorMode                   string `json:"channel_monitor_mode"`
 	ChannelMonitorDefaultIntervalSeconds int    `json:"channel_monitor_default_interval_seconds"`
@@ -745,6 +754,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		BalanceLowNotifyRechargeURL:         settings.BalanceLowNotifyRechargeURL,
 
 		ChannelMonitorEnabled:                settings.ChannelMonitorEnabled,
+		ModelQualityInspectionEnabled:        settings.ModelQualityInspectionEnabled,
 		ChannelMonitorMode:                   settings.ChannelMonitorMode,
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
 		ChannelMonitorHideThroughput:         settings.ChannelMonitorHideThroughput,

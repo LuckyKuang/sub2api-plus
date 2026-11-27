@@ -326,3 +326,11 @@ Sub2API 后续会持续补充更多 Provider 的插件适配说明，包括能�
 ## 12. 示例仓库预留
 
 后续计划提供独立的插件示例仓库，用于存放可复用的运行时骨架、UI 组件、打包工具和各 Provider 的最小实现。目前示例仓库尚未准备完成，因此暂不提供地址；正式发布后会在这里补充仓库地址、适用的 Sub2API 版本、示例插件版本和构建说明。
+
+### Production dependency wiring
+
+The shared plugin manager is attached to the Anthropic and Gemini compatibility
+services in `backend/internal/handler/wire.go` (`ProvideGatewayHandler`), and to
+the OpenAI gateway and account tester through their owning providers. Regenerate
+`backend/cmd/server/wire_gen.go` from those providers; generated-only setter
+calls are lost on the next generation and must not carry production wiring.

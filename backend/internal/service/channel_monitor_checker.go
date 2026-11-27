@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/LuckyKuang/sub2api-plus/internal/pkg/brandidentity"
@@ -24,24 +25,50 @@ import (
 
 // monitorHTTPClient 共享一个 http.Client，避免每次检测重建 transport。
 // 自定义 Transport 在 dial 时强制再次校验 IP，防止 DNS rebinding 绕过 validateEndpoint。
-var monitorHTTPClient = newSSRFSafeHTTPClient(monitorRequestTimeout)
+var monitorHTTPClient = newSSRFSafeHTTPClient(monitorDefaultTotalTimeoutSeconds*time.Second, monitorDefaultResponseHeaderTimeoutSeconds*time.Second)
 
 // monitorPingHTTPClient 用于 endpoint origin 的 HEAD ping，超时更短。
-var monitorPingHTTPClient = newSSRFSafeHTTPClient(monitorPingTimeout)
+var monitorPingHTTPClient = newSSRFSafeHTTPClient(monitorPingTimeout, monitorDefaultResponseHeaderTimeoutSeconds*time.Second)
+
+// Only retain the latest non-default client. In-flight checks hold their own client.
+var monitorCustomHTTPClient struct {
+	sync.Mutex
+	timeouts channelMonitorProbeTimeouts
+	client   *http.Client
+}
+
+func monitorHTTPClientForTimeouts(timeouts channelMonitorProbeTimeouts) *http.Client {
+	if timeouts.responseHeaderSeconds == monitorDefaultResponseHeaderTimeoutSeconds && timeouts.totalSeconds == monitorDefaultTotalTimeoutSeconds {
+		return monitorHTTPClient
+	}
+	monitorCustomHTTPClient.Lock()
+	defer monitorCustomHTTPClient.Unlock()
+	if monitorCustomHTTPClient.timeouts != timeouts || monitorCustomHTTPClient.client == nil {
+		monitorCustomHTTPClient.client = newSSRFSafeHTTPClient(time.Duration(timeouts.totalSeconds)*time.Second, time.Duration(timeouts.responseHeaderSeconds)*time.Second)
+		monitorCustomHTTPClient.timeouts = timeouts
+	}
+	return monitorCustomHTTPClient.client
+}
 
 // newSSRFSafeHTTPClient 返回一个使用 safeDialContext 的 http.Client。
 // 仅供监控模块对外发起请求使用——所有目标都应是公网 endpoint。
-func newSSRFSafeHTTPClient(timeout time.Duration) *http.Client {
-	tr := &http.Transport{
+func newSSRFSafeHTTPClient(timeout, responseHeaderTimeout time.Duration) *http.Client {
+	transport := newMonitorHTTPTransport(responseHeaderTimeout)
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: brandidentity.WrapRoundTripper(servertiming.WrapRoundTripper(firstbyte.WrapTransport(transport))),
+	}
+}
+
+func newMonitorHTTPTransport(responseHeaderTimeout time.Duration) *http.Transport {
+	return &http.Transport{
 		DialContext:           safeDialContext,
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          16,
 		IdleConnTimeout:       monitorIdleConnTimeout,
 		TLSHandshakeTimeout:   monitorTLSHandshakeTimeout,
-		ResponseHeaderTimeout: monitorResponseHeaderTimeout,
+		ResponseHeaderTimeout: responseHeaderTimeout,
 	}
-	transport := brandidentity.WrapRoundTripper(servertiming.WrapRoundTripper(firstbyte.WrapTransport(tr)))
-	return &http.Client{Timeout: timeout, Transport: transport}
 }
 
 // CheckOptions 承载一次检测的自定义入参。
@@ -57,6 +84,7 @@ type CheckOptions struct {
 	// BodyOverride 在 merge 模式下做浅合并（key 命中黑名单时静默丢弃），
 	// 在 replace 模式下直接当作完整 body。
 	BodyOverride map[string]any
+	httpClient   *http.Client
 }
 
 // runCheckForModel 对单个 (provider, model) 做一次完整检测。
@@ -325,7 +353,11 @@ func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt
 	headers := mergeHeaders(adapter.buildHeaders(apiKey), opts)
 	full := joinURL(endpoint, monitorRequestPath(provider, endpoint, adapter, model))
 	stream := opts != nil && opts.StreamProbe
-	resp, err := postMonitorRequest(ctx, full, body, headers, stream)
+	client := monitorHTTPClient
+	if opts != nil && opts.httpClient != nil {
+		client = opts.httpClient
+	}
+	resp, err := postMonitorRequest(ctx, client, full, body, headers, stream)
 	if err != nil {
 		return result, err
 	}
@@ -606,7 +638,7 @@ func hasNonEmptyBodyValue(v any) bool {
 }
 
 // postMonitorRequest shares SSRF, identity and transport boundaries for JSON and SSE.
-func postMonitorRequest(ctx context.Context, fullURL string, payload []byte, headers map[string]string, stream bool) (*http.Response, error) {
+func postMonitorRequest(ctx context.Context, client *http.Client, fullURL string, payload []byte, headers map[string]string, stream bool) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
@@ -624,7 +656,7 @@ func postMonitorRequest(ctx context.Context, fullURL string, payload []byte, hea
 		applyOpenAICodexBetaFeatures(ctx, nil, nil, req.Header)
 	}
 
-	resp, err := monitorHTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("do request: %w", err)
 	}

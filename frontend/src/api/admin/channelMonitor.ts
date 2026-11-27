@@ -341,7 +341,10 @@ export async function del(id: number): Promise<void> {
  * Returns the latest check results for primary + extra models.
  */
 export async function runNow(id: number): Promise<RunNowResponse> {
-  const { data } = await apiClient.post<RunNowResponse>(`/admin/channel-monitors/${id}/run`)
+  const { data } = await apiClient.post<RunNowResponse>(`/admin/channel-monitors/${id}/run`, undefined, {
+    // Allow the maximum V1 model probe, initial Ping, and optional quota lookup.
+    timeout: 200_000,
+  })
   return data
 }
 

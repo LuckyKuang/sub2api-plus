@@ -148,8 +148,8 @@ func TestMain(m *testing.M) {
 }
 
 // runIntegrationTestsWithExternalServices is an explicit opt-in for runtimes
-// such as Apple Containers that do not expose a Docker-compatible API to
-// testcontainers. Callers must supply an isolated PostgreSQL database because
+// where the validation container has no Docker socket for testcontainers.
+// Callers must supply an isolated PostgreSQL database because
 // integration tests apply migrations and create persistent fixture rows.
 func runIntegrationTestsWithExternalServices(ctx context.Context, m *testing.M, postgresDSN, redisAddr string) int {
 	var err error

@@ -1,4 +1,4 @@
 interface:
   display_name: "Sub2API Push CLI"
-  short_description: "Validate in Apple Container or Docker, then push"
+  short_description: "Validate in Colima, WSL2 Docker or Linux Docker, then push"
   default_prompt: "Use $push-cli for fast non-default-branch pushes. For an ordinary final pull-request submission, use the default full submit-pr profile so the complete bounded-lane matrix runs in the platform container and publishes an exact typed base/head proof. Use release-finalization only when release-cli supplies a verified published tag and deterministic metadata tree."

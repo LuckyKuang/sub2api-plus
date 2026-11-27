@@ -508,11 +508,27 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		updates[SettingKeyOpsMetricsIntervalSeconds] = strconv.Itoa(settings.OpsMetricsIntervalSeconds)
 	}
 
+	// Model quality inspection switches
+	updates[SettingKeyModelQualityInspectionEnabled] = strconv.FormatBool(settings.ModelQualityInspectionEnabled)
+	updates[SettingKeyQualityInspectionQuarantineEnabled] = strconv.FormatBool(settings.QualityInspectionQuarantineEnabled)
+	updates[SettingKeyQualityInspectionQuarantineCooldownMinutes] = strconv.Itoa(clampInt(settings.QualityInspectionQuarantineCooldownMinutes, 5, 10080))
+	updates[SettingKeyQualityInspectionMaxRequestsPerRound] = strconv.Itoa(clampInt(settings.QualityInspectionMaxRequestsPerRound, 1, 200))
+	updates[SettingKeyQualityInspectionStabilityRounds] = strconv.Itoa(clampInt(settings.QualityInspectionStabilityRounds, 3, 30))
+
 	// Channel monitor feature switch
 	updates[SettingKeyChannelMonitorEnabled] = strconv.FormatBool(settings.ChannelMonitorEnabled)
 	updates[SettingKeyChannelMonitorMode] = normalizeChannelMonitorMode(settings.ChannelMonitorMode)
 	if v := clampChannelMonitorInterval(settings.ChannelMonitorDefaultIntervalSeconds); v > 0 {
 		updates[SettingKeyChannelMonitorDefaultIntervalSeconds] = strconv.Itoa(v)
+	}
+	probeHeaderTimeout := settings.ChannelMonitorProbeResponseHeaderTimeoutSeconds
+	probeTotalTimeout := settings.ChannelMonitorProbeTotalTimeoutSeconds
+	if probeHeaderTimeout != 0 || probeTotalTimeout != 0 {
+		if err := ValidateChannelMonitorProbeTimeouts(probeHeaderTimeout, probeTotalTimeout); err != nil {
+			return nil, err
+		}
+		updates[SettingKeyChannelMonitorProbeResponseHeaderTimeoutSeconds] = strconv.Itoa(probeHeaderTimeout)
+		updates[SettingKeyChannelMonitorProbeTotalTimeoutSeconds] = strconv.Itoa(probeTotalTimeout)
 	}
 	updates[SettingKeyChannelMonitorHideThroughput] = strconv.FormatBool(settings.ChannelMonitorHideThroughput)
 	updates[SettingKeyChannelMonitorV1Enabled] = strconv.FormatBool(settings.ChannelMonitorV1Enabled)

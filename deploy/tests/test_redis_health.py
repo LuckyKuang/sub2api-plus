@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import tempfile
@@ -22,7 +21,6 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURES = ROOT / "deploy/tests/fixtures/bin"
 COMPOSE_FILES = (
     "deploy/docker-compose.yml",
     "deploy/docker-compose.local.yml",
@@ -42,8 +40,6 @@ class RedisHealthTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name)
         self.socket = self.path / "redis.sock"
-        self.state = self.path / "state"
-        self.env_file = self.path / "deployment.env"
         self.reply_log = self.path / "reply"
         self.bin = self.path / "bin"
         self.bin.mkdir()
@@ -61,28 +57,13 @@ exit "$result"
 """)
         wrapper.chmod(0o755)
         self.env = dict(os.environ,
-            PATH=f"{self.bin}:{FIXTURES}:{os.environ['PATH']}",
-            SUB2API_ENV_FILE=str(self.env_file),
-            FAKE_CONTAINER_STATE=str(self.state),
+            PATH=f"{self.bin}:{os.environ['PATH']}",
             FAKE_REDIS_SOCKET=str(self.socket),
             HEALTH_TEST_CLI=str(self.cli),
             HEALTH_TEST_REPLY_LOG=str(self.reply_log),
         )
-        # Deployment initialization is real; only the runtime is the existing
-        # fixture. Neither this setup nor status may touch a real container.
-        self.apple("init", check=True)
-        for directory in ("containers", "running"):
-            (self.state / directory).mkdir(parents=True, exist_ok=True)
-        for name in ("sub2api-apple", "sub2api-apple-postgres", "sub2api-apple-redis"):
-            for directory in ("containers", "running"):
-                (self.state / directory / name).touch()
-        (self.state / "system-running").touch()
         self.process: subprocess.Popen[bytes] | None = None
         self.addCleanup(self.stop_server)
-
-    def apple(self, action: str, *, check: bool = False) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(["bash", str(ROOT / "deploy/apple-container.sh"), action],
-            env=self.env, capture_output=True, text=True, check=check, timeout=45)
 
     def stop_server(self) -> None:
         if self.process is not None:
@@ -115,37 +96,33 @@ exit "$result"
         self.fail("private Redis did not create its Unix socket")
 
     def configure(self, password: str, *, inherited: str = "stale-container-secret") -> None:
-        contents = self.env_file.read_text()
-        contents = re.sub(r"^REDIS_PASSWORD=.*$", lambda _: "REDIS_PASSWORD=" + password,
-                          contents, flags=re.MULTILINE)
-        contents += "\nMINIO_ENABLED=false\n"
-        self.env_file.write_text(contents)
-        self.env["FAKE_REDIS_INHERITED_AUTH"] = inherited
-        self.env["REDISCLI_AUTH"] = password
+        self.selected_password = password
+        self.env["REDISCLI_AUTH"] = inherited
 
     def assert_health(self, healthy: bool) -> str | None:
-        result = self.apple("status")
-        apple_reply = self.reply_log.read_text() if self.reply_log.exists() else None
-        expected = "healthy" if healthy else "unhealthy"
-        self.assertRegex(result.stdout, rf"(?m)^redis\s+{expected}$")
-        self.assertEqual(result.returncode, 0 if healthy else 1, result.stdout + result.stderr)
-        commands = (self.state / "commands.log").read_text()
-        self.assertNotIn(PASSWORD, commands + result.stdout + result.stderr)
-        self.assertNotRegex(commands, r"(?m)^(create|delete|stop|start) ")
+        reply = None
         for compose in COMPOSE_FILES:
             with self.subTest(compose=compose):
                 service = yaml.safe_load((ROOT / compose).read_text())["services"]["redis"]
+                # Compose replaces inherited auth with the selected deployment
+                # credential. Assert the binding before exercising its probe.
+                self.assertIn("REDISCLI_AUTH=${REDIS_PASSWORD:-}", service["environment"])
+                env = dict(self.env, REDISCLI_AUTH=self.selected_password)
                 health = service["healthcheck"]["test"]
                 if health[0] == "CMD-SHELL":
                     command = ["sh", "-c", health[1].replace("$$", "$")]
                 else:
                     self.assertEqual(health[0], "CMD")
                     command = health[1:]
-                probe = subprocess.run(command, env=self.env, capture_output=True,
+                self.reply_log.unlink(missing_ok=True)
+                probe = subprocess.run(command, env=env, capture_output=True,
                                        text=True, timeout=5)
                 self.assertEqual(probe.returncode == 0, healthy, probe.stdout + probe.stderr)
                 self.assertNotIn(PASSWORD, probe.stdout + probe.stderr)
-        return apple_reply
+                reply = self.reply_log.read_text() if self.reply_log.exists() else None
+                if healthy:
+                    self.assertEqual("PONG\n", reply)
+        return reply
 
     def test_selected_password_overrides_stale_exec_environment(self) -> None:
         self.start_server()

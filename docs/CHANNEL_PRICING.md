@@ -900,7 +900,7 @@ router remains visible with `manual_required`, since its underlying engine and
 Credit charge vary per request. Unknown StepFun suffix/date variants never
 inherit a family price. Saved channel prices remain authoritative.
 
-Run inside the platform validation container (Apple Containers on macOS, Docker
+Run inside the platform validation container (Colima Docker containers on macOS, Docker
 inside WSL2 Debian/Ubuntu on Windows, Docker on Linux); host-side validation is
 forbidden.
 

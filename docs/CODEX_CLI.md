@@ -339,7 +339,7 @@ JSONL, so a configured paid tier cannot establish correct usage billing.
 
 ## Isolation and deployment
 
-Binary, Docker and Apple-container deployments use the same managed runtime.
+Binary and Docker/Colima deployments use the same managed runtime.
 The service user needs write/execute access to its data directory and HTTPS
 access to the pinned GitHub release download. Persist `DATA_DIR` with the
 application data volume. A binary on the Docker host is not automatically

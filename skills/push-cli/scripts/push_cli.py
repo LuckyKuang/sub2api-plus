@@ -451,32 +451,6 @@ def run_step(
         raise PushCliError(f"{name} failed with exit code {result.returncode}")
 
 
-def run_runtime_final_gate(runtime: Runtime) -> None:
-    if not runtime.compose_required:
-        print("\n[Docker Compose final gate]")
-        print(
-            "not applicable: Apple Containers is the selected macOS runtime; "
-            "Docker image and Compose behavior remain covered by GitHub Actions"
-        )
-        return
-
-    compose_path = "deploy/docker-compose.dev.yml"
-    if runtime.compose_root:
-        compose_path = f"{runtime.compose_root}/deploy/docker-compose.dev.yml"
-    run_step(
-        "Docker Compose final gate",
-        [
-            *runtime.prefix,
-            "docker",
-            "compose",
-            "-f",
-            compose_path,
-            "config",
-            "--quiet",
-        ],
-    )
-
-
 def run_frontend_security_check(*, lane: str | None = None) -> None:
     command = ["pnpm", "audit", "--prod", "--audit-level=high", "--json"]
     label = f"{lane}: Frontend production audit" if lane else "Frontend production audit"
@@ -568,6 +542,8 @@ def run_local_checks(
         stop_requested = threading.Event()
         memory_slot = threading.Lock()
         memory_steps = {"Backend unit tests", "Backend integration tests", "Backend lint",
+                        "Seven-provider required unit regressions",
+                        "Seven-provider required integration regressions",
                         "Frontend production build"}
 
         def run_lane(lane_name: str) -> None:
@@ -1038,7 +1014,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "action",
         choices=("check", "push", "submit-pr", "watch", "ensure", "clean"),
-        help="prepare the runtime, check locally, push quickly, submit a validated PR, watch branch Actions, or manually purge all local validation resources",
+        help="prepare the runtime, check locally, push quickly, submit a validated PR, watch branch Actions, or manually purge validation resources in the selected runtime/profile",
     )
     parser.add_argument(
         "--in-validation",
@@ -1073,7 +1049,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--yes",
         action="store_true",
-        help="confirm deleting all local Sub2API validation images, caches, and containers (only for clean)",
+        help="confirm deleting Sub2API validation images, caches, and containers in the selected runtime/profile (only for clean)",
     )
     parser.add_argument("--wsl-workspace", choices=("linux", "bind"), default="linux",
                         help="WSL full validation source storage; bind is the diagnostic comparison mode")
@@ -1106,7 +1082,7 @@ def main() -> int:
                 run_local_checks(
                     args.remote,
                     branch,
-                    Runtime("in-validation", compose_required=False),
+                    Runtime("in-validation"),
                     base_ref=args.base_ref,
                     serial=args.serial,
                 )
@@ -1115,7 +1091,7 @@ def main() -> int:
 
         if args.action == "clean" and not args.yes:
             print(
-                "push-cli clean 需要 --yes 确认;该操作会删除本机所有 "
+                "push-cli clean 需要 --yes 确认;该操作会删除所选运行时/profile 的 "
                 "Sub2API 验证镜像、缓存与容器。",
                 file=sys.stderr,
             )
@@ -1132,7 +1108,7 @@ def main() -> int:
                 capture=capture,
                 run_step=run_step,
             )
-            print("\n已删除本机所有 Sub2API 验证镜像、缓存与容器。")
+            print("\n已删除所选运行时/profile 的 Sub2API 验证镜像、缓存与容器。")
             return 0
 
         if args.action != "submit-pr" and (
@@ -1211,7 +1187,6 @@ def main() -> int:
                 exact_base=proof.base if proof else capture(["git", "rev-parse", base_ref or f"{args.remote}/{default_branch}"]),
                 source_mode=args.wsl_workspace,
             )
-            run_runtime_final_gate(runtime)
         ensure_clean_after_checks()
         profile = proof.profile if proof is not None else FULL_PROFILE
         print(f"\nLocal {profile} checks passed. No branch was pushed.")

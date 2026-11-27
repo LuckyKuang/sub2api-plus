@@ -24,91 +24,117 @@ SPEC.loader.exec_module(push_cli)
 
 
 class ProbeRuntimeTest(unittest.TestCase):
-    def test_ready_apple_containers_is_self_sufficient(self) -> None:
-        def optional(command: list[str], **_: object) -> tuple[bool, str]:
-            if command == ["container", "--version"]:
-                return True, "container CLI version 1.2.0"
-            if command == ["container", "ls"]:
-                return True, ""
-            self.fail(f"unexpected command: {command}")
-
+    # Requirement: macOS validation uses Colima exclusively, with a checked
+    # context/socket; environment-selected daemons/builders cannot redirect it.
+    def macos_probe(self, optional, *, environment=None, which=None):
         with (
             mock.patch.object(push_cli.platform, "system", return_value="Darwin"),
-            mock.patch.object(push_cli.shutil, "which", return_value="/usr/bin/container"),
+            mock.patch.object(push_cli.shutil, "which", side_effect=which or (lambda name: f"/bin/{name}")),
+            mock.patch.dict(os.environ, environment or {}, clear=True),
             mock.patch.object(push_cli, "optional_capture", side_effect=optional),
-            mock.patch.object(push_cli, "run_step") as run_step,
-            mock.patch.object(push_cli, "probe_docker") as probe_docker,
+            mock.patch.object(push_cli, "probe_docker") as fallback,
         ):
-            runtime = push_cli.probe_runtime()
+            result = push_cli.probe_runtime()
+        fallback.assert_not_called()
+        return result
 
-        self.assertEqual("apple-containers", runtime.name)
-        self.assertFalse(runtime.compose_required)
-        run_step.assert_not_called()
-        probe_docker.assert_not_called()
+    def colima_commands(self, *, profile="default", status=None, endpoint=None, fail=None):
+        context = "colima" if profile == "default" else "colima-quality"
+        socket = "unix:///fixture/colima/docker.sock"
+        replies = {
+            ("colima", "--profile", profile, "status", "--json"): json.dumps(status if status is not None else {
+                "runtime": "docker", "docker_socket": socket, "cpu": 4, "memory": 10737418240,
+            }),
+            ("docker", "--context", context, "context", "inspect", context, "--format", "{{.Endpoints.docker.Host}}"): endpoint or socket,
+            ("docker", "--context", context, "info"): "ready",
+            ("docker", "--context", context, "compose", "version"): "Docker Compose version v2.40.0",
+            ("docker", "--context", context, "buildx", "inspect", context):
+                f"Name: {context}\nDriver: docker\n\nNodes:\nName: {context}\nEndpoint: {context}\nStatus: running\n",
+        }
+        calls = []
+        def optional(command, **_):
+            calls.append(list(command))
+            key = tuple(command)
+            self.assertIn(key, replies, "unexpected or unscoped runtime call")
+            return (False, "private diagnostic") if key == fail else (True, replies[key])
+        return optional, calls
 
-    def test_installed_apple_containers_not_ready_is_a_hard_failure(self) -> None:
-        with (
-            mock.patch.object(push_cli.platform, "system", return_value="Darwin"),
-            mock.patch.object(push_cli.shutil, "which", return_value="/usr/bin/container"),
-            mock.patch.object(
-                push_cli,
-                "optional_capture",
-                side_effect=[
-                    (True, "container CLI version 1.2.0"),
-                    (False, "runtime is not running"),
-                ],
-            ),
-            mock.patch.object(push_cli, "run_step") as run_step,
-            mock.patch.object(push_cli, "probe_docker") as probe_docker,
+    def test_macos_uses_verified_colima_despite_foreign_environment_defaults(self) -> None:
+        optional, calls = self.colima_commands()
+        runtime = self.macos_probe(optional, environment={
+            "DOCKER_HOST": "tcp://foreign.invalid:2375", "DOCKER_CONTEXT": "desktop-linux",
+            "BUILDX_BUILDER": "remote-builder",
+        })
+        self.assertEqual("colima-docker", runtime.name)
+        self.assertEqual("colima", runtime.docker_context)
+        self.assertEqual(["docker", "--context", "colima"], push_cli.validation_runtime.engine_command(runtime))
+        self.assertEqual(5, len(calls))
+
+    def test_named_colima_profile_has_its_own_verified_context(self) -> None:
+        optional, calls = self.colima_commands(profile="quality")
+        runtime = self.macos_probe(optional, environment={"SUB2API_COLIMA_PROFILE": "quality"})
+        self.assertEqual("colima-quality", runtime.docker_context)
+        self.assertEqual(["colima", "--profile", "quality", "status", "--json"], calls[0])
+
+    def test_absent_colima_or_docker_cannot_fall_back_to_apple_or_desktop(self) -> None:
+        for missing in ("colima", "docker"):
+            optional = mock.Mock()
+            with self.subTest(missing=missing), self.assertRaisesRegex(push_cli.PushCliError, "requires Colima"):
+                self.macos_probe(optional, which=lambda name: None if name == missing else f"/bin/{name}")
+            optional.assert_not_called()
+
+    def test_stopped_colima_and_unusable_docker_or_compose_are_hard_failures(self) -> None:
+        for failed in (
+            ("colima", "--profile", "default", "status", "--json"),
+            ("docker", "--context", "colima", "info"),
+            ("docker", "--context", "colima", "compose", "version"),
+            ("docker", "--context", "colima", "buildx", "inspect", "colima"),
         ):
-            with self.assertRaisesRegex(
-                push_cli.PushCliError,
-                "mandatory macOS runtime.*fallback is forbidden",
-            ):
-                push_cli.probe_runtime()
+            optional, calls = self.colima_commands(fail=failed)
+            with self.subTest(command=failed), self.assertRaises(push_cli.PushCliError) as caught:
+                self.macos_probe(optional)
+            self.assertNotIn("private diagnostic", str(caught.exception))
+            self.assertEqual(list(failed), calls[-1])
 
-        run_step.assert_not_called()
-        probe_docker.assert_not_called()
-
-    def test_installed_apple_containers_with_broken_cli_is_a_hard_failure(self) -> None:
-        with (
-            mock.patch.object(push_cli.platform, "system", return_value="Darwin"),
-            mock.patch.object(push_cli.shutil, "which", return_value="/usr/bin/container"),
-            mock.patch.object(
-                push_cli,
-                "optional_capture",
-                return_value=(False, "CLI failed"),
-            ),
-            mock.patch.object(push_cli, "run_step") as run_step,
-            mock.patch.object(push_cli, "probe_docker") as probe_docker,
+    def test_foreign_or_unready_builder_is_rejected_before_build_or_cleanup(self) -> None:
+        for builder in (
+            "Driver: remote\nEndpoint: tcp://foreign:1234\nStatus: running\n",
+            "Driver: docker\nEndpoint: foreign-context\nStatus: running\n",
+            "Driver: docker\nEndpoint: colima\nStatus: stopped\n",
+            "Driver: docker\nEndpoint: colima\nStatus: running\nEndpoint: other\nStatus: running\n",
+            "invalid status",
         ):
-            with self.assertRaisesRegex(
-                push_cli.PushCliError,
-                "mandatory macOS runtime.*fallback is forbidden",
-            ):
-                push_cli.probe_runtime()
+            optional, calls = self.colima_commands()
+            def inspect(command):
+                if command[-3:] == ["buildx", "inspect", "colima"]:
+                    return True, builder
+                return optional(command)
+            with self.subTest(builder=builder), self.assertRaisesRegex(push_cli.PushCliError, "Colima Buildx"):
+                self.macos_probe(inspect)
 
-        run_step.assert_not_called()
-        probe_docker.assert_not_called()
+    def test_colima_rejects_wrong_runtime_missing_capacity_and_invalid_status(self) -> None:
+        valid = {"runtime": "docker", "docker_socket": "unix:///fixture/colima/docker.sock", "cpu": 4, "memory": 10737418240}
+        for status in ({}, [], {**valid, "runtime": "containerd"}, {**valid, "cpu": 3},
+                       {**valid, "memory": 10737418239}, {**valid, "docker_socket": "tcp://foreign:2375"}):
+            optional, calls = self.colima_commands(status=status)
+            with self.subTest(status=status), self.assertRaises(push_cli.PushCliError):
+                self.macos_probe(optional)
+            self.assertEqual(1, len(calls))
+        with self.assertRaises(push_cli.PushCliError):
+            self.macos_probe(lambda command: (True, "not-json"))
 
-    def test_absent_apple_containers_does_not_fall_back(self) -> None:
-        def which(command: str) -> str | None:
-            return "/opt/homebrew/bin/colima" if command == "colima" else None
+    def test_foreign_context_socket_is_rejected_before_contacting_daemon(self) -> None:
+        optional, calls = self.colima_commands(endpoint="unix:///var/run/docker.sock")
+        with self.assertRaisesRegex(push_cli.PushCliError, "foreign Docker endpoint"):
+            self.macos_probe(optional)
+        self.assertEqual(2, len(calls))
 
-        with (
-            mock.patch.object(push_cli.platform, "system", return_value="Darwin"),
-            mock.patch.object(push_cli.shutil, "which", side_effect=which),
-            mock.patch.object(push_cli, "run_step") as run_step,
-            mock.patch.object(push_cli, "probe_docker") as probe_docker,
-        ):
-            with self.assertRaisesRegex(
-                push_cli.PushCliError,
-                "requires Apple Containers.*fallback is forbidden",
-            ):
-                push_cli.probe_runtime()
-
-        run_step.assert_not_called()
-        probe_docker.assert_not_called()
+    def test_invalid_profile_is_rejected_before_any_runtime_call(self) -> None:
+        for profile in ("../default", "--host", "quality\nother"):
+            optional = mock.Mock()
+            with self.subTest(profile=profile), self.assertRaisesRegex(push_cli.PushCliError, "invalid.*COLIMA_PROFILE"):
+                self.macos_probe(optional, environment={"SUB2API_COLIMA_PROFILE": profile})
+            optional.assert_not_called()
 
     def test_windows_requires_wsl2_before_any_docker_probe(self) -> None:
         with (
@@ -337,32 +363,6 @@ class DebianUbuntuNameTest(unittest.TestCase):
         )
 
 
-class RuntimeFinalGateTest(unittest.TestCase):
-    def test_apple_runtime_does_not_invoke_docker(self) -> None:
-        with mock.patch.object(push_cli, "run_step") as run_step:
-            push_cli.run_runtime_final_gate(
-                push_cli.Runtime("apple-containers", compose_required=False)
-            )
-
-        run_step.assert_not_called()
-
-    def test_docker_runtime_runs_compose_parser(self) -> None:
-        with mock.patch.object(push_cli, "run_step") as run_step:
-            push_cli.run_runtime_final_gate(push_cli.Runtime("docker"))
-
-        run_step.assert_called_once_with(
-            "Docker Compose final gate",
-            [
-                "docker",
-                "compose",
-                "-f",
-                "deploy/docker-compose.dev.yml",
-                "config",
-                "--quiet",
-            ],
-        )
-
-
 class FrontendSecurityCheckTest(unittest.TestCase):
     def test_vulnerability_exit_runs_exception_checker_with_audit_json(self) -> None:
         audit = {
@@ -437,6 +437,44 @@ class FrontendSecurityCheckTest(unittest.TestCase):
 
 
 class LocalChecksTest(unittest.TestCase):
+    def test_required_provider_go_commands_do_not_overlap_frontend_build(self):
+        for provider_step in ("Seven-provider required unit regressions",
+                              "Seven-provider required integration regressions"):
+            with self.subTest(provider_step=provider_step):
+                frontend_started = threading.Event()
+                go_started = threading.Event()
+                go_active = threading.Event()
+                steps = [
+                    push_cli.validation_checks.ValidationStep(
+                        provider_step, ["python3", "gate.py"], Path("/repo"), "backend-tests"),
+                    push_cli.validation_checks.ValidationStep(
+                        "Frontend frozen install", ["pnpm", "install"], Path("/repo"), "frontend"),
+                    push_cli.validation_checks.ValidationStep(
+                        "Frontend production build", ["pnpm", "build"], Path("/repo"), "frontend"),
+                ]
+
+                def step(name, *args, **kwargs):
+                    if name == "Frontend frozen install":
+                        frontend_started.set()
+                        self.assertTrue(go_started.wait(3))
+                    elif name == provider_step:
+                        self.assertTrue(frontend_started.wait(3))
+                        go_active.set()
+                        go_started.set()
+                        time.sleep(0.05)
+                        go_active.clear()
+                    elif name == "Frontend production build":
+                        self.assertFalse(go_active.is_set(), "provider Go gate and frontend build must share the memory slot")
+
+                with (
+                    mock.patch.object(push_cli, "ROOT", Path("/repo")),
+                    mock.patch.object(push_cli, "run_command", return_value=subprocess.CompletedProcess([], 1, "")),
+                    mock.patch.object(push_cli.validation_checks, "full_steps", return_value=steps),
+                    mock.patch.object(push_cli, "run_step", side_effect=step),
+                    mock.patch.object(push_cli, "run_frontend_security_check"),
+                ):
+                    push_cli.run_local_checks("origin", "feature", push_cli.Runtime("docker"))
+
     def test_cold_go_compilation_and_frontend_build_do_not_share_the_memory_budget(self):
         # Observed cold compilation plus frontend production build exhausted the
         # required 8-GiB VM. Frontend install/tests may overlap; heavy builds may not.
@@ -486,7 +524,7 @@ class LocalChecksTest(unittest.TestCase):
         ):
             push_cli.run_local_checks("origin", "feature", push_cli.Runtime("docker"))
 
-    def test_static_checks_still_run_for_apple_runtime(self) -> None:
+    def test_static_checks_still_run_for_colima_runtime(self) -> None:
         git_miss = subprocess.CompletedProcess(["git"], 1, "")
         with (
             mock.patch.object(push_cli, "ROOT", Path("/repo")),
@@ -494,11 +532,11 @@ class LocalChecksTest(unittest.TestCase):
             mock.patch.object(push_cli, "run_step") as run_step,
             mock.patch.object(push_cli, "run_frontend_security_check") as audit_check,
         ):
-            runtime = push_cli.Runtime("apple-containers", compose_required=False)
+            runtime = push_cli.Runtime("colima-docker", docker_context="colima")
             push_cli.run_local_checks("origin", "feature", runtime)
 
         names = [call.args[0] for call in run_step.call_args_list]
-        self.assertIn("Apple Container lifecycle test", names)
+        self.assertIn("Docker deployment helper syntax", names)
         self.assertIn("Compress CLI self-tests", names)
         compress_test = next(
             call
@@ -518,7 +556,7 @@ class LocalChecksTest(unittest.TestCase):
         self.assertIn("Docker runtime resources", names)
         audit_check.assert_called_once_with(lane="frontend")
 
-    def test_docker_runtime_still_runs_apple_lifecycle_test(self) -> None:
+    def test_docker_runtime_checks_deployment_helper_syntax(self) -> None:
         git_miss = subprocess.CompletedProcess(["git"], 1, "")
         with (
             mock.patch.object(push_cli, "ROOT", Path("/repo")),
@@ -529,7 +567,7 @@ class LocalChecksTest(unittest.TestCase):
             push_cli.run_local_checks("origin", "feature", push_cli.Runtime("docker"))
 
         names = [call.args[0] for call in run_step.call_args_list]
-        self.assertIn("Apple Container lifecycle test", names)
+        self.assertIn("Docker deployment helper syntax", names)
 
     def test_parallel_frontend_tests_respect_validation_container_cpu_budget(self) -> None:
         git_miss = subprocess.CompletedProcess(["git"], 1, "")
@@ -743,6 +781,17 @@ class PullRequestUpdateTest(unittest.TestCase):
 
 
 class ValidationGenerationTest(unittest.TestCase):
+    def test_compose_pin_changes_invalidate_the_image_and_dependency_generations(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.create_inputs(root)
+            image = push_cli.validation_runtime.validation_image_digest(root)
+            cache = push_cli.validation_runtime.validation_cache_digest(root)
+            pins = root / ".tool-versions"
+            pins.write_text(pins.read_text().replace("docker-compose 5.6.0", "docker-compose 5.6.1"))
+            self.assertNotEqual(image, push_cli.validation_runtime.validation_image_digest(root))
+            self.assertNotEqual(cache, push_cli.validation_runtime.validation_cache_digest(root))
+
     @staticmethod
     def create_inputs(root: Path) -> None:
         (root / "deploy").mkdir(parents=True)
@@ -762,7 +811,7 @@ class ValidationGenerationTest(unittest.TestCase):
             "lockfileVersion: '9.0'\n", encoding="utf-8"
         )
         (root / ".tool-versions").write_text(
-            "golangci-lint 2.13.1\ngoreleaser 2.17.1\ngovulncheck 1.6.0\n", encoding="utf-8"
+            "golangci-lint 2.13.1\ngoreleaser 2.17.1\ngovulncheck 1.6.0\ndocker-compose 5.6.0\n", encoding="utf-8"
         )
         (root / ".github/release-tools").mkdir(parents=True)
         (root / ".github/release-tools/requirements-release.txt").write_text("PyYAML==6.0.3\n")
@@ -819,22 +868,65 @@ class ValidationGenerationTest(unittest.TestCase):
 
 
 class ValidationLaunchTest(unittest.TestCase):
-    def test_apple_network_selection_is_explicit_and_platform_scoped(self) -> None:
-        with mock.patch.dict(push_cli.validation_runtime.os.environ, {}, clear=True):
-            self.assertEqual([], push_cli.validation_runtime.validation_network_args(
-                push_cli.Runtime("apple-containers")))
-        with mock.patch.dict(push_cli.validation_runtime.os.environ,
-                             {"SUB2API_VALIDATION_APPLE_NETWORK": "sub2api-test"}, clear=True):
-            self.assertEqual(["--network", "sub2api-test"],
-                             push_cli.validation_runtime.validation_network_args(
-                                 push_cli.Runtime("apple-containers")))
-            for runtime in ("docker", "wsl2-docker"):
-                with self.assertRaises(push_cli.validation_runtime.ValidationRuntimeError):
-                    push_cli.validation_runtime.validation_network_args(push_cli.Runtime(runtime))
-        with mock.patch.dict(push_cli.validation_runtime.os.environ,
-                             {"SUB2API_VALIDATION_APPLE_NETWORK": "--host"}, clear=True):
-            with self.assertRaises(push_cli.validation_runtime.ValidationRuntimeError):
-                push_cli.validation_runtime.validation_network_args(push_cli.Runtime("apple-containers"))
+    def test_colima_profiles_do_not_share_cache_cleanup_ownership(self) -> None:
+        runtime = push_cli.validation_runtime
+        selected = push_cli.Runtime("colima-docker", docker_context="colima-quality")
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(
+            runtime.Path, "home", return_value=Path(directory)
+        ):
+            default = Path(directory) / ".cache/sub2api-validation"
+            peer = Path(directory) / ".cache/sub2api-validation-colima-peer"
+            cache = Path(directory) / ".cache/sub2api-validation-colima-quality"
+            for root in (default, peer, cache):
+                (root / ("b" * 16)).mkdir(parents=True)
+            mounts = runtime.cache_mounts(selected, root=Path("/repo"), capture=mock.Mock(), generation="a" * 16)
+            self.assertEqual(str(cache / ("a" * 16) / "go"), mounts[0][0])
+            runtime.cleanup_validation_runtime(
+                selected, image="sub2api-validation:" + "a" * 16, cache_generation="a" * 16,
+                capture=mock.Mock(return_value=""), run_step=mock.Mock(),
+            )
+            self.assertFalse((cache / ("b" * 16)).exists())
+            self.assertTrue((cache / ("a" * 16)).is_dir())
+            runtime.purge_validation_resources(selected, root=Path("/repo"),
+                                               capture=mock.Mock(return_value=""), run_step=mock.Mock())
+            self.assertFalse(cache.exists())
+            self.assertTrue((default / ("b" * 16)).is_dir())
+            self.assertTrue((peer / ("b" * 16)).is_dir())
+
+    def test_docker_network_selection_is_explicit_and_rejects_conflicts(self) -> None:
+        for name in ("colima-docker", "docker", "wsl2-docker"):
+            with mock.patch.dict(os.environ, {}, clear=True):
+                self.assertEqual([], push_cli.validation_runtime.validation_network_args(push_cli.Runtime(name)))
+            with mock.patch.dict(os.environ, {"SUB2API_VALIDATION_DOCKER_NETWORK": "sub2api-test"}, clear=True):
+                self.assertEqual(["--network", "sub2api-test"],
+                    push_cli.validation_runtime.validation_network_args(push_cli.Runtime(name)))
+        for values in ({"SUB2API_VALIDATION_DOCKER_NETWORK": "--host"},
+                       {"SUB2API_VALIDATION_DOCKER_NETWORK": "host"},
+                       {"SUB2API_VALIDATION_DOCKER_NETWORK": "none"},
+                       {"SUB2API_VALIDATION_DOCKER_NETWORK": "bridge"},
+                       {"SUB2API_VALIDATION_DOCKER_NETWORK": "sub2api-test", "SUB2API_VALIDATION_WSL_NETWORK": "host"}):
+            with mock.patch.dict(os.environ, values, clear=True), self.assertRaises(push_cli.validation_runtime.ValidationRuntimeError):
+                push_cli.validation_runtime.validation_network_args(push_cli.Runtime("wsl2-docker"))
+
+    def test_colima_build_and_cache_cleanup_pin_the_context_builder(self) -> None:
+        runtime = push_cli.Runtime("colima-docker", docker_context="colima")
+        with mock.patch.dict(os.environ, {"DOCKER_CONTEXT": "desktop-linux", "BUILDX_BUILDER": "foreign", "BUILDKIT_HOST": "tcp://foreign:1234"}):
+            command = push_cli.validation_runtime.image_build_command(runtime, SCRIPT.resolve().parents[3], "fixture")
+            self.assertEqual(["docker", "--context", "colima", "build"], command[:4])
+            self.assertEqual("colima", command[command.index("--builder") + 1])
+            record = json.dumps({"ID": "a" * 25, "Description": "RUN marker >/etc/sub2api-validation"})
+            capture = mock.Mock(return_value=record)
+            run = mock.Mock()
+            push_cli.validation_runtime.prune_validation_build_cache(runtime, capture=capture, run_step=run)
+            capture.assert_called_once_with(["docker", "--context", "colima", "buildx", "du", "--builder", "colima", "--format=json"])
+            deletion = run.call_args.args[1]
+            self.assertEqual(["docker", "--context", "colima", "buildx", "prune", "--builder", "colima"], deletion[:7])
+            self.assertNotIn("foreign", " ".join(command + deletion))
+
+    def test_unsupported_runtime_and_unscoped_colima_are_rejected(self) -> None:
+        for runtime in (push_cli.Runtime("apple-containers"), push_cli.Runtime("colima-docker")):
+            with self.subTest(runtime=runtime.name), self.assertRaises(push_cli.validation_runtime.ValidationRuntimeError):
+                push_cli.validation_runtime.engine_command(runtime)
 
     def test_external_integration_configuration_is_forwarded_without_secret_values(self) -> None:
         with mock.patch.dict(push_cli.validation_runtime.os.environ,
@@ -869,7 +961,7 @@ class ValidationLaunchTest(unittest.TestCase):
                              push_cli.validation_runtime.validation_network_args(
                                  push_cli.Runtime("wsl2-docker")
                              ))
-            for name in ("docker", "apple-containers"):
+            for name in ("docker", "colima-docker"):
                 with self.assertRaises(push_cli.validation_runtime.ValidationRuntimeError):
                     push_cli.validation_runtime.validation_network_args(push_cli.Runtime(name))
         with mock.patch.dict(push_cli.validation_runtime.os.environ,
@@ -907,8 +999,8 @@ class ValidationLaunchTest(unittest.TestCase):
                 [], push_cli.validation_runtime.worktree_git_mount(runtime, worktree)
             )
 
-    def test_macos_launch_uses_apple_container_run(self) -> None:
-        runtime = push_cli.Runtime("apple-containers", compose_required=False)
+    def test_macos_launch_uses_explicit_colima_context(self) -> None:
+        runtime = push_cli.Runtime("colima-docker", docker_context="colima")
         with (
             mock.patch.dict(os.environ, {"GOMEMLIMIT": "off", "NODE_OPTIONS": "--max-old-space-size=256"}),
             mock.patch.object(push_cli, "ROOT", Path("/repo")),
@@ -945,7 +1037,7 @@ class ValidationLaunchTest(unittest.TestCase):
 
         name, command = run_step.call_args.args
         self.assertEqual("In-container validation", name)
-        self.assertEqual("container", command[0])
+        self.assertEqual(["docker", "--context", "colima", "run"], command[:4])
         self.assertIn("run", command)
         self.assertIn("--memory", command)
         self.assertIn("8G", command)
@@ -958,10 +1050,10 @@ class ValidationLaunchTest(unittest.TestCase):
         self.assertNotIn("NODE_OPTIONS=--max-old-space-size=256", command)
         self.assertNotIn("NODE_OPTIONS", command)
         self.assertIn(
-            "type=bind,source=/repo,target=/repo",
+            "/repo:/repo",
             command,
         )
-        self.assertNotIn("docker", command)
+        self.assertNotIn("container", command)
         self.assertNotIn("go", command)
         self.assertNotIn("pnpm", command)
         self.assertIn("--in-validation", command)
@@ -1073,7 +1165,7 @@ class ValidationLaunchTest(unittest.TestCase):
         cleanup.assert_called_once()
 
     def test_cleanup_failure_does_not_hide_validation_failure(self) -> None:
-        runtime = push_cli.Runtime("apple-containers", compose_required=False)
+        runtime = push_cli.Runtime("colima-docker", docker_context="colima")
         with (
             mock.patch.object(
                 push_cli.validation_runtime,
@@ -1182,8 +1274,18 @@ class ValidationCleanupTest(unittest.TestCase):
         self.assertEqual(set(), containers)
         self.assertEqual(set(), images)
 
+    def test_manual_clean_handles_auto_removed_containers(self) -> None:
+        runtime = push_cli.Runtime("colima-docker", docker_context="colima")
+        capture = mock.Mock(side_effect=["abc123", "", "NAME TAG\n", ""])
+        run = mock.Mock()
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(
+            push_cli.validation_runtime.Path, "home", return_value=Path(directory)
+        ):
+            push_cli.validation_runtime.purge_validation_resources(runtime, root=push_cli.ROOT, capture=capture, run_step=run)
+        self.assertEqual([mock.call("Stop validation container", ["docker", "--context", "colima", "container", "stop", "abc123"])], run.call_args_list)
+
     def test_cleanup_removes_read_only_go_modules_without_touching_other_trees(self) -> None:
-        runtime = push_cli.Runtime("apple-containers", compose_required=False)
+        runtime = push_cli.Runtime("colima-docker", docker_context="colima")
         with tempfile.TemporaryDirectory() as temp_dir:
             home = Path(temp_dir)
             cache = home / ".cache" / "sub2api-validation"
@@ -1202,7 +1304,7 @@ class ValidationCleanupTest(unittest.TestCase):
                         runtime,
                         image="sub2api-validation:1111111111111111",
                         cache_generation="aaaaaaaaaaaaaaaa",
-                        capture=lambda command: "NAME TAG DIGEST\n",
+                        capture=lambda command: "NAME TAG DIGEST\n" if "image" in command else "",
                         run_step=lambda name, command: self.fail("no image deletion expected"),
                     )
                 self.assertFalse((cache / "bbbbbbbbbbbbbbbb").exists())
@@ -1215,8 +1317,8 @@ class ValidationCleanupTest(unittest.TestCase):
                     if directory.exists():
                         directory.chmod(0o755)
 
-    def test_apple_cleanup_retains_current_generation_and_deletes_stale_resources(self) -> None:
-        runtime = push_cli.Runtime("apple-containers", compose_required=False)
+    def test_colima_cleanup_retains_current_generation_and_deletes_stale_resources(self) -> None:
+        runtime = push_cli.Runtime("colima-docker", docker_context="colima")
         commands: list[tuple[str, list[str]]] = []
         with tempfile.TemporaryDirectory() as temp_dir:
             home = Path(temp_dir)
@@ -1237,7 +1339,7 @@ class ValidationCleanupTest(unittest.TestCase):
                         "sub2api-validation 1111111111111111 current\n"
                         "sub2api-validation 2222222222222222 stale\n"
                         "postgres 18-alpine unrelated\n"
-                    ),
+                    ) if "image" in command else "",
                     run_step=lambda name, command: commands.append((name, list(command))),
                 )
 
@@ -1249,7 +1351,7 @@ class ValidationCleanupTest(unittest.TestCase):
             [
                 (
                     "Remove stale validation image",
-                    ["container", "image", "delete", "sub2api-validation:2222222222222222"],
+                    ["docker", "--context", "colima", "image", "rm", "sub2api-validation:2222222222222222"],
                 )
             ],
             commands,
@@ -1453,7 +1555,7 @@ class MainFlowTest(unittest.TestCase):
                 if name == "repository_default_branch":
                     return "main"
                 if name == "probe_runtime":
-                    return push_cli.Runtime("apple-containers", compose_required=False)
+                    return push_cli.Runtime("colima-docker", docker_context="colima")
                 if name == "require_clean_worktree":
                     raise push_cli.PushCliError("worktree is not clean")
                 return None
@@ -1508,7 +1610,7 @@ class MainFlowTest(unittest.TestCase):
             mock.patch.object(
                 push_cli,
                 "probe_runtime",
-                return_value=push_cli.Runtime("apple-containers", compose_required=False),
+                return_value=push_cli.Runtime("colima-docker", docker_context="colima"),
             ) as probe,
             mock.patch.object(push_cli, "ensure_validation_image") as ensure_image,
             mock.patch.object(push_cli.validation_runtime, "cleanup_validation_runtime"),
@@ -1581,7 +1683,6 @@ class MainFlowTest(unittest.TestCase):
             mock.patch.object(push_cli, "ensure_validation_image"),
             mock.patch.object(push_cli, "require_clean_worktree"),
             mock.patch.object(push_cli, "launch_in_validation") as launch,
-            mock.patch.object(push_cli, "run_runtime_final_gate") as final_gate,
             mock.patch.object(push_cli.validation_runtime, "cleanup_validation_runtime"),
             mock.patch.object(push_cli, "ensure_clean_after_checks"),
             mock.patch.object(push_cli, "run_local_checks") as local_checks,
@@ -1599,7 +1700,6 @@ class MainFlowTest(unittest.TestCase):
             exact_base="a" * 40,
             source_mode="linux",
         )
-        final_gate.assert_called_once_with(runtime)
         local_checks.assert_not_called()
         check.assert_not_called()
 
@@ -1654,7 +1754,7 @@ class MainFlowTest(unittest.TestCase):
 
     def test_submit_pr_runs_validation_before_push_and_pr_creation(self) -> None:
         args = self.args("submit-pr")
-        runtime = push_cli.Runtime("apple-containers", compose_required=False)
+        runtime = push_cli.Runtime("colima-docker", docker_context="colima")
         proof = push_cli.ValidationProof("a" * 40, "b" * 40)
         order: list[str] = []
 
@@ -1675,7 +1775,6 @@ class MainFlowTest(unittest.TestCase):
             mock.patch.object(push_cli, "ensure_validation_image"),
             mock.patch.object(push_cli, "require_latest_base", return_value=proof),
             mock.patch.object(push_cli, "launch_in_validation", side_effect=record("validate")),
-            mock.patch.object(push_cli, "run_runtime_final_gate"),
             mock.patch.object(push_cli, "ensure_clean_after_checks"),
             mock.patch.object(push_cli, "require_unchanged_proof", side_effect=record("recheck")),
             mock.patch.object(push_cli, "push_branch", side_effect=record("push")),
@@ -1707,7 +1806,6 @@ class MainFlowTest(unittest.TestCase):
                 mock.patch.object(push_cli, "ensure_validation_image"),
                 mock.patch.object(push_cli, "require_latest_base", return_value=proof),
                 mock.patch.object(push_cli, "launch_in_validation"),
-                mock.patch.object(push_cli, "run_runtime_final_gate"),
                 mock.patch.object(push_cli, "ensure_clean_after_checks"),
                 mock.patch.object(push_cli, "require_unchanged_proof"),
                 mock.patch.object(push_cli, "push_branch") as pushed,

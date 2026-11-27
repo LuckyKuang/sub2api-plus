@@ -74,7 +74,7 @@ All validation, including focused tests, lint, typechecking, builds, and policy
 checks, must run inside the platform validation container. On Windows, use
 Docker inside WSL2 Debian or Ubuntu; running checks directly on Windows or
 directly in the WSL2 distribution outside Docker is forbidden. On macOS, use
-Apple Containers; on Linux, use Docker.
+Colima Docker containers; on Linux, use Docker.
 
 Follow [`CONTRIBUTING.md`](CONTRIBUTING.md#development-checks) for the pinned
 toolchain, check selection, and validation-container cleanup requirements. Run

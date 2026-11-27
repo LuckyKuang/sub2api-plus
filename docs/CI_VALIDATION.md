@@ -22,7 +22,7 @@ result reuse; the pinned compilation and dependency caches remain available.
 
 | Context / lane | Coverage | Relationship to local full |
 | --- | --- | --- |
-| `deployment-config` | Installer syntax and real archive/resource installation regressions, Apple lifecycle fixture, real Redis authentication/readiness regressions, Docker security/gateway/resources, Caddy policy | Union of local and CI deployment checks |
+| `deployment-config` | Installer syntax and real archive/resource installation regressions, pinned in-container Compose parsing, real Redis authentication/readiness regressions, Docker security/gateway/resources, Caddy policy | Union of local and CI deployment checks; runtime regressions run in repository policy |
 | `test` | Full unit suites on Linux amd64 and arm64; Docker-backed integration on amd64 | Same Go commands, additional architecture coverage |
 | `frontend` | Frozen install, lint, typecheck, full Vitest, required seven-provider Vue/API cases, production build and its locale checks | Complete local frontend coverage; critical-only tests cannot substitute |
 | `golangci-lint` | Complete backend lint | Same command |
@@ -48,7 +48,7 @@ Validation operations/workspace regressions also run in repository policy and
 the local full profile. They cover scoped cleanup, WSL lifecycle/encoding,
 download failure, live progress, exact source isolation and PR proof ordering.
 
-The image resolves Go, Node, pnpm, lint, GoReleaser, govulncheck and PyYAML from repository
+The image resolves Go, Node, pnpm, lint, GoReleaser, govulncheck, Compose and PyYAML from repository
 declarations. Node uses an exact Node 24 LTS pin in
 [`validation_runtime.py`](../tools/validation_runtime.py), mirrored by the
 [`Dockerfile.validation`](../deploy/Dockerfile.validation) default, and must meet
@@ -71,6 +71,12 @@ The [Go release history](https://go.dev/doc/devel/release#go1.27.4) records the
 `net/http` security fixes in the patch adopted for GO-2026-6859.
 The image includes GCC and libc development headers so focused Go race tests
 can execute with `CGO_ENABLED=1` under the same pinned container toolchain.
+Compose's official Linux binary is pinned by `.tool-versions`, verified against
+its release checksum and embedded version, and used only for `config --quiet`
+against the four maintained Compose files and the tracked `.env.example`,
+with explicit inert external-service values for the standalone template.
+This shared local/CI gate needs neither a Docker socket nor deployment secrets;
+there is no host-side Compose-validation exception.
 Running an ordinary unit suite does not imply that its race profile was run.
 The exact Playwright pin also determines the image's Chromium revision. Real
 browser management tests use a separate root-owned disposable-service runner;
@@ -88,7 +94,7 @@ These summaries neither establish remote cache hits nor replace submission proof
 ## Containers and platform coverage
 
 CI uses Docker on Linux and executes unit suites natively on amd64/arm64.
-Local checks continue to use Apple Containers on macOS, Docker in supported
+Local checks use Colima Docker containers on macOS, Docker in supported
 WSL2 Debian/Ubuntu, or Docker on Linux, with existing scoped cleanup.
 The shared launcher fixes `GOMEMLIMIT=6GiB` inside its 8-GiB validation container,
 so cold-cache Go lint leaves headroom without changing the command, linter scope
@@ -107,17 +113,19 @@ share streaming output, report mounts and scoped cleanup. See
 [validation operations](VALIDATION_OPERATIONS.md) for lifecycle, benchmarks,
 network handling and evidence retention.
 
-The Apple lifecycle tests use fake runtime fixtures. Running them inside Linux
-containers does not claim live Apple Containers/WSL integration. Record any
-genuine additional platform requirements and supported-runner evidence before
-replacing the local gate.
+Colima runtime regressions verify profile/socket/context selection, resource
+requirements, Buildx driver/node binding, profile-isolated dependency cleanup,
+scoped Docker/Buildx operations and forbidden fallbacks. Deployment
+checks cover maintained Compose security/resources and actual Redis probes.
+Mocked runtime tests do not establish live platform integration; record an
+actual launcher smoke result separately.
 
 Redis health regressions also execute the actual deployment probe commands
 against test-owned foreground Redis servers on private Unix sockets. The image
 includes `redis-server` and `redis-tools` for this coverage. No live Redis or
 TCP port is used; every child is terminated and waited for before removing its
-temporary directory. The Apple exec fixture intentionally retains a stale
-credential to exercise the child-shell credential binding.
+temporary directory. Compose credential bindings are checked with stale
+inherited authentication before executing the real Redis health probes.
 
 Docker integration runs on a dedicated ephemeral GitHub Linux VM. Only that
 validation lane may mount the VM's Docker socket and matching CLI and use host networking

@@ -30,8 +30,8 @@ Run commands from the repository root:
     python3 skills/push-cli/scripts/push_cli.py watch
     python3 skills/push-cli/scripts/push_cli.py clean --yes
 
-`clean --yes` manually deletes all local Sub2API validation images, caches, and
-containers (no `--yes` rejects). It is never automatic and deletes the current
+`clean --yes` manually deletes Sub2API validation images, caches, and containers
+for the selected runtime/profile (no `--yes` rejects). It is never automatic and deletes the current
 generation, forcing the next validation to rebuild the toolchain and re-download
 dependencies.
 
@@ -61,8 +61,9 @@ inputs; do not use them to accelerate an ordinary or release-candidate PR.
 
 `check` runs the same full local matrix without pushing or creating a PR. It
 runs Go tests before Go lint, concurrently with frontend checks by default;
-Go test/lint and frontend production builds share one memory slot; `check --serial` preserves the original
-ordering for diagnosis and same-commit timing comparisons. Both modes run the
+Go test/lint, including the seven-provider Go gates, and frontend production
+builds share one memory slot; `check --serial` preserves the original ordering
+for diagnosis and same-commit timing comparisons. Both modes run the
 same command and test set. `ensure` only prepares the platform runtime and
 validation image. `watch` observes pull-request Actions for the current branch and SHA when a
 PR exists, otherwise the push-triggered runs (used on `main`).
@@ -87,7 +88,9 @@ Git transfers only `HEAD:<current-branch>`. Never use `--force`, `--all`,
 
 Only `check`, `submit-pr`, `ensure`, and `clean` access the validation runtime.
 
-- macOS: Apple Containers only; no Docker, Colima, or host-toolchain fallback.
+- macOS: Colima with Docker, Compose and Buildx only. Use the verified Colima profile's
+  explicit Docker context and matching builder; see the
+  [macOS setup](../../docs/VALIDATION_OPERATIONS.md#macos-colima).
 - Windows: Docker inside WSL2 Debian or Ubuntu only. The launcher starts an
   installed supported distribution if stopped and owns its foreground session
   until the action ends.
@@ -95,7 +98,7 @@ Only `check`, `submit-pr`, `ensure`, and `clean` access the validation runtime.
 
 Every full-profile Go, frontend, Python policy, installer, and lifecycle check
 runs inside `deploy/Dockerfile.validation`. Host processes may only perform
-GitHub/Git gates, runtime probes, image management, Compose parsing, or container
+GitHub/Git gates, runtime probes, image management, or container
 launch. Focused release metadata and deterministic finalization checks use the
 same container environment; there is no host-validation exception.
 The shared launcher fixes the Go and Node memory budgets described in
@@ -114,8 +117,7 @@ projects or runtime resources. Validation containers carry the label
 `sub2api-validation=<generation>`; `check`/`submit-pr`/`ensure` run an idempotent
 image/cache cleanup before ensuring the image. Docker also removes stopped
 project containers by label and status, including leftovers from a hard kill.
-Apple Containers relies on `--rm`; inspect and remove only leftover project
-validation containers after an interrupted run. `clean --yes` authenticates
+`clean --yes` authenticates
 before deletion, releases labelled project containers before deleting their
 images, removes current/historical dependency caches and precisely owned
 validation BuildKit records, and retains diagnostic summaries.

@@ -31,12 +31,6 @@ def full_steps(
     backend = root / "backend"
     steps = [
         ValidationStep(
-            "Apple Container lifecycle test",
-            ["bash", str(root / "deploy/tests/apple-container-test.sh")],
-            root,
-            "backend-lint-policy",
-        ),
-        ValidationStep(
             "Redis health regressions",
             [python, "deploy/tests/test_redis_health.py"],
             root,
@@ -194,8 +188,14 @@ def full_steps(
             "backend-lint-policy",
         ),
         ValidationStep(
-            "Apple installer syntax",
-            ["bash", "-n", "deploy/apple-container.sh"],
+            "Docker deployment helper syntax",
+            ["bash", "-n", "deploy/docker-deploy.sh"],
+            root,
+            "backend-lint-policy",
+        ),
+        ValidationStep(
+            "Docker Compose configuration",
+            ["sh", "deploy/tests/docker-compose-config-test.sh"],
             root,
             "backend-lint-policy",
         ),
@@ -253,8 +253,8 @@ def full_steps(
 # CI adds security/workflow/config coverage; it does not remove any local step.
 CI_STEP_NAMES = {
     "deployment-config": (
-        "Apple Container lifecycle test", "Linux installer syntax", "Binary installer resources",
-        "Apple installer syntax", "Docker Compose security",
+        "Linux installer syntax", "Binary installer resources",
+        "Docker deployment helper syntax", "Docker Compose configuration", "Docker Compose security",
         "Docker Compose gateway environment", "Docker runtime resources",
         "Caddy cache policy",
         "Redis health regressions",

@@ -108,3 +108,5 @@ The actual Settings page also checks its save dock at desktop and 375px widths
 in both themes and English/Chinese: the final visible field and save button
 remain in view and can receive pointer input, the dock stays within the viewport,
 and a save reaches the settings API.
+
+The administrator quality-inspection case mounts the production page with isolated API fixtures, checks numbered pagination and one row-action menu, confirms billable runs only after the shared confirmation dialog, and exercises the plan dialog and expanded Select in both themes/languages at phone and desktop widths.

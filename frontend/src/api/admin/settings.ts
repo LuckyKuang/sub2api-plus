@@ -751,9 +751,16 @@ export interface SystemSettings {
   account_quota_notify_emails: NotifyEmailEntry[];
 
   // Channel Monitor feature switch
+  model_quality_inspection_enabled: boolean;
+  quality_inspection_quarantine_enabled: boolean;
+  quality_inspection_quarantine_cooldown_minutes: number;
+  quality_inspection_max_requests_per_round: number;
+  quality_inspection_stability_rounds: number;
   channel_monitor_enabled: boolean;
   channel_monitor_mode?: 'v1' | 'v2' | 'v3';
   channel_monitor_default_interval_seconds: number;
+  channel_monitor_probe_response_header_timeout_seconds: number;
+  channel_monitor_probe_total_timeout_seconds: number;
   channel_monitor_hide_throughput?: boolean;
   channel_monitor_v1_enabled?: boolean;
   channel_monitor_show_quota?: boolean;
@@ -1077,9 +1084,16 @@ export interface UpdateSettingsRequest {
   account_quota_notify_emails?: NotifyEmailEntry[];
 
   // Channel Monitor feature switch
+  model_quality_inspection_enabled?: boolean;
+  quality_inspection_quarantine_enabled?: boolean;
+  quality_inspection_quarantine_cooldown_minutes?: number;
+  quality_inspection_max_requests_per_round?: number;
+  quality_inspection_stability_rounds?: number;
   channel_monitor_enabled?: boolean;
   channel_monitor_mode?: 'v1' | 'v2' | 'v3';
   channel_monitor_default_interval_seconds?: number;
+  channel_monitor_probe_response_header_timeout_seconds?: number;
+  channel_monitor_probe_total_timeout_seconds?: number;
   channel_monitor_hide_throughput?: boolean;
   channel_monitor_v1_enabled?: boolean;
   channel_monitor_show_quota?: boolean;

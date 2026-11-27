@@ -100,6 +100,8 @@ vi.mock('vue-i18n', async () => {
 
 import CreateAccountModal from '../CreateAccountModal.vue'
 
+const systemDate = Date
+
 const BaseDialogStub = defineComponent({
   name: 'BaseDialog',
   props: { show: { type: Boolean, default: false } },
@@ -243,6 +245,9 @@ async function openCodexImportStep(toggleClicks = 0) {
 
 describe('CreateAccountModal OpenAI long-context billing', () => {
   beforeEach(() => {
+    // VM clock corrections can make Vue discard events older than their listeners.
+    // Keep Date stable while leaving promise and polling timers real.
+    vi.useFakeTimers({ toFake: ['Date'] })
     authIsSimpleMode.value = true
     createAccountMock.mockReset().mockResolvedValue({ id: 42, platform: 'openai', type: 'apikey' })
     syncUpstreamModelsMock.mockReset().mockResolvedValue({ models: [], metadata: {} })
@@ -266,6 +271,27 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
   })
 
   afterEach(() => vi.useRealTimers())
+
+  it('selects an API-key account when the VM wall clock moves backwards', async () => {
+    const wrapper = mountModal()
+    const systemNow = systemDate.now()
+    const wallClock = vi.spyOn(systemDate, 'now').mockReturnValue(systemNow - 1000)
+    try {
+      await selectButtonByText(wrapper, 'OpenAI')
+      await selectButtonByText(wrapper, 'API Key')
+      await wrapper.get('form#create-account-form input[type="text"]').setValue('clock correction')
+      await wrapper.get('form#create-account-form input[type="password"]').setValue('synthetic-key')
+      await wrapper.get('form#create-account-form').trigger('submit.prevent')
+      await flushPromises()
+
+      expect(createAccountMock).toHaveBeenCalledOnce()
+      expect(createAccountMock.mock.calls[0]?.[0]?.platform).toBe('openai')
+      expect(createAccountMock.mock.calls[0]?.[0]?.type).toBe('apikey')
+    } finally {
+      wallClock.mockRestore()
+      wrapper.unmount()
+    }
+  })
 
   it('can create a passthrough account with model filtering enabled', async () => {
     const wrapper = mountModal()

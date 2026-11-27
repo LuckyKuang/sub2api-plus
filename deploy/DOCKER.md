@@ -4,55 +4,28 @@ Sub2API Plus is an AI API Gateway Platform for distributing and managing AI prod
 
 ## Quick Start
 
-```bash
-docker run -d \
-  --name sub2api \
-  -p 8080:8080 \
-  -e DATABASE_URL="postgres://user:pass@host:5432/sub2api" \
-  -e REDIS_URL="redis://host:6379" \
-  ghcr.io/luckykuang/sub2api-plus:latest
-```
+Use the maintained [Compose installation](README.md#docker-deployment-recommended)
+to prepare a private environment file and the application, PostgreSQL and Redis
+services. Choose the existing storage mode for upgrades; the initialization
+helper is for new deployments only.
+
+On macOS, first follow [COLIMA.md](COLIMA.md). Prefix every Docker command in
+the shared guides with `docker --context colima`, or the verified named profile's
+context, and select `--builder <context>` for builds. The initialization helper
+prints the explicit context selected by `SUB2API_COLIMA_PROFILE` on macOS.
 
 ## Docker Compose
 
 For local deployment and verification through `skills/deploy-cli`, follow the
 shared [deployment lifecycle](DEPLOYMENT_LIFECYCLE.md). It defines replacement,
-health checks, recovery, and scoped application-image retention for both Linux
-Docker and Docker inside WSL2 Debian/Ubuntu.
+health checks, recovery, and scoped application-image retention for macOS
+Colima Docker, Linux Docker and Docker inside WSL2 Debian/Ubuntu.
 
-```yaml
-version: '3.8'
-
-services:
-  sub2api:
-    image: ghcr.io/luckykuang/sub2api-plus:latest
-    ports:
-      - "8080:8080"
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/sub2api?sslmode=disable
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      - db
-      - redis
-
-  db:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=sub2api
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7-alpine
-    volumes:
-      - redis_data:/data
-
-volumes:
-  postgres_data:
-  redis_data:
-```
+Use [docker-compose.yml](docker-compose.yml) for named volumes or
+[docker-compose.local.yml](docker-compose.local.yml) for bind directories.
+These maintained definitions own environment bindings, dependency readiness
+and security defaults. Keep the same files, project name, directory, private
+environment and image override on every invocation.
 
 ## WSL2 Availability
 
@@ -95,10 +68,10 @@ Docker restores existing containers after a host restart.
 
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | Yes | - |
-| `REDIS_URL` | Redis connection string | Yes | - |
-| `PORT` | Server port | No | `8080` |
-| `GIN_MODE` | Gin framework mode (`debug`/`release`) | No | `release` |
+| `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_DBNAME`, `DATABASE_SSLMODE` | Application PostgreSQL configuration; all-in-one Compose binds the private `POSTGRES_*` settings | Yes | See the maintained Compose file |
+| `REDIS_HOST`, `REDIS_PORT`, `REDIS_USERNAME`, `REDIS_PASSWORD`, `REDIS_DB` | Application Redis configuration | Yes | See the maintained Compose file |
+| `SERVER_PORT` | Published host port in Compose; the application container listens on `8080` | No | `8080` |
+| `SERVER_MODE` | Server mode (`debug`/`release`) | No | `release` |
 | `WEBAUTHN_ENABLED` | Enable the WebAuthn deployment boundary | No | `false` |
 | `WEBAUTHN_RP_DISPLAY_NAME` | Relying-party display name | No | `Sub2API` |
 | `WEBAUTHN_RP_ID` | Relying-party domain without scheme or port | When enabled | - |
@@ -117,8 +90,9 @@ application container after changing these values.
 
 - `latest` - Latest stable release
 - `vX.Y.Z-custom.NNN` - Immutable fork release, for example `v0.2.25-custom.001`
-- `x.y` - Latest patch of minor version
-- `x` - Latest minor of major version
+
+The maintained image publisher emits the immutable custom-release tag and
+`latest`; it does not publish rolling major/minor aliases.
 
 Git and GitHub Releases use `vX.Y.Z+custom.NNN`. The release workflow
 preserves the leading `v` and replaces only `+` with `-` to produce the
