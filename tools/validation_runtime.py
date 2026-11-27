@@ -585,6 +585,10 @@ def validation_run_command(
         # per-process soft managed-memory target, not a hard RSS limit.
         "GOMEMLIMIT=6GiB",
         "--env",
+        # Node's default heap depends on host memory, even with the same
+        # container limit. Production vue-tsc builds exceed a 2-GiB heap.
+        "NODE_OPTIONS=--max-old-space-size=4096",
+        "--env",
         "GOFLAGS=-p=2",
         "--env",
         "GIT_CONFIG_COUNT=3",

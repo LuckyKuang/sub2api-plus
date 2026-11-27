@@ -95,6 +95,9 @@ runs inside `deploy/Dockerfile.validation`. Host processes may only perform
 GitHub/Git gates, runtime probes, image management, Compose parsing, or container
 launch. Focused release metadata and deterministic finalization checks use the
 same container environment; there is no host-validation exception.
+The shared launcher fixes the Go and Node memory budgets described in
+[CI validation](../../docs/CI_VALIDATION.md#containers-and-platform-coverage),
+so local and CI builds do not inherit different host defaults.
 After every container validation attempt, push-cli relies on `--rm` to remove
 the one-shot container and its writable snapshot. It retains only the current
 deterministic project validation image and dependency-cache generation, and
