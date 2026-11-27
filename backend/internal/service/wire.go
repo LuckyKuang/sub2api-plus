@@ -1091,6 +1091,7 @@ var ProviderSet = wire.NewSet(
 	ProvideBalanceNotifyService,
 	ProvideChannelMonitorService,
 	ProvideChannelMonitorRunner,
+	ProvideQualityInspection,
 	NewChannelMonitorQuotaFetcher,
 	ProvideChannelMonitorV2Service,
 	ProvideChannelMonitorV3Service,
@@ -1230,4 +1231,27 @@ func ProvideCNOAuthService(proxyRepo ProxyRepository, accountRepo AccountReposit
 // ProvideUsageBillingRepository 以按用户合并结算的通道作为各服务使用的计费仓储。
 func ProvideUsageBillingRepository(lanes *UsageBillingLaneCombiner) UsageBillingRepository {
 	return lanes
+}
+
+// ProvideQualityInspection 构造模型质量巡检的计划服务、执行器与作品存储。
+// 存储复用异步生图的解析器；runner 在构造时启动，开关关闭时每轮直接返回。
+func ProvideQualityInspection(
+	repo QualityInspectionRepository,
+	groups *GroupService,
+	accounts *AccountService,
+	tester *AccountTestService,
+	compositeResolver *CompositeRouteResolver,
+	settings *SettingService,
+	imageSettings *ImageStorageSettingService,
+) *QualityInspectionBundle {
+	var resolver ImageStorageResolver
+	if imageSettings != nil {
+		resolver = imageSettings.Resolver()
+	}
+	artifacts := NewQualityArtifactStore(resolver)
+	composite := NewQualityCompositeResolver(compositeResolver)
+	plans := NewQualityInspectionPlanService(repo, groups, artifacts, composite)
+	runner := NewQualityInspectionRunner(repo, plans, accounts, NewQualityProbe(tester), artifacts, composite, settings)
+	runner.Start(context.Background())
+	return &QualityInspectionBundle{Repo: repo, Plans: plans, Runner: runner, Artifacts: artifacts, Composite: composite}
 }

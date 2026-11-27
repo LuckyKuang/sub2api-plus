@@ -1116,6 +1116,13 @@ calling Drive `about?fields=storageQuota`. Drive sends that snapshot on every
 retry. A pre-account Google One OAuth exchange uses the global Gemini identity,
 with the compiled Gemini CLI UA available when no settings resolver is wired.
 
+Model quality inspection calls the existing account-test adapters with the selected
+question prompt and a single-protocol option for adaptive accounts. It retains
+the credential-owner identity and proxy bindings; prompts are inserted before
+body signing or request metadata preparation. Empty connectivity-test prompts
+retain their existing default. Quality inspection does not introduce an identity
+resolver, client family, header override or gateway audit bypass.
+
 Auxiliary services with independently configured credentials resolve a separate
 operation snapshot. They never inherit a forwarding account's identity or its
 nil-account Codex cache:

@@ -323,6 +323,13 @@ type SystemSettings struct {
 	AccountQuotaNotifyEnabled       bool               `json:"account_quota_notify_enabled"`
 	AccountQuotaNotifyEmails        []NotifyEmailEntry `json:"account_quota_notify_emails"`
 
+	// Model Quality Inspection feature switches
+	ModelQualityInspectionEnabled              bool `json:"model_quality_inspection_enabled"`
+	QualityInspectionQuarantineEnabled         bool `json:"quality_inspection_quarantine_enabled"`
+	QualityInspectionQuarantineCooldownMinutes int  `json:"quality_inspection_quarantine_cooldown_minutes"`
+	QualityInspectionMaxRequestsPerRound       int  `json:"quality_inspection_max_requests_per_round"`
+	QualityInspectionStabilityRounds           int  `json:"quality_inspection_stability_rounds"`
+
 	// Channel Monitor feature switch
 	ChannelMonitorEnabled                           bool   `json:"channel_monitor_enabled"`
 	ChannelMonitorMode                              string `json:"channel_monitor_mode"`
@@ -455,6 +462,8 @@ type PublicSettings struct {
 	AccountQuotaNotifyEnabled   bool    `json:"account_quota_notify_enabled"`
 	BalanceLowNotifyThreshold   float64 `json:"balance_low_notify_threshold"`
 	BalanceLowNotifyRechargeURL string  `json:"balance_low_notify_recharge_url"`
+
+	ModelQualityInspectionEnabled bool `json:"model_quality_inspection_enabled"`
 
 	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`
 	ChannelMonitorMode                   string `json:"channel_monitor_mode"`

@@ -508,6 +508,13 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		updates[SettingKeyOpsMetricsIntervalSeconds] = strconv.Itoa(settings.OpsMetricsIntervalSeconds)
 	}
 
+	// Model quality inspection switches
+	updates[SettingKeyModelQualityInspectionEnabled] = strconv.FormatBool(settings.ModelQualityInspectionEnabled)
+	updates[SettingKeyQualityInspectionQuarantineEnabled] = strconv.FormatBool(settings.QualityInspectionQuarantineEnabled)
+	updates[SettingKeyQualityInspectionQuarantineCooldownMinutes] = strconv.Itoa(clampInt(settings.QualityInspectionQuarantineCooldownMinutes, 5, 10080))
+	updates[SettingKeyQualityInspectionMaxRequestsPerRound] = strconv.Itoa(clampInt(settings.QualityInspectionMaxRequestsPerRound, 1, 200))
+	updates[SettingKeyQualityInspectionStabilityRounds] = strconv.Itoa(clampInt(settings.QualityInspectionStabilityRounds, 3, 30))
+
 	// Channel monitor feature switch
 	updates[SettingKeyChannelMonitorEnabled] = strconv.FormatBool(settings.ChannelMonitorEnabled)
 	updates[SettingKeyChannelMonitorMode] = normalizeChannelMonitorMode(settings.ChannelMonitorMode)

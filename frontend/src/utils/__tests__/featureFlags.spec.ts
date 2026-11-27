@@ -106,3 +106,15 @@ describe('FeatureFlags.mcp', () => {
     expect(resolveFeatureFlag({ mcp_enabled: true } as PublicSettings, FeatureFlags.mcp)).toBe(true)
   })
 })
+
+// MODEL_QUALITY_INSPECTION is admin-only and opt-in: unloaded or stale public
+// settings must never expose an enabled feature before the flag is explicit.
+describe('FeatureFlags.qualityInspection', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+  it('requires an explicit enabled flag', () => {
+    for (const settings of [null, {}, { model_quality_inspection_enabled: false }]) {
+      expect(resolveFeatureFlag(settings as PublicSettings | null, FeatureFlags.qualityInspection)).toBe(false)
+    }
+    expect(resolveFeatureFlag({ model_quality_inspection_enabled: true } as PublicSettings, FeatureFlags.qualityInspection)).toBe(true)
+  })
+})

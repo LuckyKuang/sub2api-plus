@@ -393,6 +393,12 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PaymentAlipayForceQRCode:                               paymentCfg.AlipayForceQRCode,
 		PaymentAlipayMobilePrecreateDeepLink:                   paymentCfg.AlipayMobilePrecreateDeepLink,
 
+		ModelQualityInspectionEnabled:              settings.ModelQualityInspectionEnabled,
+		QualityInspectionQuarantineEnabled:         settings.QualityInspectionQuarantineEnabled,
+		QualityInspectionQuarantineCooldownMinutes: settings.QualityInspectionQuarantineCooldownMinutes,
+		QualityInspectionMaxRequestsPerRound:       settings.QualityInspectionMaxRequestsPerRound,
+		QualityInspectionStabilityRounds:           settings.QualityInspectionStabilityRounds,
+
 		ChannelMonitorEnabled:                           settings.ChannelMonitorEnabled,
 		ChannelMonitorMode:                              settings.ChannelMonitorMode,
 		ChannelMonitorDefaultIntervalSeconds:            settings.ChannelMonitorDefaultIntervalSeconds,

@@ -24,6 +24,13 @@ the original gateway generation/batch endpoints retain the same two-engine
 canonical extraction and pre-side-effect ordering. Object reads use trusted
 storage configuration and exact recorded keys, never user-supplied URLs.
 
+The administrator-only model-quality inspection feature reuses account-test
+adapters for administrator-configured questions. Its integration changes no
+public inference body, canonical extractor, audit engine or HTTP/WS admission
+ordering. Question prompts are inserted into existing provider text fields
+before signing. The inspection runner cannot act as a gateway forwarding
+adapter or bypass either engine for accepted gateway requests.
+
 This document is the normative content-extraction matrix for Content
 Moderation and Prompt Audit. The shared implementation is
 `backend/internal/auditcontent`; protocol handlers and account paths must not

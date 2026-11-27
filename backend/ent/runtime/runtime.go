@@ -31,6 +31,11 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/ent/promocode"
 	"github.com/LuckyKuang/sub2api-plus/ent/promocodeusage"
 	"github.com/LuckyKuang/sub2api-plus/ent/proxy"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionplan"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionquarantine"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionquestion"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionresult"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionrun"
 	"github.com/LuckyKuang/sub2api-plus/ent/redeemcode"
 	"github.com/LuckyKuang/sub2api-plus/ent/schema"
 	"github.com/LuckyKuang/sub2api-plus/ent/securitysecret"
@@ -1873,6 +1878,396 @@ func init() {
 	proxy.DefaultEgressCountry = proxyDescEgressCountry.Default.(string)
 	// proxy.EgressCountryValidator is a validator for the "egress_country" field. It is called by the builders before save.
 	proxy.EgressCountryValidator = proxyDescEgressCountry.Validators[0].(func(string) error)
+	qualityinspectionplanMixin := schema.QualityInspectionPlan{}.Mixin()
+	qualityinspectionplanMixinFields0 := qualityinspectionplanMixin[0].Fields()
+	_ = qualityinspectionplanMixinFields0
+	qualityinspectionplanFields := schema.QualityInspectionPlan{}.Fields()
+	_ = qualityinspectionplanFields
+	// qualityinspectionplanDescCreatedAt is the schema descriptor for created_at field.
+	qualityinspectionplanDescCreatedAt := qualityinspectionplanMixinFields0[0].Descriptor()
+	// qualityinspectionplan.DefaultCreatedAt holds the default value on creation for the created_at field.
+	qualityinspectionplan.DefaultCreatedAt = qualityinspectionplanDescCreatedAt.Default.(func() time.Time)
+	// qualityinspectionplanDescUpdatedAt is the schema descriptor for updated_at field.
+	qualityinspectionplanDescUpdatedAt := qualityinspectionplanMixinFields0[1].Descriptor()
+	// qualityinspectionplan.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	qualityinspectionplan.DefaultUpdatedAt = qualityinspectionplanDescUpdatedAt.Default.(func() time.Time)
+	// qualityinspectionplan.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	qualityinspectionplan.UpdateDefaultUpdatedAt = qualityinspectionplanDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// qualityinspectionplanDescName is the schema descriptor for name field.
+	qualityinspectionplanDescName := qualityinspectionplanFields[1].Descriptor()
+	// qualityinspectionplan.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	qualityinspectionplan.NameValidator = func() func(string) error {
+		validators := qualityinspectionplanDescName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(name string) error {
+			for _, fn := range fns {
+				if err := fn(name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// qualityinspectionplanDescPlatform is the schema descriptor for platform field.
+	qualityinspectionplanDescPlatform := qualityinspectionplanFields[2].Descriptor()
+	// qualityinspectionplan.DefaultPlatform holds the default value on creation for the platform field.
+	qualityinspectionplan.DefaultPlatform = qualityinspectionplanDescPlatform.Default.(string)
+	// qualityinspectionplan.PlatformValidator is a validator for the "platform" field. It is called by the builders before save.
+	qualityinspectionplan.PlatformValidator = qualityinspectionplanDescPlatform.Validators[0].(func(string) error)
+	// qualityinspectionplanDescModel is the schema descriptor for model field.
+	qualityinspectionplanDescModel := qualityinspectionplanFields[3].Descriptor()
+	// qualityinspectionplan.ModelValidator is a validator for the "model" field. It is called by the builders before save.
+	qualityinspectionplan.ModelValidator = func() func(string) error {
+		validators := qualityinspectionplanDescModel.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(model string) error {
+			for _, fn := range fns {
+				if err := fn(model); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// qualityinspectionplanDescEndpoint is the schema descriptor for endpoint field.
+	qualityinspectionplanDescEndpoint := qualityinspectionplanFields[4].Descriptor()
+	// qualityinspectionplan.DefaultEndpoint holds the default value on creation for the endpoint field.
+	qualityinspectionplan.DefaultEndpoint = qualityinspectionplanDescEndpoint.Default.(string)
+	// qualityinspectionplan.EndpointValidator is a validator for the "endpoint" field. It is called by the builders before save.
+	qualityinspectionplan.EndpointValidator = qualityinspectionplanDescEndpoint.Validators[0].(func(string) error)
+	// qualityinspectionplanDescEffort is the schema descriptor for effort field.
+	qualityinspectionplanDescEffort := qualityinspectionplanFields[5].Descriptor()
+	// qualityinspectionplan.DefaultEffort holds the default value on creation for the effort field.
+	qualityinspectionplan.DefaultEffort = qualityinspectionplanDescEffort.Default.(string)
+	// qualityinspectionplan.EffortValidator is a validator for the "effort" field. It is called by the builders before save.
+	qualityinspectionplan.EffortValidator = qualityinspectionplanDescEffort.Validators[0].(func(string) error)
+	// qualityinspectionplanDescEnabled is the schema descriptor for enabled field.
+	qualityinspectionplanDescEnabled := qualityinspectionplanFields[6].Descriptor()
+	// qualityinspectionplan.DefaultEnabled holds the default value on creation for the enabled field.
+	qualityinspectionplan.DefaultEnabled = qualityinspectionplanDescEnabled.Default.(bool)
+	// qualityinspectionplanDescScheduleEnabled is the schema descriptor for schedule_enabled field.
+	qualityinspectionplanDescScheduleEnabled := qualityinspectionplanFields[7].Descriptor()
+	// qualityinspectionplan.DefaultScheduleEnabled holds the default value on creation for the schedule_enabled field.
+	qualityinspectionplan.DefaultScheduleEnabled = qualityinspectionplanDescScheduleEnabled.Default.(bool)
+	// qualityinspectionplanDescIntervalMinutes is the schema descriptor for interval_minutes field.
+	qualityinspectionplanDescIntervalMinutes := qualityinspectionplanFields[8].Descriptor()
+	// qualityinspectionplan.DefaultIntervalMinutes holds the default value on creation for the interval_minutes field.
+	qualityinspectionplan.DefaultIntervalMinutes = qualityinspectionplanDescIntervalMinutes.Default.(int)
+	// qualityinspectionplanDescPauseStart is the schema descriptor for pause_start field.
+	qualityinspectionplanDescPauseStart := qualityinspectionplanFields[9].Descriptor()
+	// qualityinspectionplan.DefaultPauseStart holds the default value on creation for the pause_start field.
+	qualityinspectionplan.DefaultPauseStart = qualityinspectionplanDescPauseStart.Default.(string)
+	// qualityinspectionplan.PauseStartValidator is a validator for the "pause_start" field. It is called by the builders before save.
+	qualityinspectionplan.PauseStartValidator = qualityinspectionplanDescPauseStart.Validators[0].(func(string) error)
+	// qualityinspectionplanDescPauseEnd is the schema descriptor for pause_end field.
+	qualityinspectionplanDescPauseEnd := qualityinspectionplanFields[10].Descriptor()
+	// qualityinspectionplan.DefaultPauseEnd holds the default value on creation for the pause_end field.
+	qualityinspectionplan.DefaultPauseEnd = qualityinspectionplanDescPauseEnd.Default.(string)
+	// qualityinspectionplan.PauseEndValidator is a validator for the "pause_end" field. It is called by the builders before save.
+	qualityinspectionplan.PauseEndValidator = qualityinspectionplanDescPauseEnd.Validators[0].(func(string) error)
+	// qualityinspectionplanDescTimezone is the schema descriptor for timezone field.
+	qualityinspectionplanDescTimezone := qualityinspectionplanFields[11].Descriptor()
+	// qualityinspectionplan.DefaultTimezone holds the default value on creation for the timezone field.
+	qualityinspectionplan.DefaultTimezone = qualityinspectionplanDescTimezone.Default.(string)
+	// qualityinspectionplan.TimezoneValidator is a validator for the "timezone" field. It is called by the builders before save.
+	qualityinspectionplan.TimezoneValidator = qualityinspectionplanDescTimezone.Validators[0].(func(string) error)
+	// qualityinspectionplanDescMaxAccounts is the schema descriptor for max_accounts field.
+	qualityinspectionplanDescMaxAccounts := qualityinspectionplanFields[12].Descriptor()
+	// qualityinspectionplan.DefaultMaxAccounts holds the default value on creation for the max_accounts field.
+	qualityinspectionplan.DefaultMaxAccounts = qualityinspectionplanDescMaxAccounts.Default.(int)
+	// qualityinspectionplanDescMaxSavedRounds is the schema descriptor for max_saved_rounds field.
+	qualityinspectionplanDescMaxSavedRounds := qualityinspectionplanFields[13].Descriptor()
+	// qualityinspectionplan.DefaultMaxSavedRounds holds the default value on creation for the max_saved_rounds field.
+	qualityinspectionplan.DefaultMaxSavedRounds = qualityinspectionplanDescMaxSavedRounds.Default.(int)
+	// qualityinspectionplanDescQuarantineEnabled is the schema descriptor for quarantine_enabled field.
+	qualityinspectionplanDescQuarantineEnabled := qualityinspectionplanFields[14].Descriptor()
+	// qualityinspectionplan.DefaultQuarantineEnabled holds the default value on creation for the quarantine_enabled field.
+	qualityinspectionplan.DefaultQuarantineEnabled = qualityinspectionplanDescQuarantineEnabled.Default.(bool)
+	// qualityinspectionplanDescQuarantineCooldownMinutes is the schema descriptor for quarantine_cooldown_minutes field.
+	qualityinspectionplanDescQuarantineCooldownMinutes := qualityinspectionplanFields[15].Descriptor()
+	// qualityinspectionplan.DefaultQuarantineCooldownMinutes holds the default value on creation for the quarantine_cooldown_minutes field.
+	qualityinspectionplan.DefaultQuarantineCooldownMinutes = qualityinspectionplanDescQuarantineCooldownMinutes.Default.(int)
+	// qualityinspectionplanDescQuarantineFailRounds is the schema descriptor for quarantine_fail_rounds field.
+	qualityinspectionplanDescQuarantineFailRounds := qualityinspectionplanFields[16].Descriptor()
+	// qualityinspectionplan.DefaultQuarantineFailRounds holds the default value on creation for the quarantine_fail_rounds field.
+	qualityinspectionplan.DefaultQuarantineFailRounds = qualityinspectionplanDescQuarantineFailRounds.Default.(int)
+	// qualityinspectionplanDescRevision is the schema descriptor for revision field.
+	qualityinspectionplanDescRevision := qualityinspectionplanFields[17].Descriptor()
+	// qualityinspectionplan.DefaultRevision holds the default value on creation for the revision field.
+	qualityinspectionplan.DefaultRevision = qualityinspectionplanDescRevision.Default.(int64)
+	qualityinspectionquarantineMixin := schema.QualityInspectionQuarantine{}.Mixin()
+	qualityinspectionquarantineMixinFields0 := qualityinspectionquarantineMixin[0].Fields()
+	_ = qualityinspectionquarantineMixinFields0
+	qualityinspectionquarantineFields := schema.QualityInspectionQuarantine{}.Fields()
+	_ = qualityinspectionquarantineFields
+	// qualityinspectionquarantineDescCreatedAt is the schema descriptor for created_at field.
+	qualityinspectionquarantineDescCreatedAt := qualityinspectionquarantineMixinFields0[0].Descriptor()
+	// qualityinspectionquarantine.DefaultCreatedAt holds the default value on creation for the created_at field.
+	qualityinspectionquarantine.DefaultCreatedAt = qualityinspectionquarantineDescCreatedAt.Default.(func() time.Time)
+	// qualityinspectionquarantineDescUpdatedAt is the schema descriptor for updated_at field.
+	qualityinspectionquarantineDescUpdatedAt := qualityinspectionquarantineMixinFields0[1].Descriptor()
+	// qualityinspectionquarantine.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	qualityinspectionquarantine.DefaultUpdatedAt = qualityinspectionquarantineDescUpdatedAt.Default.(func() time.Time)
+	// qualityinspectionquarantine.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	qualityinspectionquarantine.UpdateDefaultUpdatedAt = qualityinspectionquarantineDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// qualityinspectionquarantineDescState is the schema descriptor for state field.
+	qualityinspectionquarantineDescState := qualityinspectionquarantineFields[2].Descriptor()
+	// qualityinspectionquarantine.DefaultState holds the default value on creation for the state field.
+	qualityinspectionquarantine.DefaultState = qualityinspectionquarantineDescState.Default.(string)
+	// qualityinspectionquarantine.StateValidator is a validator for the "state" field. It is called by the builders before save.
+	qualityinspectionquarantine.StateValidator = qualityinspectionquarantineDescState.Validators[0].(func(string) error)
+	// qualityinspectionquarantineDescGeneration is the schema descriptor for generation field.
+	qualityinspectionquarantineDescGeneration := qualityinspectionquarantineFields[3].Descriptor()
+	// qualityinspectionquarantine.DefaultGeneration holds the default value on creation for the generation field.
+	qualityinspectionquarantine.DefaultGeneration = qualityinspectionquarantineDescGeneration.Default.(int)
+	// qualityinspectionquarantineDescEvidenceRunID is the schema descriptor for evidence_run_id field.
+	qualityinspectionquarantineDescEvidenceRunID := qualityinspectionquarantineFields[4].Descriptor()
+	// qualityinspectionquarantine.DefaultEvidenceRunID holds the default value on creation for the evidence_run_id field.
+	qualityinspectionquarantine.DefaultEvidenceRunID = qualityinspectionquarantineDescEvidenceRunID.Default.(int64)
+	// qualityinspectionquarantineDescRecheckRunID is the schema descriptor for recheck_run_id field.
+	qualityinspectionquarantineDescRecheckRunID := qualityinspectionquarantineFields[5].Descriptor()
+	// qualityinspectionquarantine.DefaultRecheckRunID holds the default value on creation for the recheck_run_id field.
+	qualityinspectionquarantine.DefaultRecheckRunID = qualityinspectionquarantineDescRecheckRunID.Default.(int64)
+	// qualityinspectionquarantineDescFailRounds is the schema descriptor for fail_rounds field.
+	qualityinspectionquarantineDescFailRounds := qualityinspectionquarantineFields[6].Descriptor()
+	// qualityinspectionquarantine.DefaultFailRounds holds the default value on creation for the fail_rounds field.
+	qualityinspectionquarantine.DefaultFailRounds = qualityinspectionquarantineDescFailRounds.Default.(int)
+	// qualityinspectionquarantineDescAttempts is the schema descriptor for attempts field.
+	qualityinspectionquarantineDescAttempts := qualityinspectionquarantineFields[8].Descriptor()
+	// qualityinspectionquarantine.DefaultAttempts holds the default value on creation for the attempts field.
+	qualityinspectionquarantine.DefaultAttempts = qualityinspectionquarantineDescAttempts.Default.(int)
+	// qualityinspectionquarantineDescErrorCode is the schema descriptor for error_code field.
+	qualityinspectionquarantineDescErrorCode := qualityinspectionquarantineFields[9].Descriptor()
+	// qualityinspectionquarantine.DefaultErrorCode holds the default value on creation for the error_code field.
+	qualityinspectionquarantine.DefaultErrorCode = qualityinspectionquarantineDescErrorCode.Default.(string)
+	// qualityinspectionquarantine.ErrorCodeValidator is a validator for the "error_code" field. It is called by the builders before save.
+	qualityinspectionquarantine.ErrorCodeValidator = qualityinspectionquarantineDescErrorCode.Validators[0].(func(string) error)
+	// qualityinspectionquarantineDescActor is the schema descriptor for actor field.
+	qualityinspectionquarantineDescActor := qualityinspectionquarantineFields[10].Descriptor()
+	// qualityinspectionquarantine.DefaultActor holds the default value on creation for the actor field.
+	qualityinspectionquarantine.DefaultActor = qualityinspectionquarantineDescActor.Default.(string)
+	// qualityinspectionquarantine.ActorValidator is a validator for the "actor" field. It is called by the builders before save.
+	qualityinspectionquarantine.ActorValidator = qualityinspectionquarantineDescActor.Validators[0].(func(string) error)
+	qualityinspectionquestionFields := schema.QualityInspectionQuestion{}.Fields()
+	_ = qualityinspectionquestionFields
+	// qualityinspectionquestionDescQuestionID is the schema descriptor for question_id field.
+	qualityinspectionquestionDescQuestionID := qualityinspectionquestionFields[1].Descriptor()
+	// qualityinspectionquestion.QuestionIDValidator is a validator for the "question_id" field. It is called by the builders before save.
+	qualityinspectionquestion.QuestionIDValidator = func() func(string) error {
+		validators := qualityinspectionquestionDescQuestionID.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(question_id string) error {
+			for _, fn := range fns {
+				if err := fn(question_id); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// qualityinspectionquestionDescTitle is the schema descriptor for title field.
+	qualityinspectionquestionDescTitle := qualityinspectionquestionFields[2].Descriptor()
+	// qualityinspectionquestion.DefaultTitle holds the default value on creation for the title field.
+	qualityinspectionquestion.DefaultTitle = qualityinspectionquestionDescTitle.Default.(string)
+	// qualityinspectionquestion.TitleValidator is a validator for the "title" field. It is called by the builders before save.
+	qualityinspectionquestion.TitleValidator = qualityinspectionquestionDescTitle.Validators[0].(func(string) error)
+	// qualityinspectionquestionDescKind is the schema descriptor for kind field.
+	qualityinspectionquestionDescKind := qualityinspectionquestionFields[3].Descriptor()
+	// qualityinspectionquestion.DefaultKind holds the default value on creation for the kind field.
+	qualityinspectionquestion.DefaultKind = qualityinspectionquestionDescKind.Default.(string)
+	// qualityinspectionquestion.KindValidator is a validator for the "kind" field. It is called by the builders before save.
+	qualityinspectionquestion.KindValidator = qualityinspectionquestionDescKind.Validators[0].(func(string) error)
+	// qualityinspectionquestionDescPrompt is the schema descriptor for prompt field.
+	qualityinspectionquestionDescPrompt := qualityinspectionquestionFields[4].Descriptor()
+	// qualityinspectionquestion.DefaultPrompt holds the default value on creation for the prompt field.
+	qualityinspectionquestion.DefaultPrompt = qualityinspectionquestionDescPrompt.Default.(string)
+	// qualityinspectionquestionDescInstructions is the schema descriptor for instructions field.
+	qualityinspectionquestionDescInstructions := qualityinspectionquestionFields[5].Descriptor()
+	// qualityinspectionquestion.DefaultInstructions holds the default value on creation for the instructions field.
+	qualityinspectionquestion.DefaultInstructions = qualityinspectionquestionDescInstructions.Default.(string)
+	// qualityinspectionquestionDescExpected is the schema descriptor for expected field.
+	qualityinspectionquestionDescExpected := qualityinspectionquestionFields[6].Descriptor()
+	// qualityinspectionquestion.DefaultExpected holds the default value on creation for the expected field.
+	qualityinspectionquestion.DefaultExpected = qualityinspectionquestionDescExpected.Default.(string)
+	// qualityinspectionquestionDescUnit is the schema descriptor for unit field.
+	qualityinspectionquestionDescUnit := qualityinspectionquestionFields[8].Descriptor()
+	// qualityinspectionquestion.DefaultUnit holds the default value on creation for the unit field.
+	qualityinspectionquestion.DefaultUnit = qualityinspectionquestionDescUnit.Default.(string)
+	// qualityinspectionquestion.UnitValidator is a validator for the "unit" field. It is called by the builders before save.
+	qualityinspectionquestion.UnitValidator = qualityinspectionquestionDescUnit.Validators[0].(func(string) error)
+	// qualityinspectionquestionDescRounds is the schema descriptor for rounds field.
+	qualityinspectionquestionDescRounds := qualityinspectionquestionFields[9].Descriptor()
+	// qualityinspectionquestion.DefaultRounds holds the default value on creation for the rounds field.
+	qualityinspectionquestion.DefaultRounds = qualityinspectionquestionDescRounds.Default.(int)
+	// qualityinspectionquestionDescEnabled is the schema descriptor for enabled field.
+	qualityinspectionquestionDescEnabled := qualityinspectionquestionFields[10].Descriptor()
+	// qualityinspectionquestion.DefaultEnabled holds the default value on creation for the enabled field.
+	qualityinspectionquestion.DefaultEnabled = qualityinspectionquestionDescEnabled.Default.(bool)
+	// qualityinspectionquestionDescVersion is the schema descriptor for version field.
+	qualityinspectionquestionDescVersion := qualityinspectionquestionFields[11].Descriptor()
+	// qualityinspectionquestion.DefaultVersion holds the default value on creation for the version field.
+	qualityinspectionquestion.DefaultVersion = qualityinspectionquestionDescVersion.Default.(string)
+	// qualityinspectionquestion.VersionValidator is a validator for the "version" field. It is called by the builders before save.
+	qualityinspectionquestion.VersionValidator = qualityinspectionquestionDescVersion.Validators[0].(func(string) error)
+	// qualityinspectionquestionDescPosition is the schema descriptor for position field.
+	qualityinspectionquestionDescPosition := qualityinspectionquestionFields[12].Descriptor()
+	// qualityinspectionquestion.DefaultPosition holds the default value on creation for the position field.
+	qualityinspectionquestion.DefaultPosition = qualityinspectionquestionDescPosition.Default.(int)
+	qualityinspectionresultFields := schema.QualityInspectionResult{}.Fields()
+	_ = qualityinspectionresultFields
+	// qualityinspectionresultDescQuestionID is the schema descriptor for question_id field.
+	qualityinspectionresultDescQuestionID := qualityinspectionresultFields[3].Descriptor()
+	// qualityinspectionresult.QuestionIDValidator is a validator for the "question_id" field. It is called by the builders before save.
+	qualityinspectionresult.QuestionIDValidator = func() func(string) error {
+		validators := qualityinspectionresultDescQuestionID.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(question_id string) error {
+			for _, fn := range fns {
+				if err := fn(question_id); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// qualityinspectionresultDescKind is the schema descriptor for kind field.
+	qualityinspectionresultDescKind := qualityinspectionresultFields[4].Descriptor()
+	// qualityinspectionresult.DefaultKind holds the default value on creation for the kind field.
+	qualityinspectionresult.DefaultKind = qualityinspectionresultDescKind.Default.(string)
+	// qualityinspectionresult.KindValidator is a validator for the "kind" field. It is called by the builders before save.
+	qualityinspectionresult.KindValidator = qualityinspectionresultDescKind.Validators[0].(func(string) error)
+	// qualityinspectionresultDescStatus is the schema descriptor for status field.
+	qualityinspectionresultDescStatus := qualityinspectionresultFields[5].Descriptor()
+	// qualityinspectionresult.DefaultStatus holds the default value on creation for the status field.
+	qualityinspectionresult.DefaultStatus = qualityinspectionresultDescStatus.Default.(string)
+	// qualityinspectionresult.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	qualityinspectionresult.StatusValidator = qualityinspectionresultDescStatus.Validators[0].(func(string) error)
+	// qualityinspectionresultDescAnswer is the schema descriptor for answer field.
+	qualityinspectionresultDescAnswer := qualityinspectionresultFields[6].Descriptor()
+	// qualityinspectionresult.DefaultAnswer holds the default value on creation for the answer field.
+	qualityinspectionresult.DefaultAnswer = qualityinspectionresultDescAnswer.Default.(string)
+	// qualityinspectionresultDescExpected is the schema descriptor for expected field.
+	qualityinspectionresultDescExpected := qualityinspectionresultFields[7].Descriptor()
+	// qualityinspectionresult.DefaultExpected holds the default value on creation for the expected field.
+	qualityinspectionresult.DefaultExpected = qualityinspectionresultDescExpected.Default.(string)
+	// qualityinspectionresultDescResponse is the schema descriptor for response field.
+	qualityinspectionresultDescResponse := qualityinspectionresultFields[8].Descriptor()
+	// qualityinspectionresult.DefaultResponse holds the default value on creation for the response field.
+	qualityinspectionresult.DefaultResponse = qualityinspectionresultDescResponse.Default.(string)
+	// qualityinspectionresultDescArtifactKey is the schema descriptor for artifact_key field.
+	qualityinspectionresultDescArtifactKey := qualityinspectionresultFields[9].Descriptor()
+	// qualityinspectionresult.DefaultArtifactKey holds the default value on creation for the artifact_key field.
+	qualityinspectionresult.DefaultArtifactKey = qualityinspectionresultDescArtifactKey.Default.(string)
+	// qualityinspectionresult.ArtifactKeyValidator is a validator for the "artifact_key" field. It is called by the builders before save.
+	qualityinspectionresult.ArtifactKeyValidator = qualityinspectionresultDescArtifactKey.Validators[0].(func(string) error)
+	// qualityinspectionresultDescArtifactBytes is the schema descriptor for artifact_bytes field.
+	qualityinspectionresultDescArtifactBytes := qualityinspectionresultFields[10].Descriptor()
+	// qualityinspectionresult.DefaultArtifactBytes holds the default value on creation for the artifact_bytes field.
+	qualityinspectionresult.DefaultArtifactBytes = qualityinspectionresultDescArtifactBytes.Default.(int64)
+	// qualityinspectionresultDescArtifactTruncated is the schema descriptor for artifact_truncated field.
+	qualityinspectionresultDescArtifactTruncated := qualityinspectionresultFields[11].Descriptor()
+	// qualityinspectionresult.DefaultArtifactTruncated holds the default value on creation for the artifact_truncated field.
+	qualityinspectionresult.DefaultArtifactTruncated = qualityinspectionresultDescArtifactTruncated.Default.(bool)
+	// qualityinspectionresultDescFailureClass is the schema descriptor for failure_class field.
+	qualityinspectionresultDescFailureClass := qualityinspectionresultFields[14].Descriptor()
+	// qualityinspectionresult.DefaultFailureClass holds the default value on creation for the failure_class field.
+	qualityinspectionresult.DefaultFailureClass = qualityinspectionresultDescFailureClass.Default.(string)
+	// qualityinspectionresult.FailureClassValidator is a validator for the "failure_class" field. It is called by the builders before save.
+	qualityinspectionresult.FailureClassValidator = qualityinspectionresultDescFailureClass.Validators[0].(func(string) error)
+	// qualityinspectionresultDescErrorCode is the schema descriptor for error_code field.
+	qualityinspectionresultDescErrorCode := qualityinspectionresultFields[15].Descriptor()
+	// qualityinspectionresult.DefaultErrorCode holds the default value on creation for the error_code field.
+	qualityinspectionresult.DefaultErrorCode = qualityinspectionresultDescErrorCode.Default.(string)
+	// qualityinspectionresult.ErrorCodeValidator is a validator for the "error_code" field. It is called by the builders before save.
+	qualityinspectionresult.ErrorCodeValidator = qualityinspectionresultDescErrorCode.Validators[0].(func(string) error)
+	// qualityinspectionresultDescBankVersion is the schema descriptor for bank_version field.
+	qualityinspectionresultDescBankVersion := qualityinspectionresultFields[16].Descriptor()
+	// qualityinspectionresult.DefaultBankVersion holds the default value on creation for the bank_version field.
+	qualityinspectionresult.DefaultBankVersion = qualityinspectionresultDescBankVersion.Default.(string)
+	// qualityinspectionresult.BankVersionValidator is a validator for the "bank_version" field. It is called by the builders before save.
+	qualityinspectionresult.BankVersionValidator = qualityinspectionresultDescBankVersion.Validators[0].(func(string) error)
+	// qualityinspectionresultDescCreatedAt is the schema descriptor for created_at field.
+	qualityinspectionresultDescCreatedAt := qualityinspectionresultFields[17].Descriptor()
+	// qualityinspectionresult.DefaultCreatedAt holds the default value on creation for the created_at field.
+	qualityinspectionresult.DefaultCreatedAt = qualityinspectionresultDescCreatedAt.Default.(func() time.Time)
+	qualityinspectionrunFields := schema.QualityInspectionRun{}.Fields()
+	_ = qualityinspectionrunFields
+	// qualityinspectionrunDescPlanRevision is the schema descriptor for plan_revision field.
+	qualityinspectionrunDescPlanRevision := qualityinspectionrunFields[1].Descriptor()
+	// qualityinspectionrun.DefaultPlanRevision holds the default value on creation for the plan_revision field.
+	qualityinspectionrun.DefaultPlanRevision = qualityinspectionrunDescPlanRevision.Default.(int64)
+	// qualityinspectionrunDescTrigger is the schema descriptor for trigger field.
+	qualityinspectionrunDescTrigger := qualityinspectionrunFields[2].Descriptor()
+	// qualityinspectionrun.DefaultTrigger holds the default value on creation for the trigger field.
+	qualityinspectionrun.DefaultTrigger = qualityinspectionrunDescTrigger.Default.(string)
+	// qualityinspectionrun.TriggerValidator is a validator for the "trigger" field. It is called by the builders before save.
+	qualityinspectionrun.TriggerValidator = qualityinspectionrunDescTrigger.Validators[0].(func(string) error)
+	// qualityinspectionrunDescSlot is the schema descriptor for slot field.
+	qualityinspectionrunDescSlot := qualityinspectionrunFields[3].Descriptor()
+	// qualityinspectionrun.DefaultSlot holds the default value on creation for the slot field.
+	qualityinspectionrun.DefaultSlot = qualityinspectionrunDescSlot.Default.(int64)
+	// qualityinspectionrunDescStatus is the schema descriptor for status field.
+	qualityinspectionrunDescStatus := qualityinspectionrunFields[4].Descriptor()
+	// qualityinspectionrun.DefaultStatus holds the default value on creation for the status field.
+	qualityinspectionrun.DefaultStatus = qualityinspectionrunDescStatus.Default.(string)
+	// qualityinspectionrun.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	qualityinspectionrun.StatusValidator = qualityinspectionrunDescStatus.Validators[0].(func(string) error)
+	// qualityinspectionrunDescModel is the schema descriptor for model field.
+	qualityinspectionrunDescModel := qualityinspectionrunFields[6].Descriptor()
+	// qualityinspectionrun.DefaultModel holds the default value on creation for the model field.
+	qualityinspectionrun.DefaultModel = qualityinspectionrunDescModel.Default.(string)
+	// qualityinspectionrun.ModelValidator is a validator for the "model" field. It is called by the builders before save.
+	qualityinspectionrun.ModelValidator = qualityinspectionrunDescModel.Validators[0].(func(string) error)
+	// qualityinspectionrunDescEffort is the schema descriptor for effort field.
+	qualityinspectionrunDescEffort := qualityinspectionrunFields[7].Descriptor()
+	// qualityinspectionrun.DefaultEffort holds the default value on creation for the effort field.
+	qualityinspectionrun.DefaultEffort = qualityinspectionrunDescEffort.Default.(string)
+	// qualityinspectionrun.EffortValidator is a validator for the "effort" field. It is called by the builders before save.
+	qualityinspectionrun.EffortValidator = qualityinspectionrunDescEffort.Validators[0].(func(string) error)
+	// qualityinspectionrunDescRequestCount is the schema descriptor for request_count field.
+	qualityinspectionrunDescRequestCount := qualityinspectionrunFields[8].Descriptor()
+	// qualityinspectionrun.DefaultRequestCount holds the default value on creation for the request_count field.
+	qualityinspectionrun.DefaultRequestCount = qualityinspectionrunDescRequestCount.Default.(int)
+	// qualityinspectionrunDescMessage is the schema descriptor for message field.
+	qualityinspectionrunDescMessage := qualityinspectionrunFields[10].Descriptor()
+	// qualityinspectionrun.DefaultMessage holds the default value on creation for the message field.
+	qualityinspectionrun.DefaultMessage = qualityinspectionrunDescMessage.Default.(string)
+	// qualityinspectionrunDescResolvedPlatform is the schema descriptor for resolved_platform field.
+	qualityinspectionrunDescResolvedPlatform := qualityinspectionrunFields[11].Descriptor()
+	// qualityinspectionrun.DefaultResolvedPlatform holds the default value on creation for the resolved_platform field.
+	qualityinspectionrun.DefaultResolvedPlatform = qualityinspectionrunDescResolvedPlatform.Default.(string)
+	// qualityinspectionrun.ResolvedPlatformValidator is a validator for the "resolved_platform" field. It is called by the builders before save.
+	qualityinspectionrun.ResolvedPlatformValidator = qualityinspectionrunDescResolvedPlatform.Validators[0].(func(string) error)
+	// qualityinspectionrunDescResolvedUpstreamModel is the schema descriptor for resolved_upstream_model field.
+	qualityinspectionrunDescResolvedUpstreamModel := qualityinspectionrunFields[12].Descriptor()
+	// qualityinspectionrun.DefaultResolvedUpstreamModel holds the default value on creation for the resolved_upstream_model field.
+	qualityinspectionrun.DefaultResolvedUpstreamModel = qualityinspectionrunDescResolvedUpstreamModel.Default.(string)
+	// qualityinspectionrun.ResolvedUpstreamModelValidator is a validator for the "resolved_upstream_model" field. It is called by the builders before save.
+	qualityinspectionrun.ResolvedUpstreamModelValidator = qualityinspectionrunDescResolvedUpstreamModel.Validators[0].(func(string) error)
+	// qualityinspectionrunDescResolvedEndpoint is the schema descriptor for resolved_endpoint field.
+	qualityinspectionrunDescResolvedEndpoint := qualityinspectionrunFields[13].Descriptor()
+	// qualityinspectionrun.DefaultResolvedEndpoint holds the default value on creation for the resolved_endpoint field.
+	qualityinspectionrun.DefaultResolvedEndpoint = qualityinspectionrunDescResolvedEndpoint.Default.(string)
+	// qualityinspectionrun.ResolvedEndpointValidator is a validator for the "resolved_endpoint" field. It is called by the builders before save.
+	qualityinspectionrun.ResolvedEndpointValidator = qualityinspectionrunDescResolvedEndpoint.Validators[0].(func(string) error)
+	// qualityinspectionrunDescResolvedSource is the schema descriptor for resolved_source field.
+	qualityinspectionrunDescResolvedSource := qualityinspectionrunFields[14].Descriptor()
+	// qualityinspectionrun.DefaultResolvedSource holds the default value on creation for the resolved_source field.
+	qualityinspectionrun.DefaultResolvedSource = qualityinspectionrunDescResolvedSource.Default.(string)
+	// qualityinspectionrun.ResolvedSourceValidator is a validator for the "resolved_source" field. It is called by the builders before save.
+	qualityinspectionrun.ResolvedSourceValidator = qualityinspectionrunDescResolvedSource.Validators[0].(func(string) error)
 	redeemcodeFields := schema.RedeemCode{}.Fields()
 	_ = redeemcodeFields
 	// redeemcodeDescCode is the schema descriptor for code field.

@@ -44,7 +44,7 @@ func TestChannelMonitorProbeTimeoutsBoundHeadersAndBody(t *testing.T) {
 		wantError      string
 	}{
 		{"waiting for headers", 40 * time.Millisecond, 2 * time.Second, false, "timeout awaiting response headers"},
-		{"reading the body", 150 * time.Millisecond, 250 * time.Millisecond, true, "Client.Timeout"},
+		{"reading the body", 150 * time.Millisecond, 250 * time.Millisecond, true, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -60,9 +60,23 @@ func TestChannelMonitorProbeTimeoutsBoundHeadersAndBody(t *testing.T) {
 			transport.DialContext = nil // Use the local test server; production uses safeDialContext.
 			defer transport.CloseIdleConnections()
 			client := &http.Client{Timeout: tc.totalTimeout, Transport: firstbyte.WrapTransport(transport)}
+			started := time.Now()
 			result := runCheckForModel(context.Background(), MonitorProviderOpenAI, server.URL, "test-key", "test-model", &CheckOptions{httpClient: client})
 			require.Equal(t, MonitorStatusError, result.Status)
-			require.Contains(t, result.Message, tc.wantError)
+			// CHANNEL_MONITOR requires separate header/body deadlines. The standard
+			// library has multiple cancellation wrappers. Error status, observed
+			// deadline and first-byte presence prove the required failure stage.
+			require.NotEmpty(t, result.Message)
+			if tc.wantError != "" {
+				require.Contains(t, result.Message, tc.wantError)
+			}
+			elapsed := time.Since(started)
+			deadline := tc.headerTimeout
+			if tc.flushFirstByte {
+				deadline = tc.totalTimeout
+			}
+			require.GreaterOrEqual(t, elapsed, deadline*8/10)
+			require.Less(t, elapsed, deadline+time.Second)
 			if tc.flushFirstByte {
 				require.NotNil(t, result.FirstByteMs)
 			} else {

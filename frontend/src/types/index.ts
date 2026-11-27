@@ -269,6 +269,7 @@ export interface PublicSettings {
   balance_low_notify_enabled: boolean
   account_quota_notify_enabled: boolean
   balance_low_notify_threshold: number
+  model_quality_inspection_enabled: boolean
   channel_monitor_enabled: boolean
   /** Exclusive mode: v1 active probes, v2 private analytics, or v3 service status. Default v1. */
   channel_monitor_mode?: 'v1' | 'v2' | 'v3'

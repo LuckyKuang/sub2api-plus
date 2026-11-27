@@ -25,7 +25,7 @@ func TestCreateTestPayload_Temperature(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
-			payload, err := createTestPayload(tt.model)
+			payload, err := createTestPayload(tt.model, "")
 			require.NoError(t, err)
 
 			temperature, present := payload["temperature"]
@@ -48,7 +48,7 @@ func TestBuildBedrockTestPayload_Temperature(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
-			_, present := buildBedrockTestPayload(tt.model)["temperature"]
+			_, present := buildBedrockTestPayload(tt.model, "")["temperature"]
 			require.Equal(t, tt.wantTemperature, present)
 		})
 	}

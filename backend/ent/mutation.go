@@ -39,6 +39,11 @@ import (
 	"github.com/LuckyKuang/sub2api-plus/ent/promocode"
 	"github.com/LuckyKuang/sub2api-plus/ent/promocodeusage"
 	"github.com/LuckyKuang/sub2api-plus/ent/proxy"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionplan"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionquarantine"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionquestion"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionresult"
+	"github.com/LuckyKuang/sub2api-plus/ent/qualityinspectionrun"
 	"github.com/LuckyKuang/sub2api-plus/ent/redeemcode"
 	"github.com/LuckyKuang/sub2api-plus/ent/securitysecret"
 	"github.com/LuckyKuang/sub2api-plus/ent/setting"
@@ -90,6 +95,11 @@ const (
 	TypePromoCode                     = "PromoCode"
 	TypePromoCodeUsage                = "PromoCodeUsage"
 	TypeProxy                         = "Proxy"
+	TypeQualityInspectionPlan         = "QualityInspectionPlan"
+	TypeQualityInspectionQuarantine   = "QualityInspectionQuarantine"
+	TypeQualityInspectionQuestion     = "QualityInspectionQuestion"
+	TypeQualityInspectionResult       = "QualityInspectionResult"
+	TypeQualityInspectionRun          = "QualityInspectionRun"
 	TypeRedeemCode                    = "RedeemCode"
 	TypeSecuritySecret                = "SecuritySecret"
 	TypeSetting                       = "Setting"
@@ -41270,6 +41280,6973 @@ func (m *ProxyMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Proxy edge %s", name)
+}
+
+// QualityInspectionPlanMutation represents an operation that mutates the QualityInspectionPlan nodes in the graph.
+type QualityInspectionPlanMutation struct {
+	config
+	op                             Op
+	typ                            string
+	id                             *int64
+	created_at                     *time.Time
+	updated_at                     *time.Time
+	group_id                       *int64
+	addgroup_id                    *int64
+	name                           *string
+	platform                       *string
+	model                          *string
+	endpoint                       *string
+	effort                         *string
+	enabled                        *bool
+	schedule_enabled               *bool
+	interval_minutes               *int
+	addinterval_minutes            *int
+	pause_start                    *string
+	pause_end                      *string
+	timezone                       *string
+	max_accounts                   *int
+	addmax_accounts                *int
+	max_saved_rounds               *int
+	addmax_saved_rounds            *int
+	quarantine_enabled             *bool
+	quarantine_cooldown_minutes    *int
+	addquarantine_cooldown_minutes *int
+	quarantine_fail_rounds         *int
+	addquarantine_fail_rounds      *int
+	revision                       *int64
+	addrevision                    *int64
+	created_by                     *int64
+	addcreated_by                  *int64
+	clearedFields                  map[string]struct{}
+	done                           bool
+	oldValue                       func(context.Context) (*QualityInspectionPlan, error)
+	predicates                     []predicate.QualityInspectionPlan
+}
+
+var _ ent.Mutation = (*QualityInspectionPlanMutation)(nil)
+
+// qualityinspectionplanOption allows management of the mutation configuration using functional options.
+type qualityinspectionplanOption func(*QualityInspectionPlanMutation)
+
+// newQualityInspectionPlanMutation creates new mutation for the QualityInspectionPlan entity.
+func newQualityInspectionPlanMutation(c config, op Op, opts ...qualityinspectionplanOption) *QualityInspectionPlanMutation {
+	m := &QualityInspectionPlanMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeQualityInspectionPlan,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withQualityInspectionPlanID sets the ID field of the mutation.
+func withQualityInspectionPlanID(id int64) qualityinspectionplanOption {
+	return func(m *QualityInspectionPlanMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *QualityInspectionPlan
+		)
+		m.oldValue = func(ctx context.Context) (*QualityInspectionPlan, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().QualityInspectionPlan.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withQualityInspectionPlan sets the old QualityInspectionPlan of the mutation.
+func withQualityInspectionPlan(node *QualityInspectionPlan) qualityinspectionplanOption {
+	return func(m *QualityInspectionPlanMutation) {
+		m.oldValue = func(context.Context) (*QualityInspectionPlan, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m QualityInspectionPlanMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m QualityInspectionPlanMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *QualityInspectionPlanMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *QualityInspectionPlanMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().QualityInspectionPlan.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *QualityInspectionPlanMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *QualityInspectionPlanMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *QualityInspectionPlanMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *QualityInspectionPlanMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *QualityInspectionPlanMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *QualityInspectionPlanMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *QualityInspectionPlanMutation) SetGroupID(i int64) {
+	m.group_id = &i
+	m.addgroup_id = nil
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *QualityInspectionPlanMutation) GroupID() (r int64, exists bool) {
+	v := m.group_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldGroupID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// AddGroupID adds i to the "group_id" field.
+func (m *QualityInspectionPlanMutation) AddGroupID(i int64) {
+	if m.addgroup_id != nil {
+		*m.addgroup_id += i
+	} else {
+		m.addgroup_id = &i
+	}
+}
+
+// AddedGroupID returns the value that was added to the "group_id" field in this mutation.
+func (m *QualityInspectionPlanMutation) AddedGroupID() (r int64, exists bool) {
+	v := m.addgroup_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *QualityInspectionPlanMutation) ResetGroupID() {
+	m.group_id = nil
+	m.addgroup_id = nil
+}
+
+// SetName sets the "name" field.
+func (m *QualityInspectionPlanMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *QualityInspectionPlanMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *QualityInspectionPlanMutation) ResetName() {
+	m.name = nil
+}
+
+// SetPlatform sets the "platform" field.
+func (m *QualityInspectionPlanMutation) SetPlatform(s string) {
+	m.platform = &s
+}
+
+// Platform returns the value of the "platform" field in the mutation.
+func (m *QualityInspectionPlanMutation) Platform() (r string, exists bool) {
+	v := m.platform
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlatform returns the old "platform" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldPlatform(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlatform is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlatform requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlatform: %w", err)
+	}
+	return oldValue.Platform, nil
+}
+
+// ResetPlatform resets all changes to the "platform" field.
+func (m *QualityInspectionPlanMutation) ResetPlatform() {
+	m.platform = nil
+}
+
+// SetModel sets the "model" field.
+func (m *QualityInspectionPlanMutation) SetModel(s string) {
+	m.model = &s
+}
+
+// Model returns the value of the "model" field in the mutation.
+func (m *QualityInspectionPlanMutation) Model() (r string, exists bool) {
+	v := m.model
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldModel returns the old "model" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldModel(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldModel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldModel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldModel: %w", err)
+	}
+	return oldValue.Model, nil
+}
+
+// ResetModel resets all changes to the "model" field.
+func (m *QualityInspectionPlanMutation) ResetModel() {
+	m.model = nil
+}
+
+// SetEndpoint sets the "endpoint" field.
+func (m *QualityInspectionPlanMutation) SetEndpoint(s string) {
+	m.endpoint = &s
+}
+
+// Endpoint returns the value of the "endpoint" field in the mutation.
+func (m *QualityInspectionPlanMutation) Endpoint() (r string, exists bool) {
+	v := m.endpoint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEndpoint returns the old "endpoint" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldEndpoint(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEndpoint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEndpoint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEndpoint: %w", err)
+	}
+	return oldValue.Endpoint, nil
+}
+
+// ResetEndpoint resets all changes to the "endpoint" field.
+func (m *QualityInspectionPlanMutation) ResetEndpoint() {
+	m.endpoint = nil
+}
+
+// SetEffort sets the "effort" field.
+func (m *QualityInspectionPlanMutation) SetEffort(s string) {
+	m.effort = &s
+}
+
+// Effort returns the value of the "effort" field in the mutation.
+func (m *QualityInspectionPlanMutation) Effort() (r string, exists bool) {
+	v := m.effort
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEffort returns the old "effort" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldEffort(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEffort is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEffort requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEffort: %w", err)
+	}
+	return oldValue.Effort, nil
+}
+
+// ResetEffort resets all changes to the "effort" field.
+func (m *QualityInspectionPlanMutation) ResetEffort() {
+	m.effort = nil
+}
+
+// SetEnabled sets the "enabled" field.
+func (m *QualityInspectionPlanMutation) SetEnabled(b bool) {
+	m.enabled = &b
+}
+
+// Enabled returns the value of the "enabled" field in the mutation.
+func (m *QualityInspectionPlanMutation) Enabled() (r bool, exists bool) {
+	v := m.enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEnabled returns the old "enabled" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEnabled: %w", err)
+	}
+	return oldValue.Enabled, nil
+}
+
+// ResetEnabled resets all changes to the "enabled" field.
+func (m *QualityInspectionPlanMutation) ResetEnabled() {
+	m.enabled = nil
+}
+
+// SetScheduleEnabled sets the "schedule_enabled" field.
+func (m *QualityInspectionPlanMutation) SetScheduleEnabled(b bool) {
+	m.schedule_enabled = &b
+}
+
+// ScheduleEnabled returns the value of the "schedule_enabled" field in the mutation.
+func (m *QualityInspectionPlanMutation) ScheduleEnabled() (r bool, exists bool) {
+	v := m.schedule_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScheduleEnabled returns the old "schedule_enabled" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldScheduleEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScheduleEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScheduleEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScheduleEnabled: %w", err)
+	}
+	return oldValue.ScheduleEnabled, nil
+}
+
+// ResetScheduleEnabled resets all changes to the "schedule_enabled" field.
+func (m *QualityInspectionPlanMutation) ResetScheduleEnabled() {
+	m.schedule_enabled = nil
+}
+
+// SetIntervalMinutes sets the "interval_minutes" field.
+func (m *QualityInspectionPlanMutation) SetIntervalMinutes(i int) {
+	m.interval_minutes = &i
+	m.addinterval_minutes = nil
+}
+
+// IntervalMinutes returns the value of the "interval_minutes" field in the mutation.
+func (m *QualityInspectionPlanMutation) IntervalMinutes() (r int, exists bool) {
+	v := m.interval_minutes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIntervalMinutes returns the old "interval_minutes" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldIntervalMinutes(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIntervalMinutes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIntervalMinutes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIntervalMinutes: %w", err)
+	}
+	return oldValue.IntervalMinutes, nil
+}
+
+// AddIntervalMinutes adds i to the "interval_minutes" field.
+func (m *QualityInspectionPlanMutation) AddIntervalMinutes(i int) {
+	if m.addinterval_minutes != nil {
+		*m.addinterval_minutes += i
+	} else {
+		m.addinterval_minutes = &i
+	}
+}
+
+// AddedIntervalMinutes returns the value that was added to the "interval_minutes" field in this mutation.
+func (m *QualityInspectionPlanMutation) AddedIntervalMinutes() (r int, exists bool) {
+	v := m.addinterval_minutes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetIntervalMinutes resets all changes to the "interval_minutes" field.
+func (m *QualityInspectionPlanMutation) ResetIntervalMinutes() {
+	m.interval_minutes = nil
+	m.addinterval_minutes = nil
+}
+
+// SetPauseStart sets the "pause_start" field.
+func (m *QualityInspectionPlanMutation) SetPauseStart(s string) {
+	m.pause_start = &s
+}
+
+// PauseStart returns the value of the "pause_start" field in the mutation.
+func (m *QualityInspectionPlanMutation) PauseStart() (r string, exists bool) {
+	v := m.pause_start
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPauseStart returns the old "pause_start" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldPauseStart(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPauseStart is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPauseStart requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPauseStart: %w", err)
+	}
+	return oldValue.PauseStart, nil
+}
+
+// ResetPauseStart resets all changes to the "pause_start" field.
+func (m *QualityInspectionPlanMutation) ResetPauseStart() {
+	m.pause_start = nil
+}
+
+// SetPauseEnd sets the "pause_end" field.
+func (m *QualityInspectionPlanMutation) SetPauseEnd(s string) {
+	m.pause_end = &s
+}
+
+// PauseEnd returns the value of the "pause_end" field in the mutation.
+func (m *QualityInspectionPlanMutation) PauseEnd() (r string, exists bool) {
+	v := m.pause_end
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPauseEnd returns the old "pause_end" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldPauseEnd(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPauseEnd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPauseEnd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPauseEnd: %w", err)
+	}
+	return oldValue.PauseEnd, nil
+}
+
+// ResetPauseEnd resets all changes to the "pause_end" field.
+func (m *QualityInspectionPlanMutation) ResetPauseEnd() {
+	m.pause_end = nil
+}
+
+// SetTimezone sets the "timezone" field.
+func (m *QualityInspectionPlanMutation) SetTimezone(s string) {
+	m.timezone = &s
+}
+
+// Timezone returns the value of the "timezone" field in the mutation.
+func (m *QualityInspectionPlanMutation) Timezone() (r string, exists bool) {
+	v := m.timezone
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTimezone returns the old "timezone" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldTimezone(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTimezone is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTimezone requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTimezone: %w", err)
+	}
+	return oldValue.Timezone, nil
+}
+
+// ResetTimezone resets all changes to the "timezone" field.
+func (m *QualityInspectionPlanMutation) ResetTimezone() {
+	m.timezone = nil
+}
+
+// SetMaxAccounts sets the "max_accounts" field.
+func (m *QualityInspectionPlanMutation) SetMaxAccounts(i int) {
+	m.max_accounts = &i
+	m.addmax_accounts = nil
+}
+
+// MaxAccounts returns the value of the "max_accounts" field in the mutation.
+func (m *QualityInspectionPlanMutation) MaxAccounts() (r int, exists bool) {
+	v := m.max_accounts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMaxAccounts returns the old "max_accounts" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldMaxAccounts(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMaxAccounts is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMaxAccounts requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMaxAccounts: %w", err)
+	}
+	return oldValue.MaxAccounts, nil
+}
+
+// AddMaxAccounts adds i to the "max_accounts" field.
+func (m *QualityInspectionPlanMutation) AddMaxAccounts(i int) {
+	if m.addmax_accounts != nil {
+		*m.addmax_accounts += i
+	} else {
+		m.addmax_accounts = &i
+	}
+}
+
+// AddedMaxAccounts returns the value that was added to the "max_accounts" field in this mutation.
+func (m *QualityInspectionPlanMutation) AddedMaxAccounts() (r int, exists bool) {
+	v := m.addmax_accounts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetMaxAccounts resets all changes to the "max_accounts" field.
+func (m *QualityInspectionPlanMutation) ResetMaxAccounts() {
+	m.max_accounts = nil
+	m.addmax_accounts = nil
+}
+
+// SetMaxSavedRounds sets the "max_saved_rounds" field.
+func (m *QualityInspectionPlanMutation) SetMaxSavedRounds(i int) {
+	m.max_saved_rounds = &i
+	m.addmax_saved_rounds = nil
+}
+
+// MaxSavedRounds returns the value of the "max_saved_rounds" field in the mutation.
+func (m *QualityInspectionPlanMutation) MaxSavedRounds() (r int, exists bool) {
+	v := m.max_saved_rounds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMaxSavedRounds returns the old "max_saved_rounds" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldMaxSavedRounds(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMaxSavedRounds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMaxSavedRounds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMaxSavedRounds: %w", err)
+	}
+	return oldValue.MaxSavedRounds, nil
+}
+
+// AddMaxSavedRounds adds i to the "max_saved_rounds" field.
+func (m *QualityInspectionPlanMutation) AddMaxSavedRounds(i int) {
+	if m.addmax_saved_rounds != nil {
+		*m.addmax_saved_rounds += i
+	} else {
+		m.addmax_saved_rounds = &i
+	}
+}
+
+// AddedMaxSavedRounds returns the value that was added to the "max_saved_rounds" field in this mutation.
+func (m *QualityInspectionPlanMutation) AddedMaxSavedRounds() (r int, exists bool) {
+	v := m.addmax_saved_rounds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetMaxSavedRounds resets all changes to the "max_saved_rounds" field.
+func (m *QualityInspectionPlanMutation) ResetMaxSavedRounds() {
+	m.max_saved_rounds = nil
+	m.addmax_saved_rounds = nil
+}
+
+// SetQuarantineEnabled sets the "quarantine_enabled" field.
+func (m *QualityInspectionPlanMutation) SetQuarantineEnabled(b bool) {
+	m.quarantine_enabled = &b
+}
+
+// QuarantineEnabled returns the value of the "quarantine_enabled" field in the mutation.
+func (m *QualityInspectionPlanMutation) QuarantineEnabled() (r bool, exists bool) {
+	v := m.quarantine_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQuarantineEnabled returns the old "quarantine_enabled" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldQuarantineEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQuarantineEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQuarantineEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQuarantineEnabled: %w", err)
+	}
+	return oldValue.QuarantineEnabled, nil
+}
+
+// ResetQuarantineEnabled resets all changes to the "quarantine_enabled" field.
+func (m *QualityInspectionPlanMutation) ResetQuarantineEnabled() {
+	m.quarantine_enabled = nil
+}
+
+// SetQuarantineCooldownMinutes sets the "quarantine_cooldown_minutes" field.
+func (m *QualityInspectionPlanMutation) SetQuarantineCooldownMinutes(i int) {
+	m.quarantine_cooldown_minutes = &i
+	m.addquarantine_cooldown_minutes = nil
+}
+
+// QuarantineCooldownMinutes returns the value of the "quarantine_cooldown_minutes" field in the mutation.
+func (m *QualityInspectionPlanMutation) QuarantineCooldownMinutes() (r int, exists bool) {
+	v := m.quarantine_cooldown_minutes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQuarantineCooldownMinutes returns the old "quarantine_cooldown_minutes" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldQuarantineCooldownMinutes(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQuarantineCooldownMinutes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQuarantineCooldownMinutes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQuarantineCooldownMinutes: %w", err)
+	}
+	return oldValue.QuarantineCooldownMinutes, nil
+}
+
+// AddQuarantineCooldownMinutes adds i to the "quarantine_cooldown_minutes" field.
+func (m *QualityInspectionPlanMutation) AddQuarantineCooldownMinutes(i int) {
+	if m.addquarantine_cooldown_minutes != nil {
+		*m.addquarantine_cooldown_minutes += i
+	} else {
+		m.addquarantine_cooldown_minutes = &i
+	}
+}
+
+// AddedQuarantineCooldownMinutes returns the value that was added to the "quarantine_cooldown_minutes" field in this mutation.
+func (m *QualityInspectionPlanMutation) AddedQuarantineCooldownMinutes() (r int, exists bool) {
+	v := m.addquarantine_cooldown_minutes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetQuarantineCooldownMinutes resets all changes to the "quarantine_cooldown_minutes" field.
+func (m *QualityInspectionPlanMutation) ResetQuarantineCooldownMinutes() {
+	m.quarantine_cooldown_minutes = nil
+	m.addquarantine_cooldown_minutes = nil
+}
+
+// SetQuarantineFailRounds sets the "quarantine_fail_rounds" field.
+func (m *QualityInspectionPlanMutation) SetQuarantineFailRounds(i int) {
+	m.quarantine_fail_rounds = &i
+	m.addquarantine_fail_rounds = nil
+}
+
+// QuarantineFailRounds returns the value of the "quarantine_fail_rounds" field in the mutation.
+func (m *QualityInspectionPlanMutation) QuarantineFailRounds() (r int, exists bool) {
+	v := m.quarantine_fail_rounds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQuarantineFailRounds returns the old "quarantine_fail_rounds" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldQuarantineFailRounds(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQuarantineFailRounds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQuarantineFailRounds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQuarantineFailRounds: %w", err)
+	}
+	return oldValue.QuarantineFailRounds, nil
+}
+
+// AddQuarantineFailRounds adds i to the "quarantine_fail_rounds" field.
+func (m *QualityInspectionPlanMutation) AddQuarantineFailRounds(i int) {
+	if m.addquarantine_fail_rounds != nil {
+		*m.addquarantine_fail_rounds += i
+	} else {
+		m.addquarantine_fail_rounds = &i
+	}
+}
+
+// AddedQuarantineFailRounds returns the value that was added to the "quarantine_fail_rounds" field in this mutation.
+func (m *QualityInspectionPlanMutation) AddedQuarantineFailRounds() (r int, exists bool) {
+	v := m.addquarantine_fail_rounds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetQuarantineFailRounds resets all changes to the "quarantine_fail_rounds" field.
+func (m *QualityInspectionPlanMutation) ResetQuarantineFailRounds() {
+	m.quarantine_fail_rounds = nil
+	m.addquarantine_fail_rounds = nil
+}
+
+// SetRevision sets the "revision" field.
+func (m *QualityInspectionPlanMutation) SetRevision(i int64) {
+	m.revision = &i
+	m.addrevision = nil
+}
+
+// Revision returns the value of the "revision" field in the mutation.
+func (m *QualityInspectionPlanMutation) Revision() (r int64, exists bool) {
+	v := m.revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRevision returns the old "revision" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldRevision(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRevision is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRevision requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRevision: %w", err)
+	}
+	return oldValue.Revision, nil
+}
+
+// AddRevision adds i to the "revision" field.
+func (m *QualityInspectionPlanMutation) AddRevision(i int64) {
+	if m.addrevision != nil {
+		*m.addrevision += i
+	} else {
+		m.addrevision = &i
+	}
+}
+
+// AddedRevision returns the value that was added to the "revision" field in this mutation.
+func (m *QualityInspectionPlanMutation) AddedRevision() (r int64, exists bool) {
+	v := m.addrevision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRevision resets all changes to the "revision" field.
+func (m *QualityInspectionPlanMutation) ResetRevision() {
+	m.revision = nil
+	m.addrevision = nil
+}
+
+// SetCreatedBy sets the "created_by" field.
+func (m *QualityInspectionPlanMutation) SetCreatedBy(i int64) {
+	m.created_by = &i
+	m.addcreated_by = nil
+}
+
+// CreatedBy returns the value of the "created_by" field in the mutation.
+func (m *QualityInspectionPlanMutation) CreatedBy() (r int64, exists bool) {
+	v := m.created_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedBy returns the old "created_by" field's value of the QualityInspectionPlan entity.
+// If the QualityInspectionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionPlanMutation) OldCreatedBy(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedBy: %w", err)
+	}
+	return oldValue.CreatedBy, nil
+}
+
+// AddCreatedBy adds i to the "created_by" field.
+func (m *QualityInspectionPlanMutation) AddCreatedBy(i int64) {
+	if m.addcreated_by != nil {
+		*m.addcreated_by += i
+	} else {
+		m.addcreated_by = &i
+	}
+}
+
+// AddedCreatedBy returns the value that was added to the "created_by" field in this mutation.
+func (m *QualityInspectionPlanMutation) AddedCreatedBy() (r int64, exists bool) {
+	v := m.addcreated_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearCreatedBy clears the value of the "created_by" field.
+func (m *QualityInspectionPlanMutation) ClearCreatedBy() {
+	m.created_by = nil
+	m.addcreated_by = nil
+	m.clearedFields[qualityinspectionplan.FieldCreatedBy] = struct{}{}
+}
+
+// CreatedByCleared returns if the "created_by" field was cleared in this mutation.
+func (m *QualityInspectionPlanMutation) CreatedByCleared() bool {
+	_, ok := m.clearedFields[qualityinspectionplan.FieldCreatedBy]
+	return ok
+}
+
+// ResetCreatedBy resets all changes to the "created_by" field.
+func (m *QualityInspectionPlanMutation) ResetCreatedBy() {
+	m.created_by = nil
+	m.addcreated_by = nil
+	delete(m.clearedFields, qualityinspectionplan.FieldCreatedBy)
+}
+
+// Where appends a list predicates to the QualityInspectionPlanMutation builder.
+func (m *QualityInspectionPlanMutation) Where(ps ...predicate.QualityInspectionPlan) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the QualityInspectionPlanMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *QualityInspectionPlanMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.QualityInspectionPlan, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *QualityInspectionPlanMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *QualityInspectionPlanMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (QualityInspectionPlan).
+func (m *QualityInspectionPlanMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *QualityInspectionPlanMutation) Fields() []string {
+	fields := make([]string, 0, 21)
+	if m.created_at != nil {
+		fields = append(fields, qualityinspectionplan.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, qualityinspectionplan.FieldUpdatedAt)
+	}
+	if m.group_id != nil {
+		fields = append(fields, qualityinspectionplan.FieldGroupID)
+	}
+	if m.name != nil {
+		fields = append(fields, qualityinspectionplan.FieldName)
+	}
+	if m.platform != nil {
+		fields = append(fields, qualityinspectionplan.FieldPlatform)
+	}
+	if m.model != nil {
+		fields = append(fields, qualityinspectionplan.FieldModel)
+	}
+	if m.endpoint != nil {
+		fields = append(fields, qualityinspectionplan.FieldEndpoint)
+	}
+	if m.effort != nil {
+		fields = append(fields, qualityinspectionplan.FieldEffort)
+	}
+	if m.enabled != nil {
+		fields = append(fields, qualityinspectionplan.FieldEnabled)
+	}
+	if m.schedule_enabled != nil {
+		fields = append(fields, qualityinspectionplan.FieldScheduleEnabled)
+	}
+	if m.interval_minutes != nil {
+		fields = append(fields, qualityinspectionplan.FieldIntervalMinutes)
+	}
+	if m.pause_start != nil {
+		fields = append(fields, qualityinspectionplan.FieldPauseStart)
+	}
+	if m.pause_end != nil {
+		fields = append(fields, qualityinspectionplan.FieldPauseEnd)
+	}
+	if m.timezone != nil {
+		fields = append(fields, qualityinspectionplan.FieldTimezone)
+	}
+	if m.max_accounts != nil {
+		fields = append(fields, qualityinspectionplan.FieldMaxAccounts)
+	}
+	if m.max_saved_rounds != nil {
+		fields = append(fields, qualityinspectionplan.FieldMaxSavedRounds)
+	}
+	if m.quarantine_enabled != nil {
+		fields = append(fields, qualityinspectionplan.FieldQuarantineEnabled)
+	}
+	if m.quarantine_cooldown_minutes != nil {
+		fields = append(fields, qualityinspectionplan.FieldQuarantineCooldownMinutes)
+	}
+	if m.quarantine_fail_rounds != nil {
+		fields = append(fields, qualityinspectionplan.FieldQuarantineFailRounds)
+	}
+	if m.revision != nil {
+		fields = append(fields, qualityinspectionplan.FieldRevision)
+	}
+	if m.created_by != nil {
+		fields = append(fields, qualityinspectionplan.FieldCreatedBy)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *QualityInspectionPlanMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case qualityinspectionplan.FieldCreatedAt:
+		return m.CreatedAt()
+	case qualityinspectionplan.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case qualityinspectionplan.FieldGroupID:
+		return m.GroupID()
+	case qualityinspectionplan.FieldName:
+		return m.Name()
+	case qualityinspectionplan.FieldPlatform:
+		return m.Platform()
+	case qualityinspectionplan.FieldModel:
+		return m.Model()
+	case qualityinspectionplan.FieldEndpoint:
+		return m.Endpoint()
+	case qualityinspectionplan.FieldEffort:
+		return m.Effort()
+	case qualityinspectionplan.FieldEnabled:
+		return m.Enabled()
+	case qualityinspectionplan.FieldScheduleEnabled:
+		return m.ScheduleEnabled()
+	case qualityinspectionplan.FieldIntervalMinutes:
+		return m.IntervalMinutes()
+	case qualityinspectionplan.FieldPauseStart:
+		return m.PauseStart()
+	case qualityinspectionplan.FieldPauseEnd:
+		return m.PauseEnd()
+	case qualityinspectionplan.FieldTimezone:
+		return m.Timezone()
+	case qualityinspectionplan.FieldMaxAccounts:
+		return m.MaxAccounts()
+	case qualityinspectionplan.FieldMaxSavedRounds:
+		return m.MaxSavedRounds()
+	case qualityinspectionplan.FieldQuarantineEnabled:
+		return m.QuarantineEnabled()
+	case qualityinspectionplan.FieldQuarantineCooldownMinutes:
+		return m.QuarantineCooldownMinutes()
+	case qualityinspectionplan.FieldQuarantineFailRounds:
+		return m.QuarantineFailRounds()
+	case qualityinspectionplan.FieldRevision:
+		return m.Revision()
+	case qualityinspectionplan.FieldCreatedBy:
+		return m.CreatedBy()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *QualityInspectionPlanMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case qualityinspectionplan.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case qualityinspectionplan.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case qualityinspectionplan.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case qualityinspectionplan.FieldName:
+		return m.OldName(ctx)
+	case qualityinspectionplan.FieldPlatform:
+		return m.OldPlatform(ctx)
+	case qualityinspectionplan.FieldModel:
+		return m.OldModel(ctx)
+	case qualityinspectionplan.FieldEndpoint:
+		return m.OldEndpoint(ctx)
+	case qualityinspectionplan.FieldEffort:
+		return m.OldEffort(ctx)
+	case qualityinspectionplan.FieldEnabled:
+		return m.OldEnabled(ctx)
+	case qualityinspectionplan.FieldScheduleEnabled:
+		return m.OldScheduleEnabled(ctx)
+	case qualityinspectionplan.FieldIntervalMinutes:
+		return m.OldIntervalMinutes(ctx)
+	case qualityinspectionplan.FieldPauseStart:
+		return m.OldPauseStart(ctx)
+	case qualityinspectionplan.FieldPauseEnd:
+		return m.OldPauseEnd(ctx)
+	case qualityinspectionplan.FieldTimezone:
+		return m.OldTimezone(ctx)
+	case qualityinspectionplan.FieldMaxAccounts:
+		return m.OldMaxAccounts(ctx)
+	case qualityinspectionplan.FieldMaxSavedRounds:
+		return m.OldMaxSavedRounds(ctx)
+	case qualityinspectionplan.FieldQuarantineEnabled:
+		return m.OldQuarantineEnabled(ctx)
+	case qualityinspectionplan.FieldQuarantineCooldownMinutes:
+		return m.OldQuarantineCooldownMinutes(ctx)
+	case qualityinspectionplan.FieldQuarantineFailRounds:
+		return m.OldQuarantineFailRounds(ctx)
+	case qualityinspectionplan.FieldRevision:
+		return m.OldRevision(ctx)
+	case qualityinspectionplan.FieldCreatedBy:
+		return m.OldCreatedBy(ctx)
+	}
+	return nil, fmt.Errorf("unknown QualityInspectionPlan field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *QualityInspectionPlanMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case qualityinspectionplan.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case qualityinspectionplan.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case qualityinspectionplan.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case qualityinspectionplan.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case qualityinspectionplan.FieldPlatform:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlatform(v)
+		return nil
+	case qualityinspectionplan.FieldModel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetModel(v)
+		return nil
+	case qualityinspectionplan.FieldEndpoint:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEndpoint(v)
+		return nil
+	case qualityinspectionplan.FieldEffort:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEffort(v)
+		return nil
+	case qualityinspectionplan.FieldEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEnabled(v)
+		return nil
+	case qualityinspectionplan.FieldScheduleEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScheduleEnabled(v)
+		return nil
+	case qualityinspectionplan.FieldIntervalMinutes:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIntervalMinutes(v)
+		return nil
+	case qualityinspectionplan.FieldPauseStart:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPauseStart(v)
+		return nil
+	case qualityinspectionplan.FieldPauseEnd:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPauseEnd(v)
+		return nil
+	case qualityinspectionplan.FieldTimezone:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTimezone(v)
+		return nil
+	case qualityinspectionplan.FieldMaxAccounts:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMaxAccounts(v)
+		return nil
+	case qualityinspectionplan.FieldMaxSavedRounds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMaxSavedRounds(v)
+		return nil
+	case qualityinspectionplan.FieldQuarantineEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQuarantineEnabled(v)
+		return nil
+	case qualityinspectionplan.FieldQuarantineCooldownMinutes:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQuarantineCooldownMinutes(v)
+		return nil
+	case qualityinspectionplan.FieldQuarantineFailRounds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQuarantineFailRounds(v)
+		return nil
+	case qualityinspectionplan.FieldRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRevision(v)
+		return nil
+	case qualityinspectionplan.FieldCreatedBy:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedBy(v)
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionPlan field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *QualityInspectionPlanMutation) AddedFields() []string {
+	var fields []string
+	if m.addgroup_id != nil {
+		fields = append(fields, qualityinspectionplan.FieldGroupID)
+	}
+	if m.addinterval_minutes != nil {
+		fields = append(fields, qualityinspectionplan.FieldIntervalMinutes)
+	}
+	if m.addmax_accounts != nil {
+		fields = append(fields, qualityinspectionplan.FieldMaxAccounts)
+	}
+	if m.addmax_saved_rounds != nil {
+		fields = append(fields, qualityinspectionplan.FieldMaxSavedRounds)
+	}
+	if m.addquarantine_cooldown_minutes != nil {
+		fields = append(fields, qualityinspectionplan.FieldQuarantineCooldownMinutes)
+	}
+	if m.addquarantine_fail_rounds != nil {
+		fields = append(fields, qualityinspectionplan.FieldQuarantineFailRounds)
+	}
+	if m.addrevision != nil {
+		fields = append(fields, qualityinspectionplan.FieldRevision)
+	}
+	if m.addcreated_by != nil {
+		fields = append(fields, qualityinspectionplan.FieldCreatedBy)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *QualityInspectionPlanMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case qualityinspectionplan.FieldGroupID:
+		return m.AddedGroupID()
+	case qualityinspectionplan.FieldIntervalMinutes:
+		return m.AddedIntervalMinutes()
+	case qualityinspectionplan.FieldMaxAccounts:
+		return m.AddedMaxAccounts()
+	case qualityinspectionplan.FieldMaxSavedRounds:
+		return m.AddedMaxSavedRounds()
+	case qualityinspectionplan.FieldQuarantineCooldownMinutes:
+		return m.AddedQuarantineCooldownMinutes()
+	case qualityinspectionplan.FieldQuarantineFailRounds:
+		return m.AddedQuarantineFailRounds()
+	case qualityinspectionplan.FieldRevision:
+		return m.AddedRevision()
+	case qualityinspectionplan.FieldCreatedBy:
+		return m.AddedCreatedBy()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *QualityInspectionPlanMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case qualityinspectionplan.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupID(v)
+		return nil
+	case qualityinspectionplan.FieldIntervalMinutes:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddIntervalMinutes(v)
+		return nil
+	case qualityinspectionplan.FieldMaxAccounts:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMaxAccounts(v)
+		return nil
+	case qualityinspectionplan.FieldMaxSavedRounds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMaxSavedRounds(v)
+		return nil
+	case qualityinspectionplan.FieldQuarantineCooldownMinutes:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddQuarantineCooldownMinutes(v)
+		return nil
+	case qualityinspectionplan.FieldQuarantineFailRounds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddQuarantineFailRounds(v)
+		return nil
+	case qualityinspectionplan.FieldRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRevision(v)
+		return nil
+	case qualityinspectionplan.FieldCreatedBy:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCreatedBy(v)
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionPlan numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *QualityInspectionPlanMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(qualityinspectionplan.FieldCreatedBy) {
+		fields = append(fields, qualityinspectionplan.FieldCreatedBy)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *QualityInspectionPlanMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *QualityInspectionPlanMutation) ClearField(name string) error {
+	switch name {
+	case qualityinspectionplan.FieldCreatedBy:
+		m.ClearCreatedBy()
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionPlan nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *QualityInspectionPlanMutation) ResetField(name string) error {
+	switch name {
+	case qualityinspectionplan.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case qualityinspectionplan.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case qualityinspectionplan.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case qualityinspectionplan.FieldName:
+		m.ResetName()
+		return nil
+	case qualityinspectionplan.FieldPlatform:
+		m.ResetPlatform()
+		return nil
+	case qualityinspectionplan.FieldModel:
+		m.ResetModel()
+		return nil
+	case qualityinspectionplan.FieldEndpoint:
+		m.ResetEndpoint()
+		return nil
+	case qualityinspectionplan.FieldEffort:
+		m.ResetEffort()
+		return nil
+	case qualityinspectionplan.FieldEnabled:
+		m.ResetEnabled()
+		return nil
+	case qualityinspectionplan.FieldScheduleEnabled:
+		m.ResetScheduleEnabled()
+		return nil
+	case qualityinspectionplan.FieldIntervalMinutes:
+		m.ResetIntervalMinutes()
+		return nil
+	case qualityinspectionplan.FieldPauseStart:
+		m.ResetPauseStart()
+		return nil
+	case qualityinspectionplan.FieldPauseEnd:
+		m.ResetPauseEnd()
+		return nil
+	case qualityinspectionplan.FieldTimezone:
+		m.ResetTimezone()
+		return nil
+	case qualityinspectionplan.FieldMaxAccounts:
+		m.ResetMaxAccounts()
+		return nil
+	case qualityinspectionplan.FieldMaxSavedRounds:
+		m.ResetMaxSavedRounds()
+		return nil
+	case qualityinspectionplan.FieldQuarantineEnabled:
+		m.ResetQuarantineEnabled()
+		return nil
+	case qualityinspectionplan.FieldQuarantineCooldownMinutes:
+		m.ResetQuarantineCooldownMinutes()
+		return nil
+	case qualityinspectionplan.FieldQuarantineFailRounds:
+		m.ResetQuarantineFailRounds()
+		return nil
+	case qualityinspectionplan.FieldRevision:
+		m.ResetRevision()
+		return nil
+	case qualityinspectionplan.FieldCreatedBy:
+		m.ResetCreatedBy()
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionPlan field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *QualityInspectionPlanMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *QualityInspectionPlanMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *QualityInspectionPlanMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *QualityInspectionPlanMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *QualityInspectionPlanMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *QualityInspectionPlanMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *QualityInspectionPlanMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown QualityInspectionPlan unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *QualityInspectionPlanMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown QualityInspectionPlan edge %s", name)
+}
+
+// QualityInspectionQuarantineMutation represents an operation that mutates the QualityInspectionQuarantine nodes in the graph.
+type QualityInspectionQuarantineMutation struct {
+	config
+	op                 Op
+	typ                string
+	id                 *int64
+	created_at         *time.Time
+	updated_at         *time.Time
+	plan_id            *int64
+	addplan_id         *int64
+	account_id         *int64
+	addaccount_id      *int64
+	state              *string
+	generation         *int
+	addgeneration      *int
+	evidence_run_id    *int64
+	addevidence_run_id *int64
+	recheck_run_id     *int64
+	addrecheck_run_id  *int64
+	fail_rounds        *int
+	addfail_rounds     *int
+	due_at             *time.Time
+	attempts           *int
+	addattempts        *int
+	error_code         *string
+	actor              *string
+	clearedFields      map[string]struct{}
+	done               bool
+	oldValue           func(context.Context) (*QualityInspectionQuarantine, error)
+	predicates         []predicate.QualityInspectionQuarantine
+}
+
+var _ ent.Mutation = (*QualityInspectionQuarantineMutation)(nil)
+
+// qualityinspectionquarantineOption allows management of the mutation configuration using functional options.
+type qualityinspectionquarantineOption func(*QualityInspectionQuarantineMutation)
+
+// newQualityInspectionQuarantineMutation creates new mutation for the QualityInspectionQuarantine entity.
+func newQualityInspectionQuarantineMutation(c config, op Op, opts ...qualityinspectionquarantineOption) *QualityInspectionQuarantineMutation {
+	m := &QualityInspectionQuarantineMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeQualityInspectionQuarantine,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withQualityInspectionQuarantineID sets the ID field of the mutation.
+func withQualityInspectionQuarantineID(id int64) qualityinspectionquarantineOption {
+	return func(m *QualityInspectionQuarantineMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *QualityInspectionQuarantine
+		)
+		m.oldValue = func(ctx context.Context) (*QualityInspectionQuarantine, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().QualityInspectionQuarantine.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withQualityInspectionQuarantine sets the old QualityInspectionQuarantine of the mutation.
+func withQualityInspectionQuarantine(node *QualityInspectionQuarantine) qualityinspectionquarantineOption {
+	return func(m *QualityInspectionQuarantineMutation) {
+		m.oldValue = func(context.Context) (*QualityInspectionQuarantine, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m QualityInspectionQuarantineMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m QualityInspectionQuarantineMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *QualityInspectionQuarantineMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *QualityInspectionQuarantineMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().QualityInspectionQuarantine.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *QualityInspectionQuarantineMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *QualityInspectionQuarantineMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the QualityInspectionQuarantine entity.
+// If the QualityInspectionQuarantine object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuarantineMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *QualityInspectionQuarantineMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *QualityInspectionQuarantineMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *QualityInspectionQuarantineMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the QualityInspectionQuarantine entity.
+// If the QualityInspectionQuarantine object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuarantineMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *QualityInspectionQuarantineMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetPlanID sets the "plan_id" field.
+func (m *QualityInspectionQuarantineMutation) SetPlanID(i int64) {
+	m.plan_id = &i
+	m.addplan_id = nil
+}
+
+// PlanID returns the value of the "plan_id" field in the mutation.
+func (m *QualityInspectionQuarantineMutation) PlanID() (r int64, exists bool) {
+	v := m.plan_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlanID returns the old "plan_id" field's value of the QualityInspectionQuarantine entity.
+// If the QualityInspectionQuarantine object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuarantineMutation) OldPlanID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlanID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlanID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlanID: %w", err)
+	}
+	return oldValue.PlanID, nil
+}
+
+// AddPlanID adds i to the "plan_id" field.
+func (m *QualityInspectionQuarantineMutation) AddPlanID(i int64) {
+	if m.addplan_id != nil {
+		*m.addplan_id += i
+	} else {
+		m.addplan_id = &i
+	}
+}
+
+// AddedPlanID returns the value that was added to the "plan_id" field in this mutation.
+func (m *QualityInspectionQuarantineMutation) AddedPlanID() (r int64, exists bool) {
+	v := m.addplan_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPlanID resets all changes to the "plan_id" field.
+func (m *QualityInspectionQuarantineMutation) ResetPlanID() {
+	m.plan_id = nil
+	m.addplan_id = nil
+}
+
+// SetAccountID sets the "account_id" field.
+func (m *QualityInspectionQuarantineMutation) SetAccountID(i int64) {
+	m.account_id = &i
+	m.addaccount_id = nil
+}
+
+// AccountID returns the value of the "account_id" field in the mutation.
+func (m *QualityInspectionQuarantineMutation) AccountID() (r int64, exists bool) {
+	v := m.account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountID returns the old "account_id" field's value of the QualityInspectionQuarantine entity.
+// If the QualityInspectionQuarantine object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuarantineMutation) OldAccountID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountID: %w", err)
+	}
+	return oldValue.AccountID, nil
+}
+
+// AddAccountID adds i to the "account_id" field.
+func (m *QualityInspectionQuarantineMutation) AddAccountID(i int64) {
+	if m.addaccount_id != nil {
+		*m.addaccount_id += i
+	} else {
+		m.addaccount_id = &i
+	}
+}
+
+// AddedAccountID returns the value that was added to the "account_id" field in this mutation.
+func (m *QualityInspectionQuarantineMutation) AddedAccountID() (r int64, exists bool) {
+	v := m.addaccount_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAccountID resets all changes to the "account_id" field.
+func (m *QualityInspectionQuarantineMutation) ResetAccountID() {
+	m.account_id = nil
+	m.addaccount_id = nil
+}
+
+// SetState sets the "state" field.
+func (m *QualityInspectionQuarantineMutation) SetState(s string) {
+	m.state = &s
+}
+
+// State returns the value of the "state" field in the mutation.
+func (m *QualityInspectionQuarantineMutation) State() (r string, exists bool) {
+	v := m.state
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldState returns the old "state" field's value of the QualityInspectionQuarantine entity.
+// If the QualityInspectionQuarantine object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuarantineMutation) OldState(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldState is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldState requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldState: %w", err)
+	}
+	return oldValue.State, nil
+}
+
+// ResetState resets all changes to the "state" field.
+func (m *QualityInspectionQuarantineMutation) ResetState() {
+	m.state = nil
+}
+
+// SetGeneration sets the "generation" field.
+func (m *QualityInspectionQuarantineMutation) SetGeneration(i int) {
+	m.generation = &i
+	m.addgeneration = nil
+}
+
+// Generation returns the value of the "generation" field in the mutation.
+func (m *QualityInspectionQuarantineMutation) Generation() (r int, exists bool) {
+	v := m.generation
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGeneration returns the old "generation" field's value of the QualityInspectionQuarantine entity.
+// If the QualityInspectionQuarantine object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuarantineMutation) OldGeneration(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGeneration is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGeneration requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGeneration: %w", err)
+	}
+	return oldValue.Generation, nil
+}
+
+// AddGeneration adds i to the "generation" field.
+func (m *QualityInspectionQuarantineMutation) AddGeneration(i int) {
+	if m.addgeneration != nil {
+		*m.addgeneration += i
+	} else {
+		m.addgeneration = &i
+	}
+}
+
+// AddedGeneration returns the value that was added to the "generation" field in this mutation.
+func (m *QualityInspectionQuarantineMutation) AddedGeneration() (r int, exists bool) {
+	v := m.addgeneration
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGeneration resets all changes to the "generation" field.
+func (m *QualityInspectionQuarantineMutation) ResetGeneration() {
+	m.generation = nil
+	m.addgeneration = nil
+}
+
+// SetEvidenceRunID sets the "evidence_run_id" field.
+func (m *QualityInspectionQuarantineMutation) SetEvidenceRunID(i int64) {
+	m.evidence_run_id = &i
+	m.addevidence_run_id = nil
+}
+
+// EvidenceRunID returns the value of the "evidence_run_id" field in the mutation.
+func (m *QualityInspectionQuarantineMutation) EvidenceRunID() (r int64, exists bool) {
+	v := m.evidence_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEvidenceRunID returns the old "evidence_run_id" field's value of the QualityInspectionQuarantine entity.
+// If the QualityInspectionQuarantine object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuarantineMutation) OldEvidenceRunID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEvidenceRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEvidenceRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEvidenceRunID: %w", err)
+	}
+	return oldValue.EvidenceRunID, nil
+}
+
+// AddEvidenceRunID adds i to the "evidence_run_id" field.
+func (m *QualityInspectionQuarantineMutation) AddEvidenceRunID(i int64) {
+	if m.addevidence_run_id != nil {
+		*m.addevidence_run_id += i
+	} else {
+		m.addevidence_run_id = &i
+	}
+}
+
+// AddedEvidenceRunID returns the value that was added to the "evidence_run_id" field in this mutation.
+func (m *QualityInspectionQuarantineMutation) AddedEvidenceRunID() (r int64, exists bool) {
+	v := m.addevidence_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetEvidenceRunID resets all changes to the "evidence_run_id" field.
+func (m *QualityInspectionQuarantineMutation) ResetEvidenceRunID() {
+	m.evidence_run_id = nil
+	m.addevidence_run_id = nil
+}
+
+// SetRecheckRunID sets the "recheck_run_id" field.
+func (m *QualityInspectionQuarantineMutation) SetRecheckRunID(i int64) {
+	m.recheck_run_id = &i
+	m.addrecheck_run_id = nil
+}
+
+// RecheckRunID returns the value of the "recheck_run_id" field in the mutation.
+func (m *QualityInspectionQuarantineMutation) RecheckRunID() (r int64, exists bool) {
+	v := m.recheck_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRecheckRunID returns the old "recheck_run_id" field's value of the QualityInspectionQuarantine entity.
+// If the QualityInspectionQuarantine object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuarantineMutation) OldRecheckRunID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRecheckRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRecheckRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRecheckRunID: %w", err)
+	}
+	return oldValue.RecheckRunID, nil
+}
+
+// AddRecheckRunID adds i to the "recheck_run_id" field.
+func (m *QualityInspectionQuarantineMutation) AddRecheckRunID(i int64) {
+	if m.addrecheck_run_id != nil {
+		*m.addrecheck_run_id += i
+	} else {
+		m.addrecheck_run_id = &i
+	}
+}
+
+// AddedRecheckRunID returns the value that was added to the "recheck_run_id" field in this mutation.
+func (m *QualityInspectionQuarantineMutation) AddedRecheckRunID() (r int64, exists bool) {
+	v := m.addrecheck_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRecheckRunID resets all changes to the "recheck_run_id" field.
+func (m *QualityInspectionQuarantineMutation) ResetRecheckRunID() {
+	m.recheck_run_id = nil
+	m.addrecheck_run_id = nil
+}
+
+// SetFailRounds sets the "fail_rounds" field.
+func (m *QualityInspectionQuarantineMutation) SetFailRounds(i int) {
+	m.fail_rounds = &i
+	m.addfail_rounds = nil
+}
+
+// FailRounds returns the value of the "fail_rounds" field in the mutation.
+func (m *QualityInspectionQuarantineMutation) FailRounds() (r int, exists bool) {
+	v := m.fail_rounds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailRounds returns the old "fail_rounds" field's value of the QualityInspectionQuarantine entity.
+// If the QualityInspectionQuarantine object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuarantineMutation) OldFailRounds(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailRounds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailRounds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailRounds: %w", err)
+	}
+	return oldValue.FailRounds, nil
+}
+
+// AddFailRounds adds i to the "fail_rounds" field.
+func (m *QualityInspectionQuarantineMutation) AddFailRounds(i int) {
+	if m.addfail_rounds != nil {
+		*m.addfail_rounds += i
+	} else {
+		m.addfail_rounds = &i
+	}
+}
+
+// AddedFailRounds returns the value that was added to the "fail_rounds" field in this mutation.
+func (m *QualityInspectionQuarantineMutation) AddedFailRounds() (r int, exists bool) {
+	v := m.addfail_rounds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFailRounds resets all changes to the "fail_rounds" field.
+func (m *QualityInspectionQuarantineMutation) ResetFailRounds() {
+	m.fail_rounds = nil
+	m.addfail_rounds = nil
+}
+
+// SetDueAt sets the "due_at" field.
+func (m *QualityInspectionQuarantineMutation) SetDueAt(t time.Time) {
+	m.due_at = &t
+}
+
+// DueAt returns the value of the "due_at" field in the mutation.
+func (m *QualityInspectionQuarantineMutation) DueAt() (r time.Time, exists bool) {
+	v := m.due_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDueAt returns the old "due_at" field's value of the QualityInspectionQuarantine entity.
+// If the QualityInspectionQuarantine object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuarantineMutation) OldDueAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDueAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDueAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDueAt: %w", err)
+	}
+	return oldValue.DueAt, nil
+}
+
+// ClearDueAt clears the value of the "due_at" field.
+func (m *QualityInspectionQuarantineMutation) ClearDueAt() {
+	m.due_at = nil
+	m.clearedFields[qualityinspectionquarantine.FieldDueAt] = struct{}{}
+}
+
+// DueAtCleared returns if the "due_at" field was cleared in this mutation.
+func (m *QualityInspectionQuarantineMutation) DueAtCleared() bool {
+	_, ok := m.clearedFields[qualityinspectionquarantine.FieldDueAt]
+	return ok
+}
+
+// ResetDueAt resets all changes to the "due_at" field.
+func (m *QualityInspectionQuarantineMutation) ResetDueAt() {
+	m.due_at = nil
+	delete(m.clearedFields, qualityinspectionquarantine.FieldDueAt)
+}
+
+// SetAttempts sets the "attempts" field.
+func (m *QualityInspectionQuarantineMutation) SetAttempts(i int) {
+	m.attempts = &i
+	m.addattempts = nil
+}
+
+// Attempts returns the value of the "attempts" field in the mutation.
+func (m *QualityInspectionQuarantineMutation) Attempts() (r int, exists bool) {
+	v := m.attempts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAttempts returns the old "attempts" field's value of the QualityInspectionQuarantine entity.
+// If the QualityInspectionQuarantine object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuarantineMutation) OldAttempts(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAttempts is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAttempts requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAttempts: %w", err)
+	}
+	return oldValue.Attempts, nil
+}
+
+// AddAttempts adds i to the "attempts" field.
+func (m *QualityInspectionQuarantineMutation) AddAttempts(i int) {
+	if m.addattempts != nil {
+		*m.addattempts += i
+	} else {
+		m.addattempts = &i
+	}
+}
+
+// AddedAttempts returns the value that was added to the "attempts" field in this mutation.
+func (m *QualityInspectionQuarantineMutation) AddedAttempts() (r int, exists bool) {
+	v := m.addattempts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAttempts resets all changes to the "attempts" field.
+func (m *QualityInspectionQuarantineMutation) ResetAttempts() {
+	m.attempts = nil
+	m.addattempts = nil
+}
+
+// SetErrorCode sets the "error_code" field.
+func (m *QualityInspectionQuarantineMutation) SetErrorCode(s string) {
+	m.error_code = &s
+}
+
+// ErrorCode returns the value of the "error_code" field in the mutation.
+func (m *QualityInspectionQuarantineMutation) ErrorCode() (r string, exists bool) {
+	v := m.error_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorCode returns the old "error_code" field's value of the QualityInspectionQuarantine entity.
+// If the QualityInspectionQuarantine object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuarantineMutation) OldErrorCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorCode: %w", err)
+	}
+	return oldValue.ErrorCode, nil
+}
+
+// ResetErrorCode resets all changes to the "error_code" field.
+func (m *QualityInspectionQuarantineMutation) ResetErrorCode() {
+	m.error_code = nil
+}
+
+// SetActor sets the "actor" field.
+func (m *QualityInspectionQuarantineMutation) SetActor(s string) {
+	m.actor = &s
+}
+
+// Actor returns the value of the "actor" field in the mutation.
+func (m *QualityInspectionQuarantineMutation) Actor() (r string, exists bool) {
+	v := m.actor
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActor returns the old "actor" field's value of the QualityInspectionQuarantine entity.
+// If the QualityInspectionQuarantine object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuarantineMutation) OldActor(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActor is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActor requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActor: %w", err)
+	}
+	return oldValue.Actor, nil
+}
+
+// ResetActor resets all changes to the "actor" field.
+func (m *QualityInspectionQuarantineMutation) ResetActor() {
+	m.actor = nil
+}
+
+// Where appends a list predicates to the QualityInspectionQuarantineMutation builder.
+func (m *QualityInspectionQuarantineMutation) Where(ps ...predicate.QualityInspectionQuarantine) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the QualityInspectionQuarantineMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *QualityInspectionQuarantineMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.QualityInspectionQuarantine, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *QualityInspectionQuarantineMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *QualityInspectionQuarantineMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (QualityInspectionQuarantine).
+func (m *QualityInspectionQuarantineMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *QualityInspectionQuarantineMutation) Fields() []string {
+	fields := make([]string, 0, 13)
+	if m.created_at != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldUpdatedAt)
+	}
+	if m.plan_id != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldPlanID)
+	}
+	if m.account_id != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldAccountID)
+	}
+	if m.state != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldState)
+	}
+	if m.generation != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldGeneration)
+	}
+	if m.evidence_run_id != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldEvidenceRunID)
+	}
+	if m.recheck_run_id != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldRecheckRunID)
+	}
+	if m.fail_rounds != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldFailRounds)
+	}
+	if m.due_at != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldDueAt)
+	}
+	if m.attempts != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldAttempts)
+	}
+	if m.error_code != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldErrorCode)
+	}
+	if m.actor != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldActor)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *QualityInspectionQuarantineMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case qualityinspectionquarantine.FieldCreatedAt:
+		return m.CreatedAt()
+	case qualityinspectionquarantine.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case qualityinspectionquarantine.FieldPlanID:
+		return m.PlanID()
+	case qualityinspectionquarantine.FieldAccountID:
+		return m.AccountID()
+	case qualityinspectionquarantine.FieldState:
+		return m.State()
+	case qualityinspectionquarantine.FieldGeneration:
+		return m.Generation()
+	case qualityinspectionquarantine.FieldEvidenceRunID:
+		return m.EvidenceRunID()
+	case qualityinspectionquarantine.FieldRecheckRunID:
+		return m.RecheckRunID()
+	case qualityinspectionquarantine.FieldFailRounds:
+		return m.FailRounds()
+	case qualityinspectionquarantine.FieldDueAt:
+		return m.DueAt()
+	case qualityinspectionquarantine.FieldAttempts:
+		return m.Attempts()
+	case qualityinspectionquarantine.FieldErrorCode:
+		return m.ErrorCode()
+	case qualityinspectionquarantine.FieldActor:
+		return m.Actor()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *QualityInspectionQuarantineMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case qualityinspectionquarantine.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case qualityinspectionquarantine.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case qualityinspectionquarantine.FieldPlanID:
+		return m.OldPlanID(ctx)
+	case qualityinspectionquarantine.FieldAccountID:
+		return m.OldAccountID(ctx)
+	case qualityinspectionquarantine.FieldState:
+		return m.OldState(ctx)
+	case qualityinspectionquarantine.FieldGeneration:
+		return m.OldGeneration(ctx)
+	case qualityinspectionquarantine.FieldEvidenceRunID:
+		return m.OldEvidenceRunID(ctx)
+	case qualityinspectionquarantine.FieldRecheckRunID:
+		return m.OldRecheckRunID(ctx)
+	case qualityinspectionquarantine.FieldFailRounds:
+		return m.OldFailRounds(ctx)
+	case qualityinspectionquarantine.FieldDueAt:
+		return m.OldDueAt(ctx)
+	case qualityinspectionquarantine.FieldAttempts:
+		return m.OldAttempts(ctx)
+	case qualityinspectionquarantine.FieldErrorCode:
+		return m.OldErrorCode(ctx)
+	case qualityinspectionquarantine.FieldActor:
+		return m.OldActor(ctx)
+	}
+	return nil, fmt.Errorf("unknown QualityInspectionQuarantine field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *QualityInspectionQuarantineMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case qualityinspectionquarantine.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case qualityinspectionquarantine.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case qualityinspectionquarantine.FieldPlanID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlanID(v)
+		return nil
+	case qualityinspectionquarantine.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountID(v)
+		return nil
+	case qualityinspectionquarantine.FieldState:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetState(v)
+		return nil
+	case qualityinspectionquarantine.FieldGeneration:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGeneration(v)
+		return nil
+	case qualityinspectionquarantine.FieldEvidenceRunID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEvidenceRunID(v)
+		return nil
+	case qualityinspectionquarantine.FieldRecheckRunID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRecheckRunID(v)
+		return nil
+	case qualityinspectionquarantine.FieldFailRounds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailRounds(v)
+		return nil
+	case qualityinspectionquarantine.FieldDueAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDueAt(v)
+		return nil
+	case qualityinspectionquarantine.FieldAttempts:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAttempts(v)
+		return nil
+	case qualityinspectionquarantine.FieldErrorCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorCode(v)
+		return nil
+	case qualityinspectionquarantine.FieldActor:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActor(v)
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionQuarantine field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *QualityInspectionQuarantineMutation) AddedFields() []string {
+	var fields []string
+	if m.addplan_id != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldPlanID)
+	}
+	if m.addaccount_id != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldAccountID)
+	}
+	if m.addgeneration != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldGeneration)
+	}
+	if m.addevidence_run_id != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldEvidenceRunID)
+	}
+	if m.addrecheck_run_id != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldRecheckRunID)
+	}
+	if m.addfail_rounds != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldFailRounds)
+	}
+	if m.addattempts != nil {
+		fields = append(fields, qualityinspectionquarantine.FieldAttempts)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *QualityInspectionQuarantineMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case qualityinspectionquarantine.FieldPlanID:
+		return m.AddedPlanID()
+	case qualityinspectionquarantine.FieldAccountID:
+		return m.AddedAccountID()
+	case qualityinspectionquarantine.FieldGeneration:
+		return m.AddedGeneration()
+	case qualityinspectionquarantine.FieldEvidenceRunID:
+		return m.AddedEvidenceRunID()
+	case qualityinspectionquarantine.FieldRecheckRunID:
+		return m.AddedRecheckRunID()
+	case qualityinspectionquarantine.FieldFailRounds:
+		return m.AddedFailRounds()
+	case qualityinspectionquarantine.FieldAttempts:
+		return m.AddedAttempts()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *QualityInspectionQuarantineMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case qualityinspectionquarantine.FieldPlanID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPlanID(v)
+		return nil
+	case qualityinspectionquarantine.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountID(v)
+		return nil
+	case qualityinspectionquarantine.FieldGeneration:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGeneration(v)
+		return nil
+	case qualityinspectionquarantine.FieldEvidenceRunID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddEvidenceRunID(v)
+		return nil
+	case qualityinspectionquarantine.FieldRecheckRunID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRecheckRunID(v)
+		return nil
+	case qualityinspectionquarantine.FieldFailRounds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFailRounds(v)
+		return nil
+	case qualityinspectionquarantine.FieldAttempts:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAttempts(v)
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionQuarantine numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *QualityInspectionQuarantineMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(qualityinspectionquarantine.FieldDueAt) {
+		fields = append(fields, qualityinspectionquarantine.FieldDueAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *QualityInspectionQuarantineMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *QualityInspectionQuarantineMutation) ClearField(name string) error {
+	switch name {
+	case qualityinspectionquarantine.FieldDueAt:
+		m.ClearDueAt()
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionQuarantine nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *QualityInspectionQuarantineMutation) ResetField(name string) error {
+	switch name {
+	case qualityinspectionquarantine.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case qualityinspectionquarantine.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case qualityinspectionquarantine.FieldPlanID:
+		m.ResetPlanID()
+		return nil
+	case qualityinspectionquarantine.FieldAccountID:
+		m.ResetAccountID()
+		return nil
+	case qualityinspectionquarantine.FieldState:
+		m.ResetState()
+		return nil
+	case qualityinspectionquarantine.FieldGeneration:
+		m.ResetGeneration()
+		return nil
+	case qualityinspectionquarantine.FieldEvidenceRunID:
+		m.ResetEvidenceRunID()
+		return nil
+	case qualityinspectionquarantine.FieldRecheckRunID:
+		m.ResetRecheckRunID()
+		return nil
+	case qualityinspectionquarantine.FieldFailRounds:
+		m.ResetFailRounds()
+		return nil
+	case qualityinspectionquarantine.FieldDueAt:
+		m.ResetDueAt()
+		return nil
+	case qualityinspectionquarantine.FieldAttempts:
+		m.ResetAttempts()
+		return nil
+	case qualityinspectionquarantine.FieldErrorCode:
+		m.ResetErrorCode()
+		return nil
+	case qualityinspectionquarantine.FieldActor:
+		m.ResetActor()
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionQuarantine field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *QualityInspectionQuarantineMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *QualityInspectionQuarantineMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *QualityInspectionQuarantineMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *QualityInspectionQuarantineMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *QualityInspectionQuarantineMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *QualityInspectionQuarantineMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *QualityInspectionQuarantineMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown QualityInspectionQuarantine unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *QualityInspectionQuarantineMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown QualityInspectionQuarantine edge %s", name)
+}
+
+// QualityInspectionQuestionMutation represents an operation that mutates the QualityInspectionQuestion nodes in the graph.
+type QualityInspectionQuestionMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int64
+	plan_id       *int64
+	addplan_id    *int64
+	question_id   *string
+	title         *string
+	kind          *string
+	prompt        *string
+	instructions  *string
+	expected      *string
+	choices       *[]string
+	appendchoices []string
+	unit          *string
+	rounds        *int
+	addrounds     *int
+	enabled       *bool
+	version       *string
+	position      *int
+	addposition   *int
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*QualityInspectionQuestion, error)
+	predicates    []predicate.QualityInspectionQuestion
+}
+
+var _ ent.Mutation = (*QualityInspectionQuestionMutation)(nil)
+
+// qualityinspectionquestionOption allows management of the mutation configuration using functional options.
+type qualityinspectionquestionOption func(*QualityInspectionQuestionMutation)
+
+// newQualityInspectionQuestionMutation creates new mutation for the QualityInspectionQuestion entity.
+func newQualityInspectionQuestionMutation(c config, op Op, opts ...qualityinspectionquestionOption) *QualityInspectionQuestionMutation {
+	m := &QualityInspectionQuestionMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeQualityInspectionQuestion,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withQualityInspectionQuestionID sets the ID field of the mutation.
+func withQualityInspectionQuestionID(id int64) qualityinspectionquestionOption {
+	return func(m *QualityInspectionQuestionMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *QualityInspectionQuestion
+		)
+		m.oldValue = func(ctx context.Context) (*QualityInspectionQuestion, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().QualityInspectionQuestion.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withQualityInspectionQuestion sets the old QualityInspectionQuestion of the mutation.
+func withQualityInspectionQuestion(node *QualityInspectionQuestion) qualityinspectionquestionOption {
+	return func(m *QualityInspectionQuestionMutation) {
+		m.oldValue = func(context.Context) (*QualityInspectionQuestion, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m QualityInspectionQuestionMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m QualityInspectionQuestionMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *QualityInspectionQuestionMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *QualityInspectionQuestionMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().QualityInspectionQuestion.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetPlanID sets the "plan_id" field.
+func (m *QualityInspectionQuestionMutation) SetPlanID(i int64) {
+	m.plan_id = &i
+	m.addplan_id = nil
+}
+
+// PlanID returns the value of the "plan_id" field in the mutation.
+func (m *QualityInspectionQuestionMutation) PlanID() (r int64, exists bool) {
+	v := m.plan_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlanID returns the old "plan_id" field's value of the QualityInspectionQuestion entity.
+// If the QualityInspectionQuestion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuestionMutation) OldPlanID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlanID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlanID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlanID: %w", err)
+	}
+	return oldValue.PlanID, nil
+}
+
+// AddPlanID adds i to the "plan_id" field.
+func (m *QualityInspectionQuestionMutation) AddPlanID(i int64) {
+	if m.addplan_id != nil {
+		*m.addplan_id += i
+	} else {
+		m.addplan_id = &i
+	}
+}
+
+// AddedPlanID returns the value that was added to the "plan_id" field in this mutation.
+func (m *QualityInspectionQuestionMutation) AddedPlanID() (r int64, exists bool) {
+	v := m.addplan_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPlanID resets all changes to the "plan_id" field.
+func (m *QualityInspectionQuestionMutation) ResetPlanID() {
+	m.plan_id = nil
+	m.addplan_id = nil
+}
+
+// SetQuestionID sets the "question_id" field.
+func (m *QualityInspectionQuestionMutation) SetQuestionID(s string) {
+	m.question_id = &s
+}
+
+// QuestionID returns the value of the "question_id" field in the mutation.
+func (m *QualityInspectionQuestionMutation) QuestionID() (r string, exists bool) {
+	v := m.question_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQuestionID returns the old "question_id" field's value of the QualityInspectionQuestion entity.
+// If the QualityInspectionQuestion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuestionMutation) OldQuestionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQuestionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQuestionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQuestionID: %w", err)
+	}
+	return oldValue.QuestionID, nil
+}
+
+// ResetQuestionID resets all changes to the "question_id" field.
+func (m *QualityInspectionQuestionMutation) ResetQuestionID() {
+	m.question_id = nil
+}
+
+// SetTitle sets the "title" field.
+func (m *QualityInspectionQuestionMutation) SetTitle(s string) {
+	m.title = &s
+}
+
+// Title returns the value of the "title" field in the mutation.
+func (m *QualityInspectionQuestionMutation) Title() (r string, exists bool) {
+	v := m.title
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTitle returns the old "title" field's value of the QualityInspectionQuestion entity.
+// If the QualityInspectionQuestion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuestionMutation) OldTitle(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTitle is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTitle requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTitle: %w", err)
+	}
+	return oldValue.Title, nil
+}
+
+// ResetTitle resets all changes to the "title" field.
+func (m *QualityInspectionQuestionMutation) ResetTitle() {
+	m.title = nil
+}
+
+// SetKind sets the "kind" field.
+func (m *QualityInspectionQuestionMutation) SetKind(s string) {
+	m.kind = &s
+}
+
+// Kind returns the value of the "kind" field in the mutation.
+func (m *QualityInspectionQuestionMutation) Kind() (r string, exists bool) {
+	v := m.kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKind returns the old "kind" field's value of the QualityInspectionQuestion entity.
+// If the QualityInspectionQuestion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuestionMutation) OldKind(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKind: %w", err)
+	}
+	return oldValue.Kind, nil
+}
+
+// ResetKind resets all changes to the "kind" field.
+func (m *QualityInspectionQuestionMutation) ResetKind() {
+	m.kind = nil
+}
+
+// SetPrompt sets the "prompt" field.
+func (m *QualityInspectionQuestionMutation) SetPrompt(s string) {
+	m.prompt = &s
+}
+
+// Prompt returns the value of the "prompt" field in the mutation.
+func (m *QualityInspectionQuestionMutation) Prompt() (r string, exists bool) {
+	v := m.prompt
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPrompt returns the old "prompt" field's value of the QualityInspectionQuestion entity.
+// If the QualityInspectionQuestion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuestionMutation) OldPrompt(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPrompt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPrompt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPrompt: %w", err)
+	}
+	return oldValue.Prompt, nil
+}
+
+// ResetPrompt resets all changes to the "prompt" field.
+func (m *QualityInspectionQuestionMutation) ResetPrompt() {
+	m.prompt = nil
+}
+
+// SetInstructions sets the "instructions" field.
+func (m *QualityInspectionQuestionMutation) SetInstructions(s string) {
+	m.instructions = &s
+}
+
+// Instructions returns the value of the "instructions" field in the mutation.
+func (m *QualityInspectionQuestionMutation) Instructions() (r string, exists bool) {
+	v := m.instructions
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInstructions returns the old "instructions" field's value of the QualityInspectionQuestion entity.
+// If the QualityInspectionQuestion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuestionMutation) OldInstructions(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInstructions is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInstructions requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInstructions: %w", err)
+	}
+	return oldValue.Instructions, nil
+}
+
+// ResetInstructions resets all changes to the "instructions" field.
+func (m *QualityInspectionQuestionMutation) ResetInstructions() {
+	m.instructions = nil
+}
+
+// SetExpected sets the "expected" field.
+func (m *QualityInspectionQuestionMutation) SetExpected(s string) {
+	m.expected = &s
+}
+
+// Expected returns the value of the "expected" field in the mutation.
+func (m *QualityInspectionQuestionMutation) Expected() (r string, exists bool) {
+	v := m.expected
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpected returns the old "expected" field's value of the QualityInspectionQuestion entity.
+// If the QualityInspectionQuestion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuestionMutation) OldExpected(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpected is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpected requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpected: %w", err)
+	}
+	return oldValue.Expected, nil
+}
+
+// ResetExpected resets all changes to the "expected" field.
+func (m *QualityInspectionQuestionMutation) ResetExpected() {
+	m.expected = nil
+}
+
+// SetChoices sets the "choices" field.
+func (m *QualityInspectionQuestionMutation) SetChoices(s []string) {
+	m.choices = &s
+	m.appendchoices = nil
+}
+
+// Choices returns the value of the "choices" field in the mutation.
+func (m *QualityInspectionQuestionMutation) Choices() (r []string, exists bool) {
+	v := m.choices
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChoices returns the old "choices" field's value of the QualityInspectionQuestion entity.
+// If the QualityInspectionQuestion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuestionMutation) OldChoices(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChoices is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChoices requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChoices: %w", err)
+	}
+	return oldValue.Choices, nil
+}
+
+// AppendChoices adds s to the "choices" field.
+func (m *QualityInspectionQuestionMutation) AppendChoices(s []string) {
+	m.appendchoices = append(m.appendchoices, s...)
+}
+
+// AppendedChoices returns the list of values that were appended to the "choices" field in this mutation.
+func (m *QualityInspectionQuestionMutation) AppendedChoices() ([]string, bool) {
+	if len(m.appendchoices) == 0 {
+		return nil, false
+	}
+	return m.appendchoices, true
+}
+
+// ClearChoices clears the value of the "choices" field.
+func (m *QualityInspectionQuestionMutation) ClearChoices() {
+	m.choices = nil
+	m.appendchoices = nil
+	m.clearedFields[qualityinspectionquestion.FieldChoices] = struct{}{}
+}
+
+// ChoicesCleared returns if the "choices" field was cleared in this mutation.
+func (m *QualityInspectionQuestionMutation) ChoicesCleared() bool {
+	_, ok := m.clearedFields[qualityinspectionquestion.FieldChoices]
+	return ok
+}
+
+// ResetChoices resets all changes to the "choices" field.
+func (m *QualityInspectionQuestionMutation) ResetChoices() {
+	m.choices = nil
+	m.appendchoices = nil
+	delete(m.clearedFields, qualityinspectionquestion.FieldChoices)
+}
+
+// SetUnit sets the "unit" field.
+func (m *QualityInspectionQuestionMutation) SetUnit(s string) {
+	m.unit = &s
+}
+
+// Unit returns the value of the "unit" field in the mutation.
+func (m *QualityInspectionQuestionMutation) Unit() (r string, exists bool) {
+	v := m.unit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUnit returns the old "unit" field's value of the QualityInspectionQuestion entity.
+// If the QualityInspectionQuestion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuestionMutation) OldUnit(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUnit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUnit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUnit: %w", err)
+	}
+	return oldValue.Unit, nil
+}
+
+// ResetUnit resets all changes to the "unit" field.
+func (m *QualityInspectionQuestionMutation) ResetUnit() {
+	m.unit = nil
+}
+
+// SetRounds sets the "rounds" field.
+func (m *QualityInspectionQuestionMutation) SetRounds(i int) {
+	m.rounds = &i
+	m.addrounds = nil
+}
+
+// Rounds returns the value of the "rounds" field in the mutation.
+func (m *QualityInspectionQuestionMutation) Rounds() (r int, exists bool) {
+	v := m.rounds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRounds returns the old "rounds" field's value of the QualityInspectionQuestion entity.
+// If the QualityInspectionQuestion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuestionMutation) OldRounds(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRounds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRounds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRounds: %w", err)
+	}
+	return oldValue.Rounds, nil
+}
+
+// AddRounds adds i to the "rounds" field.
+func (m *QualityInspectionQuestionMutation) AddRounds(i int) {
+	if m.addrounds != nil {
+		*m.addrounds += i
+	} else {
+		m.addrounds = &i
+	}
+}
+
+// AddedRounds returns the value that was added to the "rounds" field in this mutation.
+func (m *QualityInspectionQuestionMutation) AddedRounds() (r int, exists bool) {
+	v := m.addrounds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRounds resets all changes to the "rounds" field.
+func (m *QualityInspectionQuestionMutation) ResetRounds() {
+	m.rounds = nil
+	m.addrounds = nil
+}
+
+// SetEnabled sets the "enabled" field.
+func (m *QualityInspectionQuestionMutation) SetEnabled(b bool) {
+	m.enabled = &b
+}
+
+// Enabled returns the value of the "enabled" field in the mutation.
+func (m *QualityInspectionQuestionMutation) Enabled() (r bool, exists bool) {
+	v := m.enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEnabled returns the old "enabled" field's value of the QualityInspectionQuestion entity.
+// If the QualityInspectionQuestion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuestionMutation) OldEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEnabled: %w", err)
+	}
+	return oldValue.Enabled, nil
+}
+
+// ResetEnabled resets all changes to the "enabled" field.
+func (m *QualityInspectionQuestionMutation) ResetEnabled() {
+	m.enabled = nil
+}
+
+// SetVersion sets the "version" field.
+func (m *QualityInspectionQuestionMutation) SetVersion(s string) {
+	m.version = &s
+}
+
+// Version returns the value of the "version" field in the mutation.
+func (m *QualityInspectionQuestionMutation) Version() (r string, exists bool) {
+	v := m.version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVersion returns the old "version" field's value of the QualityInspectionQuestion entity.
+// If the QualityInspectionQuestion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuestionMutation) OldVersion(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVersion: %w", err)
+	}
+	return oldValue.Version, nil
+}
+
+// ResetVersion resets all changes to the "version" field.
+func (m *QualityInspectionQuestionMutation) ResetVersion() {
+	m.version = nil
+}
+
+// SetPosition sets the "position" field.
+func (m *QualityInspectionQuestionMutation) SetPosition(i int) {
+	m.position = &i
+	m.addposition = nil
+}
+
+// Position returns the value of the "position" field in the mutation.
+func (m *QualityInspectionQuestionMutation) Position() (r int, exists bool) {
+	v := m.position
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPosition returns the old "position" field's value of the QualityInspectionQuestion entity.
+// If the QualityInspectionQuestion object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionQuestionMutation) OldPosition(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPosition is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPosition requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPosition: %w", err)
+	}
+	return oldValue.Position, nil
+}
+
+// AddPosition adds i to the "position" field.
+func (m *QualityInspectionQuestionMutation) AddPosition(i int) {
+	if m.addposition != nil {
+		*m.addposition += i
+	} else {
+		m.addposition = &i
+	}
+}
+
+// AddedPosition returns the value that was added to the "position" field in this mutation.
+func (m *QualityInspectionQuestionMutation) AddedPosition() (r int, exists bool) {
+	v := m.addposition
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPosition resets all changes to the "position" field.
+func (m *QualityInspectionQuestionMutation) ResetPosition() {
+	m.position = nil
+	m.addposition = nil
+}
+
+// Where appends a list predicates to the QualityInspectionQuestionMutation builder.
+func (m *QualityInspectionQuestionMutation) Where(ps ...predicate.QualityInspectionQuestion) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the QualityInspectionQuestionMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *QualityInspectionQuestionMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.QualityInspectionQuestion, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *QualityInspectionQuestionMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *QualityInspectionQuestionMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (QualityInspectionQuestion).
+func (m *QualityInspectionQuestionMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *QualityInspectionQuestionMutation) Fields() []string {
+	fields := make([]string, 0, 13)
+	if m.plan_id != nil {
+		fields = append(fields, qualityinspectionquestion.FieldPlanID)
+	}
+	if m.question_id != nil {
+		fields = append(fields, qualityinspectionquestion.FieldQuestionID)
+	}
+	if m.title != nil {
+		fields = append(fields, qualityinspectionquestion.FieldTitle)
+	}
+	if m.kind != nil {
+		fields = append(fields, qualityinspectionquestion.FieldKind)
+	}
+	if m.prompt != nil {
+		fields = append(fields, qualityinspectionquestion.FieldPrompt)
+	}
+	if m.instructions != nil {
+		fields = append(fields, qualityinspectionquestion.FieldInstructions)
+	}
+	if m.expected != nil {
+		fields = append(fields, qualityinspectionquestion.FieldExpected)
+	}
+	if m.choices != nil {
+		fields = append(fields, qualityinspectionquestion.FieldChoices)
+	}
+	if m.unit != nil {
+		fields = append(fields, qualityinspectionquestion.FieldUnit)
+	}
+	if m.rounds != nil {
+		fields = append(fields, qualityinspectionquestion.FieldRounds)
+	}
+	if m.enabled != nil {
+		fields = append(fields, qualityinspectionquestion.FieldEnabled)
+	}
+	if m.version != nil {
+		fields = append(fields, qualityinspectionquestion.FieldVersion)
+	}
+	if m.position != nil {
+		fields = append(fields, qualityinspectionquestion.FieldPosition)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *QualityInspectionQuestionMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case qualityinspectionquestion.FieldPlanID:
+		return m.PlanID()
+	case qualityinspectionquestion.FieldQuestionID:
+		return m.QuestionID()
+	case qualityinspectionquestion.FieldTitle:
+		return m.Title()
+	case qualityinspectionquestion.FieldKind:
+		return m.Kind()
+	case qualityinspectionquestion.FieldPrompt:
+		return m.Prompt()
+	case qualityinspectionquestion.FieldInstructions:
+		return m.Instructions()
+	case qualityinspectionquestion.FieldExpected:
+		return m.Expected()
+	case qualityinspectionquestion.FieldChoices:
+		return m.Choices()
+	case qualityinspectionquestion.FieldUnit:
+		return m.Unit()
+	case qualityinspectionquestion.FieldRounds:
+		return m.Rounds()
+	case qualityinspectionquestion.FieldEnabled:
+		return m.Enabled()
+	case qualityinspectionquestion.FieldVersion:
+		return m.Version()
+	case qualityinspectionquestion.FieldPosition:
+		return m.Position()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *QualityInspectionQuestionMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case qualityinspectionquestion.FieldPlanID:
+		return m.OldPlanID(ctx)
+	case qualityinspectionquestion.FieldQuestionID:
+		return m.OldQuestionID(ctx)
+	case qualityinspectionquestion.FieldTitle:
+		return m.OldTitle(ctx)
+	case qualityinspectionquestion.FieldKind:
+		return m.OldKind(ctx)
+	case qualityinspectionquestion.FieldPrompt:
+		return m.OldPrompt(ctx)
+	case qualityinspectionquestion.FieldInstructions:
+		return m.OldInstructions(ctx)
+	case qualityinspectionquestion.FieldExpected:
+		return m.OldExpected(ctx)
+	case qualityinspectionquestion.FieldChoices:
+		return m.OldChoices(ctx)
+	case qualityinspectionquestion.FieldUnit:
+		return m.OldUnit(ctx)
+	case qualityinspectionquestion.FieldRounds:
+		return m.OldRounds(ctx)
+	case qualityinspectionquestion.FieldEnabled:
+		return m.OldEnabled(ctx)
+	case qualityinspectionquestion.FieldVersion:
+		return m.OldVersion(ctx)
+	case qualityinspectionquestion.FieldPosition:
+		return m.OldPosition(ctx)
+	}
+	return nil, fmt.Errorf("unknown QualityInspectionQuestion field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *QualityInspectionQuestionMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case qualityinspectionquestion.FieldPlanID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlanID(v)
+		return nil
+	case qualityinspectionquestion.FieldQuestionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQuestionID(v)
+		return nil
+	case qualityinspectionquestion.FieldTitle:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTitle(v)
+		return nil
+	case qualityinspectionquestion.FieldKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKind(v)
+		return nil
+	case qualityinspectionquestion.FieldPrompt:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPrompt(v)
+		return nil
+	case qualityinspectionquestion.FieldInstructions:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInstructions(v)
+		return nil
+	case qualityinspectionquestion.FieldExpected:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpected(v)
+		return nil
+	case qualityinspectionquestion.FieldChoices:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChoices(v)
+		return nil
+	case qualityinspectionquestion.FieldUnit:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUnit(v)
+		return nil
+	case qualityinspectionquestion.FieldRounds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRounds(v)
+		return nil
+	case qualityinspectionquestion.FieldEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEnabled(v)
+		return nil
+	case qualityinspectionquestion.FieldVersion:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVersion(v)
+		return nil
+	case qualityinspectionquestion.FieldPosition:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPosition(v)
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionQuestion field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *QualityInspectionQuestionMutation) AddedFields() []string {
+	var fields []string
+	if m.addplan_id != nil {
+		fields = append(fields, qualityinspectionquestion.FieldPlanID)
+	}
+	if m.addrounds != nil {
+		fields = append(fields, qualityinspectionquestion.FieldRounds)
+	}
+	if m.addposition != nil {
+		fields = append(fields, qualityinspectionquestion.FieldPosition)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *QualityInspectionQuestionMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case qualityinspectionquestion.FieldPlanID:
+		return m.AddedPlanID()
+	case qualityinspectionquestion.FieldRounds:
+		return m.AddedRounds()
+	case qualityinspectionquestion.FieldPosition:
+		return m.AddedPosition()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *QualityInspectionQuestionMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case qualityinspectionquestion.FieldPlanID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPlanID(v)
+		return nil
+	case qualityinspectionquestion.FieldRounds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRounds(v)
+		return nil
+	case qualityinspectionquestion.FieldPosition:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPosition(v)
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionQuestion numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *QualityInspectionQuestionMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(qualityinspectionquestion.FieldChoices) {
+		fields = append(fields, qualityinspectionquestion.FieldChoices)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *QualityInspectionQuestionMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *QualityInspectionQuestionMutation) ClearField(name string) error {
+	switch name {
+	case qualityinspectionquestion.FieldChoices:
+		m.ClearChoices()
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionQuestion nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *QualityInspectionQuestionMutation) ResetField(name string) error {
+	switch name {
+	case qualityinspectionquestion.FieldPlanID:
+		m.ResetPlanID()
+		return nil
+	case qualityinspectionquestion.FieldQuestionID:
+		m.ResetQuestionID()
+		return nil
+	case qualityinspectionquestion.FieldTitle:
+		m.ResetTitle()
+		return nil
+	case qualityinspectionquestion.FieldKind:
+		m.ResetKind()
+		return nil
+	case qualityinspectionquestion.FieldPrompt:
+		m.ResetPrompt()
+		return nil
+	case qualityinspectionquestion.FieldInstructions:
+		m.ResetInstructions()
+		return nil
+	case qualityinspectionquestion.FieldExpected:
+		m.ResetExpected()
+		return nil
+	case qualityinspectionquestion.FieldChoices:
+		m.ResetChoices()
+		return nil
+	case qualityinspectionquestion.FieldUnit:
+		m.ResetUnit()
+		return nil
+	case qualityinspectionquestion.FieldRounds:
+		m.ResetRounds()
+		return nil
+	case qualityinspectionquestion.FieldEnabled:
+		m.ResetEnabled()
+		return nil
+	case qualityinspectionquestion.FieldVersion:
+		m.ResetVersion()
+		return nil
+	case qualityinspectionquestion.FieldPosition:
+		m.ResetPosition()
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionQuestion field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *QualityInspectionQuestionMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *QualityInspectionQuestionMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *QualityInspectionQuestionMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *QualityInspectionQuestionMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *QualityInspectionQuestionMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *QualityInspectionQuestionMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *QualityInspectionQuestionMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown QualityInspectionQuestion unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *QualityInspectionQuestionMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown QualityInspectionQuestion edge %s", name)
+}
+
+// QualityInspectionResultMutation represents an operation that mutates the QualityInspectionResult nodes in the graph.
+type QualityInspectionResultMutation struct {
+	config
+	op                 Op
+	typ                string
+	id                 *int64
+	run_id             *int64
+	addrun_id          *int64
+	plan_id            *int64
+	addplan_id         *int64
+	account_id         *int64
+	addaccount_id      *int64
+	question_id        *string
+	kind               *string
+	status             *string
+	answer             *string
+	expected           *string
+	response           *string
+	artifact_key       *string
+	artifact_bytes     *int64
+	addartifact_bytes  *int64
+	artifact_truncated *bool
+	first_token_ms     *int
+	addfirst_token_ms  *int
+	duration_ms        *int
+	addduration_ms     *int
+	failure_class      *string
+	error_code         *string
+	bank_version       *string
+	created_at         *time.Time
+	clearedFields      map[string]struct{}
+	done               bool
+	oldValue           func(context.Context) (*QualityInspectionResult, error)
+	predicates         []predicate.QualityInspectionResult
+}
+
+var _ ent.Mutation = (*QualityInspectionResultMutation)(nil)
+
+// qualityinspectionresultOption allows management of the mutation configuration using functional options.
+type qualityinspectionresultOption func(*QualityInspectionResultMutation)
+
+// newQualityInspectionResultMutation creates new mutation for the QualityInspectionResult entity.
+func newQualityInspectionResultMutation(c config, op Op, opts ...qualityinspectionresultOption) *QualityInspectionResultMutation {
+	m := &QualityInspectionResultMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeQualityInspectionResult,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withQualityInspectionResultID sets the ID field of the mutation.
+func withQualityInspectionResultID(id int64) qualityinspectionresultOption {
+	return func(m *QualityInspectionResultMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *QualityInspectionResult
+		)
+		m.oldValue = func(ctx context.Context) (*QualityInspectionResult, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().QualityInspectionResult.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withQualityInspectionResult sets the old QualityInspectionResult of the mutation.
+func withQualityInspectionResult(node *QualityInspectionResult) qualityinspectionresultOption {
+	return func(m *QualityInspectionResultMutation) {
+		m.oldValue = func(context.Context) (*QualityInspectionResult, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m QualityInspectionResultMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m QualityInspectionResultMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *QualityInspectionResultMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *QualityInspectionResultMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().QualityInspectionResult.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetRunID sets the "run_id" field.
+func (m *QualityInspectionResultMutation) SetRunID(i int64) {
+	m.run_id = &i
+	m.addrun_id = nil
+}
+
+// RunID returns the value of the "run_id" field in the mutation.
+func (m *QualityInspectionResultMutation) RunID() (r int64, exists bool) {
+	v := m.run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRunID returns the old "run_id" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldRunID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRunID: %w", err)
+	}
+	return oldValue.RunID, nil
+}
+
+// AddRunID adds i to the "run_id" field.
+func (m *QualityInspectionResultMutation) AddRunID(i int64) {
+	if m.addrun_id != nil {
+		*m.addrun_id += i
+	} else {
+		m.addrun_id = &i
+	}
+}
+
+// AddedRunID returns the value that was added to the "run_id" field in this mutation.
+func (m *QualityInspectionResultMutation) AddedRunID() (r int64, exists bool) {
+	v := m.addrun_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRunID resets all changes to the "run_id" field.
+func (m *QualityInspectionResultMutation) ResetRunID() {
+	m.run_id = nil
+	m.addrun_id = nil
+}
+
+// SetPlanID sets the "plan_id" field.
+func (m *QualityInspectionResultMutation) SetPlanID(i int64) {
+	m.plan_id = &i
+	m.addplan_id = nil
+}
+
+// PlanID returns the value of the "plan_id" field in the mutation.
+func (m *QualityInspectionResultMutation) PlanID() (r int64, exists bool) {
+	v := m.plan_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlanID returns the old "plan_id" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldPlanID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlanID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlanID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlanID: %w", err)
+	}
+	return oldValue.PlanID, nil
+}
+
+// AddPlanID adds i to the "plan_id" field.
+func (m *QualityInspectionResultMutation) AddPlanID(i int64) {
+	if m.addplan_id != nil {
+		*m.addplan_id += i
+	} else {
+		m.addplan_id = &i
+	}
+}
+
+// AddedPlanID returns the value that was added to the "plan_id" field in this mutation.
+func (m *QualityInspectionResultMutation) AddedPlanID() (r int64, exists bool) {
+	v := m.addplan_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPlanID resets all changes to the "plan_id" field.
+func (m *QualityInspectionResultMutation) ResetPlanID() {
+	m.plan_id = nil
+	m.addplan_id = nil
+}
+
+// SetAccountID sets the "account_id" field.
+func (m *QualityInspectionResultMutation) SetAccountID(i int64) {
+	m.account_id = &i
+	m.addaccount_id = nil
+}
+
+// AccountID returns the value of the "account_id" field in the mutation.
+func (m *QualityInspectionResultMutation) AccountID() (r int64, exists bool) {
+	v := m.account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountID returns the old "account_id" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldAccountID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountID: %w", err)
+	}
+	return oldValue.AccountID, nil
+}
+
+// AddAccountID adds i to the "account_id" field.
+func (m *QualityInspectionResultMutation) AddAccountID(i int64) {
+	if m.addaccount_id != nil {
+		*m.addaccount_id += i
+	} else {
+		m.addaccount_id = &i
+	}
+}
+
+// AddedAccountID returns the value that was added to the "account_id" field in this mutation.
+func (m *QualityInspectionResultMutation) AddedAccountID() (r int64, exists bool) {
+	v := m.addaccount_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAccountID resets all changes to the "account_id" field.
+func (m *QualityInspectionResultMutation) ResetAccountID() {
+	m.account_id = nil
+	m.addaccount_id = nil
+}
+
+// SetQuestionID sets the "question_id" field.
+func (m *QualityInspectionResultMutation) SetQuestionID(s string) {
+	m.question_id = &s
+}
+
+// QuestionID returns the value of the "question_id" field in the mutation.
+func (m *QualityInspectionResultMutation) QuestionID() (r string, exists bool) {
+	v := m.question_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQuestionID returns the old "question_id" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldQuestionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQuestionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQuestionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQuestionID: %w", err)
+	}
+	return oldValue.QuestionID, nil
+}
+
+// ResetQuestionID resets all changes to the "question_id" field.
+func (m *QualityInspectionResultMutation) ResetQuestionID() {
+	m.question_id = nil
+}
+
+// SetKind sets the "kind" field.
+func (m *QualityInspectionResultMutation) SetKind(s string) {
+	m.kind = &s
+}
+
+// Kind returns the value of the "kind" field in the mutation.
+func (m *QualityInspectionResultMutation) Kind() (r string, exists bool) {
+	v := m.kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKind returns the old "kind" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldKind(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKind: %w", err)
+	}
+	return oldValue.Kind, nil
+}
+
+// ResetKind resets all changes to the "kind" field.
+func (m *QualityInspectionResultMutation) ResetKind() {
+	m.kind = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *QualityInspectionResultMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *QualityInspectionResultMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *QualityInspectionResultMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetAnswer sets the "answer" field.
+func (m *QualityInspectionResultMutation) SetAnswer(s string) {
+	m.answer = &s
+}
+
+// Answer returns the value of the "answer" field in the mutation.
+func (m *QualityInspectionResultMutation) Answer() (r string, exists bool) {
+	v := m.answer
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAnswer returns the old "answer" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldAnswer(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAnswer is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAnswer requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAnswer: %w", err)
+	}
+	return oldValue.Answer, nil
+}
+
+// ResetAnswer resets all changes to the "answer" field.
+func (m *QualityInspectionResultMutation) ResetAnswer() {
+	m.answer = nil
+}
+
+// SetExpected sets the "expected" field.
+func (m *QualityInspectionResultMutation) SetExpected(s string) {
+	m.expected = &s
+}
+
+// Expected returns the value of the "expected" field in the mutation.
+func (m *QualityInspectionResultMutation) Expected() (r string, exists bool) {
+	v := m.expected
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpected returns the old "expected" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldExpected(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpected is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpected requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpected: %w", err)
+	}
+	return oldValue.Expected, nil
+}
+
+// ResetExpected resets all changes to the "expected" field.
+func (m *QualityInspectionResultMutation) ResetExpected() {
+	m.expected = nil
+}
+
+// SetResponse sets the "response" field.
+func (m *QualityInspectionResultMutation) SetResponse(s string) {
+	m.response = &s
+}
+
+// Response returns the value of the "response" field in the mutation.
+func (m *QualityInspectionResultMutation) Response() (r string, exists bool) {
+	v := m.response
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponse returns the old "response" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldResponse(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponse is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponse requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponse: %w", err)
+	}
+	return oldValue.Response, nil
+}
+
+// ResetResponse resets all changes to the "response" field.
+func (m *QualityInspectionResultMutation) ResetResponse() {
+	m.response = nil
+}
+
+// SetArtifactKey sets the "artifact_key" field.
+func (m *QualityInspectionResultMutation) SetArtifactKey(s string) {
+	m.artifact_key = &s
+}
+
+// ArtifactKey returns the value of the "artifact_key" field in the mutation.
+func (m *QualityInspectionResultMutation) ArtifactKey() (r string, exists bool) {
+	v := m.artifact_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldArtifactKey returns the old "artifact_key" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldArtifactKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldArtifactKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldArtifactKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldArtifactKey: %w", err)
+	}
+	return oldValue.ArtifactKey, nil
+}
+
+// ResetArtifactKey resets all changes to the "artifact_key" field.
+func (m *QualityInspectionResultMutation) ResetArtifactKey() {
+	m.artifact_key = nil
+}
+
+// SetArtifactBytes sets the "artifact_bytes" field.
+func (m *QualityInspectionResultMutation) SetArtifactBytes(i int64) {
+	m.artifact_bytes = &i
+	m.addartifact_bytes = nil
+}
+
+// ArtifactBytes returns the value of the "artifact_bytes" field in the mutation.
+func (m *QualityInspectionResultMutation) ArtifactBytes() (r int64, exists bool) {
+	v := m.artifact_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldArtifactBytes returns the old "artifact_bytes" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldArtifactBytes(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldArtifactBytes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldArtifactBytes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldArtifactBytes: %w", err)
+	}
+	return oldValue.ArtifactBytes, nil
+}
+
+// AddArtifactBytes adds i to the "artifact_bytes" field.
+func (m *QualityInspectionResultMutation) AddArtifactBytes(i int64) {
+	if m.addartifact_bytes != nil {
+		*m.addartifact_bytes += i
+	} else {
+		m.addartifact_bytes = &i
+	}
+}
+
+// AddedArtifactBytes returns the value that was added to the "artifact_bytes" field in this mutation.
+func (m *QualityInspectionResultMutation) AddedArtifactBytes() (r int64, exists bool) {
+	v := m.addartifact_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetArtifactBytes resets all changes to the "artifact_bytes" field.
+func (m *QualityInspectionResultMutation) ResetArtifactBytes() {
+	m.artifact_bytes = nil
+	m.addartifact_bytes = nil
+}
+
+// SetArtifactTruncated sets the "artifact_truncated" field.
+func (m *QualityInspectionResultMutation) SetArtifactTruncated(b bool) {
+	m.artifact_truncated = &b
+}
+
+// ArtifactTruncated returns the value of the "artifact_truncated" field in the mutation.
+func (m *QualityInspectionResultMutation) ArtifactTruncated() (r bool, exists bool) {
+	v := m.artifact_truncated
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldArtifactTruncated returns the old "artifact_truncated" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldArtifactTruncated(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldArtifactTruncated is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldArtifactTruncated requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldArtifactTruncated: %w", err)
+	}
+	return oldValue.ArtifactTruncated, nil
+}
+
+// ResetArtifactTruncated resets all changes to the "artifact_truncated" field.
+func (m *QualityInspectionResultMutation) ResetArtifactTruncated() {
+	m.artifact_truncated = nil
+}
+
+// SetFirstTokenMs sets the "first_token_ms" field.
+func (m *QualityInspectionResultMutation) SetFirstTokenMs(i int) {
+	m.first_token_ms = &i
+	m.addfirst_token_ms = nil
+}
+
+// FirstTokenMs returns the value of the "first_token_ms" field in the mutation.
+func (m *QualityInspectionResultMutation) FirstTokenMs() (r int, exists bool) {
+	v := m.first_token_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFirstTokenMs returns the old "first_token_ms" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldFirstTokenMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFirstTokenMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFirstTokenMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFirstTokenMs: %w", err)
+	}
+	return oldValue.FirstTokenMs, nil
+}
+
+// AddFirstTokenMs adds i to the "first_token_ms" field.
+func (m *QualityInspectionResultMutation) AddFirstTokenMs(i int) {
+	if m.addfirst_token_ms != nil {
+		*m.addfirst_token_ms += i
+	} else {
+		m.addfirst_token_ms = &i
+	}
+}
+
+// AddedFirstTokenMs returns the value that was added to the "first_token_ms" field in this mutation.
+func (m *QualityInspectionResultMutation) AddedFirstTokenMs() (r int, exists bool) {
+	v := m.addfirst_token_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearFirstTokenMs clears the value of the "first_token_ms" field.
+func (m *QualityInspectionResultMutation) ClearFirstTokenMs() {
+	m.first_token_ms = nil
+	m.addfirst_token_ms = nil
+	m.clearedFields[qualityinspectionresult.FieldFirstTokenMs] = struct{}{}
+}
+
+// FirstTokenMsCleared returns if the "first_token_ms" field was cleared in this mutation.
+func (m *QualityInspectionResultMutation) FirstTokenMsCleared() bool {
+	_, ok := m.clearedFields[qualityinspectionresult.FieldFirstTokenMs]
+	return ok
+}
+
+// ResetFirstTokenMs resets all changes to the "first_token_ms" field.
+func (m *QualityInspectionResultMutation) ResetFirstTokenMs() {
+	m.first_token_ms = nil
+	m.addfirst_token_ms = nil
+	delete(m.clearedFields, qualityinspectionresult.FieldFirstTokenMs)
+}
+
+// SetDurationMs sets the "duration_ms" field.
+func (m *QualityInspectionResultMutation) SetDurationMs(i int) {
+	m.duration_ms = &i
+	m.addduration_ms = nil
+}
+
+// DurationMs returns the value of the "duration_ms" field in the mutation.
+func (m *QualityInspectionResultMutation) DurationMs() (r int, exists bool) {
+	v := m.duration_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDurationMs returns the old "duration_ms" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldDurationMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDurationMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDurationMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDurationMs: %w", err)
+	}
+	return oldValue.DurationMs, nil
+}
+
+// AddDurationMs adds i to the "duration_ms" field.
+func (m *QualityInspectionResultMutation) AddDurationMs(i int) {
+	if m.addduration_ms != nil {
+		*m.addduration_ms += i
+	} else {
+		m.addduration_ms = &i
+	}
+}
+
+// AddedDurationMs returns the value that was added to the "duration_ms" field in this mutation.
+func (m *QualityInspectionResultMutation) AddedDurationMs() (r int, exists bool) {
+	v := m.addduration_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDurationMs clears the value of the "duration_ms" field.
+func (m *QualityInspectionResultMutation) ClearDurationMs() {
+	m.duration_ms = nil
+	m.addduration_ms = nil
+	m.clearedFields[qualityinspectionresult.FieldDurationMs] = struct{}{}
+}
+
+// DurationMsCleared returns if the "duration_ms" field was cleared in this mutation.
+func (m *QualityInspectionResultMutation) DurationMsCleared() bool {
+	_, ok := m.clearedFields[qualityinspectionresult.FieldDurationMs]
+	return ok
+}
+
+// ResetDurationMs resets all changes to the "duration_ms" field.
+func (m *QualityInspectionResultMutation) ResetDurationMs() {
+	m.duration_ms = nil
+	m.addduration_ms = nil
+	delete(m.clearedFields, qualityinspectionresult.FieldDurationMs)
+}
+
+// SetFailureClass sets the "failure_class" field.
+func (m *QualityInspectionResultMutation) SetFailureClass(s string) {
+	m.failure_class = &s
+}
+
+// FailureClass returns the value of the "failure_class" field in the mutation.
+func (m *QualityInspectionResultMutation) FailureClass() (r string, exists bool) {
+	v := m.failure_class
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailureClass returns the old "failure_class" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldFailureClass(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailureClass is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailureClass requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailureClass: %w", err)
+	}
+	return oldValue.FailureClass, nil
+}
+
+// ResetFailureClass resets all changes to the "failure_class" field.
+func (m *QualityInspectionResultMutation) ResetFailureClass() {
+	m.failure_class = nil
+}
+
+// SetErrorCode sets the "error_code" field.
+func (m *QualityInspectionResultMutation) SetErrorCode(s string) {
+	m.error_code = &s
+}
+
+// ErrorCode returns the value of the "error_code" field in the mutation.
+func (m *QualityInspectionResultMutation) ErrorCode() (r string, exists bool) {
+	v := m.error_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorCode returns the old "error_code" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldErrorCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorCode: %w", err)
+	}
+	return oldValue.ErrorCode, nil
+}
+
+// ResetErrorCode resets all changes to the "error_code" field.
+func (m *QualityInspectionResultMutation) ResetErrorCode() {
+	m.error_code = nil
+}
+
+// SetBankVersion sets the "bank_version" field.
+func (m *QualityInspectionResultMutation) SetBankVersion(s string) {
+	m.bank_version = &s
+}
+
+// BankVersion returns the value of the "bank_version" field in the mutation.
+func (m *QualityInspectionResultMutation) BankVersion() (r string, exists bool) {
+	v := m.bank_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBankVersion returns the old "bank_version" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldBankVersion(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBankVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBankVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBankVersion: %w", err)
+	}
+	return oldValue.BankVersion, nil
+}
+
+// ResetBankVersion resets all changes to the "bank_version" field.
+func (m *QualityInspectionResultMutation) ResetBankVersion() {
+	m.bank_version = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *QualityInspectionResultMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *QualityInspectionResultMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the QualityInspectionResult entity.
+// If the QualityInspectionResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionResultMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *QualityInspectionResultMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the QualityInspectionResultMutation builder.
+func (m *QualityInspectionResultMutation) Where(ps ...predicate.QualityInspectionResult) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the QualityInspectionResultMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *QualityInspectionResultMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.QualityInspectionResult, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *QualityInspectionResultMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *QualityInspectionResultMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (QualityInspectionResult).
+func (m *QualityInspectionResultMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *QualityInspectionResultMutation) Fields() []string {
+	fields := make([]string, 0, 18)
+	if m.run_id != nil {
+		fields = append(fields, qualityinspectionresult.FieldRunID)
+	}
+	if m.plan_id != nil {
+		fields = append(fields, qualityinspectionresult.FieldPlanID)
+	}
+	if m.account_id != nil {
+		fields = append(fields, qualityinspectionresult.FieldAccountID)
+	}
+	if m.question_id != nil {
+		fields = append(fields, qualityinspectionresult.FieldQuestionID)
+	}
+	if m.kind != nil {
+		fields = append(fields, qualityinspectionresult.FieldKind)
+	}
+	if m.status != nil {
+		fields = append(fields, qualityinspectionresult.FieldStatus)
+	}
+	if m.answer != nil {
+		fields = append(fields, qualityinspectionresult.FieldAnswer)
+	}
+	if m.expected != nil {
+		fields = append(fields, qualityinspectionresult.FieldExpected)
+	}
+	if m.response != nil {
+		fields = append(fields, qualityinspectionresult.FieldResponse)
+	}
+	if m.artifact_key != nil {
+		fields = append(fields, qualityinspectionresult.FieldArtifactKey)
+	}
+	if m.artifact_bytes != nil {
+		fields = append(fields, qualityinspectionresult.FieldArtifactBytes)
+	}
+	if m.artifact_truncated != nil {
+		fields = append(fields, qualityinspectionresult.FieldArtifactTruncated)
+	}
+	if m.first_token_ms != nil {
+		fields = append(fields, qualityinspectionresult.FieldFirstTokenMs)
+	}
+	if m.duration_ms != nil {
+		fields = append(fields, qualityinspectionresult.FieldDurationMs)
+	}
+	if m.failure_class != nil {
+		fields = append(fields, qualityinspectionresult.FieldFailureClass)
+	}
+	if m.error_code != nil {
+		fields = append(fields, qualityinspectionresult.FieldErrorCode)
+	}
+	if m.bank_version != nil {
+		fields = append(fields, qualityinspectionresult.FieldBankVersion)
+	}
+	if m.created_at != nil {
+		fields = append(fields, qualityinspectionresult.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *QualityInspectionResultMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case qualityinspectionresult.FieldRunID:
+		return m.RunID()
+	case qualityinspectionresult.FieldPlanID:
+		return m.PlanID()
+	case qualityinspectionresult.FieldAccountID:
+		return m.AccountID()
+	case qualityinspectionresult.FieldQuestionID:
+		return m.QuestionID()
+	case qualityinspectionresult.FieldKind:
+		return m.Kind()
+	case qualityinspectionresult.FieldStatus:
+		return m.Status()
+	case qualityinspectionresult.FieldAnswer:
+		return m.Answer()
+	case qualityinspectionresult.FieldExpected:
+		return m.Expected()
+	case qualityinspectionresult.FieldResponse:
+		return m.Response()
+	case qualityinspectionresult.FieldArtifactKey:
+		return m.ArtifactKey()
+	case qualityinspectionresult.FieldArtifactBytes:
+		return m.ArtifactBytes()
+	case qualityinspectionresult.FieldArtifactTruncated:
+		return m.ArtifactTruncated()
+	case qualityinspectionresult.FieldFirstTokenMs:
+		return m.FirstTokenMs()
+	case qualityinspectionresult.FieldDurationMs:
+		return m.DurationMs()
+	case qualityinspectionresult.FieldFailureClass:
+		return m.FailureClass()
+	case qualityinspectionresult.FieldErrorCode:
+		return m.ErrorCode()
+	case qualityinspectionresult.FieldBankVersion:
+		return m.BankVersion()
+	case qualityinspectionresult.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *QualityInspectionResultMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case qualityinspectionresult.FieldRunID:
+		return m.OldRunID(ctx)
+	case qualityinspectionresult.FieldPlanID:
+		return m.OldPlanID(ctx)
+	case qualityinspectionresult.FieldAccountID:
+		return m.OldAccountID(ctx)
+	case qualityinspectionresult.FieldQuestionID:
+		return m.OldQuestionID(ctx)
+	case qualityinspectionresult.FieldKind:
+		return m.OldKind(ctx)
+	case qualityinspectionresult.FieldStatus:
+		return m.OldStatus(ctx)
+	case qualityinspectionresult.FieldAnswer:
+		return m.OldAnswer(ctx)
+	case qualityinspectionresult.FieldExpected:
+		return m.OldExpected(ctx)
+	case qualityinspectionresult.FieldResponse:
+		return m.OldResponse(ctx)
+	case qualityinspectionresult.FieldArtifactKey:
+		return m.OldArtifactKey(ctx)
+	case qualityinspectionresult.FieldArtifactBytes:
+		return m.OldArtifactBytes(ctx)
+	case qualityinspectionresult.FieldArtifactTruncated:
+		return m.OldArtifactTruncated(ctx)
+	case qualityinspectionresult.FieldFirstTokenMs:
+		return m.OldFirstTokenMs(ctx)
+	case qualityinspectionresult.FieldDurationMs:
+		return m.OldDurationMs(ctx)
+	case qualityinspectionresult.FieldFailureClass:
+		return m.OldFailureClass(ctx)
+	case qualityinspectionresult.FieldErrorCode:
+		return m.OldErrorCode(ctx)
+	case qualityinspectionresult.FieldBankVersion:
+		return m.OldBankVersion(ctx)
+	case qualityinspectionresult.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown QualityInspectionResult field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *QualityInspectionResultMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case qualityinspectionresult.FieldRunID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRunID(v)
+		return nil
+	case qualityinspectionresult.FieldPlanID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlanID(v)
+		return nil
+	case qualityinspectionresult.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountID(v)
+		return nil
+	case qualityinspectionresult.FieldQuestionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQuestionID(v)
+		return nil
+	case qualityinspectionresult.FieldKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKind(v)
+		return nil
+	case qualityinspectionresult.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case qualityinspectionresult.FieldAnswer:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAnswer(v)
+		return nil
+	case qualityinspectionresult.FieldExpected:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpected(v)
+		return nil
+	case qualityinspectionresult.FieldResponse:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponse(v)
+		return nil
+	case qualityinspectionresult.FieldArtifactKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetArtifactKey(v)
+		return nil
+	case qualityinspectionresult.FieldArtifactBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetArtifactBytes(v)
+		return nil
+	case qualityinspectionresult.FieldArtifactTruncated:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetArtifactTruncated(v)
+		return nil
+	case qualityinspectionresult.FieldFirstTokenMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFirstTokenMs(v)
+		return nil
+	case qualityinspectionresult.FieldDurationMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDurationMs(v)
+		return nil
+	case qualityinspectionresult.FieldFailureClass:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailureClass(v)
+		return nil
+	case qualityinspectionresult.FieldErrorCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorCode(v)
+		return nil
+	case qualityinspectionresult.FieldBankVersion:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBankVersion(v)
+		return nil
+	case qualityinspectionresult.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionResult field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *QualityInspectionResultMutation) AddedFields() []string {
+	var fields []string
+	if m.addrun_id != nil {
+		fields = append(fields, qualityinspectionresult.FieldRunID)
+	}
+	if m.addplan_id != nil {
+		fields = append(fields, qualityinspectionresult.FieldPlanID)
+	}
+	if m.addaccount_id != nil {
+		fields = append(fields, qualityinspectionresult.FieldAccountID)
+	}
+	if m.addartifact_bytes != nil {
+		fields = append(fields, qualityinspectionresult.FieldArtifactBytes)
+	}
+	if m.addfirst_token_ms != nil {
+		fields = append(fields, qualityinspectionresult.FieldFirstTokenMs)
+	}
+	if m.addduration_ms != nil {
+		fields = append(fields, qualityinspectionresult.FieldDurationMs)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *QualityInspectionResultMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case qualityinspectionresult.FieldRunID:
+		return m.AddedRunID()
+	case qualityinspectionresult.FieldPlanID:
+		return m.AddedPlanID()
+	case qualityinspectionresult.FieldAccountID:
+		return m.AddedAccountID()
+	case qualityinspectionresult.FieldArtifactBytes:
+		return m.AddedArtifactBytes()
+	case qualityinspectionresult.FieldFirstTokenMs:
+		return m.AddedFirstTokenMs()
+	case qualityinspectionresult.FieldDurationMs:
+		return m.AddedDurationMs()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *QualityInspectionResultMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case qualityinspectionresult.FieldRunID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRunID(v)
+		return nil
+	case qualityinspectionresult.FieldPlanID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPlanID(v)
+		return nil
+	case qualityinspectionresult.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountID(v)
+		return nil
+	case qualityinspectionresult.FieldArtifactBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddArtifactBytes(v)
+		return nil
+	case qualityinspectionresult.FieldFirstTokenMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFirstTokenMs(v)
+		return nil
+	case qualityinspectionresult.FieldDurationMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDurationMs(v)
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionResult numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *QualityInspectionResultMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(qualityinspectionresult.FieldFirstTokenMs) {
+		fields = append(fields, qualityinspectionresult.FieldFirstTokenMs)
+	}
+	if m.FieldCleared(qualityinspectionresult.FieldDurationMs) {
+		fields = append(fields, qualityinspectionresult.FieldDurationMs)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *QualityInspectionResultMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *QualityInspectionResultMutation) ClearField(name string) error {
+	switch name {
+	case qualityinspectionresult.FieldFirstTokenMs:
+		m.ClearFirstTokenMs()
+		return nil
+	case qualityinspectionresult.FieldDurationMs:
+		m.ClearDurationMs()
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionResult nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *QualityInspectionResultMutation) ResetField(name string) error {
+	switch name {
+	case qualityinspectionresult.FieldRunID:
+		m.ResetRunID()
+		return nil
+	case qualityinspectionresult.FieldPlanID:
+		m.ResetPlanID()
+		return nil
+	case qualityinspectionresult.FieldAccountID:
+		m.ResetAccountID()
+		return nil
+	case qualityinspectionresult.FieldQuestionID:
+		m.ResetQuestionID()
+		return nil
+	case qualityinspectionresult.FieldKind:
+		m.ResetKind()
+		return nil
+	case qualityinspectionresult.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case qualityinspectionresult.FieldAnswer:
+		m.ResetAnswer()
+		return nil
+	case qualityinspectionresult.FieldExpected:
+		m.ResetExpected()
+		return nil
+	case qualityinspectionresult.FieldResponse:
+		m.ResetResponse()
+		return nil
+	case qualityinspectionresult.FieldArtifactKey:
+		m.ResetArtifactKey()
+		return nil
+	case qualityinspectionresult.FieldArtifactBytes:
+		m.ResetArtifactBytes()
+		return nil
+	case qualityinspectionresult.FieldArtifactTruncated:
+		m.ResetArtifactTruncated()
+		return nil
+	case qualityinspectionresult.FieldFirstTokenMs:
+		m.ResetFirstTokenMs()
+		return nil
+	case qualityinspectionresult.FieldDurationMs:
+		m.ResetDurationMs()
+		return nil
+	case qualityinspectionresult.FieldFailureClass:
+		m.ResetFailureClass()
+		return nil
+	case qualityinspectionresult.FieldErrorCode:
+		m.ResetErrorCode()
+		return nil
+	case qualityinspectionresult.FieldBankVersion:
+		m.ResetBankVersion()
+		return nil
+	case qualityinspectionresult.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionResult field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *QualityInspectionResultMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *QualityInspectionResultMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *QualityInspectionResultMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *QualityInspectionResultMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *QualityInspectionResultMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *QualityInspectionResultMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *QualityInspectionResultMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown QualityInspectionResult unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *QualityInspectionResultMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown QualityInspectionResult edge %s", name)
+}
+
+// QualityInspectionRunMutation represents an operation that mutates the QualityInspectionRun nodes in the graph.
+type QualityInspectionRunMutation struct {
+	config
+	op                      Op
+	typ                     string
+	id                      *int64
+	plan_id                 *int64
+	addplan_id              *int64
+	plan_revision           *int64
+	addplan_revision        *int64
+	trigger                 *string
+	slot                    *int64
+	addslot                 *int64
+	status                  *string
+	account_id              *int64
+	addaccount_id           *int64
+	model                   *string
+	effort                  *string
+	request_count           *int
+	addrequest_count        *int
+	stats                   *map[string]interface{}
+	message                 *string
+	resolved_platform       *string
+	resolved_upstream_model *string
+	resolved_endpoint       *string
+	resolved_source         *string
+	started_at              *time.Time
+	finished_at             *time.Time
+	clearedFields           map[string]struct{}
+	done                    bool
+	oldValue                func(context.Context) (*QualityInspectionRun, error)
+	predicates              []predicate.QualityInspectionRun
+}
+
+var _ ent.Mutation = (*QualityInspectionRunMutation)(nil)
+
+// qualityinspectionrunOption allows management of the mutation configuration using functional options.
+type qualityinspectionrunOption func(*QualityInspectionRunMutation)
+
+// newQualityInspectionRunMutation creates new mutation for the QualityInspectionRun entity.
+func newQualityInspectionRunMutation(c config, op Op, opts ...qualityinspectionrunOption) *QualityInspectionRunMutation {
+	m := &QualityInspectionRunMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeQualityInspectionRun,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withQualityInspectionRunID sets the ID field of the mutation.
+func withQualityInspectionRunID(id int64) qualityinspectionrunOption {
+	return func(m *QualityInspectionRunMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *QualityInspectionRun
+		)
+		m.oldValue = func(ctx context.Context) (*QualityInspectionRun, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().QualityInspectionRun.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withQualityInspectionRun sets the old QualityInspectionRun of the mutation.
+func withQualityInspectionRun(node *QualityInspectionRun) qualityinspectionrunOption {
+	return func(m *QualityInspectionRunMutation) {
+		m.oldValue = func(context.Context) (*QualityInspectionRun, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m QualityInspectionRunMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m QualityInspectionRunMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *QualityInspectionRunMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *QualityInspectionRunMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().QualityInspectionRun.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetPlanID sets the "plan_id" field.
+func (m *QualityInspectionRunMutation) SetPlanID(i int64) {
+	m.plan_id = &i
+	m.addplan_id = nil
+}
+
+// PlanID returns the value of the "plan_id" field in the mutation.
+func (m *QualityInspectionRunMutation) PlanID() (r int64, exists bool) {
+	v := m.plan_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlanID returns the old "plan_id" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldPlanID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlanID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlanID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlanID: %w", err)
+	}
+	return oldValue.PlanID, nil
+}
+
+// AddPlanID adds i to the "plan_id" field.
+func (m *QualityInspectionRunMutation) AddPlanID(i int64) {
+	if m.addplan_id != nil {
+		*m.addplan_id += i
+	} else {
+		m.addplan_id = &i
+	}
+}
+
+// AddedPlanID returns the value that was added to the "plan_id" field in this mutation.
+func (m *QualityInspectionRunMutation) AddedPlanID() (r int64, exists bool) {
+	v := m.addplan_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPlanID resets all changes to the "plan_id" field.
+func (m *QualityInspectionRunMutation) ResetPlanID() {
+	m.plan_id = nil
+	m.addplan_id = nil
+}
+
+// SetPlanRevision sets the "plan_revision" field.
+func (m *QualityInspectionRunMutation) SetPlanRevision(i int64) {
+	m.plan_revision = &i
+	m.addplan_revision = nil
+}
+
+// PlanRevision returns the value of the "plan_revision" field in the mutation.
+func (m *QualityInspectionRunMutation) PlanRevision() (r int64, exists bool) {
+	v := m.plan_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlanRevision returns the old "plan_revision" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldPlanRevision(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlanRevision is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlanRevision requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlanRevision: %w", err)
+	}
+	return oldValue.PlanRevision, nil
+}
+
+// AddPlanRevision adds i to the "plan_revision" field.
+func (m *QualityInspectionRunMutation) AddPlanRevision(i int64) {
+	if m.addplan_revision != nil {
+		*m.addplan_revision += i
+	} else {
+		m.addplan_revision = &i
+	}
+}
+
+// AddedPlanRevision returns the value that was added to the "plan_revision" field in this mutation.
+func (m *QualityInspectionRunMutation) AddedPlanRevision() (r int64, exists bool) {
+	v := m.addplan_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPlanRevision resets all changes to the "plan_revision" field.
+func (m *QualityInspectionRunMutation) ResetPlanRevision() {
+	m.plan_revision = nil
+	m.addplan_revision = nil
+}
+
+// SetTrigger sets the "trigger" field.
+func (m *QualityInspectionRunMutation) SetTrigger(s string) {
+	m.trigger = &s
+}
+
+// Trigger returns the value of the "trigger" field in the mutation.
+func (m *QualityInspectionRunMutation) Trigger() (r string, exists bool) {
+	v := m.trigger
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTrigger returns the old "trigger" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldTrigger(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTrigger is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTrigger requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTrigger: %w", err)
+	}
+	return oldValue.Trigger, nil
+}
+
+// ResetTrigger resets all changes to the "trigger" field.
+func (m *QualityInspectionRunMutation) ResetTrigger() {
+	m.trigger = nil
+}
+
+// SetSlot sets the "slot" field.
+func (m *QualityInspectionRunMutation) SetSlot(i int64) {
+	m.slot = &i
+	m.addslot = nil
+}
+
+// Slot returns the value of the "slot" field in the mutation.
+func (m *QualityInspectionRunMutation) Slot() (r int64, exists bool) {
+	v := m.slot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSlot returns the old "slot" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldSlot(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSlot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSlot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSlot: %w", err)
+	}
+	return oldValue.Slot, nil
+}
+
+// AddSlot adds i to the "slot" field.
+func (m *QualityInspectionRunMutation) AddSlot(i int64) {
+	if m.addslot != nil {
+		*m.addslot += i
+	} else {
+		m.addslot = &i
+	}
+}
+
+// AddedSlot returns the value that was added to the "slot" field in this mutation.
+func (m *QualityInspectionRunMutation) AddedSlot() (r int64, exists bool) {
+	v := m.addslot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSlot resets all changes to the "slot" field.
+func (m *QualityInspectionRunMutation) ResetSlot() {
+	m.slot = nil
+	m.addslot = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *QualityInspectionRunMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *QualityInspectionRunMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *QualityInspectionRunMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetAccountID sets the "account_id" field.
+func (m *QualityInspectionRunMutation) SetAccountID(i int64) {
+	m.account_id = &i
+	m.addaccount_id = nil
+}
+
+// AccountID returns the value of the "account_id" field in the mutation.
+func (m *QualityInspectionRunMutation) AccountID() (r int64, exists bool) {
+	v := m.account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountID returns the old "account_id" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldAccountID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountID: %w", err)
+	}
+	return oldValue.AccountID, nil
+}
+
+// AddAccountID adds i to the "account_id" field.
+func (m *QualityInspectionRunMutation) AddAccountID(i int64) {
+	if m.addaccount_id != nil {
+		*m.addaccount_id += i
+	} else {
+		m.addaccount_id = &i
+	}
+}
+
+// AddedAccountID returns the value that was added to the "account_id" field in this mutation.
+func (m *QualityInspectionRunMutation) AddedAccountID() (r int64, exists bool) {
+	v := m.addaccount_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAccountID clears the value of the "account_id" field.
+func (m *QualityInspectionRunMutation) ClearAccountID() {
+	m.account_id = nil
+	m.addaccount_id = nil
+	m.clearedFields[qualityinspectionrun.FieldAccountID] = struct{}{}
+}
+
+// AccountIDCleared returns if the "account_id" field was cleared in this mutation.
+func (m *QualityInspectionRunMutation) AccountIDCleared() bool {
+	_, ok := m.clearedFields[qualityinspectionrun.FieldAccountID]
+	return ok
+}
+
+// ResetAccountID resets all changes to the "account_id" field.
+func (m *QualityInspectionRunMutation) ResetAccountID() {
+	m.account_id = nil
+	m.addaccount_id = nil
+	delete(m.clearedFields, qualityinspectionrun.FieldAccountID)
+}
+
+// SetModel sets the "model" field.
+func (m *QualityInspectionRunMutation) SetModel(s string) {
+	m.model = &s
+}
+
+// Model returns the value of the "model" field in the mutation.
+func (m *QualityInspectionRunMutation) Model() (r string, exists bool) {
+	v := m.model
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldModel returns the old "model" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldModel(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldModel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldModel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldModel: %w", err)
+	}
+	return oldValue.Model, nil
+}
+
+// ResetModel resets all changes to the "model" field.
+func (m *QualityInspectionRunMutation) ResetModel() {
+	m.model = nil
+}
+
+// SetEffort sets the "effort" field.
+func (m *QualityInspectionRunMutation) SetEffort(s string) {
+	m.effort = &s
+}
+
+// Effort returns the value of the "effort" field in the mutation.
+func (m *QualityInspectionRunMutation) Effort() (r string, exists bool) {
+	v := m.effort
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEffort returns the old "effort" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldEffort(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEffort is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEffort requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEffort: %w", err)
+	}
+	return oldValue.Effort, nil
+}
+
+// ResetEffort resets all changes to the "effort" field.
+func (m *QualityInspectionRunMutation) ResetEffort() {
+	m.effort = nil
+}
+
+// SetRequestCount sets the "request_count" field.
+func (m *QualityInspectionRunMutation) SetRequestCount(i int) {
+	m.request_count = &i
+	m.addrequest_count = nil
+}
+
+// RequestCount returns the value of the "request_count" field in the mutation.
+func (m *QualityInspectionRunMutation) RequestCount() (r int, exists bool) {
+	v := m.request_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestCount returns the old "request_count" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldRequestCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestCount: %w", err)
+	}
+	return oldValue.RequestCount, nil
+}
+
+// AddRequestCount adds i to the "request_count" field.
+func (m *QualityInspectionRunMutation) AddRequestCount(i int) {
+	if m.addrequest_count != nil {
+		*m.addrequest_count += i
+	} else {
+		m.addrequest_count = &i
+	}
+}
+
+// AddedRequestCount returns the value that was added to the "request_count" field in this mutation.
+func (m *QualityInspectionRunMutation) AddedRequestCount() (r int, exists bool) {
+	v := m.addrequest_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRequestCount resets all changes to the "request_count" field.
+func (m *QualityInspectionRunMutation) ResetRequestCount() {
+	m.request_count = nil
+	m.addrequest_count = nil
+}
+
+// SetStats sets the "stats" field.
+func (m *QualityInspectionRunMutation) SetStats(value map[string]interface{}) {
+	m.stats = &value
+}
+
+// Stats returns the value of the "stats" field in the mutation.
+func (m *QualityInspectionRunMutation) Stats() (r map[string]interface{}, exists bool) {
+	v := m.stats
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStats returns the old "stats" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldStats(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStats is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStats requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStats: %w", err)
+	}
+	return oldValue.Stats, nil
+}
+
+// ClearStats clears the value of the "stats" field.
+func (m *QualityInspectionRunMutation) ClearStats() {
+	m.stats = nil
+	m.clearedFields[qualityinspectionrun.FieldStats] = struct{}{}
+}
+
+// StatsCleared returns if the "stats" field was cleared in this mutation.
+func (m *QualityInspectionRunMutation) StatsCleared() bool {
+	_, ok := m.clearedFields[qualityinspectionrun.FieldStats]
+	return ok
+}
+
+// ResetStats resets all changes to the "stats" field.
+func (m *QualityInspectionRunMutation) ResetStats() {
+	m.stats = nil
+	delete(m.clearedFields, qualityinspectionrun.FieldStats)
+}
+
+// SetMessage sets the "message" field.
+func (m *QualityInspectionRunMutation) SetMessage(s string) {
+	m.message = &s
+}
+
+// Message returns the value of the "message" field in the mutation.
+func (m *QualityInspectionRunMutation) Message() (r string, exists bool) {
+	v := m.message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMessage returns the old "message" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldMessage(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMessage: %w", err)
+	}
+	return oldValue.Message, nil
+}
+
+// ResetMessage resets all changes to the "message" field.
+func (m *QualityInspectionRunMutation) ResetMessage() {
+	m.message = nil
+}
+
+// SetResolvedPlatform sets the "resolved_platform" field.
+func (m *QualityInspectionRunMutation) SetResolvedPlatform(s string) {
+	m.resolved_platform = &s
+}
+
+// ResolvedPlatform returns the value of the "resolved_platform" field in the mutation.
+func (m *QualityInspectionRunMutation) ResolvedPlatform() (r string, exists bool) {
+	v := m.resolved_platform
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResolvedPlatform returns the old "resolved_platform" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldResolvedPlatform(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResolvedPlatform is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResolvedPlatform requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResolvedPlatform: %w", err)
+	}
+	return oldValue.ResolvedPlatform, nil
+}
+
+// ResetResolvedPlatform resets all changes to the "resolved_platform" field.
+func (m *QualityInspectionRunMutation) ResetResolvedPlatform() {
+	m.resolved_platform = nil
+}
+
+// SetResolvedUpstreamModel sets the "resolved_upstream_model" field.
+func (m *QualityInspectionRunMutation) SetResolvedUpstreamModel(s string) {
+	m.resolved_upstream_model = &s
+}
+
+// ResolvedUpstreamModel returns the value of the "resolved_upstream_model" field in the mutation.
+func (m *QualityInspectionRunMutation) ResolvedUpstreamModel() (r string, exists bool) {
+	v := m.resolved_upstream_model
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResolvedUpstreamModel returns the old "resolved_upstream_model" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldResolvedUpstreamModel(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResolvedUpstreamModel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResolvedUpstreamModel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResolvedUpstreamModel: %w", err)
+	}
+	return oldValue.ResolvedUpstreamModel, nil
+}
+
+// ResetResolvedUpstreamModel resets all changes to the "resolved_upstream_model" field.
+func (m *QualityInspectionRunMutation) ResetResolvedUpstreamModel() {
+	m.resolved_upstream_model = nil
+}
+
+// SetResolvedEndpoint sets the "resolved_endpoint" field.
+func (m *QualityInspectionRunMutation) SetResolvedEndpoint(s string) {
+	m.resolved_endpoint = &s
+}
+
+// ResolvedEndpoint returns the value of the "resolved_endpoint" field in the mutation.
+func (m *QualityInspectionRunMutation) ResolvedEndpoint() (r string, exists bool) {
+	v := m.resolved_endpoint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResolvedEndpoint returns the old "resolved_endpoint" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldResolvedEndpoint(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResolvedEndpoint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResolvedEndpoint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResolvedEndpoint: %w", err)
+	}
+	return oldValue.ResolvedEndpoint, nil
+}
+
+// ResetResolvedEndpoint resets all changes to the "resolved_endpoint" field.
+func (m *QualityInspectionRunMutation) ResetResolvedEndpoint() {
+	m.resolved_endpoint = nil
+}
+
+// SetResolvedSource sets the "resolved_source" field.
+func (m *QualityInspectionRunMutation) SetResolvedSource(s string) {
+	m.resolved_source = &s
+}
+
+// ResolvedSource returns the value of the "resolved_source" field in the mutation.
+func (m *QualityInspectionRunMutation) ResolvedSource() (r string, exists bool) {
+	v := m.resolved_source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResolvedSource returns the old "resolved_source" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldResolvedSource(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResolvedSource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResolvedSource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResolvedSource: %w", err)
+	}
+	return oldValue.ResolvedSource, nil
+}
+
+// ResetResolvedSource resets all changes to the "resolved_source" field.
+func (m *QualityInspectionRunMutation) ResetResolvedSource() {
+	m.resolved_source = nil
+}
+
+// SetStartedAt sets the "started_at" field.
+func (m *QualityInspectionRunMutation) SetStartedAt(t time.Time) {
+	m.started_at = &t
+}
+
+// StartedAt returns the value of the "started_at" field in the mutation.
+func (m *QualityInspectionRunMutation) StartedAt() (r time.Time, exists bool) {
+	v := m.started_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStartedAt returns the old "started_at" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldStartedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStartedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStartedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStartedAt: %w", err)
+	}
+	return oldValue.StartedAt, nil
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (m *QualityInspectionRunMutation) ClearStartedAt() {
+	m.started_at = nil
+	m.clearedFields[qualityinspectionrun.FieldStartedAt] = struct{}{}
+}
+
+// StartedAtCleared returns if the "started_at" field was cleared in this mutation.
+func (m *QualityInspectionRunMutation) StartedAtCleared() bool {
+	_, ok := m.clearedFields[qualityinspectionrun.FieldStartedAt]
+	return ok
+}
+
+// ResetStartedAt resets all changes to the "started_at" field.
+func (m *QualityInspectionRunMutation) ResetStartedAt() {
+	m.started_at = nil
+	delete(m.clearedFields, qualityinspectionrun.FieldStartedAt)
+}
+
+// SetFinishedAt sets the "finished_at" field.
+func (m *QualityInspectionRunMutation) SetFinishedAt(t time.Time) {
+	m.finished_at = &t
+}
+
+// FinishedAt returns the value of the "finished_at" field in the mutation.
+func (m *QualityInspectionRunMutation) FinishedAt() (r time.Time, exists bool) {
+	v := m.finished_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFinishedAt returns the old "finished_at" field's value of the QualityInspectionRun entity.
+// If the QualityInspectionRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QualityInspectionRunMutation) OldFinishedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFinishedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFinishedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFinishedAt: %w", err)
+	}
+	return oldValue.FinishedAt, nil
+}
+
+// ClearFinishedAt clears the value of the "finished_at" field.
+func (m *QualityInspectionRunMutation) ClearFinishedAt() {
+	m.finished_at = nil
+	m.clearedFields[qualityinspectionrun.FieldFinishedAt] = struct{}{}
+}
+
+// FinishedAtCleared returns if the "finished_at" field was cleared in this mutation.
+func (m *QualityInspectionRunMutation) FinishedAtCleared() bool {
+	_, ok := m.clearedFields[qualityinspectionrun.FieldFinishedAt]
+	return ok
+}
+
+// ResetFinishedAt resets all changes to the "finished_at" field.
+func (m *QualityInspectionRunMutation) ResetFinishedAt() {
+	m.finished_at = nil
+	delete(m.clearedFields, qualityinspectionrun.FieldFinishedAt)
+}
+
+// Where appends a list predicates to the QualityInspectionRunMutation builder.
+func (m *QualityInspectionRunMutation) Where(ps ...predicate.QualityInspectionRun) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the QualityInspectionRunMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *QualityInspectionRunMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.QualityInspectionRun, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *QualityInspectionRunMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *QualityInspectionRunMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (QualityInspectionRun).
+func (m *QualityInspectionRunMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *QualityInspectionRunMutation) Fields() []string {
+	fields := make([]string, 0, 17)
+	if m.plan_id != nil {
+		fields = append(fields, qualityinspectionrun.FieldPlanID)
+	}
+	if m.plan_revision != nil {
+		fields = append(fields, qualityinspectionrun.FieldPlanRevision)
+	}
+	if m.trigger != nil {
+		fields = append(fields, qualityinspectionrun.FieldTrigger)
+	}
+	if m.slot != nil {
+		fields = append(fields, qualityinspectionrun.FieldSlot)
+	}
+	if m.status != nil {
+		fields = append(fields, qualityinspectionrun.FieldStatus)
+	}
+	if m.account_id != nil {
+		fields = append(fields, qualityinspectionrun.FieldAccountID)
+	}
+	if m.model != nil {
+		fields = append(fields, qualityinspectionrun.FieldModel)
+	}
+	if m.effort != nil {
+		fields = append(fields, qualityinspectionrun.FieldEffort)
+	}
+	if m.request_count != nil {
+		fields = append(fields, qualityinspectionrun.FieldRequestCount)
+	}
+	if m.stats != nil {
+		fields = append(fields, qualityinspectionrun.FieldStats)
+	}
+	if m.message != nil {
+		fields = append(fields, qualityinspectionrun.FieldMessage)
+	}
+	if m.resolved_platform != nil {
+		fields = append(fields, qualityinspectionrun.FieldResolvedPlatform)
+	}
+	if m.resolved_upstream_model != nil {
+		fields = append(fields, qualityinspectionrun.FieldResolvedUpstreamModel)
+	}
+	if m.resolved_endpoint != nil {
+		fields = append(fields, qualityinspectionrun.FieldResolvedEndpoint)
+	}
+	if m.resolved_source != nil {
+		fields = append(fields, qualityinspectionrun.FieldResolvedSource)
+	}
+	if m.started_at != nil {
+		fields = append(fields, qualityinspectionrun.FieldStartedAt)
+	}
+	if m.finished_at != nil {
+		fields = append(fields, qualityinspectionrun.FieldFinishedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *QualityInspectionRunMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case qualityinspectionrun.FieldPlanID:
+		return m.PlanID()
+	case qualityinspectionrun.FieldPlanRevision:
+		return m.PlanRevision()
+	case qualityinspectionrun.FieldTrigger:
+		return m.Trigger()
+	case qualityinspectionrun.FieldSlot:
+		return m.Slot()
+	case qualityinspectionrun.FieldStatus:
+		return m.Status()
+	case qualityinspectionrun.FieldAccountID:
+		return m.AccountID()
+	case qualityinspectionrun.FieldModel:
+		return m.Model()
+	case qualityinspectionrun.FieldEffort:
+		return m.Effort()
+	case qualityinspectionrun.FieldRequestCount:
+		return m.RequestCount()
+	case qualityinspectionrun.FieldStats:
+		return m.Stats()
+	case qualityinspectionrun.FieldMessage:
+		return m.Message()
+	case qualityinspectionrun.FieldResolvedPlatform:
+		return m.ResolvedPlatform()
+	case qualityinspectionrun.FieldResolvedUpstreamModel:
+		return m.ResolvedUpstreamModel()
+	case qualityinspectionrun.FieldResolvedEndpoint:
+		return m.ResolvedEndpoint()
+	case qualityinspectionrun.FieldResolvedSource:
+		return m.ResolvedSource()
+	case qualityinspectionrun.FieldStartedAt:
+		return m.StartedAt()
+	case qualityinspectionrun.FieldFinishedAt:
+		return m.FinishedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *QualityInspectionRunMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case qualityinspectionrun.FieldPlanID:
+		return m.OldPlanID(ctx)
+	case qualityinspectionrun.FieldPlanRevision:
+		return m.OldPlanRevision(ctx)
+	case qualityinspectionrun.FieldTrigger:
+		return m.OldTrigger(ctx)
+	case qualityinspectionrun.FieldSlot:
+		return m.OldSlot(ctx)
+	case qualityinspectionrun.FieldStatus:
+		return m.OldStatus(ctx)
+	case qualityinspectionrun.FieldAccountID:
+		return m.OldAccountID(ctx)
+	case qualityinspectionrun.FieldModel:
+		return m.OldModel(ctx)
+	case qualityinspectionrun.FieldEffort:
+		return m.OldEffort(ctx)
+	case qualityinspectionrun.FieldRequestCount:
+		return m.OldRequestCount(ctx)
+	case qualityinspectionrun.FieldStats:
+		return m.OldStats(ctx)
+	case qualityinspectionrun.FieldMessage:
+		return m.OldMessage(ctx)
+	case qualityinspectionrun.FieldResolvedPlatform:
+		return m.OldResolvedPlatform(ctx)
+	case qualityinspectionrun.FieldResolvedUpstreamModel:
+		return m.OldResolvedUpstreamModel(ctx)
+	case qualityinspectionrun.FieldResolvedEndpoint:
+		return m.OldResolvedEndpoint(ctx)
+	case qualityinspectionrun.FieldResolvedSource:
+		return m.OldResolvedSource(ctx)
+	case qualityinspectionrun.FieldStartedAt:
+		return m.OldStartedAt(ctx)
+	case qualityinspectionrun.FieldFinishedAt:
+		return m.OldFinishedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown QualityInspectionRun field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *QualityInspectionRunMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case qualityinspectionrun.FieldPlanID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlanID(v)
+		return nil
+	case qualityinspectionrun.FieldPlanRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlanRevision(v)
+		return nil
+	case qualityinspectionrun.FieldTrigger:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTrigger(v)
+		return nil
+	case qualityinspectionrun.FieldSlot:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSlot(v)
+		return nil
+	case qualityinspectionrun.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case qualityinspectionrun.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountID(v)
+		return nil
+	case qualityinspectionrun.FieldModel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetModel(v)
+		return nil
+	case qualityinspectionrun.FieldEffort:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEffort(v)
+		return nil
+	case qualityinspectionrun.FieldRequestCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestCount(v)
+		return nil
+	case qualityinspectionrun.FieldStats:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStats(v)
+		return nil
+	case qualityinspectionrun.FieldMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMessage(v)
+		return nil
+	case qualityinspectionrun.FieldResolvedPlatform:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResolvedPlatform(v)
+		return nil
+	case qualityinspectionrun.FieldResolvedUpstreamModel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResolvedUpstreamModel(v)
+		return nil
+	case qualityinspectionrun.FieldResolvedEndpoint:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResolvedEndpoint(v)
+		return nil
+	case qualityinspectionrun.FieldResolvedSource:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResolvedSource(v)
+		return nil
+	case qualityinspectionrun.FieldStartedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStartedAt(v)
+		return nil
+	case qualityinspectionrun.FieldFinishedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFinishedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionRun field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *QualityInspectionRunMutation) AddedFields() []string {
+	var fields []string
+	if m.addplan_id != nil {
+		fields = append(fields, qualityinspectionrun.FieldPlanID)
+	}
+	if m.addplan_revision != nil {
+		fields = append(fields, qualityinspectionrun.FieldPlanRevision)
+	}
+	if m.addslot != nil {
+		fields = append(fields, qualityinspectionrun.FieldSlot)
+	}
+	if m.addaccount_id != nil {
+		fields = append(fields, qualityinspectionrun.FieldAccountID)
+	}
+	if m.addrequest_count != nil {
+		fields = append(fields, qualityinspectionrun.FieldRequestCount)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *QualityInspectionRunMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case qualityinspectionrun.FieldPlanID:
+		return m.AddedPlanID()
+	case qualityinspectionrun.FieldPlanRevision:
+		return m.AddedPlanRevision()
+	case qualityinspectionrun.FieldSlot:
+		return m.AddedSlot()
+	case qualityinspectionrun.FieldAccountID:
+		return m.AddedAccountID()
+	case qualityinspectionrun.FieldRequestCount:
+		return m.AddedRequestCount()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *QualityInspectionRunMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case qualityinspectionrun.FieldPlanID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPlanID(v)
+		return nil
+	case qualityinspectionrun.FieldPlanRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPlanRevision(v)
+		return nil
+	case qualityinspectionrun.FieldSlot:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSlot(v)
+		return nil
+	case qualityinspectionrun.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountID(v)
+		return nil
+	case qualityinspectionrun.FieldRequestCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRequestCount(v)
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionRun numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *QualityInspectionRunMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(qualityinspectionrun.FieldAccountID) {
+		fields = append(fields, qualityinspectionrun.FieldAccountID)
+	}
+	if m.FieldCleared(qualityinspectionrun.FieldStats) {
+		fields = append(fields, qualityinspectionrun.FieldStats)
+	}
+	if m.FieldCleared(qualityinspectionrun.FieldStartedAt) {
+		fields = append(fields, qualityinspectionrun.FieldStartedAt)
+	}
+	if m.FieldCleared(qualityinspectionrun.FieldFinishedAt) {
+		fields = append(fields, qualityinspectionrun.FieldFinishedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *QualityInspectionRunMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *QualityInspectionRunMutation) ClearField(name string) error {
+	switch name {
+	case qualityinspectionrun.FieldAccountID:
+		m.ClearAccountID()
+		return nil
+	case qualityinspectionrun.FieldStats:
+		m.ClearStats()
+		return nil
+	case qualityinspectionrun.FieldStartedAt:
+		m.ClearStartedAt()
+		return nil
+	case qualityinspectionrun.FieldFinishedAt:
+		m.ClearFinishedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionRun nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *QualityInspectionRunMutation) ResetField(name string) error {
+	switch name {
+	case qualityinspectionrun.FieldPlanID:
+		m.ResetPlanID()
+		return nil
+	case qualityinspectionrun.FieldPlanRevision:
+		m.ResetPlanRevision()
+		return nil
+	case qualityinspectionrun.FieldTrigger:
+		m.ResetTrigger()
+		return nil
+	case qualityinspectionrun.FieldSlot:
+		m.ResetSlot()
+		return nil
+	case qualityinspectionrun.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case qualityinspectionrun.FieldAccountID:
+		m.ResetAccountID()
+		return nil
+	case qualityinspectionrun.FieldModel:
+		m.ResetModel()
+		return nil
+	case qualityinspectionrun.FieldEffort:
+		m.ResetEffort()
+		return nil
+	case qualityinspectionrun.FieldRequestCount:
+		m.ResetRequestCount()
+		return nil
+	case qualityinspectionrun.FieldStats:
+		m.ResetStats()
+		return nil
+	case qualityinspectionrun.FieldMessage:
+		m.ResetMessage()
+		return nil
+	case qualityinspectionrun.FieldResolvedPlatform:
+		m.ResetResolvedPlatform()
+		return nil
+	case qualityinspectionrun.FieldResolvedUpstreamModel:
+		m.ResetResolvedUpstreamModel()
+		return nil
+	case qualityinspectionrun.FieldResolvedEndpoint:
+		m.ResetResolvedEndpoint()
+		return nil
+	case qualityinspectionrun.FieldResolvedSource:
+		m.ResetResolvedSource()
+		return nil
+	case qualityinspectionrun.FieldStartedAt:
+		m.ResetStartedAt()
+		return nil
+	case qualityinspectionrun.FieldFinishedAt:
+		m.ResetFinishedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown QualityInspectionRun field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *QualityInspectionRunMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *QualityInspectionRunMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *QualityInspectionRunMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *QualityInspectionRunMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *QualityInspectionRunMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *QualityInspectionRunMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *QualityInspectionRunMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown QualityInspectionRun unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *QualityInspectionRunMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown QualityInspectionRun edge %s", name)
 }
 
 // RedeemCodeMutation represents an operation that mutates the RedeemCode nodes in the graph.

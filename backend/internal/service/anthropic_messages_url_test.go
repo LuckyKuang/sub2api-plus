@@ -76,7 +76,7 @@ func TestAnthropicMessagesURL_EntryPoints(t *testing.T) {
 				upstream := &anthropicHTTPUpstreamRecorder{resp: adaptiveCNAnthropicTestResponse()}
 				testSvc := &AccountTestService{cfg: &config.Config{}, httpUpstream: upstream}
 				c, rec := newTestContext()
-				require.NoError(t, testSvc.testClaudeAccountConnection(c, account, "claude-haiku-4-5"))
+				require.NoError(t, testSvc.testClaudeAccountConnection(c, account, "claude-haiku-4-5", ""))
 				checkRequest(t, upstream.lastReq)
 				require.Equal(t, "claude-haiku-4-5", gjson.GetBytes(upstream.lastBody, "model").String())
 				require.Contains(t, rec.Body.String(), `"success":true`)
@@ -106,7 +106,7 @@ func TestAccountTestService_CloudflareMessagesRejectsBetaQuery(t *testing.T) {
 	upstream := &cloudflareMessagesTestUpstream{}
 	svc := &AccountTestService{cfg: &config.Config{}, httpUpstream: upstream}
 	c, rec := newTestContext()
-	require.NoError(t, svc.testClaudeAccountConnection(c, account, "claude-haiku-4-5"))
+	require.NoError(t, svc.testClaudeAccountConnection(c, account, "claude-haiku-4-5", ""))
 	require.Contains(t, rec.Body.String(), `"success":true`)
 	require.NotContains(t, rec.Body.String(), "API returned 400")
 }
@@ -129,6 +129,6 @@ func TestAnthropicMessagesURL_RespectsURLAllowlist(t *testing.T) {
 	upstream := &anthropicHTTPUpstreamRecorder{}
 	testSvc := &AccountTestService{cfg: cfg, httpUpstream: upstream}
 	c, _ = newTestContext()
-	require.ErrorContains(t, testSvc.testClaudeAccountConnection(c, account, "claude-haiku-4-5"), "host is not allowed")
+	require.ErrorContains(t, testSvc.testClaudeAccountConnection(c, account, "claude-haiku-4-5", ""), "host is not allowed")
 	require.Nil(t, upstream.lastReq)
 }

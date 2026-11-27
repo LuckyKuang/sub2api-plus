@@ -87,6 +87,20 @@ export default {
         sources: { account: '账号配置', global: '全局配置', compiled_default: '项目默认', environment: '环境变量' },
       },
       features: {
+      qualityInspection: {
+        title: '模型质量巡检',
+        description: '按分组对单个模型做定时巡检。关闭时不发起任何请求、不产生费用；开启后仍需配置巡检计划才会调用模型。',
+        configureLink: '前往 模型质量巡检 配置计划',
+        enabled: '启用模型质量巡检',
+        enabledHint: '关闭后调度器停止、管理接口统一拒绝；已有计划与历史保留。',
+        quarantine: '自动剔除配置（预留）',
+        quarantineHint: '当前版本仅保存配置，不会剔除账号、更改调度或自动恢复账号。',
+        cooldown: '默认冷却时长（分钟）',
+        maxRequests: '单轮请求上限',
+        maxRequestsHint: '账号数 × 启用题目请求次数不能超过该值，保存与运行两处都会校验。',
+        stabilityRounds: '稳定性统计轮数',
+        stabilityHint: '当前版本仅保存该配置。结果页展示各轮明细，尚未计算滚动通过率。',
+      },
         channelMonitor: {
           title: '渠道监控',
           description: '选择 V1 主动探测、V2 被动监控或 V3 服务状态。关闭后监控任务停止，用户端入口隐藏。',

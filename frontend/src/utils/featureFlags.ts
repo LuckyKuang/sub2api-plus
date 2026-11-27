@@ -124,6 +124,11 @@ export const FeatureFlags = {
     mode: 'opt-out',
     label: 'Payment',
   }),
+  qualityInspection: defineFlag({
+    key: 'model_quality_inspection_enabled',
+    mode: 'opt-in',
+    label: 'Model Quality Inspection',
+  }),
   riskControl: defineFlag({
     key: 'risk_control_enabled',
     mode: 'opt-in',

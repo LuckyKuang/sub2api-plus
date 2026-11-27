@@ -6,6 +6,16 @@ publication status. Release naming and procedures live in
 
 ## Integrated Baseline
 
+The current integration also merges Plus feature branches
+`fix/channel-monitor-v1-timeouts` (`959798afbf07b636bce42fa2e2a377733167e2f9`)
+and `feat/model-quality-inspection` (`48cc6723095804e1c4230aaf9392c3c15ec582ca`).
+These are Plus changes and do not advance the official baseline below. Both
+settings groups are preserved. The incoming quality-inspection migration is
+renumbered to 318 after existing migration 317, preserving all previously
+integrated SQL. The admin inspection UI follows the shared console components
+and English/Chinese locale contracts; automatic quarantine and effort injection
+retain the limitations in [model quality inspection](docs/MODEL_QUALITY_INSPECTION.md).
+
 The current tree integrates official [`v0.2.25`](https://github.com/Wei-Shaw/sub2api/releases/tag/v0.2.25),
 peeled commit `348997267d756eab5729bb6b78a275a15d18796a`, from Plus main
 `25617c9b1`. The bounded upstream delta starts at the previously reviewed v0.2.24

@@ -47,6 +47,7 @@ type AdminHandlers struct {
 	AuditLog               *admin.AuditLogHandler
 	IPAccessControl        *admin.IPAccessControlHandler
 	ImageTask              *admin.ImageTaskSettingsHandler
+	QualityInspection      *admin.QualityInspectionHandler
 }
 
 // Handlers contains all HTTP handlers

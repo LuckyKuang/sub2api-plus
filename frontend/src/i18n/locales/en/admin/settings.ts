@@ -87,6 +87,20 @@ export default {
         sources: { account: 'Account', global: 'Global settings', compiled_default: 'Project default', environment: 'Environment' },
       },
       features: {
+      qualityInspection: {
+        title: 'Model Quality Inspection',
+        description: 'Scheduled per-group inspection of a single model. When disabled it makes no requests and incurs no cost; after enabling you still need a configured plan before any model call happens.',
+        configureLink: 'Configure inspection plans',
+        enabled: 'Enable model quality inspection',
+        enabledHint: 'Disabling stops the scheduler and rejects admin APIs; existing plans and history are kept.',
+        quarantine: 'Automatic quarantine configuration (reserved)',
+        quarantineHint: 'Configuration only in this version: no accounts are removed from scheduling or restored automatically.',
+        cooldown: 'Default cooldown (minutes)',
+        maxRequests: 'Requests per round cap',
+        maxRequestsHint: 'accounts × enabled question rounds must not exceed this; validated on save and on run.',
+        stabilityRounds: 'Stability window (rounds)',
+        stabilityHint: 'Configuration only in this version. The result page currently shows individual rounds; no rolling pass rate is calculated.',
+      },
         channelMonitor: {
           title: 'Channel Monitor',
           description: 'Choose V1 active probes, V2 passive monitoring, or V3 service status. Disabling stops monitoring jobs and hides the user entry.',

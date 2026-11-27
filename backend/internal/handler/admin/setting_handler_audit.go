@@ -595,6 +595,21 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if !equalNotifyEmailEntries(before.AccountQuotaNotifyEmails, after.AccountQuotaNotifyEmails) {
 		changed = append(changed, "account_quota_notify_emails")
 	}
+	if before.ModelQualityInspectionEnabled != after.ModelQualityInspectionEnabled {
+		changed = append(changed, "model_quality_inspection_enabled")
+	}
+	if before.QualityInspectionQuarantineEnabled != after.QualityInspectionQuarantineEnabled {
+		changed = append(changed, "quality_inspection_quarantine_enabled")
+	}
+	if before.QualityInspectionQuarantineCooldownMinutes != after.QualityInspectionQuarantineCooldownMinutes {
+		changed = append(changed, "quality_inspection_quarantine_cooldown_minutes")
+	}
+	if before.QualityInspectionMaxRequestsPerRound != after.QualityInspectionMaxRequestsPerRound {
+		changed = append(changed, "quality_inspection_max_requests_per_round")
+	}
+	if before.QualityInspectionStabilityRounds != after.QualityInspectionStabilityRounds {
+		changed = append(changed, "quality_inspection_stability_rounds")
+	}
 	if before.ChannelMonitorEnabled != after.ChannelMonitorEnabled {
 		changed = append(changed, "channel_monitor_enabled")
 	}

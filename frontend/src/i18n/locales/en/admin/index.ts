@@ -10,6 +10,7 @@ import ipAccessControl from './ipAccessControl'
 import support from './support'
 import plugins from './plugins'
 import imageTasks from './imageTasks'
+import qualityInspection from './qualityInspection'
 
 export default {
   ...overview,
@@ -24,4 +25,5 @@ export default {
   ...support,
   ...plugins,
   ...imageTasks,
+  ...qualityInspection,
 }
