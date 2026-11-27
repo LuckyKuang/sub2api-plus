@@ -44,6 +44,21 @@ class OperationsTests(unittest.TestCase):
             self.assertTrue(source.startswith("/home/fixture/.cache/sub2api-validation/" + "a" * 16 + "/"))
         self.assertIn(("/home/fixture/.cache/sub2api-validation/" + "a" * 16 + "/frontend-node-modules",
                        "/mnt/c/source/frontend/node_modules"), mounts)
+
+    def test_package_store_cannot_fall_back_to_the_windows_source_disk(self):
+        command = runtime.validation_run_command(
+            runtime.Runtime("wsl2-docker", ("wsl", "--exec"), "/mnt/c/source"), ["pnpm", "store", "path"],
+            root=ROOT, image="fixture", user=None, caches=[], cache_generation="a" * 16,
+        )
+        self.assertIn("npm_config_store_dir=/tmp/sub2api-home/pnpm/store", command)
+
+    def test_current_image_references_preserve_build_cache_metadata(self):
+        # Pruning a shared record frees only metadata and forces future builds
+        # to repeat downloads. Stale private validation records remain owned.
+        shared, stale = "s" * 25, "t" * 25
+        records = [{"ID": shared, "Description": "RUN marker >/etc/sub2api-validation", "Shared": True},
+                   {"ID": stale, "Description": "RUN old marker >/etc/sub2api-validation", "Shared": False}]
+        self.assertEqual([stale], runtime.validation_build_cache_ids(records))
     def test_utf16_wsl_output_is_decoded_before_token_parsing(self):
         value = "名称 状态 版本\r\n* Ubuntu Running 2\r\n"
         self.assertEqual(value, runtime.decode_output(value.encode("utf-16-le")))

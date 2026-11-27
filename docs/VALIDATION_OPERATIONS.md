@@ -110,13 +110,19 @@ proxy credentials. A successful probe does not guarantee the subsequent transfer
 `push-cli clean --yes` first passes the authenticated repository gate, then stops
 and removes only labelled validation containers before deleting their images.
 WSL dependencies live in `~/.cache/sub2api-validation/<generation>` on Linux
-storage so session restarts do not discard them. Manual clean removes this root
+storage so session restarts do not discard them. The launcher explicitly sets
+`npm_config_store_dir` to the mounted `$PNPM_HOME/store`; otherwise pnpm can select
+the Windows source disk and copy packages across filesystems. Cache identity
+includes the layout version as well as toolchain and dependency inputs. Manual clean removes this root
 and the historical `/tmp/sub2api-validation-cache` location; ordinary cleanup
 retains only the current home generation and removes the historical temporary root.
 It also prunes precisely identified BuildKit record IDs rooted in the validation
 Dockerfile's `/etc/sub2api-validation` marker, with its installation ancestors and
 known browser/package-manager/workspace continuation. Generic base-image records
-and unrelated descendants are retained. Unknown ownership is not permission to
+and unrelated descendants are retained. Records shared with retained images also
+keep their reusable build metadata; pruning them would not reclaim layer storage.
+See Docker's [Shared record semantics](https://docs.docker.com/reference/cli/docker/buildx/du/).
+Unknown ownership is not permission to
 delete a record. Apple Builder's shared cache remains outside automatic cleanup.
 
 Ordinary cleanup defers all deletion while another labelled validation is running.

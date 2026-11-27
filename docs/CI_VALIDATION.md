@@ -54,7 +54,9 @@ declarations. Node uses an exact Node 24 LTS pin in
 [`Dockerfile.validation`](../deploy/Dockerfile.validation) default, and must meet
 the frontend's declared minimum engine version. The image identity includes
 these pins and the Dockerfile. Dependency generation additionally includes Go
-and pnpm lock inputs. Remote caches are
+and pnpm lock inputs and the cache layout version. The pnpm store is explicitly
+bound to the mounted Linux dependency generation rather than the source disk.
+Remote caches are
 separated by architecture and lane; fallback preserves the exact generation.
 GitHub ref visibility still applies: prefixes do not guarantee cross-tag reuse
 or warm compilation. No validation image is pushed to a registry.

@@ -51,6 +51,7 @@ CONTAINER_HOME = "/tmp/sub2api-home"
 VALIDATION_GIT_NAME = "sub2api-validation"
 VALIDATION_GIT_EMAIL = "validation@sub2api.local"
 NODE_VERSION = "24.22.2"
+CACHE_LAYOUT_VERSION = "2"
 GO_VERSION_RE = re.compile(r"^go\s+(\d+\.\d+(?:\.\d+)?)\s*$", re.MULTILINE)
 VALIDATION_GENERATION_RE = re.compile(r"^[0-9a-f]{16}$")
 LEGACY_CACHE_DIRECTORIES = frozenset({"go", "pnpm", "frontend-node-modules"})
@@ -342,6 +343,7 @@ def validation_image_ref(root: Path) -> str:
 
 def validation_cache_digest(root: Path) -> str:
     hasher = hashlib.sha256()
+    hasher.update(f"cache-layout:{CACHE_LAYOUT_VERSION}\0".encode("utf-8"))
     hasher.update(validation_image_digest(root).encode("utf-8"))
     hasher.update(b"\0")
     for relative in (
@@ -601,6 +603,10 @@ def validation_run_command(
         f"GOMODCACHE={CONTAINER_HOME}/go/pkg/mod",
         "--env",
         f"PNPM_HOME={CONTAINER_HOME}/pnpm",
+        "--env",
+        # Otherwise a Windows project mount can select a store on that disk,
+        # forcing cross-filesystem copies despite the Linux node_modules mount.
+        f"npm_config_store_dir={CONTAINER_HOME}/pnpm/store",
         "--env",
         f"GOLANGCI_LINT_CACHE={CONTAINER_HOME}/go/golangci-lint",
         "--env",
@@ -938,7 +944,9 @@ def validation_build_cache_ids(records: Sequence[dict]) -> list[str]:
             if key not in owned and continuation and any(parent in owned for parent in entry.get("Parents") or []):
                 owned.add(key)
                 changed = True
-    return sorted(owned)
+    # Shared records are referenced by retained images. Deleting them removes
+    # only reusable build metadata, not layer storage. See buildx du's Shared.
+    return sorted(key for key in owned if not entries[key].get("Shared", False))
 
 
 def prune_validation_build_cache(runtime: Runtime, *, capture: Capture,
