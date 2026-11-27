@@ -125,6 +125,13 @@ WSL dependencies live in `~/.cache/sub2api-validation/<generation>` on Linux
 storage so session restarts do not discard them. The launcher prepares all Go,
 pnpm and node_modules mounts through `cache_mounts`; the command builder
 consumes that supplied list and does not create an implicit dependency overlay.
+Cache and home-resolution test fixtures use private temporary homes. Test a
+missing-home fallback separately without writing into the real image home:
+package-manager resources there can belong to root while CI runs as the runner
+UID. For changes to these fixtures, run the affected policy checks in the pinned
+validation image as both the usual local user and an unprivileged user (for
+example UID/GID 1001). A local root pass does not
+establish that filesystem permissions work in CI.
 The launcher explicitly sets
 `npm_config_store_dir` to the mounted `$PNPM_HOME/store`; otherwise pnpm can select
 the Windows source disk and copy packages across filesystems. Cache identity
