@@ -23,12 +23,13 @@ type fakeQualityRepo struct {
 	nextRunID    int64
 	nextResultID int64
 
-	createRunErr  error
-	pruneKeys     []string
-	artifactKeys  map[int64]string
-	artifactSizes map[int64]int64
-	quarantines   []*QualityQuarantine
-	states        map[int64]string
+	createRunErr   error
+	createRunCalls int
+	pruneKeys      []string
+	artifactKeys   map[int64]string
+	artifactSizes  map[int64]int64
+	quarantines    []*QualityQuarantine
+	states         map[int64]string
 }
 
 func newFakeQualityRepo() *fakeQualityRepo {
@@ -139,6 +140,7 @@ func (f *fakeQualityRepo) ReplaceQuestions(_ context.Context, planID int64, ques
 func (f *fakeQualityRepo) CreateRun(_ context.Context, run *QualityRun) (*QualityRun, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.createRunCalls++
 	if f.createRunErr != nil {
 		return nil, f.createRunErr
 	}
@@ -399,7 +401,6 @@ var _ QualityInspectionRepository = (*fakeQualityRepo)(nil)
 var _ QualityGroupLookup = (*fakeGroupLookup)(nil)
 var _ QualityAccountLister = (*fakeAccountLister)(nil)
 var _ QualitySettingsSource = (*fakeQualitySettings)(nil)
-var _ QualitySwitchReader = (*fakeQualitySettings)(nil)
 var _ QualityProber = (*fakeProber)(nil)
 var _ QualityArtifactWriter = (*fakeArtifacts)(nil)
 var _ CompositeModelRouteRepository = (*fakeCompositeRepo)(nil)

@@ -132,3 +132,51 @@ func TestQualityArtifactStore_UnavailableWithoutResolver(t *testing.T) {
 		t.Fatal("nil uploader must be unavailable")
 	}
 }
+
+// docs/MODEL_QUALITY_INSPECTION.md: disabled storage forbids new drawing artifacts;
+// disabling new submissions must preserve historical reads and retention cleanup.
+func TestQualityArtifactStore_DisabledRejectsWritesButRetainsHistory(t *testing.T) {
+	storage := &deletingImageStorage{stubImageStorage: stubImageStorage{openData: []byte("<svg>history</svg>")}}
+	store := NewQualityArtifactStore(func() (*ImageResultUploader, bool) {
+		return NewImageResultUploader(storage, "images", true, 0, nil), false
+	})
+	if store.Available() {
+		t.Error("disabled storage must be unavailable for new artifacts")
+	}
+	key, size, truncated, err := store.Save(context.Background(), 1, 2, 3, "<svg>new</svg>")
+	if !errors.Is(err, ErrQualityStorageUnavailable) || key != "" || size != 0 || truncated {
+		t.Errorf("disabled save = (%q, %d, %v, %v)", key, size, truncated, err)
+	}
+	if storage.lastKey != "" || len(storage.lastData) != 0 {
+		t.Error("disabled save wrote a new object")
+	}
+	data, err := store.Open(context.Background(), "history.html")
+	if err != nil || string(data) != "<svg>history</svg>" {
+		t.Errorf("historical read = %q, %v", data, err)
+	}
+	if err := store.Delete(context.Background(), "history.html"); err != nil {
+		t.Fatalf("historical retention delete: %v", err)
+	}
+	if len(storage.deleted) != 1 || storage.deleted[0] != "history.html" {
+		t.Fatalf("deleted = %v", storage.deleted)
+	}
+}
+
+func TestQualityArtifactStore_SaveRechecksEnabledSnapshot(t *testing.T) {
+	storage := &stubImageStorage{}
+	enabled, resolutions := true, 0
+	store := NewQualityArtifactStore(func() (*ImageResultUploader, bool) {
+		resolutions++
+		return NewImageResultUploader(storage, "images", true, 0, nil), enabled
+	})
+	if !store.Available() {
+		t.Fatal("enabled configured storage must be available")
+	}
+	enabled = false
+	if _, _, _, err := store.Save(context.Background(), 1, 2, 3, "new"); !errors.Is(err, ErrQualityStorageUnavailable) {
+		t.Fatalf("save after disabling: %v", err)
+	}
+	if storage.lastKey != "" || resolutions != 2 {
+		t.Fatalf("save must use one current snapshot and avoid writes: key=%q resolutions=%d", storage.lastKey, resolutions)
+	}
+}

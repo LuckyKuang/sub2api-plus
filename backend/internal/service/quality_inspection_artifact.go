@@ -22,28 +22,31 @@ func NewQualityArtifactStore(resolve ImageStorageResolver) *QualityArtifactStore
 	return &QualityArtifactStore{resolve: resolve}
 }
 
-func (s *QualityArtifactStore) uploader() (*ImageResultUploader, error) {
+func (s *QualityArtifactStore) uploader() (*ImageResultUploader, bool, error) {
 	if s == nil || s.resolve == nil {
-		return nil, ErrQualityStorageUnavailable
+		return nil, false, ErrQualityStorageUnavailable
 	}
-	uploader, _ := s.resolve()
+	uploader, enabled := s.resolve()
 	if uploader == nil || uploader.storage == nil {
-		return nil, ErrQualityStorageUnavailable
+		return nil, false, ErrQualityStorageUnavailable
 	}
-	return uploader, nil
+	return uploader, enabled, nil
 }
 
-// Available 报告对象存储是否已配置且可用（被关闭时仍返回 true，以允许历史读取）。
+// Available 报告对象存储是否允许写入新作品；历史读取与清理不受启用开关影响。
 func (s *QualityArtifactStore) Available() bool {
-	_, err := s.uploader()
-	return err == nil
+	_, enabled, err := s.uploader()
+	return err == nil && enabled
 }
 
 // Save 写入作品 HTML，返回对象键与字节数。
 func (s *QualityArtifactStore) Save(ctx context.Context, planID, runID, resultID int64, html string) (string, int64, bool, error) {
-	uploader, err := s.uploader()
+	uploader, enabled, err := s.uploader()
 	if err != nil {
 		return "", 0, false, err
+	}
+	if !enabled {
+		return "", 0, false, ErrQualityStorageUnavailable
 	}
 	truncated := false
 	if len(html) > qualityArtifactMaxBytes {
@@ -67,7 +70,7 @@ func (s *QualityArtifactStore) Save(ctx context.Context, planID, runID, resultID
 
 // Open 读取作品字节。作品始终经本服务路由转出，不把预签名 URL 交给浏览器。
 func (s *QualityArtifactStore) Open(ctx context.Context, key string) ([]byte, error) {
-	uploader, err := s.uploader()
+	uploader, _, err := s.uploader()
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +101,7 @@ func (s *QualityArtifactStore) Open(ctx context.Context, key string) ([]byte, er
 var errQualityDeleteUnsupported = errors.New("object storage does not support deletion")
 
 func (s *QualityArtifactStore) Delete(ctx context.Context, key string) error {
-	uploader, err := s.uploader()
+	uploader, _, err := s.uploader()
 	if err != nil {
 		return err
 	}

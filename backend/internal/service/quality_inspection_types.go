@@ -169,12 +169,9 @@ type (
 	QualityAccountLister interface {
 		ListByGroup(ctx context.Context, groupID int64) ([]Account, error)
 	}
-	// QualitySettingsSource 只需要读取系统设置。
+	// QualitySettingsSource 读取功能开关与每轮运行约束。
 	QualitySettingsSource interface {
 		GetAllSettings(ctx context.Context) (*SystemSettings, error)
-	}
-	// QualitySwitchReader 只读总开关。
-	QualitySwitchReader interface {
 		ModelQualityInspectionEnabled(ctx context.Context) bool
 	}
 	// QualityProber 一次账号探测。

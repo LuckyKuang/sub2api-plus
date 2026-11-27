@@ -24,7 +24,7 @@ type QualityInspectionRunner struct {
 	probe     QualityProber
 	artifacts QualityArtifactWriter
 	composite *QualityCompositeResolver
-	settings  QualitySwitchReader
+	settings  QualitySettingsSource
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -37,7 +37,7 @@ type QualityInspectionRunner struct {
 
 func NewQualityInspectionRunner(repo QualityInspectionRepository, plans *QualityInspectionPlanService,
 	accounts QualityAccountLister, probe QualityProber, artifacts QualityArtifactWriter,
-	composite *QualityCompositeResolver, settings QualitySwitchReader) *QualityInspectionRunner {
+	composite *QualityCompositeResolver, settings QualitySettingsSource) *QualityInspectionRunner {
 	return &QualityInspectionRunner{
 		repo: repo, plans: plans, accounts: accounts, probe: probe,
 		artifacts: artifacts, composite: composite, settings: settings,
@@ -91,6 +91,37 @@ func (r *QualityInspectionRunner) enabled(ctx context.Context) bool {
 	return r.settings.ModelQualityInspectionEnabled(ctx)
 }
 
+// validateRun 在入队与真正执行前读取当前约束，避免已保存计划绕过后续设置变更。
+func (r *QualityInspectionRunner) validateRun(ctx context.Context, plan *QualityPlan) error {
+	if !plan.Enabled {
+		return qualityInvalid("计划未启用，不能运行")
+	}
+	if !r.enabled(ctx) {
+		return ErrQualityInspectionDisabled
+	}
+	settings, err := r.settings.GetAllSettings(ctx)
+	if err != nil {
+		return err
+	}
+	if settings == nil {
+		return errors.New("巡检运行设置不可用")
+	}
+	if !settings.ModelQualityInspectionEnabled {
+		return ErrQualityInspectionDisabled
+	}
+	limit := settings.QualityInspectionMaxRequestsPerRound
+	if limit <= 0 {
+		limit = 30
+	}
+	if err := r.plans.validateRequestBudget(plan, limit); err != nil {
+		return err
+	}
+	if hasDrawing(plan.Questions) && (r.artifacts == nil || !r.artifacts.Available()) {
+		return ErrQualityStorageUnavailable
+	}
+	return nil
+}
+
 func (r *QualityInspectionRunner) tick(ctx context.Context) {
 	if !r.enabled(ctx) {
 		return
@@ -103,6 +134,10 @@ func (r *QualityInspectionRunner) tick(ctx context.Context) {
 	now := time.Now()
 	for _, plan := range plans {
 		if r.paused(plan, now) {
+			continue
+		}
+		if err := r.validateRun(ctx, plan); err != nil {
+			slog.Warn("quality_inspection.run_rejected", "plan_id", plan.ID, "error", err)
 			continue
 		}
 		slot := now.Unix() / int64(qualityMaxInt(plan.IntervalMinutes, 1)*60)
@@ -128,11 +163,8 @@ func (r *QualityInspectionRunner) RunManual(ctx context.Context, planID int64) (
 	if err != nil {
 		return nil, err
 	}
-	if !plan.Enabled {
-		return nil, qualityInvalid("计划未启用，不能手动运行")
-	}
-	if !r.enabled(ctx) {
-		return nil, ErrQualityInspectionDisabled
+	if err := r.validateRun(ctx, plan); err != nil {
+		return nil, err
 	}
 	run := &QualityRun{
 		PlanID: plan.ID, PlanRevision: plan.Revision, Trigger: QualityTriggerManual,
@@ -173,6 +205,9 @@ func (r *QualityInspectionRunner) execute(runID int64) {
 	if err != nil || run == nil {
 		return
 	}
+	if run.Status != QualityRunQueued {
+		return
+	}
 	r.mu.Lock()
 	if r.inFlight[run.PlanID] {
 		r.mu.Unlock()
@@ -191,6 +226,10 @@ func (r *QualityInspectionRunner) execute(runID int64) {
 	plan, err := r.repo.GetPlan(ctx, run.PlanID)
 	if err != nil || plan == nil {
 		r.finish(ctx, run, QualityRunFailed, "计划不存在", nil)
+		return
+	}
+	if err := r.validateRun(ctx, plan); err != nil {
+		r.finish(ctx, run, QualityRunWithError, err.Error(), nil)
 		return
 	}
 

@@ -4,9 +4,105 @@ package service
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 )
+
+// docs/MODEL_QUALITY_INSPECTION.md requires a current request budget at run time,
+// disabled plans/switches to issue no requests, and storage for drawing questions.
+func TestQualityRunnerExecute_CurrentRuntimeConstraints(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		change       func(*runnerFixture, *QualityPlan, *QualityRun)
+		wantStatus   string
+		wantRequests int
+	}{
+		{"lowered budget", func(f *runnerFixture, _ *QualityPlan, _ *QualityRun) {
+			f.settings.settings.QualityInspectionMaxRequestsPerRound = 1
+		}, QualityRunWithError, 0},
+		{"exact budget", func(f *runnerFixture, _ *QualityPlan, _ *QualityRun) {
+			f.settings.settings.QualityInspectionMaxRequestsPerRound = 2
+		}, QualityRunCompleted, 2},
+		{"disabled switch", func(f *runnerFixture, _ *QualityPlan, _ *QualityRun) {
+			f.settings.settings.ModelQualityInspectionEnabled = false
+		}, QualityRunWithError, 0},
+		{"unreadable settings", func(f *runnerFixture, _ *QualityPlan, _ *QualityRun) {
+			f.settings.err = errors.New("settings unavailable")
+		}, QualityRunWithError, 0},
+		{"disabled plan", func(f *runnerFixture, p *QualityPlan, _ *QualityRun) {
+			f.repo.plans[p.ID].Enabled = false
+		}, QualityRunWithError, 0},
+		{"disabled drawing storage", func(f *runnerFixture, p *QualityPlan, _ *QualityRun) {
+			f.repo.questions[p.ID] = []QualityQuestion{{ID: "pelican", Kind: QualityKindDrawing, Enabled: true, Rounds: 1}}
+			f.artifacts.available = false
+		}, QualityRunWithError, 0},
+		{"standard answers without storage", func(f *runnerFixture, _ *QualityPlan, _ *QualityRun) {
+			f.artifacts.available = false
+		}, QualityRunCompleted, 2},
+		{"cancelled queued run", func(f *runnerFixture, _ *QualityPlan, run *QualityRun) {
+			_, err := f.runner.StopRun(context.Background(), run.ID)
+			if err != nil {
+				t.Fatalf("stop: %v", err)
+			}
+		}, QualityRunCancelled, 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := newRunnerFixture(t, true)
+			question := numberQuestion()
+			question.Rounds = 2
+			plan := f.seedPlan(t, []QualityQuestion{question}, nil)
+			run := f.seedRun(t, plan.ID, QualityTriggerManual)
+			test.change(f, plan, run)
+			f.runner.execute(run.ID)
+			stored, err := f.repo.GetRun(context.Background(), run.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stored.Status != test.wantStatus || stored.RequestCount != test.wantRequests || f.prober.calls != test.wantRequests {
+				t.Errorf("status=%s requests=%d probes=%d, want %s/%d: %s", stored.Status, stored.RequestCount, f.prober.calls, test.wantStatus, test.wantRequests, stored.Message)
+			}
+			results, _ := f.repo.ListResultsByRun(context.Background(), run.ID)
+			if len(results) != test.wantRequests || len(f.artifacts.saved) != 0 {
+				t.Errorf("unexpected side effects: results=%d artifact writes=%d", len(results), len(f.artifacts.saved))
+			}
+		})
+	}
+}
+
+func TestQualityRunnerRunManual_RejectsCurrentBudgetBeforeEnqueue(t *testing.T) {
+	f := newRunnerFixture(t, true)
+	q := numberQuestion()
+	q.Rounds = 2
+	p := f.seedPlan(t, []QualityQuestion{q}, func(p *QualityPlanParams) { p.MaxAccounts = 2 })
+	f.settings.settings.QualityInspectionMaxRequestsPerRound = 3
+	f.repo.createRunErr = errors.New("must not enqueue an over-budget run")
+	_, err := f.runner.RunManual(context.Background(), p.ID)
+	var invalid *QualityValidationError
+	if !errors.As(err, &invalid) || !strings.Contains(err.Error(), "4") || !strings.Contains(err.Error(), "3") {
+		t.Fatalf("expected budget validation for 4 requests / limit 3, got %v", err)
+	}
+	if len(f.repo.runs) != 0 || f.prober.calls != 0 {
+		t.Fatal("rejection must precede queue/probe side effects")
+	}
+}
+
+func TestQualityRunnerTick_RejectsCurrentBudgetBeforeEnqueue(t *testing.T) {
+	f := newRunnerFixture(t, true)
+	q := numberQuestion()
+	q.Rounds = 2
+	f.seedPlan(t, []QualityQuestion{q}, func(p *QualityPlanParams) {
+		p.ScheduleEnabled = true
+		p.PauseStart, p.PauseEnd = "00:00", "00:00"
+	})
+	f.settings.settings.QualityInspectionMaxRequestsPerRound = 1
+	f.repo.createRunErr = errors.New("must not enqueue an over-budget run")
+	f.runner.tick(context.Background())
+	if f.repo.createRunCalls != 0 || f.prober.calls != 0 {
+		t.Fatalf("over-budget timer attempted enqueue/probe: %d/%d", f.repo.createRunCalls, f.prober.calls)
+	}
+}
 
 type runnerFixture struct {
 	repo      *fakeQualityRepo

@@ -28,6 +28,22 @@ func basePlanParams() QualityPlanParams {
 	}
 }
 
+func TestQualityPlanValidate_ConfiguredButDisabledStorage(t *testing.T) {
+	svc, _ := newPlanTestService(t, true)
+	svc.artifacts = NewQualityArtifactStore(func() (*ImageResultUploader, bool) {
+		return NewImageResultUploader(&stubImageStorage{}, "images", true, 0, nil), false
+	})
+	params := basePlanParams()
+	params.Questions = []QualityQuestion{{ID: "pelican", Kind: QualityKindDrawing, Enabled: true, Rounds: 1}}
+	if _, err := svc.Create(context.Background(), params, defaultQualitySettings(), 1); !errors.Is(err, ErrQualityStorageUnavailable) {
+		t.Fatalf("drawing plan with disabled storage: %v", err)
+	}
+	params.Questions = []QualityQuestion{numberQuestion()}
+	if _, err := svc.Create(context.Background(), params, defaultQualitySettings(), 1); err != nil {
+		t.Fatalf("standard-answer plan must not require storage: %v", err)
+	}
+}
+
 func defaultQualitySettings() QualityPlanSettings {
 	return QualityPlanSettings{QuarantineEnabled: false, MaxRequestsPerRound: 30, DefaultStabilityRounds: 5}
 }

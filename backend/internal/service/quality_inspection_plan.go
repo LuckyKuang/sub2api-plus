@@ -255,10 +255,17 @@ func (s *QualityInspectionPlanService) validate(ctx context.Context, params Qual
 	if current != nil {
 		plan.Revision = current.Revision
 	}
-	if limit := settings.MaxRequestsPerRound; limit > 0 && s.Estimate(plan) > limit {
-		return nil, qualityInvalid("单轮预估请求数 %d 超过上限 %d，请减少账号数或题目次数", s.Estimate(plan), limit)
+	if err := s.validateRequestBudget(plan, settings.MaxRequestsPerRound); err != nil {
+		return nil, err
 	}
 	return plan, nil
+}
+
+func (s *QualityInspectionPlanService) validateRequestBudget(plan *QualityPlan, limit int) error {
+	if estimated := s.Estimate(plan); limit > 0 && estimated > limit {
+		return qualityInvalid("单轮预估请求数 %d 超过上限 %d，请减少账号数或题目次数", estimated, limit)
+	}
+	return nil
 }
 
 // normalizeQuestions 补齐默认值、校验字段并重算版本。
