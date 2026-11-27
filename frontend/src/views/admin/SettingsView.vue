@@ -6829,8 +6829,8 @@
             </p>
           </div>
           <div class="space-y-5 p-6">
-            <div class="flex items-center justify-between">
-              <div>
+            <div class="flex items-center justify-between gap-4">
+              <div class="min-w-0">
                 <label class="text-sm font-medium surface-muted">
                   {{ t('admin.settings.features.qualityInspection.enabled') }}
                 </label>
@@ -6842,8 +6842,8 @@
             </div>
 
             <div v-if="form.model_quality_inspection_enabled" class="space-y-5">
-              <div class="flex items-center justify-between">
-                <div>
+              <div class="flex items-center justify-between gap-4">
+                <div class="min-w-0">
                   <label class="text-sm font-medium surface-muted">
                     {{ t('admin.settings.features.qualityInspection.quarantine') }}
                   </label>

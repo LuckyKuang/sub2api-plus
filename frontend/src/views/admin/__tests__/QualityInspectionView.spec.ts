@@ -16,7 +16,7 @@ const plan = (id: number): QualityPlan => ({ id, name: `Plan ${id}`, group_id: 1
 const run = (id: number): QualityRun => ({ id, plan_id: 1, trigger: 'manual', status: 'completed', model: 'gpt-5.1-codex', effort: 'medium', request_count: 1, message: '', stats: { verdict: 'pass' }, resolved_platform: 'openai', resolved_upstream_model: '', resolved_endpoint: '', resolved_source: '', started_at: null, finished_at: null })
 let wrapper: VueWrapper
 function render(locale = 'en') {
-  wrapper = mount(QualityInspectionView, { attachTo: document.body, global: { plugins: [createPinia(), createI18n({ legacy: false, locale, messages: { en, zh }, warnHtmlMessage: false })], stubs: { BaseDialog: dialog } } })
+  wrapper = mount(QualityInspectionView, { attachTo: document.body, global: { plugins: [createPinia(), createI18n({ legacy: false, locale, messages: { en, zh }, warnHtmlMessage: false })], stubs: { BaseDialog: dialog, RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } } } })
   return wrapper
 }
 function button(text: string) { return wrapper.findAll('button').find(b => b.text() === text)! }
@@ -45,9 +45,9 @@ describe('quality inspection admin workflow', () => {
   })
   it('creates with the loaded question bank and preserves explicit plan fields', async () => {
     render(); await flushPromises(); await button('New plan').trigger('click')
-    const inputs = wrapper.find('[role="dialog"]').findAll('input')
-    await inputs[0].setValue('Weekday inspection')
-    await inputs[2].setValue('gpt-5.1-codex')
+    const dialog = wrapper.find('[role="dialog"]')
+    await dialog.find('input[name="plan-name"]').setValue('Weekday inspection')
+    await dialog.find('input[name="plan-model"]').setValue('gpt-5.1-codex')
     await button('Save').trigger('click'); await flushPromises()
     expect(api.createQualityPlan).toHaveBeenCalledWith(expect.objectContaining({ name: 'Weekday inspection', model: 'gpt-5.1-codex', group_id: 1, questions: [question], schedule_enabled: false }))
     expect(api.listQualityPlans).toHaveBeenCalledTimes(2) // initial + successful save, no duplicate bank load

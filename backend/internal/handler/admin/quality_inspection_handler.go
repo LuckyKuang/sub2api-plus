@@ -126,15 +126,19 @@ func (r qualityPlanRequest) params() service.QualityPlanParams {
 	}
 }
 
-func qualityPlanToView(plan *service.QualityPlan, estimated int) qualityPlanView {
-	questions := make([]qualityQuestionView, 0, len(plan.Questions))
-	for _, question := range plan.Questions {
+func qualityQuestionsToView(items []service.QualityQuestion) []qualityQuestionView {
+	questions := make([]qualityQuestionView, 0, len(items))
+	for _, question := range items {
 		questions = append(questions, qualityQuestionView{
 			ID: question.ID, Title: question.Title, Kind: question.Kind, Prompt: question.Prompt,
 			Instructions: question.Instructions, Expected: question.Expected, Choices: question.Choices,
 			Unit: question.Unit, Rounds: question.Rounds, Enabled: question.Enabled, Version: question.Version,
 		})
 	}
+	return questions
+}
+
+func qualityPlanToView(plan *service.QualityPlan, estimated int) qualityPlanView {
 	return qualityPlanView{
 		ID: plan.ID, GroupID: plan.GroupID, GroupName: plan.GroupName, Name: plan.Name,
 		Platform: plan.Platform, Model: plan.Model, Endpoint: plan.Endpoint, Effort: plan.Effort,
@@ -143,7 +147,7 @@ func qualityPlanToView(plan *service.QualityPlan, estimated int) qualityPlanView
 		MaxAccounts: plan.MaxAccounts, MaxSavedRounds: plan.MaxSavedRounds,
 		QuarantineEnabled: plan.QuarantineEnabled, QuarantineCooldownMinutes: plan.QuarantineCooldownMinutes,
 		QuarantineFailRounds: plan.QuarantineFailRounds, Revision: plan.Revision,
-		Questions: questions, EstimatedRequests: estimated, UpdatedAt: plan.UpdatedAt,
+		Questions: qualityQuestionsToView(plan.Questions), EstimatedRequests: estimated, UpdatedAt: plan.UpdatedAt,
 	}
 }
 
@@ -214,7 +218,7 @@ func (h *QualityInspectionHandler) List(c *gin.Context) {
 		views = append(views, qualityPlanToView(plan, h.plans.Estimate(plan)))
 	}
 	settings, _ := h.settings.GetAllSettings(c.Request.Context())
-	response.Success(c, gin.H{"plans": views, "settings": qualitySettingsView(settings), "questions": service.BuiltinQualityQuestions()})
+	response.Success(c, gin.H{"plans": views, "settings": qualitySettingsView(settings), "questions": qualityQuestionsToView(service.BuiltinQualityQuestions())})
 }
 
 func (h *QualityInspectionHandler) Create(c *gin.Context) {
