@@ -18,6 +18,13 @@ class ValidationStep:
     lane: str
 
 
+def frontend_install_command() -> list[str]:
+    # pnpm 9 otherwise exits zero at a closed-stdin modules-purge prompt.
+    # Only the validation-owned dependency mount may be rebuilt this way.
+    return ["pnpm", "--dir", "frontend", "install", "--frozen-lockfile",
+            "--config.confirmModulesPurge=false"]
+
+
 def full_steps(
     root: Path, *, python: str, frontend_workers: int = 2, migration_base: str | None = None,
 ) -> list[ValidationStep]:
@@ -97,7 +104,7 @@ def full_steps(
         ),
         ValidationStep(
             "Frontend frozen install",
-            ["pnpm", "--dir", "frontend", "install", "--frozen-lockfile"],
+            frontend_install_command(),
             root,
             "frontend",
         ),

@@ -20,7 +20,7 @@ Install frontend dependencies with pnpm only and synchronize
 Inside the validation container:
 
 ```bash
-pnpm --dir frontend install --frozen-lockfile
+pnpm --dir frontend install --frozen-lockfile --config.confirmModulesPurge=false
 ```
 
 ## Documentation and Skill Maintenance

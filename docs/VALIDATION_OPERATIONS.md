@@ -113,9 +113,15 @@ WSL dependencies live in `~/.cache/sub2api-validation/<generation>` on Linux
 storage so session restarts do not discard them. The launcher explicitly sets
 `npm_config_store_dir` to the mounted `$PNPM_HOME/store`; otherwise pnpm can select
 the Windows source disk and copy packages across filesystems. Cache identity
-includes the layout version as well as toolchain and dependency inputs. Manual clean removes this root
-and the historical `/tmp/sub2api-validation-cache` location; ordinary cleanup
-retains only the current home generation and removes the historical temporary root.
+includes the layout version as well as toolchain and dependency inputs.
+The pinned pnpm 9 frozen installation runs with
+`--config.confirmModulesPurge=false` so an incompatible mounted/symlinked
+modules directory is actually rebuilt without a closed-stdin confirmation prompt.
+Frozen lockfile enforcement remains mandatory and is exercised against a changed
+dependency manifest in the offline installation regression.
+Manual clean removes all home generations and the historical temporary root.
+Ordinary cleanup retains the current home generation and removes the historical
+`/tmp/sub2api-validation-cache` root.
 It also prunes precisely identified BuildKit record IDs rooted in the validation
 Dockerfile's `/etc/sub2api-validation` marker, with its installation ancestors and
 known browser/package-manager/workspace continuation. Generic base-image records

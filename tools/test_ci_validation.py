@@ -54,7 +54,7 @@ class FullCoverageTests(unittest.TestCase):
     def test_full_frontend_coverage_includes_test_suite_and_production_build(self) -> None:
         # Requirement: replacing local full must preserve full tests and build.
         self.assertEqual(self.commands("frontend"), [
-            ("pnpm", "--dir", "frontend", "install", "--frozen-lockfile"),
+            ("pnpm", "--dir", "frontend", "install", "--frozen-lockfile", "--config.confirmModulesPurge=false"),
             ("pnpm", "--dir", "frontend", "run", "lint:check"),
             ("pnpm", "--dir", "frontend", "run", "typecheck"),
             ("pnpm", "--dir", "frontend", "run", "test:run", "--maxWorkers=2"),

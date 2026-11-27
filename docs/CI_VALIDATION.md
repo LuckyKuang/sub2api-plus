@@ -56,6 +56,9 @@ the frontend's declared minimum engine version. The image identity includes
 these pins and the Dockerfile. Dependency generation additionally includes Go
 and pnpm lock inputs and the cache layout version. The pnpm store is explicitly
 bound to the mounted Linux dependency generation rather than the source disk.
+Frozen installation explicitly disables pnpm 9's modules-purge confirmation;
+an offline regression checks actual dependency reconstruction and lockfile refusal,
+rather than accepting a zero exit at an unanswered prompt.
 Remote caches are
 separated by architecture and lane; fallback preserves the exact generation.
 GitHub ref visibility still applies: prefixes do not guarantee cross-tag reuse

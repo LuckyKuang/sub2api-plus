@@ -2,6 +2,7 @@
 
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -12,6 +13,7 @@ from unittest import mock
 
 import validation_runtime as runtime
 import validation_output
+import validation_checks
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("operations_push_cli", ROOT / "skills/push-cli/scripts/push_cli.py")
@@ -59,6 +61,44 @@ class OperationsTests(unittest.TestCase):
         records = [{"ID": shared, "Description": "RUN marker >/etc/sub2api-validation", "Shared": True},
                    {"ID": stale, "Description": "RUN old marker >/etc/sub2api-validation", "Shared": False}]
         self.assertEqual([stale], runtime.validation_build_cache_ids(records))
+
+    def test_frozen_install_really_rebuilds_an_incompatible_symlinked_modules_directory(self):
+        # pnpm 9 can exit zero at a prompt with closed stdin, leaving the old
+        # dependency layout intact. Use a local package, with no network.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            dependency, source, target = (root / name for name in ("dependency", "source", "target"))
+            for path in (dependency, source, target):
+                path.mkdir()
+            (dependency / "package.json").write_text(json.dumps({"name": "fixture-dependency", "version": "1.0.0"}))
+            (dependency / "index.js").write_text("module.exports = 42\n")
+            package = {"name": "install-fixture", "dependencies": {"fixture-dependency": "file:../dependency"}}
+            (source / "package.json").write_text(json.dumps(package))
+            old_store, new_store = root / "old-store", root / "new-store"
+            environment = dict(os.environ)
+            environment.pop("CI", None)
+            setup = subprocess.run(["pnpm", "--dir", str(source), "install", "--offline", "--ignore-scripts",
+                                    "--store-dir", str(old_store)], env=environment, stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
+            self.assertEqual(0, setup.returncode, setup.stdout.decode())
+            self.assertIn(str(old_store), (source / "node_modules/.modules.yaml").read_text())
+            for name in ("package.json", "pnpm-lock.yaml"):
+                (target / name).write_bytes((source / name).read_bytes())
+            (target / "node_modules").symlink_to(source / "node_modules", target_is_directory=True)
+            command = validation_checks.frontend_install_command()
+            command[command.index("--dir") + 1] = str(target)
+            command.extend(["--offline", "--ignore-scripts", "--store-dir", str(new_store)])
+            result = subprocess.run(command, env=environment, stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
+            self.assertEqual(0, result.returncode, result.stdout.decode())
+            self.assertIn(str(new_store), (target / "node_modules/.modules.yaml").read_text(),
+                          "zero exit left the old layout intact instead of completing installation")
+            self.assertEqual(b"42", subprocess.check_output(["node", "-p", "require('fixture-dependency')"], cwd=target).strip())
+            package["dependencies"]["unexpected-dependency"] = "1.0.0"
+            (target / "package.json").write_text(json.dumps(package))
+            rejected = subprocess.run(command, env=environment, stdin=subprocess.DEVNULL,
+                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
+            self.assertNotEqual(0, rejected.returncode, "frozen install accepted a changed dependency manifest")
     def test_utf16_wsl_output_is_decoded_before_token_parsing(self):
         value = "名称 状态 版本\r\n* Ubuntu Running 2\r\n"
         self.assertEqual(value, runtime.decode_output(value.encode("utf-16-le")))

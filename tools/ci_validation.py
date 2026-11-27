@@ -136,7 +136,7 @@ def run_lane(lane: str, *, base: str, tag: str | None = None) -> None:
         subprocess.run(["goreleaser", "check"], cwd=ROOT, env=env, check=True)
     elif lane == "frontend-security":
         execute("Frontend frozen install",
-                ["pnpm", "--dir", "frontend", "install", "--frozen-lockfile"])
+                validation_checks.frontend_install_command())
         sys.path.insert(0, str(ROOT / "skills/push-cli/scripts"))
         import push_cli
         push_cli.run_frontend_security_check()
