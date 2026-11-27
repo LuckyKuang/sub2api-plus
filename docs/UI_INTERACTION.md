@@ -69,7 +69,9 @@ layouts keep their natural vertical flow.
 Operations separates monitoring, alert events and system logs; risk control
 separates configuration and audit records; IP access control separates automatic
 protection, trusted proxies, login failures and rules. Existing rule links activate
-the rules tab. Admin usage is the usage-list workspace, retaining its
+the rules tab. The risk-control heading keeps its title, frameless tabs and
+right-aligned actions in three successive rows at every viewport width.
+Admin usage is the usage-list workspace, retaining its
 history/error/ranking/client-disconnect subviews; the chart statistics that used
 to share the page now live on the dashboard, whose cards scroll vertically in one
 column. Administrator history and error lists use separate rounded control and
@@ -359,8 +361,9 @@ Public/auth forms and both consoles use the same button/input/Select styles.
 This contrast calculation uses the known theme surfaces; arbitrary custom
 background images beneath transparent fills can change the resulting contrast.
 
-Workspace tabs use 9px corners and at least 38px height; overflowing tab lists
-scroll horizontally. Card tabs wrap, including long translated labels. Explicit
+Workspace tabs use `--surface-radius-control` for corners and `--control-height`
+as their minimum height; overflowing tab lists scroll horizontally. Card tabs
+wrap, including long translated labels. Explicit
 single-choice groups use `segmented-control` and `segmented-option`: an 8px
 inset track with 3px spacing and 6px options of at least 26px height. Selection
 uses a subtle raised theme surface; long options can wrap and grow. Other

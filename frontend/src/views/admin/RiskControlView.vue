@@ -6,16 +6,16 @@
       </div>
 
       <template v-else>
-        <div class="card workspace-fixed flex flex-col gap-3 px-5 py-4 sm:px-6 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between" data-testid="risk-page-heading">
+        <div class="card workspace-fixed flex flex-col gap-3 px-5 py-4 sm:px-6" data-testid="risk-page-heading">
           <div class="min-w-0">
             <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.title') }}</h1>
             <p class="mt-1 text-sm surface-muted">{{ t('admin.riskControl.description') }}</p>
           </div>
           <!-- Tabs live inside the header card so the page keeps one surface. -->
-          <div class="w-full lg:order-3">
+          <div class="w-full">
             <WorkspaceTabs v-model="activePageTab" embedded :tabs="pageTabs" :label="t('admin.riskControl.title')" />
           </div>
-          <div class="flex flex-wrap items-center gap-2 lg:order-2" data-testid="risk-page-actions">
+          <div class="flex w-full flex-wrap items-center justify-end gap-2" data-testid="risk-page-actions">
             <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="statusLoading" @click="loadStatus(false)">
               <Icon name="refresh" size="sm" :class="statusLoading ? 'animate-spin' : ''" />
               {{ t('admin.riskControl.refreshStatus') }}
