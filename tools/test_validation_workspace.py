@@ -42,6 +42,20 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual("accepted source\n", (self.source / "frontend/source.txt").read_text())
         self.assertEqual("cache", (modules / "dependency").read_text())
 
+    def test_clean_source_probes_do_not_refresh_the_host_index(self):
+        index = self.source / ".git/index"
+        before = index.read_bytes()
+        source_file = self.source / "frontend/source.txt"
+        metadata = source_file.stat()
+        # Changed filesystem metadata with unchanged bytes is still Git-clean.
+        # Ordinary status refreshes its stat cache in the source index, leaving
+        # a host index.lock if container execution is interrupted during writing.
+        os.utime(source_file, ns=(metadata.st_atime_ns, metadata.st_mtime_ns - 10_000_000_000))
+        with workspace.snapshot(self.source, self.head, self.head):
+            self.assertEqual(before, index.read_bytes())
+        self.assertEqual(before, index.read_bytes())
+        self.assertFalse((self.source / ".git/index.lock").exists())
+
     def test_dirty_tracked_or_untracked_source_cannot_receive_exact_commit_proof(self):
         for name in ("frontend/source.txt", "untracked.txt"):
             with self.subTest(name=name):

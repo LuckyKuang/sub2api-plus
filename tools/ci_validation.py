@@ -200,7 +200,9 @@ def main() -> int:
                                                 profile="release-finalization" if args.lane == "finalization" else "full"):
                 run_lane(args.lane, base=args.base, tag=args.tag)
         else:
-            argv = ["python3", str(Path(__file__).resolve()), "lane", "--inside",
+            # The launcher sets cwd to ROOT's container mount. Host absolute
+            # paths (especially Windows drive paths) are not container paths.
+            argv = ["python3", "tools/ci_validation.py", "lane", "--inside",
                     "--lane", args.lane, "--base", args.base]
             if args.tag:
                 argv.extend(["--tag", args.tag])

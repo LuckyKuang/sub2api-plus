@@ -22,12 +22,19 @@ Use `wsl --exec` argument arrays so the default shell cannot reinterpret paths,
 regular expressions or parentheses. WSL UTF-16 output is decoded before parsing.
 Launcher output uses UTF-8 so Unicode tool progress cannot fail on a Windows
 legacy code page. CI helper invocations own the same foreground WSL session.
+Host-launched CI lanes enter `tools/ci_validation.py` relative to the mounted
+repository working directory; Windows drive paths never become Linux script
+arguments. This keeps focused policy lanes available through the same container
+boundary as local submission.
 
 ## Source storage and I/O evidence
 
 WSL full validation defaults to a fresh Git checkout on the container's Linux
 filesystem. It requires clean source and the exact recorded head; the exact base
-must be readable in its object store. The clone shares source objects read-only,
+must be readable in its object store. Git probes disable optional index refresh
+locks so interrupted source reads cannot leave a host index lock. Mandatory
+locks for writes in the disposable clone remain enabled.
+The clone shares source objects read-only,
 but owns its index, refs, source and build outputs. The frozen Linux dependency
 generation remains reusable. Checkout conversion follows the source repository's
 Git settings to preserve byte parity and cache identities on Windows.
@@ -115,7 +122,10 @@ proxy credentials. A successful probe does not guarantee the subsequent transfer
 `push-cli clean --yes` first passes the authenticated repository gate, then stops
 and removes only labelled validation containers before deleting their images.
 WSL dependencies live in `~/.cache/sub2api-validation/<generation>` on Linux
-storage so session restarts do not discard them. The launcher explicitly sets
+storage so session restarts do not discard them. The launcher prepares all Go,
+pnpm and node_modules mounts through `cache_mounts`; the command builder
+consumes that supplied list and does not create an implicit dependency overlay.
+The launcher explicitly sets
 `npm_config_store_dir` to the mounted `$PNPM_HOME/store`; otherwise pnpm can select
 the Windows source disk and copy packages across filesystems. Cache identity
 includes the layout version as well as toolchain and dependency inputs.

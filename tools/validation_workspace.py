@@ -20,7 +20,9 @@ import validation_runtime
 
 
 def git(root: Path, *args: str) -> str:
-    result = subprocess.run(["git", "-C", str(root), *args], check=True,
+    # Reads must not refresh the host index; required locks for writes in the
+    # disposable clone remain enabled by Git.
+    result = subprocess.run(["git", "--no-optional-locks", "-C", str(root), *args], check=True,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return result.stdout.decode("utf-8").strip()
 
