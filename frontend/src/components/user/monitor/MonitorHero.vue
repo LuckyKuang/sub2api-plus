@@ -3,7 +3,7 @@
     <div class="flex items-center justify-end gap-3 flex-wrap">
       <div
         role="tablist"
-        class="inline-flex p-0.5 rounded-xl surface-inset border border-gray-200/60 dark:border-dark-700/60 text-xs"
+        class="segmented-control text-xs"
       >
         <button
           v-for="opt in windowOptions"
@@ -11,10 +11,7 @@
           type="button"
           role="tab"
           :aria-selected="window === opt.value"
-          class="px-3 py-1 rounded-lg transition-colors surface-control"
-          :class="window === opt.value
-            ? 'surface-field dark:surface-field shadow-sm text-gray-900 dark:text-white font-semibold'
-            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+          class="segmented-option"
           @click="emit('update:window', opt.value)"
         >
           {{ opt.label }}
@@ -34,7 +31,7 @@
 
       <button
         type="button"
-        class="h-8 w-8 rounded-lg flex items-center justify-center hover:text-gray-700 hover:surface-hover dark:hover:text-gray-200 transition-colors disabled:opacity-50 surface-control surface-muted"
+        class="btn btn-secondary btn-icon"
         :disabled="loading"
         :title="t('common.refresh')"
         @click="emit('refresh')"

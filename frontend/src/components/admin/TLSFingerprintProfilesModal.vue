@@ -34,9 +34,9 @@
         </p>
       </div>
 
-      <div v-else class="record-table-scroll max-h-96 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600">
-        <table class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
-          <thead class="sticky top-0 surface-inset">
+      <div v-else class="record-table-scroll max-h-96 overflow-auto rounded-lg border border-[var(--surface-edge)]">
+        <table class="record-table min-w-full divide-y divide-[var(--surface-edge)]">
+          <thead class="sticky top-0 surface-panel">
             <tr>
               <th class="px-3 py-2 text-left text-xs font-medium uppercase surface-muted">
                 {{ t('admin.tlsFingerprintProfiles.columns.name') }}
@@ -55,7 +55,7 @@
               </th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-200 surface-inset dark:divide-dark-700">
+          <tbody class="divide-y divide-[var(--surface-edge)]">
             <tr v-for="profile in profiles" :key="profile.id" class="hover:surface-hover">
               <td class="px-3 py-2">
                 <div class="font-medium text-gray-900 dark:text-white text-sm">{{ profile.name }}</div>
@@ -149,7 +149,7 @@
           </div>
         </div>
 
-        <hr class="border-gray-200 dark:border-dark-600" />
+        <hr class="border-[var(--surface-edge)]" />
 
         <!-- Basic Info -->
         <div class="grid grid-cols-2 gap-4">

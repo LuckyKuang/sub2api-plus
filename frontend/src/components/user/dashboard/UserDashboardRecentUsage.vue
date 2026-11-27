@@ -1,18 +1,18 @@
 <template>
   <div class="card">
-    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-      <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('dashboard.recentUsage') }}</h2>
+    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--surface-edge)] px-5 py-4">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('dashboard.recentUsage') }}</h2>
       <span class="badge badge-gray">{{ startDate && endDate ? `${startDate} – ${endDate}` : t('dashboard.last7Days') }}</span>
     </div>
-    <div class="p-6">
+    <div class="p-5">
       <div v-if="loading && !data.length" class="flex items-center justify-center py-12">
         <LoadingSpinner size="lg" />
       </div>
       <div v-else-if="data.length === 0" class="py-8">
         <EmptyState :title="t('dashboard.noUsageRecords')" :description="t('dashboard.startUsingApi')" />
       </div>
-      <div v-else class="space-y-3">
-        <div v-for="log in data" :key="log.id" class="flex flex-wrap items-center justify-between gap-3 rounded-xl surface-inset p-4 transition-colors hover:surface-hover">
+      <div v-else class="space-y-2.5">
+        <div v-for="log in data" :key="log.id" class="surface-subcard flex flex-wrap items-center justify-between gap-3 p-3.5 transition-colors hover:surface-hover">
           <div class="min-w-0">
             <p class="truncate text-sm font-medium text-gray-900 dark:text-white" :title="log.model">{{ log.model }}</p>
             <p class="text-xs surface-muted">{{ formatDateTime(log.created_at) }}</p>

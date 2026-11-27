@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-lg border border-gray-200 surface-inset p-3 dark:border-dark-600">
+  <div class="rounded-lg border border-[var(--surface-edge)] surface-inset p-3">
     <!-- Collapsed summary header (clickable) -->
     <div
       class="flex cursor-pointer select-none items-center gap-2"
@@ -105,7 +105,7 @@
           v-if="displayStatus.state !== 'idle' && displayStatus.state !== 'priced'"
           class="mt-2 flex flex-wrap items-center gap-2 rounded border border-dashed px-2 py-1.5 text-xs"
           :class="displayStatus.state === 'loading'
-            ? 'border-gray-300 text-gray-500 dark:border-dark-500 dark:text-gray-400'
+            ? 'border-[var(--surface-edge)] text-gray-500 dark:text-gray-400'
             : 'border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300'"
           data-testid="pricing-lookup-status"
         >
@@ -261,7 +261,7 @@
               @remove="removeInterval(idx)"
             />
           </div>
-          <div v-else class="mt-2 rounded border border-dashed border-gray-300 p-3 text-center text-xs dark:border-dark-500 surface-muted">
+          <div v-else class="mt-2 rounded border border-dashed border-[var(--surface-edge)] p-3 text-center text-xs surface-muted">
             {{ t('admin.channels.form.noTiersYet') }}
           </div>
         </div>
@@ -299,7 +299,7 @@
           </div>
         </div>
 
-        <div class="mt-3 border-t border-gray-200 pt-3 dark:border-dark-600" data-testid="reasoning-effort-multipliers">
+        <div class="mt-3 border-t border-[var(--surface-edge)] pt-3" data-testid="reasoning-effort-multipliers">
           <div class="flex items-center justify-between gap-2">
             <label class="text-xs font-medium surface-muted">
               {{ t('admin.channels.form.reasoningEffortMultipliers') }}

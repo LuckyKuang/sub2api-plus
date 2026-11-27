@@ -177,13 +177,19 @@ export default {
       scopeAll: 'All authorized pay-as-you-go groups',
       scopeCustom: 'Custom groups ({count})',
       scopeUngrouped: 'No group assigned',
-      model: 'Text model',
+      model: 'Test model',
       modelPlaceholder: 'Choose a model',
+      prompt: 'Test prompt',
+      promptHint: 'Edit the question to see the model’s answer.',
+      imagePromptHint: 'Describe the image you want to generate. Image generation may take several minutes.',
+      response: 'Model response',
+      generatedImage: 'Generated image {index}',
       protocol: {
         responses: 'Responses',
         chat: 'Chat Completions',
         messages: 'Messages',
-        gemini: 'Gemini'
+        gemini: 'Gemini',
+        images: 'Images'
       },
       endpointHint: 'Sends one {protocol} request to {endpoint}.',
       costHint: 'Will send 1 request, billed by this group’s rules. Cancellation or timeout may still be billed.',
@@ -193,10 +199,10 @@ export default {
       failed: 'Test failed',
       successDetail: 'Model {model} · {ms} ms',
       requestId: 'Request ID: {id}',
-      loading: 'Loading available text models…',
+      loading: 'Loading available models…',
       retry: 'Retry',
       loadFailed: 'Could not load available models. This does not mean the key is invalid. Try again later.',
-      noCapability: 'This key has no text model that the browser can test.',
+      noCapability: 'This key has no model that the browser can test.',
       emptyScope: 'This aggregate key currently has no available models.',
       blocked: {
         readonly: 'Read-only assistance cannot send a test request.',
@@ -220,7 +226,8 @@ export default {
         network: 'Unable to confirm: the network request failed or the cross-origin response was unreadable.',
         timeout: 'Unable to confirm: the request timed out.',
         noText: 'Unable to confirm a valid text response.',
-        unknown: 'Unable to confirm a valid text response.'
+        noImage: 'No valid generated image was returned. Try another prompt or model.',
+        unknown: 'Unable to confirm a valid response.'
       }
     },
     useKey: 'Use Key',
@@ -850,8 +857,29 @@ export default {
       groupLabel: 'Group',
       rateLabel: 'Rate',
       modelLabel: 'Model',
-      searchPlaceholder: 'Search models',
+      searchPlaceholder: 'Search model IDs',
+      allGroups: 'All groups',
+      view: 'View layout',
+      cards: 'Cards',
+      table: 'Table',
+      remove: 'Remove {filter} filter',
       all: 'All'
+    },
+    catalog: {
+      models: '{count} model | {count} models',
+      groups: 'in {count} group | in {count} groups',
+      pricingNotes: 'Pricing notes',
+      reset: 'Clear search and filters',
+      details: 'Pricing details',
+      compareGroups: 'Compare {count} groups',
+      standardPrice: 'Standard pricing',
+      paid: 'Your price',
+      perMillion: 'Per 1M tokens',
+      billingRules: 'Billing rules',
+      comparison: 'Group comparison',
+      price: 'Price',
+      cacheWriteDuration: 'Cache write · {duration}',
+      cacheRead: 'Cache read'
     },
     badges: {
       exclusive: 'Exclusive',
@@ -891,6 +919,8 @@ export default {
       unitPerMillion: '$ / 1M tokens',
       perUnitRequest: '/ request',
       perUnitImage: '/ image',
+      perUnitSecond: '/ second',
+      perSecond: 'Per second',
       perRequest: 'Per request',
       perImage: 'Per image'
     },
@@ -1236,6 +1266,9 @@ export default {
   errors: {
     somethingWentWrong: 'Something went wrong',
     pageNotFound: 'Page not found',
+    pageNotFoundDescription: 'The page you are looking for does not exist or has been moved.',
+    goBack: 'Go Back',
+    backToHome: 'Back to Home',
     unauthorized: 'Unauthorized',
     forbidden: 'Forbidden',
     serverError: 'Server error',

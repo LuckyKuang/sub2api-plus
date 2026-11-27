@@ -34,6 +34,30 @@ When enabled, sign-in is required by default. This remains true when
 an administrator to explicitly save `model_plaza_require_auth=false`; the
 administrative UI presents an exposure warning before that setting is used.
 
+## Browsing models and comparing prices
+
+The public page and the embedded console open in card view. Each distinct
+platform and exact model ID has one card. Search matches model IDs across all
+visible groups, ignoring case. Choosing a group, group platform or effective
+group rate narrows the results. Switching between cards and the grouped price
+tables keeps the current search and filters.
+
+Each card names the group supplying its displayed price. For a model offered
+by several matching groups, the first group in effective group-rate order
+supplies the quote. Channel base prices and independent media rates can differ
+between groups. The card shows the standard-period price, the applicable
+billing unit and the first tier when tiered pricing applies. The `video`
+billing mode quotes a second of video, while `per_request` quotes one request.
+Image and video quotes use their respective independent multiplier when enabled,
+with a lower bound of zero as in settlement. Copying uses the exact model ID
+required by the client.
+
+Opening a model from either view shows pricing details and the same model’s
+offers across groups visible to the visitor, including groups outside the
+current filters. The detail view provides official reference prices, applicable
+tiers and cache prices, and the group’s pricing rules. Site-wide pricing notes
+are available above the results when configured by the administrator.
+
 ## Data Exposure
 
 Anonymous visitors see only non-exclusive groups, including their names,

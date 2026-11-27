@@ -77,7 +77,7 @@ const options = computed(() => {
 </script>
 
 <template>
-  <div data-testid="ops-latency-chart" class="glass-surface flex flex-col p-6 ring-1 ring-gray-900/5 md:h-full dark:ring-dark-700">
+  <div data-testid="ops-latency-chart" class="glass-surface flex flex-col p-6 md:h-full">
     <div class="mb-4 flex items-center justify-between">
       <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
         <svg class="h-4 w-4 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">

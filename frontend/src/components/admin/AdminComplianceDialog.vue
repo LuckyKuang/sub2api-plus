@@ -21,11 +21,11 @@
       </div>
 
       <div class="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px]">
-        <section class="min-h-[320px] max-h-[46vh] overflow-y-auto rounded-lg border border-gray-200 surface-inset p-5 dark:border-dark-700">
+        <section class="surface-subcard min-h-[320px] max-h-[46vh] overflow-y-auto p-5">
           <div class="legal-document-content" v-html="renderedDocument"></div>
         </section>
 
-        <aside class="space-y-3 rounded-lg border border-gray-200 surface-inset p-4 text-sm dark:border-dark-700">
+        <aside class="surface-subcard space-y-3 p-4 text-sm">
           <div>
             <p class="text-xs font-medium uppercase tracking-wide surface-muted">
               {{ t('adminCompliance.version') }}
@@ -53,7 +53,7 @@
         <label for="admin-compliance-phrase" class="block text-sm font-semibold text-gray-900 dark:text-white">
           {{ t('adminCompliance.inputLabel') }}
         </label>
-        <div class="rounded-lg surface-inset px-3 py-2 font-mono text-sm text-gray-900 dark:text-dark-100">
+        <div class="surface-subcard px-3 py-2 font-mono text-sm text-gray-900 dark:text-dark-100">
           {{ expectedPhrase }}
         </div>
         <Input

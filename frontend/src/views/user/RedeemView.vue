@@ -6,15 +6,15 @@
         <div class="card redeem-balance-card overflow-hidden">
           <div class="redeem-balance">
             <div
-              class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-xl surface-inset"
+              class="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-lg surface-inset"
             >
               <Icon name="creditCard" size="xl" class="text-primary-600 dark:text-primary-400" />
             </div>
             <p class="text-sm font-medium surface-muted">{{ t('redeem.currentBalance') }}</p>
-            <p class="mt-2 text-4xl font-bold">
+            <p class="mt-2 text-4xl font-bold tabular-nums">
               ${{ user?.balance?.toFixed(2) || '0.00' }}
             </p>
-            <p class="mt-2 text-sm surface-muted">
+            <p class="mt-2 text-sm tabular-nums surface-muted">
               {{ t('redeem.concurrency') }}: {{ user?.concurrency || 0 }} {{ t('redeem.requests') }}
             </p>
           </div>
@@ -184,7 +184,7 @@
 
       <!-- Recent Activity -->
       <div class="card workspace-table-card redeem-history-card">
-        <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+        <div class="border-b border-[var(--surface-edge)] px-6 py-4">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
             {{ t('redeem.recentActivity') }}
           </h2>
@@ -214,7 +214,7 @@
             <div
               v-for="item in history"
               :key="item.id"
-              class="flex items-center justify-between rounded-xl surface-inset p-4"
+              class="surface-subcard flex flex-wrap items-center justify-between gap-3 p-4"
             >
               <div class="flex items-center gap-4">
                 <div
@@ -273,7 +273,7 @@
               <div class="text-right">
                 <p
                   :class="[
-                    'text-sm font-semibold',
+                    'text-sm font-semibold tabular-nums',
                     isBalanceType(item.type)
                       ? item.value >= 0
                         ? 'text-emerald-600 dark:text-emerald-400'
@@ -311,7 +311,7 @@
           <!-- Empty State -->
           <div v-else class="empty-state py-8">
             <div
-              class="mb-4 flex h-16 w-16 items-center justify-center rounded-xl surface-inset"
+              class="mb-4 flex h-16 w-16 items-center justify-center rounded-lg surface-inset"
             >
               <Icon name="clock" size="xl" class="surface-muted" />
             </div>
@@ -536,8 +536,8 @@ useLocaleRefresh(() => fetchHistory(historyPage.value))
 .redeem-balance > p { grid-column: 2; margin: 4px 0; }
 .redeem-form-card { display: flex; align-items: center; }
 .redeem-form-card > div { width: 100%; padding: 24px 28px; }
-.redeem-guide-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-.redeem-guide-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 18px 20px; border-radius: var(--surface-radius); }
+.redeem-guide-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.redeem-guide-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px 18px; }
 .redeem-guide-top { display: flex; align-items: center; justify-content: space-between; }
 .redeem-guide-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: var(--surface-radius-control); background: var(--surface-soft); color: var(--console-accent-readable); }
 .redeem-guide-step { color: var(--surface-muted); opacity: .65; font: 500 12px/1.5 ui-monospace, monospace; }

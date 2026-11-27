@@ -114,7 +114,7 @@
       <div
         v-if="showResetCreditDetails && resetCreditExpirations.length > 1"
         data-testid="reset-credit-expiry-details"
-        class="inline-grid max-w-full gap-0.5 rounded border border-gray-200 surface-inset px-1.5 py-1 text-[10px] leading-4 shadow-sm dark:border-dark-700 surface-muted"
+        class="inline-grid max-w-full gap-0.5 rounded border border-[var(--surface-edge)] surface-inset px-1.5 py-1 text-[10px] leading-4 shadow-sm surface-muted"
       >
         <span class="sr-only">{{ t('admin.accounts.openaiQuotaReset.expirationDetails') }}</span>
         <span
@@ -230,7 +230,7 @@ const autoResetStateClass = computed(() => {
     case 'resetting':
       return 'bg-orange-50/[0.15] text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
     default:
-      return 'surface-inset surface-muted dark:surface-inset'
+      return 'surface-inset surface-muted'
   }
 })
 

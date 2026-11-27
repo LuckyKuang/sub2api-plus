@@ -620,7 +620,8 @@ auth snapshot and invalidates both cache layers on edits. Older snapshots reload
 provider identity, authentication or a different upstream credential.
 
 `GET /api/v1/groups/:id/native-access` returns an authorized group's public
-models, each model's `endpoints` and `conversion_endpoints`, and the native union
+models, each model's `endpoints` and `conversion_endpoints`, the `is_image`
+flag identifying image-generation models (including mapped public aliases), and the native union
 `endpoints` plus conversion intersection `conversion_endpoints`. No account IDs
 or credentials are exposed. It works before a price directory exists and obeys
 route domains and model allowlists. Management discovery may refresh metadata;
@@ -629,9 +630,16 @@ exhaustion remains distinct from unsupported capability.
 
 The API-key Test dialog reads this same capability response. Unconfigured keys
 select each model's native `endpoints`; configured keys admit only models whose
-`conversion_endpoints` include the saved default endpoint. The dialog sends one
-fixed short non-streaming request through the public gateway and shows the model
-and elapsed time. Opening it never invokes inference.
+`conversion_endpoints` include the saved default endpoint. Image generation uses
+its supported native image endpoint; text protocol conversion does not advertise
+image generation. The dialog sends one non-streaming request through the public
+gateway with an editable prompt. Text defaults to `hi`; image models reuse the
+account connection test's orange cat astronaut prompt. Switching model types
+updates an untouched default and preserves custom input. Empty prompts cannot
+submit. Results show the actual returned text and generated images, model and
+elapsed time; editing the prompt or model clears the prior result. Image tests
+allow up to five minutes and require a usable image in the response. Opening the
+dialog never invokes inference, and each explicit test sends only one request.
 
 The OpenAI SDK Base URL ends in `/v1`; the Anthropic SDK Base URL is the site
 root because that SDK appends `/v1/messages`. Gemini native uses

@@ -109,8 +109,8 @@ const options = computed(() => ({
 </script>
 
 <template>
-  <div data-testid="ops-error-distribution-chart" class="glass-surface flex flex-col p-6 ring-1 ring-gray-900/5 md:h-full dark:ring-dark-700">
-    <div class="mb-4 flex items-center justify-between">
+  <div data-testid="ops-error-distribution-chart" class="glass-surface flex flex-col p-6 md:h-full">
+    <div class="mb-4 flex items-center justify-between gap-2">
       <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
         <svg class="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
@@ -125,7 +125,7 @@ const options = computed(() => ({
       </h3>
       <button
         type="button"
-        class="inline-flex items-center rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 dark:border-dark-700 surface-control surface-muted"
+        class="inline-flex items-center rounded-lg border border-[var(--surface-edge)] px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 surface-control surface-muted"
         :disabled="state !== 'ready'"
         :title="t('admin.ops.errorTrend')"
         @click="emit('openDetails')"
@@ -144,7 +144,7 @@ const options = computed(() => ({
             {{ t('admin.ops.top') }}: <span :style="{ color: topReason.color }">{{ topReason.label }}</span>
           </div>
           <div class="flex flex-wrap justify-center gap-3">
-            <div v-for="item in categories" :key="item.label" class="flex items-center gap-1.5 text-xs">
+            <div v-for="item in categories" :key="item.label" class="flex items-center gap-1.5 text-xs tabular-nums">
               <span class="h-2 w-2 rounded-full" :style="{ backgroundColor: item.color }"></span>
               <span class="surface-muted">{{ item.label }} {{ item.count }}</span>
             </div>

@@ -24,7 +24,7 @@
         </svg>
       </div>
 
-      <div v-else-if="!isActive" class="rounded-lg border border-gray-200 p-4 text-sm dark:border-dark-600 surface-muted">
+      <div v-else-if="!isActive" class="rounded-lg border border-[var(--surface-edge)] p-4 text-sm surface-muted">
         {{ t('admin.accounts.tempUnschedulable.notActive') }}
       </div>
 
@@ -33,7 +33,7 @@
           {{ t('admin.accounts.recoverStateHint') }}
         </div>
 
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <p class="text-xs surface-muted">
             {{ t('admin.accounts.tempUnschedulable.accountName') }}
           </p>
@@ -43,7 +43,7 @@
         </div>
 
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+          <div class="rounded-lg border border-[var(--surface-edge)] p-3">
             <p class="text-xs surface-muted">
               {{ t('admin.accounts.tempUnschedulable.triggeredAt') }}
             </p>
@@ -51,7 +51,7 @@
               {{ triggeredAtText }}
             </p>
           </div>
-          <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+          <div class="rounded-lg border border-[var(--surface-edge)] p-3">
             <p class="text-xs surface-muted">
               {{ t('admin.accounts.tempUnschedulable.until') }}
             </p>
@@ -59,7 +59,7 @@
               {{ untilText }}
             </p>
           </div>
-          <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+          <div class="rounded-lg border border-[var(--surface-edge)] p-3">
             <p class="text-xs surface-muted">
               {{ t('admin.accounts.tempUnschedulable.remaining') }}
             </p>
@@ -67,7 +67,7 @@
               {{ remainingText }}
             </p>
           </div>
-          <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+          <div class="rounded-lg border border-[var(--surface-edge)] p-3">
             <p class="text-xs surface-muted">
               {{ t('admin.accounts.tempUnschedulable.errorCode') }}
             </p>
@@ -75,7 +75,7 @@
               {{ state?.status_code || '-' }}
             </p>
           </div>
-          <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+          <div class="rounded-lg border border-[var(--surface-edge)] p-3">
             <p class="text-xs surface-muted">
               {{ t('admin.accounts.tempUnschedulable.matchedKeyword') }}
             </p>
@@ -83,7 +83,7 @@
               {{ state?.matched_keyword || '-' }}
             </p>
           </div>
-          <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+          <div class="rounded-lg border border-[var(--surface-edge)] p-3">
             <p class="text-xs surface-muted">
               {{ t('admin.accounts.tempUnschedulable.ruleOrder') }}
             </p>
@@ -93,7 +93,7 @@
           </div>
         </div>
 
-        <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-3">
           <p class="text-xs surface-muted">
             {{ t('admin.accounts.tempUnschedulable.errorMessage') }}
           </p>

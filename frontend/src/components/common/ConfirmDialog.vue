@@ -11,7 +11,7 @@
           @click="handleCancel"
           type="button"
           :disabled="loading"
-          class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:surface-hover focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-600 dark:focus:ring-offset-dark-800 surface-control surface-muted"
+          class="btn btn-secondary"
         >
           {{ cancelText }}
         </button>
@@ -20,12 +20,7 @@
           type="button"
           :disabled="loading"
           :aria-busy="loading"
-          :class="[
-            'rounded-lg px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-offset-dark-800',
-            danger
-              ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
-              : 'bg-primary-600 hover:bg-primary-700 focus:ring-primary-500'
-          ]"
+          :class="['btn', danger ? 'btn-danger' : 'btn-primary']"
         >
           {{ confirmText }}
         </button>

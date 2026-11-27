@@ -1,6 +1,6 @@
 <template>
-  <div class="min-h-screen surface-inset px-4 py-10">
-    <div class="mx-auto max-w-2xl">
+  <div class="auth-layout flex min-h-screen items-center justify-center px-4 py-10">
+    <div class="w-full max-w-2xl">
       <div class="card p-6">
         <h1 class="text-lg font-semibold text-gray-900 dark:text-white">
           {{ callbackTitleText }}
@@ -20,7 +20,7 @@
 
         <div
           v-else
-          class="mt-6 rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-700"
+          class="surface-subcard mt-6 p-4"
         >
           <p class="text-sm surface-muted">
             {{ errorMessage }}

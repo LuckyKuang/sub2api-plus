@@ -49,9 +49,9 @@ const props = defineProps<{
 
 function rankClass(idx: number): string {
   if (idx === 0) return 'bg-yellow-100/[0.15] text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-  if (idx === 1) return 'surface-inset surface-muted dark:surface-inset'
+  if (idx === 1) return 'surface-inset surface-muted'
   if (idx === 2) return 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-  return 'surface-inset surface-muted dark:surface-inset'
+  return 'surface-inset surface-muted'
 }
 
 function hasUsers(usersByCurrency: Record<string, TopUserPaymentStats[]>): boolean {

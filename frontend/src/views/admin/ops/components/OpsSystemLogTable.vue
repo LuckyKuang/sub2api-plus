@@ -103,7 +103,7 @@ const levelBadgeClass = (level: string) => {
   const v = String(level || '').toLowerCase()
   if (v === 'error' || v === 'fatal') return 'bg-red-100/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300'
   if (v === 'warn' || v === 'warning') return 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-  if (v === 'debug') return 'surface-inset text-slate-700 dark:surface-inset dark:text-slate-300'
+  if (v === 'debug') return 'border border-[var(--surface-edge)] text-slate-700 dark:text-slate-300'
   return 'bg-blue-100/[0.15] text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
 }
 
@@ -391,15 +391,15 @@ onMounted(async () => {
         <h3 class="text-sm font-bold text-gray-900 dark:text-white">{{ t('admin.ops.systemLogs.title') }}</h3>
         <p class="mt-1 text-xs surface-muted">{{ t('admin.ops.systemLogs.description') }}</p>
       </div>
-      <div class="flex flex-wrap items-center gap-2 text-xs">
-        <span class="rounded-md surface-inset px-2 py-1 surface-muted">{{ t('admin.ops.systemLogs.queue') }} {{ health.queue_depth }}/{{ health.queue_capacity }}</span>
-        <span class="rounded-md surface-inset px-2 py-1 surface-muted">{{ t('admin.ops.systemLogs.written') }} {{ health.written_count }}</span>
+      <div class="flex flex-wrap items-center gap-2 text-xs tabular-nums">
+        <span class="rounded-md border border-[var(--surface-edge)] px-2 py-1 surface-muted">{{ t('admin.ops.systemLogs.queue') }} {{ health.queue_depth }}/{{ health.queue_capacity }}</span>
+        <span class="rounded-md border border-[var(--surface-edge)] px-2 py-1 surface-muted">{{ t('admin.ops.systemLogs.written') }} {{ health.written_count }}</span>
         <span class="rounded-md bg-amber-100/[0.15] px-2 py-1 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">{{ t('admin.ops.systemLogs.dropped') }} {{ health.dropped_count }}</span>
         <span class="rounded-md bg-red-100/[0.15] px-2 py-1 text-red-700 dark:bg-red-900/30 dark:text-red-300">{{ t('admin.ops.systemLogs.failed') }} {{ health.write_failed_count }}</span>
       </div>
     </div>
 
-    <div class="mb-4 rounded-xl border border-gray-200 surface-inset p-3 dark:border-dark-700">
+    <div class="surface-subcard mb-4 p-3">
       <div class="mb-2 flex items-center justify-between">
         <div class="text-xs font-semibold surface-muted">{{ t('admin.ops.systemLogs.runtimeConfig') }}</div>
         <span v-if="runtimeLoading" class="text-xs surface-muted">{{ t('common.loading') }}</span>
@@ -523,16 +523,16 @@ onMounted(async () => {
       <button type="button" class="btn btn-secondary btn-sm" @click="fetchHealth">{{ t('admin.ops.systemLogs.refreshHealth') }}</button>
     </div>
 
-    <div class="workspace-shell overflow-hidden rounded-xl">
+    <div class="workspace-shell overflow-hidden rounded-lg border border-[var(--surface-edge)]">
       <div v-if="loading" class="px-4 py-8 text-center text-sm surface-muted">{{ t('common.loading') }}</div>
       <div v-else-if="!hasData" class="px-4 py-8 text-center text-sm surface-muted">{{ t('admin.ops.systemLogs.empty') }}</div>
-      <div v-else-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
+      <div v-else-if="!isDesktopViewport" class="divide-y divide-[var(--surface-edge)]">
         <div v-for="row in logs" :key="row.id" class="space-y-1.5 p-3">
           <div class="flex items-center justify-between gap-2">
             <span class="inline-flex rounded-md px-2 py-0.5 text-xs font-semibold" :class="levelBadgeClass(row.level)">
               {{ row.level }}
             </span>
-            <span class="text-xs surface-muted">{{ formatTime(row.created_at) }}</span>
+            <span class="text-xs tabular-nums surface-muted">{{ formatTime(row.created_at) }}</span>
           </div>
           <div v-if="row.host" class="truncate text-xs surface-muted" :title="row.host">
             {{ row.host }}
@@ -543,8 +543,8 @@ onMounted(async () => {
         </div>
       </div>
       <div v-else class="record-table-scroll table-container overflow-auto">
-        <table class="record-table min-w-full table-fixed divide-y divide-gray-200 dark:divide-dark-700">
-          <thead class="sticky top-0 z-10 surface-inset">
+        <table class="record-table min-w-full table-fixed divide-y divide-[var(--surface-edge)]">
+          <thead class="sticky top-0 z-10">
             <tr>
               <th class="w-[170px] px-3 py-2 text-left text-[11px] font-semibold surface-muted">{{ t('admin.ops.systemLogs.time') }}</th>
               <th class="w-[160px] px-3 py-2 text-left text-[11px] font-semibold surface-muted">{{ t('admin.ops.systemLogs.host') }}</th>
@@ -552,7 +552,7 @@ onMounted(async () => {
               <th class="px-3 py-2 text-left text-[11px] font-semibold surface-muted">{{ t('admin.ops.systemLogs.logDetails') }}</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100 dark:divide-dark-800">
+          <tbody class="divide-y divide-[var(--surface-edge)]">
             <tr v-for="row in logs" :key="row.id" class="align-top">
               <td class="px-3 py-2 text-xs surface-muted">{{ formatTime(row.created_at) }}</td>
               <td class="px-3 py-2 text-xs surface-muted">

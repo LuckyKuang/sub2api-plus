@@ -22,7 +22,7 @@
       <template v-if="mode === 'catalog'">
         <input v-model="query" class="input mt-3" type="search" :aria-label="t('channelMonitorV2.settings.picker.search')" :placeholder="t('channelMonitorV2.settings.picker.search')" />
         <div class="monitor-picker-options mt-2">
-          <label v-for="candidate in filtered" :key="candidate.model" class="flex cursor-pointer items-center gap-3 rounded-xl p-3 hover:surface-hover">
+          <label v-for="candidate in filtered" :key="candidate.model" class="flex cursor-pointer items-center gap-3 rounded-lg p-3 hover:surface-hover">
             <input type="checkbox" class="rounded" :checked="selected.includes(candidate.model)" @change="toggle(candidate.model)" />
             <span class="min-w-0 flex-1 break-all text-sm">{{ candidate.model }}</span>
             <span class="badge badge-gray">{{ t(`channelMonitorV2.settings.picker.${candidate.source}`) }}</span>
@@ -36,7 +36,7 @@
         <textarea v-model="bulk" class="input min-h-36 resize-y" :aria-label="t('channelMonitorV2.settings.picker.bulkLabel')" :placeholder="t('channelMonitorV2.settings.picker.bulkPlaceholder')" />
         <p class="mt-2 text-xs surface-muted">{{ t('channelMonitorV2.settings.picker.bulkCount', { count: pending.length }) }}</p>
       </template>
-      <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-dark-700">
+      <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--surface-edge)] pt-3">
         <span class="text-xs surface-muted">{{ t('channelMonitorV2.settings.picker.pending', { count: pending.length }) }}</span>
         <div class="flex gap-2">
           <button type="button" class="btn btn-ghost btn-sm" @click="close">{{ t('common.cancel') }}</button>

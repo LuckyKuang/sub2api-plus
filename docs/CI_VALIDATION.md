@@ -82,6 +82,12 @@ so cold-cache Go lint leaves headroom without changing the command, linter scope
 or heavy-step scheduling. This is a per-process soft managed-memory target;
 non-Go memory and aggregate process RSS remain outside that target. Host
 environment values cannot disable or replace the declared container setting.
+The same launcher sets `NODE_OPTIONS=--max-old-space-size=4096` for a 4-GiB
+Node old-space budget. Node's host-dependent default can be about 2 GiB on
+GitHub runners and exhaust the heap during the full production `vue-tsc` build.
+The fixed budget applies to local and CI containers and cannot be replaced by
+host `NODE_OPTIONS`. It is a per-process old-space limit, not a total RSS cap;
+the 8-GiB container limit and existing heavy-step serialization remain in force.
 
 The Apple lifecycle tests use fake runtime fixtures. Running them inside Linux
 containers does not claim live Apple Containers/WSL integration. Record any

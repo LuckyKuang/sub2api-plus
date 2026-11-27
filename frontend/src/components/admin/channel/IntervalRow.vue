@@ -1,6 +1,6 @@
 <template>
   <div class="flex items-start gap-2 rounded border p-2"
-       :class="isEmpty ? 'border-red-400 bg-red-50/[0.15] dark:border-red-500 dark:bg-red-950/20' : 'border-gray-200 surface-inset dark:border-dark-500 dark:surface-inset'">
+       :class="isEmpty ? 'border-red-400 bg-red-50/[0.15] dark:border-red-500 dark:bg-red-950/20' : 'border-[var(--surface-edge)] surface-inset'">
     <!-- Token mode: context range + prices ($/MTok) -->
     <template v-if="mode === 'token'">
       <div class="pricing-interval-grid grid min-w-0 flex-1 gap-2">

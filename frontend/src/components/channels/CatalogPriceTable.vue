@@ -1,11 +1,11 @@
 <template>
-  <div class="record-table-scroll record-table-dialog-scroll max-w-full overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-700" tabindex="0" :aria-label="t('availableChannels.catalog.prices')">
+  <div class="record-table-scroll record-table-dialog-scroll max-w-full overflow-x-auto rounded-lg border border-[var(--surface-edge)]" tabindex="0" :aria-label="t('availableChannels.catalog.prices')">
     <table class="record-table record-table-compact w-full text-left text-xs">
-      <thead class="surface-inset surface-muted"><tr>
+      <thead class="surface-muted"><tr>
         <th class="px-3 py-2">{{ t('availableChannels.catalog.context') }}</th>
         <th v-for="field in fields" :key="field.key" class="whitespace-nowrap px-3 py-2">{{ t(field.key === 'per_request_price' && !token ? 'availableChannels.catalog.unitPrice' : `availableChannels.pricing.${field.label}`) }}</th>
       </tr></thead>
-      <tbody class="divide-y divide-gray-100 dark:divide-dark-700"><tr v-for="(row, i) in rows" :key="i">
+      <tbody class="divide-y divide-[var(--surface-edge)]"><tr v-for="(row, i) in rows" :key="i">
         <th class="whitespace-nowrap px-3 py-2 font-normal">{{ row.label }}</th>
         <td v-for="field in fields" :key="field.key" class="whitespace-nowrap px-3 py-2 font-mono">{{ catalogMoney(row.pricing[field.key], rate, token && field.key !== 'per_request_price') }}</td>
       </tr></tbody>

@@ -17,10 +17,10 @@
         @rowClick="(row) => emit('openErrorDetail', row.id)"
       >
         <template #cell-created_at="{ row }">
-          <button v-if="compact" type="button" class="text-left text-sm text-primary-600 underline decoration-dotted surface-control" :aria-label="t('inspection.view')" @click.stop="emit('openErrorDetail', row.id)">{{ formatDateTime(row.created_at) }}</button>
+          <button v-if="compact" type="button" class="text-left text-sm tabular-nums text-primary-600 underline decoration-dotted surface-control" :aria-label="t('inspection.view')" @click.stop="emit('openErrorDetail', row.id)">{{ formatDateTime(row.created_at) }}</button>
           <span
             v-else
-            class="text-sm surface-muted"
+            class="text-sm tabular-nums surface-muted"
             :title="row.request_id || row.client_request_id"
           >{{ formatDateTime(row.created_at) }}</span>
         </template>
@@ -118,7 +118,7 @@
 
         <template #cell-status="{ row }">
           <div class="flex items-center gap-1.5">
-            <span class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium" :class="getStatusClass(row.status_code)">
+            <span class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium tabular-nums" :class="getStatusClass(row.status_code)">
               {{ row.status_code }}
             </span>
             <span
@@ -127,7 +127,7 @@
             >{{ row.severity }}</span>
             <span
               v-if="row.request_type != null && row.request_type > 0"
-              class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium surface-inset text-gray-800 dark:text-gray-200"
+              class="inline-flex items-center rounded border border-[var(--surface-edge)] px-2 py-0.5 text-xs font-medium text-gray-800 dark:text-gray-200"
             >{{ formatRequestType(row.request_type) }}</span>
           </div>
         </template>
@@ -319,11 +319,11 @@ function getTypeBadge(log: OpsErrorLog): { label: string; className: string } {
     return { label: t('admin.ops.errorLog.typeRouting'), className: 'bg-purple-100/[0.15] text-purple-800 dark:bg-purple-900/25 dark:text-purple-200' }
   }
   if (phase === 'internal' && owner === 'platform') {
-    return { label: t('admin.ops.errorLog.typeInternal'), className: 'surface-inset text-gray-800 dark:surface-inset dark:text-gray-200' }
+    return { label: t('admin.ops.errorLog.typeInternal'), className: 'border border-[var(--surface-edge)] text-gray-800 dark:text-gray-200' }
   }
 
   const fallback = phase || owner || t('common.unknown')
-  return { label: fallback, className: 'surface-inset text-gray-800 dark:surface-inset dark:text-gray-200' }
+  return { label: fallback, className: 'border border-[var(--surface-edge)] text-gray-800 dark:text-gray-200' }
 }
 
 interface Props {

@@ -1,6 +1,6 @@
 <template>
   <div class="card p-4" :class="{ 'chart-workspace': workspace }">
-    <div class="mb-4 flex items-center justify-between gap-3">
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
         {{ !enableRankingView || activeView === 'model_distribution'
           ? t('admin.dashboard.modelDistribution')
@@ -117,19 +117,19 @@
                   {{ model.model }}
                 </span>
               </td>
-              <td class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right tabular-nums surface-muted">
                 {{ formatNumber(model.requests) }}
               </td>
-              <td class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right tabular-nums surface-muted">
                 {{ formatTokens(model.total_tokens) }} <span v-if="modelTokenShare(model.total_tokens)" class="surface-muted">({{ modelTokenShare(model.total_tokens) }})</span>
               </td>
-              <td class="py-1.5 text-right text-green-600 dark:text-green-400">
+              <td class="py-1.5 text-right tabular-nums text-green-600 dark:text-green-400">
                 ${{ formatCost(model.actual_cost) }}
               </td>
-              <td v-if="showAccountCost" class="py-1.5 text-right text-orange-500 dark:text-orange-400">
+              <td v-if="showAccountCost" class="py-1.5 text-right tabular-nums text-orange-500 dark:text-orange-400">
                 ${{ formatCost(model.account_cost) }}
               </td>
-              <td class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right tabular-nums surface-muted">
                 ${{ formatCost(model.cost) }}
               </td>
             </tr>
@@ -178,15 +178,15 @@
             <tr
               v-for="(item, index) in rankingDisplayItems"
               :key="item.isOther ? 'others' : `${item.user_id}-${index}`"
-              class="border-t border-gray-100 transition-colors dark:border-dark-700"
+              class="border-t border-[var(--surface-edge)] transition-colors"
               :class="item.isOther
-                ? 'surface-inset dark:surface-inset'
-                : 'cursor-pointer hover:surface-hover dark:hover:surface-hover'"
+                ? 'bg-[var(--surface-hover)]'
+                : 'cursor-pointer hover:surface-hover'"
               @click="item.isOther ? undefined : emit('ranking-click', item)"
             >
               <td class="py-1.5">
                 <div class="flex min-w-0 items-center gap-2">
-                  <span class="shrink-0 text-[11px] font-semibold surface-muted">
+                  <span class="shrink-0 text-[11px] font-semibold tabular-nums surface-muted">
                     {{ item.isOther ? 'Σ' : `#${index + 1}` }}
                   </span>
                   <span
@@ -197,13 +197,13 @@
                   </span>
                 </div>
               </td>
-              <td class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right tabular-nums surface-muted">
                 {{ formatNumber(item.requests) }}
               </td>
-              <td class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right tabular-nums surface-muted">
                 {{ formatTokens(item.tokens) }} <span v-if="rankingTokenShare(item.tokens)" class="surface-muted">({{ rankingTokenShare(item.tokens) }})</span>
               </td>
-              <td class="py-1.5 text-right text-green-600 dark:text-green-400">
+              <td class="py-1.5 text-right tabular-nums text-green-600 dark:text-green-400">
                 ${{ formatCost(item.actual_cost) }}
               </td>
             </tr>

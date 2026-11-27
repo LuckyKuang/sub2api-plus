@@ -9,7 +9,7 @@
       <!-- Account Info Header -->
       <div
         v-if="account"
-        class="flex items-center justify-between rounded-xl border border-primary-200 bg-gradient-to-r from-primary-50 to-primary-100 p-3 dark:border-primary-700/50 dark:from-primary-900/20 dark:to-primary-800/20"
+        class="flex items-center justify-between rounded-lg border border-primary-200 bg-gradient-to-r from-primary-50 to-primary-100 p-3 dark:border-primary-700/50 dark:from-primary-900/20 dark:to-primary-800/20"
       >
         <div class="flex items-center gap-3">
           <div
@@ -29,7 +29,7 @@
             'rounded-md px-2.5 py-1 text-xs font-semibold',
             account.status === 'active'
               ? 'bg-green-100/[0.15] text-green-700 dark:bg-green-500/20 dark:text-green-400'
-              : 'surface-inset text-gray-600 dark:surface-inset dark:text-gray-400'
+              : 'surface-inset text-gray-600 dark:text-gray-400'
           ]"
         >
           {{ account.status }}

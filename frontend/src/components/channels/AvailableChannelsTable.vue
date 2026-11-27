@@ -7,7 +7,7 @@
       class="record-table !hidden w-full table-fixed border-collapse text-sm lg:!table"
     >
       <thead>
-        <tr class="border-b border-gray-100 surface-inset text-xs font-medium uppercase tracking-wide dark:border-dark-700 surface-muted">
+        <tr class="border-b border-[var(--surface-edge)] surface-inset text-xs font-medium uppercase tracking-wide surface-muted">
           <th class="w-[180px] px-4 py-3 text-center">{{ columns.name }}</th>
           <th class="w-[200px] px-4 py-3 text-left">{{ columns.description }}</th>
           <th class="w-[140px] px-4 py-3 text-left">{{ columns.platform }}</th>
@@ -184,7 +184,7 @@
         v-else
         v-for="(channel, chIdx) in rows"
         :key="`mobile-${channel.name}-${chIdx}`"
-        class="border-b-2 border-gray-200 px-4 py-4 last:border-b-0 dark:border-dark-600"
+        class="border-b-2 border-[var(--surface-edge)] px-4 py-4 last:border-b-0"
       >
         <header class="mb-3 min-w-0">
           <h3 class="break-words text-sm font-semibold text-gray-900 dark:text-white">
@@ -195,7 +195,7 @@
           </p>
         </header>
 
-        <div class="divide-y divide-gray-100 dark:divide-dark-700/60">
+        <div class="divide-y divide-[var(--surface-edge)]">
           <div
             v-for="section in channel.platforms"
             :key="`mobile-${channel.name}-${section.platform}`"

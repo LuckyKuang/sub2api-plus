@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import axios, { type InternalAxiosRequestConfig } from 'axios'
 vi.mock('@/i18n', () => ({ getLocale: () => 'en' }))
 import { apiClient } from '@/api/client'
+import { fetchCodexModelsManifest } from '@/api/codex'
 import { setAdminSupportContext, supportImageFetch } from '@/utils/adminSupportContext'
 
 const success = (config: InternalAxiosRequestConfig, data: unknown) => ({ config, data: { code: 0, data }, status: 200, statusText: 'OK', headers: {} })
@@ -94,7 +95,6 @@ describe('complete scoped assistance requests', () => {
     await apiClient.get('/keys')
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ models: [{ slug: 'gpt-fixture' }] })))
     vi.stubGlobal('fetch', fetchMock)
-    const { fetchCodexModelsManifest } = await import('@/api/codex')
     expect((await fetchCodexModelsManifest('https://public-base.example.com', key)).modelCount).toBe(1)
     // The reviewed Codex baseline in docs/OFFICIAL_AGENT_BASELINES.md is rust-v0.170.0.
     expect(fetchMock.mock.calls[0][0]).toContain('/admin/support/users/42/images/models?client_version=0.170.0&api_key_id=7')

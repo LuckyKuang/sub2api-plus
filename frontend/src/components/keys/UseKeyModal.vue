@@ -58,7 +58,7 @@
         <!-- Codex Authentication Mode -->
         <div
           v-if="showCodexAuthMode"
-          class="rounded-lg border border-gray-200 p-3 dark:border-dark-700"
+          class="surface-subcard p-3"
         >
           <div class="mb-2">
             <p class="text-sm font-medium text-gray-900 dark:text-white">
@@ -81,7 +81,7 @@
               :class="[
                 'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 codexAuthMode === 'legacy'
-                  ? 'surface-inset text-primary-700 shadow-sm dark:surface-inset dark:text-primary-300'
+                  ? 'surface-inset text-primary-700 shadow-sm dark:text-primary-300'
                   : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
               ]"
               @click="codexAuthMode = 'legacy'"
@@ -96,7 +96,7 @@
               :class="[
                 'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 codexAuthMode === 'api-key'
-                  ? 'surface-inset text-primary-700 shadow-sm dark:surface-inset dark:text-primary-300'
+                  ? 'surface-inset text-primary-700 shadow-sm dark:text-primary-300'
                   : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
               ]"
               @click="codexAuthMode = 'api-key'"
@@ -146,14 +146,14 @@
               <Icon name="exclamationCircle" size="sm" class="flex-shrink-0" />
               {{ file.hint }}
             </p>
-            <div class="surface-inset rounded-xl overflow-hidden">
+            <div class="surface-subcard overflow-hidden">
               <!-- Code Header -->
-              <div class="flex items-center justify-between px-4 py-2 surface-inset border-b border-gray-700 dark:border-dark-700">
+              <div class="flex items-center justify-between px-4 py-2 surface-inset border-b border-[var(--surface-edge)]">
                 <span class="min-w-0 truncate text-xs font-mono surface-muted">{{ file.path }}</span>
                 <button
                   type="button"
                   @click="copyContent(file.content, index)"
-                  class="flex flex-shrink-0 items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors surface-control"
+                  class="flex flex-shrink-0 items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors"
                   :class="copiedIndex === index
                     ? 'bg-green-500/20 text-green-800 dark:text-green-400'
                     : 'surface-field text-gray-700 hover:bg-gray-200 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-600 dark:hover:text-white'"
@@ -176,7 +176,7 @@
         <section
           v-if="showCodexModelCatalog"
           data-testid="codex-model-catalog"
-          class="overflow-hidden rounded-lg border border-gray-200 surface-inset dark:border-dark-700"
+          class="surface-subcard overflow-hidden"
         >
           <div class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="min-w-0">
@@ -232,7 +232,7 @@
           </div>
           <p
             v-if="codexModelManifestState === 'ready'"
-            class="border-t border-gray-200 px-4 py-2 text-xs text-emerald-700 dark:border-dark-700 dark:text-emerald-300"
+            class="border-t border-[var(--surface-edge)] px-4 py-2 text-xs text-emerald-700 dark:text-emerald-300"
           >
             {{ t('keys.useKeyModal.codexModelCatalog.modelsCount', { count: codexModelManifestModelCount }) }}
           </p>

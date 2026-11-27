@@ -6,7 +6,7 @@
         :class="[
           hasUpdate
             ? 'bg-amber-100/[0.15] text-amber-700 hover:bg-amber-200/25 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50'
-            : 'surface-field text-gray-600 hover:surface-hover dark:surface-field dark:text-dark-400 dark:hover:surface-hover'
+            : 'surface-field text-gray-600 hover:surface-hover dark:text-dark-400 dark:hover:surface-hover'
         ]"
         :title="hasUpdate ? t('version.updateAvailable') : t('version.upToDate')"
       >
@@ -33,7 +33,7 @@
         >
           <!-- Header with refresh button -->
           <div
-            class="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-dark-700"
+            class="flex items-center justify-between border-b border-[var(--surface-edge)] px-4 py-3"
           >
             <span class="text-sm font-medium surface-muted">{{
               t('version.currentVersion')
@@ -372,7 +372,7 @@
                 </a>
 
                 <!-- Version rollback entry -->
-                <div class="border-t border-gray-100 pt-2 dark:border-dark-700">
+                <div class="border-t border-[var(--surface-edge)] pt-2">
                   <button
                     @click="toggleRollbackPanel"
                     class="group flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors hover:surface-hover hover:text-gray-600 dark:hover:text-dark-300 surface-control surface-muted"
@@ -450,7 +450,7 @@
                         </p>
                         <button
                           @click="loadRollbackVersions"
-                          class="w-full rounded-lg border border-gray-200 py-1.5 text-xs transition-colors hover:surface-hover hover:text-gray-700 dark:border-dark-700 dark:hover:text-dark-200 surface-control surface-muted"
+                          class="w-full rounded-lg border border-[var(--surface-edge)] py-1.5 text-xs transition-colors hover:surface-hover hover:text-gray-700 dark:hover:text-dark-200 surface-control surface-muted"
                         >
                           {{ t('version.retry') }}
                         </button>
@@ -479,7 +479,7 @@
                           :class="
                             selectedRollbackVersion === item.version
                               ? 'border-amber-300 bg-amber-50/[0.15] shadow-sm dark:border-amber-700 dark:bg-amber-900/20'
-                              : 'border-gray-200 hover:border-gray-300 hover:surface-hover dark:border-dark-700 dark:hover:border-dark-600 dark:hover:surface-hover'
+                              : 'border-[var(--surface-edge)] hover:border-[var(--surface-edge)] hover:surface-hover dark:hover:border-dark-600 dark:hover:surface-hover'
                           "
                         >
                           <span class="flex items-center gap-2">
@@ -488,7 +488,7 @@
                               :class="
                                 selectedRollbackVersion === item.version
                                   ? 'border-amber-500'
-                                  : 'border-gray-300 dark:border-dark-500'
+                                  : 'border-[var(--surface-edge)]'
                               "
                             >
                               <span
@@ -520,10 +520,10 @@
 
                             <!-- Terminal-style block with deploy-method tabs -->
                             <div
-                              class="overflow-hidden rounded-lg border border-gray-200 dark:border-dark-600"
+                              class="overflow-hidden rounded-lg border border-[var(--surface-edge)]"
                             >
                               <div
-                                class="flex items-center justify-between border-b border-gray-200 surface-inset px-2 py-1.5 dark:border-dark-600"
+                                class="flex items-center justify-between border-b border-[var(--surface-edge)] surface-inset px-2 py-1.5"
                               >
                                 <div
                                   class="flex items-center gap-0.5 rounded-md surface-inset p-0.5"
@@ -535,7 +535,7 @@
                                     class="rounded px-2 py-0.5 text-[11px] font-medium transition-colors surface-control"
                                     :class="
                                       manualTab === tab.key
-                                        ? 'surface-field text-gray-700 shadow-sm dark:surface-field dark:text-dark-100'
+                                        ? 'surface-field text-gray-700 shadow-sm dark:text-dark-100'
                                         : 'text-gray-400 hover:text-gray-600 dark:text-dark-400 dark:hover:text-dark-200'
                                     "
                                   >

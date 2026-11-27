@@ -13,7 +13,7 @@
     </div>
     <div v-else class="record-table-scroll record-table-dialog-scroll table-container overflow-x-auto">
       <table class="record-table table">
-        <thead class="border-b border-gray-200 dark:border-dark-700">
+        <thead class="border-b border-[var(--surface-edge)]">
           <tr class="text-xs uppercase tracking-wider surface-muted">
             <th>{{ t('channelStatus.detailColumns.model') }}</th>
             <th>{{ t('channelStatus.detailColumns.latestStatus') }}</th>
@@ -32,7 +32,7 @@
           <tr
             v-for="m in detail.models"
             :key="m.model"
-            class="border-b border-gray-100 dark:border-dark-800"
+            class="border-b border-[var(--surface-edge)] tabular-nums"
           >
             <td class="font-medium text-gray-900 dark:text-gray-100">{{ formatMonitorModel(m.model) }}</td>
             <td>

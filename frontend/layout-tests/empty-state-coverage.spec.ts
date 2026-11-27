@@ -25,7 +25,7 @@ test('wide-table empty state covers the visible columns, not the full table widt
 
   // The message is horizontally centered within the visible scrollport.
   const view = (await scrollport.boundingBox())!
-  const text = (await page.locator('.empty-state-fill p').boundingBox())!
+  const text = (await fill.getByRole('heading').boundingBox())!
   const viewCenter = view.x + view.width / 2
   const textCenter = text.x + text.width / 2
   expect(Math.abs(textCenter - viewCenter)).toBeLessThanOrEqual(2)

@@ -16,10 +16,10 @@
         :class="[
           'relative flex h-[60px] min-w-0 flex-col items-center justify-center rounded-lg border px-3 transition-all',
           !method.available
-            ? 'cursor-not-allowed border-gray-200 surface-inset opacity-50 dark:border-dark-700 dark:surface-inset'
+            ? 'cursor-not-allowed border-[var(--surface-edge)] surface-inset opacity-50'
             : selected === method.type
               ? methodSelectedClass(method.type)
-              : 'border-gray-300 surface-inset text-gray-700 hover:border-gray-400 dark:border-dark-600 dark:surface-inset dark:text-gray-200 dark:hover:border-dark-500',
+              : 'border-[var(--surface-edge)] surface-inset text-gray-700 hover:border-gray-400 dark:text-gray-200 dark:hover:border-dark-500',
         ]"
         @click="method.available && emit('select', method.type)"
       >

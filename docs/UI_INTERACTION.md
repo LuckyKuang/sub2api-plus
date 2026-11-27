@@ -69,7 +69,9 @@ layouts keep their natural vertical flow.
 Operations separates monitoring, alert events and system logs; risk control
 separates configuration and audit records; IP access control separates automatic
 protection, trusted proxies, login failures and rules. Existing rule links activate
-the rules tab. Admin usage is the usage-list workspace, retaining its
+the rules tab. The risk-control heading keeps its title, frameless tabs and
+right-aligned actions in three successive rows at every viewport width.
+Admin usage is the usage-list workspace, retaining its
 history/error/ranking/client-disconnect subviews; the chart statistics that used
 to share the page now live on the dashboard, whose cards scroll vertically in one
 column. Administrator history and error lists use separate rounded control and
@@ -93,6 +95,9 @@ component lifecycle so inactive modes do not acquire background polling.
 Fixed filter areas use the available width before wrapping. In shorter usage
 workspaces, the filter fields share a horizontal row with actions below it;
 search results stay portalled outside that row so scrolling cannot clip them.
+Below 1024px, TablePageLayout initially folds query rows with at least three
+filter fields. The toggle hides only those fields; refresh, creation, column
+settings and other page actions remain reachable in the same query row.
 
 Plugin management and channel monitoring keep their heading/control cards fixed.
 Prompt Audit keeps its title, events/configuration navigation, event filters and
@@ -136,6 +141,8 @@ locally. Both pages allocate the remaining desktop height to records alone;
 aligned bottom pagination stays fixed. Changing page resets the record viewport,
 and reduced results clamp the page. Redemption, copying and balance-transfer
 business rules stay unchanged. Mobile layouts keep natural page scrolling.
+The four guide cards have their own card surfaces and share the top row's outer
+edges; an additional inset card must not indent the guide grid.
 
 Scroll clipping belongs to the actual viewport: large content viewports use the
 outer card radius, and inset table viewports use the panel radius. Their corners
@@ -354,8 +361,9 @@ Public/auth forms and both consoles use the same button/input/Select styles.
 This contrast calculation uses the known theme surfaces; arbitrary custom
 background images beneath transparent fills can change the resulting contrast.
 
-Workspace tabs use 9px corners and at least 38px height; overflowing tab lists
-scroll horizontally. Card tabs wrap, including long translated labels. Explicit
+Workspace tabs use `--surface-radius-control` for corners and `--control-height`
+as their minimum height; overflowing tab lists scroll horizontally. Card tabs
+wrap, including long translated labels. Explicit
 single-choice groups use `segmented-control` and `segmented-option`: an 8px
 inset track with 3px spacing and 6px options of at least 26px height. Selection
 uses a subtle raised theme surface; long options can wrap and grow. Other
@@ -641,8 +649,8 @@ unavailable, the API validates midnight without a browser-local assumption.
 ## User and public presentation
 
 User pages (including admin support views and embedded Model Plaza) use an explicit
-`appearance="user"` on AppLayout. Below 768px the final horizontal inset is 1rem;
-from 768px to 1023px it is 1.5rem, counting existing shell reservations once.
+`appearance="user"` on AppLayout. The shared shell supplies the horizontal
+inset of 12px below 768px and 16px from 768px to 1023px.
 From 1024px the shared page occupies 94% of the main content viewport, capped at
 100rem (1600px at the default root size), with equal automatic side margins.
 This follows Café Shop's centered content-width limit and adds proportional

@@ -1,7 +1,7 @@
 <template>
   <div
     v-if="uniqueIps.length > 0"
-    class="flex flex-shrink-0 items-center justify-end gap-2 border-b border-gray-200 px-4 py-2 dark:border-dark-700"
+    class="flex flex-shrink-0 items-center justify-end gap-2 border-b border-[var(--surface-edge)] px-4 py-2"
   >
     <span v-if="pendingCount > 0" class="text-xs surface-muted">
       {{ t('usage.ipGeo.pending', { count: pendingCount }) }}

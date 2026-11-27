@@ -53,7 +53,7 @@
             <summary class="cursor-pointer px-6 py-4 font-medium">{{ t("adminAccessKeys.legacy") }}</summary>
 
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.adminApiKey.title") }}
@@ -173,7 +173,7 @@
           <!-- Overload Cooldown (529) Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.overloadCooldown.title") }}
@@ -208,7 +208,7 @@
 
                 <div
                   v-if="overloadCooldownForm.enabled"
-                  class="space-y-4 border-t border-gray-100 pt-4 dark:border-dark-700"
+                  class="space-y-4 border-t border-[var(--surface-edge)] pt-4"
                 >
                   <div>
                     <label
@@ -232,7 +232,7 @@
                 </div>
 
                 <div
-                  class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700"
+                  class="flex justify-end border-t border-[var(--surface-edge)] pt-4"
                 >
                   <button
                     type="button"
@@ -274,7 +274,7 @@
           <!-- Rate Limit Cooldown (429) Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.rateLimit429Cooldown.title") }}
@@ -309,7 +309,7 @@
 
                 <div
                   v-if="rateLimit429CooldownForm.enabled"
-                  class="space-y-4 border-t border-gray-100 pt-4 dark:border-dark-700"
+                  class="space-y-4 border-t border-[var(--surface-edge)] pt-4"
                 >
                   <div>
                     <label
@@ -339,7 +339,7 @@
                 </div>
 
                 <div
-                  class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700"
+                  class="flex justify-end border-t border-[var(--surface-edge)] pt-4"
                 >
                   <button
                     type="button"
@@ -381,7 +381,7 @@
           <!-- Stream Timeout Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.streamTimeout.title") }}
@@ -419,7 +419,7 @@
                 <!-- Settings - Only show when enabled -->
                 <div
                   v-if="streamTimeoutForm.enabled"
-                  class="space-y-4 border-t border-gray-100 pt-4 dark:border-dark-700"
+                  class="space-y-4 border-t border-[var(--surface-edge)] pt-4"
                 >
                   <!-- Action -->
                   <div>
@@ -509,7 +509,7 @@
 
                 <!-- Save Button -->
                 <div
-                  class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700"
+                  class="flex justify-end border-t border-[var(--surface-edge)] pt-4"
                 >
                   <button
                     type="button"
@@ -551,7 +551,7 @@
           <!-- Request Rectifier Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.rectifier.title") }}
@@ -589,7 +589,7 @@
                 <!-- Sub-toggles (only show when master is enabled) -->
                 <div
                   v-if="rectifierForm.enabled"
-                  class="space-y-4 border-t border-gray-100 pt-4 dark:border-dark-700"
+                  class="space-y-4 border-t border-[var(--surface-edge)] pt-4"
                 >
                   <!-- Thinking Signature Rectifier -->
                   <div class="flex items-center justify-between">
@@ -646,7 +646,7 @@
                   <!-- Custom Patterns (only when apikey_signature_enabled) -->
                   <div
                     v-if="rectifierForm.apikey_signature_enabled"
-                    class="ml-4 space-y-3 border-l-2 border-gray-200 pl-4 dark:border-dark-600"
+                    class="ml-4 space-y-3 border-l-2 border-[var(--surface-edge)] pl-4"
                   >
                     <div>
                       <label
@@ -711,7 +711,7 @@
 
                 <!-- Save Button -->
                 <div
-                  class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700"
+                  class="flex justify-end border-t border-[var(--surface-edge)] pt-4"
                 >
                   <button
                     type="button"
@@ -750,7 +750,7 @@
           <!-- Beta Policy Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.betaPolicy.title") }}
@@ -776,7 +776,7 @@
                 <div
                   v-for="rule in betaPolicyForm.rules"
                   :key="rule.beta_token"
-                  class="rounded-lg border border-gray-200 p-4 dark:border-dark-600"
+                  class="rounded-lg border border-[var(--surface-edge)] p-4"
                 >
                   <div class="mb-3 flex items-center gap-2">
                     <span
@@ -941,7 +941,7 @@
                         v-for="pattern in commonModelPatterns"
                         :key="pattern"
                         type="button"
-                        class="rounded border border-gray-200 px-2 py-0.5 text-xs transition-colors hover:border-primary-300 hover:bg-primary-50/25 hover:text-primary-700 dark:border-dark-600 dark:hover:border-primary-700 dark:hover:bg-primary-900/30 dark:hover:text-primary-300 surface-control surface-muted"
+                        class="rounded border border-[var(--surface-edge)] px-2 py-0.5 text-xs transition-colors hover:border-primary-300 hover:bg-primary-50/25 hover:text-primary-700 dark:hover:border-primary-700 dark:hover:bg-primary-900/30 dark:hover:text-primary-300 surface-control surface-muted"
                         @click="addQuickPattern(rule, pattern)"
                       >
                         {{ pattern }}
@@ -990,7 +990,7 @@
 
                 <!-- Save Button -->
                 <div
-                  class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700"
+                  class="flex justify-end border-t border-[var(--surface-edge)] pt-4"
                 >
                   <button
                     type="button"
@@ -1029,7 +1029,7 @@
           <!-- OpenAI Fast/Flex Policy Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.openaiFastPolicy.title") }}
@@ -1042,7 +1042,7 @@
               <!-- Empty state -->
               <div
                 v-if="openaiFastPolicyForm.rules.length === 0"
-                class="rounded-lg border border-dashed border-gray-200 p-6 text-center text-sm dark:border-dark-600 surface-muted"
+                class="rounded-lg border border-dashed border-[var(--surface-edge)] p-6 text-center text-sm surface-muted"
               >
                 {{ t("admin.settings.openaiFastPolicy.empty") }}
               </div>
@@ -1051,7 +1051,7 @@
               <div
                 v-for="(rule, ruleIndex) in openaiFastPolicyForm.rules"
                 :key="ruleIndex"
-                class="rounded-lg border border-gray-200 p-4 dark:border-dark-600"
+                class="rounded-lg border border-[var(--surface-edge)] p-4"
               >
                 <div class="mb-3 flex items-center justify-between">
                   <span
@@ -1383,7 +1383,7 @@
           <!-- Registration Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.registration.title") }}
@@ -1410,7 +1410,7 @@
 
               <!-- Email Verification -->
               <div
-                class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-4"
               >
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">{{
@@ -1424,7 +1424,7 @@
               </div>
 
               <!-- Email Suffix Whitelist -->
-              <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+              <div class="border-t border-[var(--surface-edge)] pt-4">
                 <label class="font-medium text-gray-900 dark:text-white">{{
                   t("admin.settings.registration.emailSuffixWhitelist")
                 }}</label>
@@ -1434,7 +1434,7 @@
                   }}
                 </p>
                 <div
-                  class="mt-3 rounded-lg border border-gray-300 surface-inset p-2 dark:border-dark-500"
+                  class="mt-3 rounded-lg border border-[var(--surface-edge)] surface-inset p-2"
                 >
                   <div class="flex flex-wrap items-center gap-2">
                     <span
@@ -1494,7 +1494,7 @@
 
               <!-- Email Domain Quota -->
               <div
-                class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-4"
               >
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">{{
@@ -1514,7 +1514,7 @@
 
               <!-- Promo Code -->
               <div
-                class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-4"
               >
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">{{
@@ -1529,7 +1529,7 @@
 
               <!-- Invitation Code -->
               <div
-                class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-4"
               >
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">{{
@@ -1544,7 +1544,7 @@
               <!-- Password Reset - Only show when email verification is enabled -->
               <div
                 v-if="form.email_verify_enabled"
-                class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-4"
               >
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">{{
@@ -1559,7 +1559,7 @@
               <!-- Frontend URL - Only show when password reset is enabled -->
               <div
                 v-if="form.email_verify_enabled && form.password_reset_enabled"
-                class="border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="border-t border-[var(--surface-edge)] pt-4"
               >
                 <label
                   class="mb-2 block text-sm font-medium surface-muted"
@@ -1581,7 +1581,7 @@
 
               <!-- TOTP 2FA -->
               <div
-                class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-4"
               >
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">{{
@@ -1606,7 +1606,7 @@
 
               <!-- Passkey sign-in -->
               <div
-                class="border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="border-t border-[var(--surface-edge)] pt-4"
                 data-testid="passkey-settings"
               >
                 <div class="flex items-start justify-between gap-4">
@@ -1665,7 +1665,7 @@
 
               <!-- 敏感操作 step-up 2FA -->
               <div
-                class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-4"
               >
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">{{
@@ -1680,7 +1680,7 @@
 
               <!-- 会话 IP/UA 绑定 -->
               <div
-                class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-4"
               >
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">{{
@@ -1695,7 +1695,7 @@
 
               <!-- 审计日志保留天数 -->
               <div
-                class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-4"
               >
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">{{
@@ -1717,7 +1717,7 @@
 
           <!-- Global IP Access Control -->
           <div class="card workspace-shell">
-            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <div class="border-b border-[var(--surface-edge)] px-6 py-4">
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.ipAccessControl.title") }}
               </h2>
@@ -1756,7 +1756,7 @@
           <!-- API Key IP ACL Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.apiKeyAcl.title") }}
@@ -1780,7 +1780,7 @@
 
               <div
                 v-if="form.api_key_acl_trust_forwarded_ip"
-                class="border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="border-t border-[var(--surface-edge)] pt-4"
               >
                 <label
                   for="forwarded-client-ip-headers"
@@ -1792,7 +1792,7 @@
                   {{ t("admin.settings.apiKeyAcl.forwardedClientIpHeadersHint") }}
                 </p>
                 <div
-                  class="mt-3 rounded-lg border border-gray-300 surface-inset p-2 dark:border-dark-500"
+                  class="mt-3 rounded-lg border border-[var(--surface-edge)] surface-inset p-2"
                 >
                   <div class="flex flex-wrap items-center gap-2">
                     <span
@@ -1843,7 +1843,7 @@
           <!-- Panel API Rate Limit Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <div class="flex items-center gap-2">
                 <Icon
@@ -1901,7 +1901,7 @@
 
                 <div
                   v-if="panelRateLimitForm.enabled"
-                  class="space-y-5 border-t border-gray-100 pt-4 dark:border-dark-700"
+                  class="space-y-5 border-t border-[var(--surface-edge)] pt-4"
                 >
                   <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
                     <div>
@@ -1976,7 +1976,7 @@
                   </div>
 
                   <div
-                    class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
+                    class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-4"
                   >
                     <div>
                       <label class="font-medium text-gray-900 dark:text-white">{{
@@ -1991,7 +1991,7 @@
                 </div>
 
                 <div
-                  class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700"
+                  class="flex justify-end border-t border-[var(--surface-edge)] pt-4"
                 >
                   <button
                     type="button"
@@ -2034,7 +2034,7 @@
           <!-- 人机验证 Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.captcha.title") }}
@@ -2063,7 +2063,7 @@
               <!-- Provider fields - Only show when enabled -->
               <div
                 v-if="captchaMasterEnabled"
-                class="border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="border-t border-[var(--surface-edge)] pt-4"
               >
                 <!-- Provider Selector -->
                 <div class="mb-6">
@@ -2081,7 +2081,7 @@
                       class="inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition surface-control"
                       :class="
                         captchaProviderSelection === 'turnstile'
-                          ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
+                          ? 'surface-field text-primary-700 shadow-sm dark:text-primary-300'
                           : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
                       "
                       @click="selectCaptchaProvider('turnstile')"
@@ -2094,7 +2094,7 @@
                       class="inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition surface-control"
                       :class="
                         captchaProviderSelection === 'tencent'
-                          ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
+                          ? 'surface-field text-primary-700 shadow-sm dark:text-primary-300'
                           : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
                       "
                       @click="selectCaptchaProvider('tencent')"
@@ -2107,7 +2107,7 @@
                       class="inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition surface-control"
                       :class="
                         captchaProviderSelection === 'aliyun'
-                          ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
+                          ? 'surface-field text-primary-700 shadow-sm dark:text-primary-300'
                           : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
                       "
                       @click="selectCaptchaProvider('aliyun')"
@@ -2183,7 +2183,7 @@
                         class="inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition surface-control"
                         :class="
                           form.tencent_captcha_region !== 'intl'
-                            ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
+                            ? 'surface-field text-primary-700 shadow-sm dark:text-primary-300'
                             : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
                         "
                         @click="form.tencent_captcha_region = 'cn'"
@@ -2196,7 +2196,7 @@
                         class="inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition surface-control"
                         :class="
                           form.tencent_captcha_region === 'intl'
-                            ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
+                            ? 'surface-field text-primary-700 shadow-sm dark:text-primary-300'
                             : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
                         "
                         @click="form.tencent_captcha_region = 'intl'"
@@ -2244,7 +2244,7 @@
                         {{ form.tencent_captcha_app_secret_key_configured ? t("admin.settings.tencentCaptcha.configured") : t("admin.settings.tencentCaptcha.required") }}
                       </p>
                     </div>
-                    <div class="border-t border-gray-100 pt-5 md:col-span-2 dark:border-dark-700">
+                    <div class="border-t border-[var(--surface-edge)] pt-5 md:col-span-2">
                       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
                         {{ t("admin.settings.tencentCaptcha.cloudCredentialsTitle") }}
                       </h3>
@@ -2334,7 +2334,7 @@
                           class="inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition surface-control"
                           :class="
                             form.aliyun_captcha_region !== 'sgp'
-                              ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
+                              ? 'surface-field text-primary-700 shadow-sm dark:text-primary-300'
                               : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
                           "
                           @click="form.aliyun_captcha_region = 'cn'"
@@ -2346,7 +2346,7 @@
                           class="inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition surface-control"
                           :class="
                             form.aliyun_captcha_region === 'sgp'
-                              ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
+                              ? 'surface-field text-primary-700 shadow-sm dark:text-primary-300'
                               : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
                           "
                           @click="form.aliyun_captcha_region = 'sgp'"
@@ -2438,7 +2438,7 @@
           <!-- LinuxDo Connect OAuth 登录 -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.linuxdo.title") }}
@@ -2462,7 +2462,7 @@
 
               <div
                 v-if="form.linuxdo_connect_enabled"
-                class="border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="border-t border-[var(--surface-edge)] pt-4"
               >
                 <div class="grid grid-cols-1 gap-6">
                   <div>
@@ -2556,7 +2556,7 @@
           <!-- GitHub / Google 邮箱快捷登录 -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ localText("邮箱快捷登录", "Email OAuth Sign-in") }}
@@ -2572,7 +2572,7 @@
             </div>
             <div class="space-y-6 p-6">
               <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+                <div class="rounded-lg border border-[var(--surface-edge)] p-4">
                   <div class="flex items-start justify-between gap-4">
                     <div>
                       <h3 class="font-medium text-gray-900 dark:text-white">
@@ -2682,7 +2682,7 @@
                   </div>
                 </div>
 
-                <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+                <div class="rounded-lg border border-[var(--surface-edge)] p-4">
                   <div class="flex items-start justify-between gap-4">
                     <div>
                       <h3 class="font-medium text-gray-900 dark:text-white">
@@ -2782,7 +2782,7 @@
           <!-- WeChat Connect OAuth 登录 -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.wechatConnect.title") }}
@@ -2809,11 +2809,11 @@
 
               <div
                 v-if="form.wechat_connect_enabled"
-                class="space-y-6 border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="space-y-6 border-t border-[var(--surface-edge)] pt-4"
               >
                 <div class="space-y-4">
                   <div
-                    class="rounded-lg border border-gray-200 p-4 dark:border-dark-700"
+                    class="rounded-lg border border-[var(--surface-edge)] p-4"
                   >
                     <div class="flex items-start justify-between gap-4">
                       <div>
@@ -2886,7 +2886,7 @@
                   </div>
 
                   <div
-                    class="rounded-lg border border-gray-200 p-4 dark:border-dark-700"
+                    class="rounded-lg border border-[var(--surface-edge)] p-4"
                   >
                     <div class="flex items-start justify-between gap-4">
                       <div>
@@ -2964,7 +2964,7 @@
                   </div>
 
                   <div
-                    class="rounded-lg border border-gray-200 p-4 dark:border-dark-700"
+                    class="rounded-lg border border-[var(--surface-edge)] p-4"
                   >
                     <div class="flex items-start justify-between gap-4">
                       <div>
@@ -3124,7 +3124,7 @@
           <!-- DingTalk Connect OAuth 登录 -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.dingtalk.title") }}
@@ -3148,7 +3148,7 @@
 
               <div
                 v-if="form.dingtalk_connect_enabled"
-                class="border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="border-t border-[var(--surface-edge)] pt-4"
               >
                 <div class="grid grid-cols-1 gap-6">
                   <div>
@@ -3219,7 +3219,7 @@
                   </div>
 
                   <!-- Corp Restriction Policy -->
-                  <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+                  <div class="border-t border-[var(--surface-edge)] pt-4">
                     <label class="mb-2 block text-sm font-medium surface-muted">
                       {{ t("admin.settings.dingtalk.corpPolicy.label") }}
                     </label>
@@ -3255,7 +3255,7 @@
                   <!-- bypass_registration toggle（仅 internal_only 模式下可见可用） -->
                   <div
                     v-if="form.dingtalk_connect_corp_restriction_policy === 'internal_only'"
-                    class="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-dark-700"
+                    class="flex items-center justify-between pt-4 border-t border-[var(--surface-edge)]"
                   >
                     <div>
                       <label class="font-medium text-gray-900 dark:text-white">{{
@@ -3271,7 +3271,7 @@
                   <!-- 身份同步开关（仅 internal_only 模式下可见） -->
                   <div
                     v-if="form.dingtalk_connect_corp_restriction_policy === 'internal_only'"
-                    class="pt-4 border-t border-gray-100 dark:border-dark-700 space-y-2"
+                    class="pt-4 border-t border-[var(--surface-edge)] space-y-2"
                   >
                     <div class="flex items-center justify-between">
                       <div>
@@ -3314,7 +3314,7 @@
                   </div>
                   <div
                     v-if="form.dingtalk_connect_corp_restriction_policy === 'internal_only'"
-                    class="pt-4 border-t border-gray-100 dark:border-dark-700 space-y-2"
+                    class="pt-4 border-t border-[var(--surface-edge)] space-y-2"
                   >
                     <div class="flex items-center justify-between">
                       <div>
@@ -3360,7 +3360,7 @@
                   </div>
                   <div
                     v-if="form.dingtalk_connect_corp_restriction_policy === 'internal_only'"
-                    class="pt-4 border-t border-gray-100 dark:border-dark-700 space-y-2"
+                    class="pt-4 border-t border-[var(--surface-edge)] space-y-2"
                   >
                     <div class="flex items-center justify-between">
                       <div>
@@ -3412,7 +3412,7 @@
           <!-- Generic OIDC OAuth 登录 -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.oidc.title") }}
@@ -3436,7 +3436,7 @@
 
               <div
                 v-if="form.oidc_connect_enabled"
-                class="space-y-6 border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="space-y-6 border-t border-[var(--surface-edge)] pt-4"
               >
                 <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
                   <div>
@@ -3718,7 +3718,7 @@
 
                 <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
                   <div
-                    class="flex items-center justify-between rounded border border-gray-200 px-4 py-3 dark:border-dark-700"
+                    class="flex items-center justify-between rounded border border-[var(--surface-edge)] px-4 py-3"
                   >
                     <div>
                       <label class="font-medium text-gray-900 dark:text-white">
@@ -3732,7 +3732,7 @@
                   </div>
 
                   <div
-                    class="flex items-center justify-between rounded border border-gray-200 px-4 py-3 dark:border-dark-700"
+                    class="flex items-center justify-between rounded border border-[var(--surface-edge)] px-4 py-3"
                   >
                     <div>
                       <label class="font-medium text-gray-900 dark:text-white">
@@ -3746,7 +3746,7 @@
                   </div>
 
                   <div
-                    class="flex items-center justify-between rounded border border-gray-200 px-4 py-3 dark:border-dark-700"
+                    class="flex items-center justify-between rounded border border-[var(--surface-edge)] px-4 py-3"
                   >
                     <div>
                       <label class="font-medium text-gray-900 dark:text-white">
@@ -3819,7 +3819,7 @@
           <!-- Default Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.defaults.title") }}
@@ -3903,7 +3903,7 @@
                 </div>
               </div>
 
-              <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+              <div class="border-t border-[var(--surface-edge)] pt-4">
                 <div class="mb-3 flex items-center justify-between">
                   <div>
                     <label class="font-medium text-gray-900 dark:text-white">
@@ -3927,7 +3927,7 @@
 
                 <div
                   v-if="form.default_subscriptions.length === 0"
-                  class="rounded border border-dashed border-gray-300 px-4 py-3 text-sm dark:border-dark-600 surface-muted"
+                  class="rounded border border-dashed border-[var(--surface-edge)] px-4 py-3 text-sm surface-muted"
                 >
                   {{ t("admin.settings.defaults.defaultSubscriptionsEmpty") }}
                 </div>
@@ -3936,7 +3936,7 @@
                   <div
                     v-for="(item, index) in form.default_subscriptions"
                     :key="`default-sub-${index}`"
-                    class="grid grid-cols-1 gap-3 rounded border border-gray-200 p-3 md:grid-cols-[1fr_160px_auto] dark:border-dark-600"
+                    class="grid grid-cols-1 gap-3 rounded border border-[var(--surface-edge)] p-3 md:grid-cols-[1fr_160px_auto]"
                   >
                     <div>
                       <label
@@ -4042,7 +4042,7 @@
               </div>
 
               <!-- ★ 新增：系统全局默认平台限额矩阵 -->
-              <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+              <div class="border-t border-[var(--surface-edge)] pt-4">
                 <div class="mb-3">
                   <label class="font-medium text-gray-900 dark:text-white">
                     {{ t("admin.settings.defaults.defaultPlatformQuotas") }}
@@ -4110,7 +4110,7 @@
 
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.authSourceDefaults.title") }}
@@ -4121,7 +4121,7 @@
             </div>
             <div class="space-y-6 p-6">
               <div
-                class="flex items-center justify-between rounded border border-gray-200 px-4 py-3 dark:border-dark-700"
+                class="flex items-center justify-between rounded border border-[var(--surface-edge)] px-4 py-3"
               >
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">
@@ -4138,7 +4138,7 @@
                 <div
                   v-for="authSource in authSourceDefaultsMeta"
                   :key="authSource.source"
-                  class="rounded-xl border border-gray-200 p-4 dark:border-dark-700"
+                  class="rounded-lg border border-[var(--surface-edge)] p-4"
                 >
                   <div class="flex items-center justify-between gap-4">
                     <div>
@@ -4160,7 +4160,7 @@
                   <div
                     v-if="authSourceDefaults[authSource.source].grant_on_signup"
                     :data-testid="`auth-source-${authSource.source}-panel`"
-                    class="mt-4 space-y-4 border-t border-gray-100 pt-4 dark:border-dark-700"
+                    class="mt-4 space-y-4 border-t border-[var(--surface-edge)] pt-4"
                   >
                     <p class="text-sm surface-muted">
                       {{ t("admin.settings.authSourceDefaults.enabledHint") }}
@@ -4203,7 +4203,7 @@
                     </div>
 
                     <div
-                      class="flex items-center justify-between rounded border border-gray-200 px-4 py-3 dark:border-dark-700"
+                      class="flex items-center justify-between rounded border border-[var(--surface-edge)] px-4 py-3"
                     >
                       <div>
                         <label
@@ -4255,7 +4255,7 @@
                         authSourceDefaults[authSource.source].subscriptions
                           .length === 0
                       "
-                      class="rounded border border-dashed border-gray-300 px-4 py-3 text-sm dark:border-dark-600 surface-muted"
+                      class="rounded border border-dashed border-[var(--surface-edge)] px-4 py-3 text-sm surface-muted"
                     >
                       {{ t("admin.settings.authSourceDefaults.noSourceSubscriptions") }}
                     </div>
@@ -4266,7 +4266,7 @@
                           authSource.source
                         ].subscriptions"
                         :key="`${authSource.source}-sub-${index}`"
-                        class="grid grid-cols-1 gap-3 rounded border border-gray-200 p-3 md:grid-cols-[1fr_160px_auto] dark:border-dark-600"
+                        class="grid grid-cols-1 gap-3 rounded border border-[var(--surface-edge)] p-3 md:grid-cols-[1fr_160px_auto]"
                       >
                         <div>
                           <label
@@ -4380,7 +4380,7 @@
                     </div>
 
                     <!-- ★ 新增：auth source 平台限额覆盖区块 -->
-                    <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+                    <div class="border-t border-[var(--surface-edge)] pt-4">
                       <div class="mb-3">
                         <label class="font-medium text-gray-900 dark:text-white">
                           {{ t("admin.settings.authSourceDefaults.platformQuotasOverride") }}
@@ -4453,7 +4453,7 @@
           <!-- Claude Code Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.claudeCode.title") }}
@@ -4505,7 +4505,7 @@
           <!-- Codex Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.gatewayForwarding.codexHardeningTitle") }}
@@ -4733,7 +4733,7 @@
 
           <!-- Ollama Cloud Usage Settings -->
           <div class="card workspace-shell" data-testid="ollama-cloud-usage-global-settings">
-            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <div class="border-b border-[var(--surface-edge)] px-6 py-4">
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.ollamaCloudUsage.title") }}
               </h2>
@@ -4762,7 +4762,7 @@
                     data-testid="ollama-cloud-usage-global-enabled"
                   />
                 </div>
-                <div v-if="ollamaCloudUsageForm.enabled" class="space-y-4 border-t border-gray-100 pt-4 dark:border-dark-700">
+                <div v-if="ollamaCloudUsageForm.enabled" class="space-y-4 border-t border-[var(--surface-edge)] pt-4">
                   <div>
                     <label class="mb-2 block text-sm font-medium surface-muted" for="ollama-cloud-usage-debounce">
                       {{ t("admin.settings.ollamaCloudUsage.debounceMinutes") }}
@@ -4800,7 +4800,7 @@
                     </p>
                   </div>
                 </div>
-                <div class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700">
+                <div class="flex justify-end border-t border-[var(--surface-edge)] pt-4">
                   <button
                     type="button"
                     class="btn btn-primary btn-sm"
@@ -4818,7 +4818,7 @@
           <!-- Gateway Scheduling Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.scheduling.title") }}
@@ -4842,7 +4842,7 @@
                 <Toggle v-model="form.allow_ungrouped_key_scheduling" />
               </div>
 
-              <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+              <div class="border-t border-[var(--surface-edge)] pt-4">
                 <div class="mb-3">
                   <label class="font-medium text-gray-900 dark:text-white">
                     {{
@@ -4877,7 +4877,7 @@
                   <div
                     v-for="platform in schedulingThresholdPlatforms"
                     :key="platform"
-                    class="rounded-lg border border-gray-200 p-4 dark:border-dark-700"
+                    class="rounded-lg border border-[var(--surface-edge)] p-4"
                   >
                     <div class="flex items-start justify-between gap-3">
                       <div>
@@ -4916,7 +4916,7 @@
 
               <div
                 v-if="!form.openai_advanced_scheduler_enabled"
-                class="flex items-center justify-between border-t border-gray-100 pt-5 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-5"
               >
                 <div>
                   <label
@@ -4938,7 +4938,7 @@
 
               <div
                 v-if="!form.openai_advanced_scheduler_enabled && form.openai_low_upstream_rate_priority_enabled"
-                class="flex flex-col items-stretch gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:items-start sm:justify-between sm:gap-6 dark:border-dark-700"
+                class="flex flex-col items-stretch gap-3 border-t border-[var(--surface-edge)] pt-5 sm:flex-row sm:items-start sm:justify-between sm:gap-6"
               >
                 <div class="min-w-0">
                   <label
@@ -4968,7 +4968,7 @@
                 </div>
               </div>
 
-              <div class="flex items-center justify-between border-t border-gray-100 pt-5 dark:border-dark-700">
+              <div class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-5">
                 <div>
                   <label
                     class="text-sm font-medium surface-muted"
@@ -4989,7 +4989,7 @@
 
               <div
                 v-if="form.openai_advanced_scheduler_enabled"
-                class="flex items-center justify-between border-t border-gray-100 pt-5 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-5"
               >
                 <div>
                   <label
@@ -5008,7 +5008,7 @@
 
               <div
                 v-if="form.openai_advanced_scheduler_enabled"
-                class="flex items-center justify-between border-t border-gray-100 pt-5 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-5"
               >
                 <div>
                   <label
@@ -5027,7 +5027,7 @@
 
               <div
                 v-if="form.openai_advanced_scheduler_enabled"
-                class="flex flex-col items-stretch gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:items-start sm:justify-between sm:gap-6 dark:border-dark-700"
+                class="flex flex-col items-stretch gap-3 border-t border-[var(--surface-edge)] pt-5 sm:flex-row sm:items-start sm:justify-between sm:gap-6"
               >
                 <div class="min-w-0">
                   <label
@@ -5059,7 +5059,7 @@
 
               <div
                 v-if="form.openai_advanced_scheduler_enabled"
-                class="border-t border-gray-100 pt-5 dark:border-dark-700"
+                class="border-t border-[var(--surface-edge)] pt-5"
               >
                 <div>
                   <label
@@ -5099,7 +5099,7 @@
           <!-- Gateway Forwarding Behavior -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.gatewayForwarding.title") }}
@@ -5109,7 +5109,7 @@
               </p>
             </div>
             <div class="space-y-5 p-6">
-              <div class="grid gap-5 border-b border-gray-100 pb-5 dark:border-dark-700 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+              <div class="grid gap-5 border-b border-[var(--surface-edge)] pb-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                 <div>
                   <label
                     for="grok-default-text-model"
@@ -5268,7 +5268,7 @@
                   <div
                     v-for="(block, index) in claudeOAuthSystemPromptBlocks"
                     :key="block.id"
-                    class="rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-700"
+                    class="rounded-lg border border-[var(--surface-edge)] surface-inset p-4"
                   >
                     <div
                       :class="[
@@ -5535,7 +5535,7 @@
 
 
               <!-- Codex 历史客户端档案兼容模式 -->
-              <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-4 dark:border-dark-700">
+              <div class="flex items-center justify-between gap-4 border-t border-[var(--surface-edge)] pt-4">
                 <div>
                   <label class="text-sm font-medium surface-muted">
                     {{ t('admin.settings.gatewayForwarding.codexLegacyClientProfileCompatibility') }}
@@ -5550,7 +5550,7 @@
                 />
               </div>
 
-              <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-4 dark:border-dark-700">
+              <div class="flex items-center justify-between gap-4 border-t border-[var(--surface-edge)] pt-4">
                 <div>
                   <label class="text-sm font-medium surface-muted">
                     {{ t('admin.settings.gatewayForwarding.openaiCodexLocalGroupQuota') }}
@@ -5569,7 +5569,7 @@
           <!-- Web Search Emulation -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.webSearchEmulation.title") }}
@@ -5613,7 +5613,7 @@
 
                 <div
                   v-if="webSearchConfig.providers.length === 0"
-                  class="rounded-lg border border-dashed border-gray-300 p-4 text-center text-sm dark:border-dark-600 surface-muted"
+                  class="rounded-lg border border-dashed border-[var(--surface-edge)] p-4 text-center text-sm surface-muted"
                 >
                   {{ t("admin.settings.webSearchEmulation.noProviders") }}
                 </div>
@@ -5621,7 +5621,7 @@
                 <div
                   v-for="(provider, pIdx) in webSearchConfig.providers"
                   :key="pIdx"
-                  class="rounded-lg border border-gray-200 dark:border-dark-600"
+                  class="rounded-lg border border-[var(--surface-edge)]"
                 >
                   <!-- Collapsible header -->
                   <div
@@ -5690,7 +5690,7 @@
                   <!-- Expanded content -->
                   <div
                     v-if="expandedProviders[pIdx]"
-                    class="space-y-3 border-t border-gray-100 px-4 pb-4 pt-3 dark:border-dark-700"
+                    class="space-y-3 border-t border-[var(--surface-edge)] px-4 pb-4 pt-3"
                   >
                     <!-- API Key with inline show/copy -->
                     <div>
@@ -5926,7 +5926,7 @@
             @click.self="wsTestDialogOpen = false"
           >
             <div
-              class="mx-4 w-full max-w-lg rounded-xl surface-inset p-6 shadow-xl"
+              class="mx-4 w-full max-w-lg surface-panel p-6 shadow-xl"
             >
               <h3
                 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white"
@@ -5977,7 +5977,7 @@
                 <div
                   v-for="(r, rIdx) in wsTestResult.results"
                   :key="rIdx"
-                  class="mt-2 border-t border-gray-200 pt-2 first:mt-0 first:border-0 first:pt-0 dark:border-dark-600"
+                  class="mt-2 border-t border-[var(--surface-edge)] pt-2 first:mt-0 first:border-0 first:pt-0"
                 >
                   <a
                     :href="r.url"
@@ -6004,7 +6004,7 @@
 
         <!-- Usage Records Settings -->
         <div class="card workspace-shell">
-          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <div class="border-b border-[var(--surface-edge)] px-6 py-4">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.usageRecords.title') }}
             </h2>
@@ -6039,7 +6039,7 @@
           <!-- Site Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.site.title") }}
@@ -6120,7 +6120,7 @@
               </div>
 
               <!-- Global Table Preferences -->
-              <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+              <div class="border-t border-[var(--surface-edge)] pt-4">
                 <h3 class="text-sm font-medium text-gray-900 dark:text-white">
                   {{ t("admin.settings.site.tablePreferencesTitle") }}
                 </h3>
@@ -6182,7 +6182,7 @@
                   <div
                     v-for="(ep, index) in form.custom_endpoints"
                     :key="index"
-                    class="rounded-lg border border-gray-200 p-4 dark:border-dark-600"
+                    class="rounded-lg border border-[var(--surface-edge)] p-4"
                   >
                     <div class="mb-3 flex items-center justify-between">
                       <span
@@ -6278,7 +6278,7 @@
 
                 <button
                   type="button"
-                  class="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-4 py-2.5 text-sm transition-colors hover:border-primary-400 hover:text-primary-600 dark:border-dark-600 dark:hover:border-primary-500 dark:hover:text-primary-400 surface-control surface-muted"
+                  class="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[var(--surface-edge)] px-4 py-2.5 text-sm transition-colors hover:border-primary-400 hover:text-primary-600 dark:hover:border-primary-500 dark:hover:text-primary-400 surface-control surface-muted"
                   @click="addEndpoint"
                 >
                   <svg
@@ -6374,7 +6374,7 @@
               </div>
 
               <!-- Compact Home Page -->
-              <div class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700">
+              <div class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-4">
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">{{
                     t("admin.settings.site.compactHome")
@@ -6388,7 +6388,7 @@
 
               <!-- Hide CCS Import Button -->
               <div
-                class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-4"
               >
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">{{
@@ -6406,7 +6406,7 @@
           <!-- Custom Menu Items -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.customMenu.title") }}
@@ -6420,7 +6420,7 @@
               <div
                 v-for="(item, index) in form.custom_menu_items"
                 :key="item.id || index"
-                class="rounded-lg border border-gray-200 p-4 dark:border-dark-600"
+                class="rounded-lg border border-[var(--surface-edge)] p-4"
               >
                 <div class="mb-3 flex items-center justify-between">
                   <span
@@ -6582,7 +6582,7 @@
               <!-- Add button -->
               <button
                 type="button"
-                class="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 py-3 text-sm transition-colors hover:border-primary-400 hover:text-primary-600 dark:border-dark-600 dark:hover:border-primary-500 dark:hover:text-primary-400 surface-control surface-muted"
+                class="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[var(--surface-edge)] py-3 text-sm transition-colors hover:border-primary-400 hover:text-primary-600 dark:hover:border-primary-500 dark:hover:text-primary-400 surface-control surface-muted"
                 @click="addMenuItem"
               >
                 <svg
@@ -6608,7 +6608,7 @@
 	        <!-- Tab: Login Agreement -->
 	        <div v-show="activeTab === 'agreement'" class="space-y-6">
 	          <div class="card workspace-shell">
-	            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+	            <div class="border-b border-[var(--surface-edge)] px-6 py-4">
 	              <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 	                <div>
 	                  <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
@@ -6644,7 +6644,7 @@
                       class="inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition surface-control"
                       :class="
                         form.login_agreement_mode === 'modal'
-                          ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
+                          ? 'surface-field text-primary-700 shadow-sm dark:text-primary-300'
                           : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
                       "
                       @click="form.login_agreement_mode = 'modal'"
@@ -6657,7 +6657,7 @@
                       class="inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition surface-control"
                       :class="
                         form.login_agreement_mode === 'checkbox'
-                          ? 'surface-field text-primary-700 shadow-sm dark:surface-field dark:text-primary-300'
+                          ? 'surface-field text-primary-700 shadow-sm dark:text-primary-300'
                           : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
                       "
                       @click="form.login_agreement_mode = 'checkbox'"
@@ -6719,7 +6719,7 @@
                   <div
                     v-for="(doc, index) in form.login_agreement_documents"
                     :key="doc.id || index"
-                    class="rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-700"
+                    class="rounded-lg border border-[var(--surface-edge)] surface-inset p-4"
                   >
                     <div class="mb-3 flex items-center justify-between gap-3">
                       <div class="flex min-w-0 items-center gap-3">
@@ -6775,8 +6775,8 @@
                         <label class="mb-1 block text-xs font-medium surface-muted">
                           {{ localText("路由标识", "Route slug") }}
                         </label>
-                        <div class="flex overflow-hidden rounded-lg border border-gray-300 surface-inset focus-within:border-primary-500 focus-within:ring-1 focus-within:ring-primary-500 dark:border-dark-600">
-                          <span class="inline-flex flex-shrink-0 items-center border-r border-gray-200 surface-inset px-3 text-sm dark:border-dark-700 surface-muted">
+                        <div class="flex overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset focus-within:border-primary-500 focus-within:ring-1 focus-within:ring-primary-500">
+                          <span class="inline-flex flex-shrink-0 items-center border-r border-[var(--surface-edge)] surface-inset px-3 text-sm surface-muted">
                             /legal/
                           </span>
                           <input
@@ -6811,7 +6811,7 @@
         <div v-show="activeTab === 'features'" class="space-y-6">
 
         <div class="card workspace-shell">
-          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <div class="border-b border-[var(--surface-edge)] px-6 py-4">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.channelMonitor.title') }}
             </h2>
@@ -6938,7 +6938,7 @@
         </div>
 
         <div class="card workspace-shell">
-          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <div class="border-b border-[var(--surface-edge)] px-6 py-4">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.availableChannels.title') }}
             </h2>
@@ -6985,7 +6985,7 @@
         </div>
 
         <div class="card workspace-shell">
-          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <div class="border-b border-[var(--surface-edge)] px-6 py-4">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.modelPlaza.title') }}
             </h2>
@@ -7043,7 +7043,7 @@
         </div>
 
         <div class="card workspace-shell">
-          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <div class="border-b border-[var(--surface-edge)] px-6 py-4">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.siteBillingMode.title') }}
             </h2>
@@ -7073,7 +7073,7 @@
         </div>
 
         <div class="card workspace-shell">
-          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <div class="border-b border-[var(--surface-edge)] px-6 py-4">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.pluginManagement.title') }}
             </h2>
@@ -7097,7 +7097,7 @@
         </div>
 
         <div class="card workspace-shell">
-          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <div class="border-b border-[var(--surface-edge)] px-6 py-4">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.riskControl.title') }}
             </h2>
@@ -7201,7 +7201,7 @@
 
         <!-- Affiliate (邀请返利) feature card -->
         <div class="card workspace-shell">
-          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <div class="border-b border-[var(--surface-edge)] px-6 py-4">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.affiliate.title') }}
             </h2>
@@ -7307,7 +7307,7 @@
               </div>
 
               <!-- 专属用户管理 -->
-              <div class="border-t border-gray-100 pt-6 dark:border-dark-700">
+              <div class="border-t border-[var(--surface-edge)] pt-6">
                 <div class="mb-3 flex items-center justify-between">
                   <div>
                     <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
@@ -7344,9 +7344,9 @@
                   </button>
                 </div>
 
-                <div class="record-table-scroll overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-700">
-                  <table class="record-table record-table-compact min-w-full divide-y divide-gray-200 dark:divide-dark-700">
-                    <thead class="surface-inset">
+                <div class="record-table-scroll overflow-x-auto rounded-lg border border-[var(--surface-edge)]">
+                  <table class="record-table record-table-compact min-w-full divide-y divide-[var(--surface-edge)]">
+                    <thead>
                       <tr>
                         <th class="px-3 py-2 text-left">
                           <input
@@ -7362,7 +7362,7 @@
                         <th class="px-3 py-2 text-left text-xs font-medium uppercase surface-muted">{{ t('admin.settings.features.affiliate.customUsers.col.actions') }}</th>
                       </tr>
                     </thead>
-                    <tbody class="divide-y divide-gray-200 surface-inset dark:divide-dark-700">
+                    <tbody class="divide-y divide-[var(--surface-edge)]">
                       <tr v-if="affiliateState.loading">
                         <td colspan="6" class="px-3 py-6 text-center text-sm surface-muted">
                           {{ t('common.loading') }}
@@ -7475,7 +7475,7 @@
                   />
                   <div
                     v-if="affiliateModal.userResults.length > 0"
-                    class="mt-1 max-h-40 overflow-y-auto rounded border border-gray-200 dark:border-dark-700"
+                    class="mt-1 max-h-40 overflow-y-auto rounded border border-[var(--surface-edge)]"
                   >
                     <button
                       v-for="u in affiliateModal.userResults"
@@ -7610,7 +7610,7 @@
           <!-- Payment System Settings -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.payment.title") }}
@@ -7683,7 +7683,7 @@
                       t("admin.settings.payment.preview")
                     }}</label>
                     <div
-                      class="rounded-lg border border-gray-200 surface-inset px-3 py-2 text-sm dark:border-dark-600 surface-muted"
+                      class="rounded-lg border border-[var(--surface-edge)] surface-inset px-3 py-2 text-sm surface-muted"
                     >
                       {{
                         (form.payment_product_name_prefix || "Sub2API Plus") +
@@ -8019,7 +8019,7 @@
                         'rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
                         isPaymentTypeEnabled(pt.value)
                           ? 'border-primary-500 bg-primary-500 text-white shadow-sm'
-                          : 'border-gray-300 surface-inset text-gray-600 hover:border-gray-400 hover:surface-hover dark:border-dark-600 dark:surface-inset dark:text-gray-300 dark:hover:border-dark-500',
+                          : 'border-[var(--surface-edge)] surface-inset text-gray-600 hover:border-gray-400 hover:surface-hover dark:text-gray-300 dark:hover:border-dark-500',
                       ]"
                     >
                       {{ pt.label }}
@@ -8084,7 +8084,7 @@
           </div>
 
           <div class="card workspace-shell">
-            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"><h2 class="text-lg font-semibold">{{ t('featureExtensions.purchaseSettings') }}</h2><p class="mt-1 text-sm surface-muted">{{ t('featureExtensions.purchaseSettingsHint') }}</p></div>
+            <div class="border-b border-[var(--surface-edge)] px-6 py-4"><h2 class="text-lg font-semibold">{{ t('featureExtensions.purchaseSettings') }}</h2><p class="mt-1 text-sm surface-muted">{{ t('featureExtensions.purchaseSettingsHint') }}</p></div>
             <div class="space-y-4 p-6">
               <div class="flex items-center justify-between"><label class="input-label">{{ t('featureExtensions.purchaseEnabled') }}</label><Toggle v-model="form.payment_redeem_purchase_enabled" /></div>
               <div><label class="input-label" for="redeem-purchase-url">{{ t('featureExtensions.purchaseURL') }}</label><input id="redeem-purchase-url" v-model="form.payment_redeem_purchase_url" type="url" class="input" placeholder="https://" /></div>
@@ -8144,7 +8144,7 @@
           <!-- SMTP Settings - Only show when email verification is enabled -->
           <div v-if="form.email_verify_enabled" class="card workspace-shell">
             <div
-              class="flex items-center justify-between border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="flex items-center justify-between border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <div>
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
@@ -8289,7 +8289,7 @@
 
               <!-- Use TLS Toggle -->
               <div
-                class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
+                class="flex items-center justify-between border-t border-[var(--surface-edge)] pt-4"
               >
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">{{
@@ -8307,7 +8307,7 @@
           <!-- Send Test Email - Only show when email verification is enabled -->
           <div v-if="form.email_verify_enabled" class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.testEmail.title") }}
@@ -8374,7 +8374,7 @@
           <!-- 订阅到期提醒 -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h3 class="text-base font-medium text-gray-900 dark:text-white">
                 {{ t("admin.settings.subscriptionExpiryNotify.title") }}
@@ -8405,7 +8405,7 @@
           <!-- Balance Low Notification -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h3 class="text-base font-medium text-gray-900 dark:text-white">
                 {{ t("admin.settings.balanceNotify.title") }}
@@ -8465,7 +8465,7 @@
           <!-- Account Quota Notification -->
           <div class="card workspace-shell">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-[var(--surface-edge)] px-6 py-4"
             >
               <h3 class="text-base font-medium text-gray-900 dark:text-white">
                 {{ t("admin.settings.quotaNotify.title") }}
@@ -8533,7 +8533,7 @@
           <OutboundIdentitySettings v-if="identityTabVisited" ref="outboundIdentitySettings">
             <template #codex>
               <CodexCLIRuntimeSettings />
-              <div class="space-y-4 rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+              <div class="space-y-4 rounded-lg border border-[var(--surface-edge)] p-4">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                   <div class="min-w-0">
                     <label class="text-sm font-medium surface-muted" for="codex-upstream-ws">

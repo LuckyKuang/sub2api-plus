@@ -1,5 +1,5 @@
 <template>
-  <div class="border-t border-gray-200 pt-4 mt-4 dark:border-dark-400">
+  <div class="border-t border-[var(--surface-edge)] pt-4 mt-4 dark:border-dark-400">
     <div class="mb-3 flex items-start justify-between gap-3">
       <div class="min-w-0 flex-1">
         <label class="text-sm font-medium surface-muted">
@@ -65,7 +65,7 @@
         />
         <div
           v-if="showDropdown && (searchResults.length > 0 || searchKeyword.trim() !== '')"
-          class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg dark:border-dark-600 surface-panel"
+          class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg border-[var(--surface-edge)] surface-panel"
           data-testid="codex-manifest-dropdown"
         >
           <p

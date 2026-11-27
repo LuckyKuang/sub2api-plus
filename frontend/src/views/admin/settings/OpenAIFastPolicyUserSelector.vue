@@ -47,7 +47,7 @@
 
     <div
       v-if="showDropdown && searchQuery.trim()"
-      class="absolute z-50 mt-1 max-h-60 w-full space-y-0.5 overflow-auto border border-gray-200 p-1 shadow-lg dark:border-dark-600 surface-panel"
+      class="absolute z-50 mt-1 max-h-60 w-full space-y-0.5 overflow-auto border border-[var(--surface-edge)] p-1 shadow-lg surface-panel"
     >
       <div v-if="searchLoading" class="px-4 py-3 text-sm surface-muted">
         {{ t("common.loading") }}

@@ -1188,7 +1188,7 @@ const geminiTierClass = computed(() => {
   if (channel === 'google one') {
     if (level === 'ultra') return 'bg-purple-100/[0.15] text-purple-600 dark:bg-purple-900/40 dark:text-purple-300'
     if (level === 'pro') return 'bg-blue-100/[0.15] text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
-    return 'surface-inset surface-muted dark:surface-inset'
+    return 'surface-inset surface-muted'
   }
 
   if (channel === 'gcp') {
@@ -1497,7 +1497,7 @@ const antigravityTierLabel = computed(() => {
 const antigravityTierClass = computed(() => {
   switch (antigravityTier.value) {
     case 'free-tier':
-      return 'surface-inset surface-muted dark:surface-inset'
+      return 'surface-inset surface-muted'
     case 'g1-pro-tier':
       return 'bg-blue-100/[0.15] text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
     case 'g1-ultra-tier':

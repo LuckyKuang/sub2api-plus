@@ -24,6 +24,9 @@ export default {
     reset: '重置',
     search: '搜索',
     filter: '筛选',
+    filters: '筛选条件',
+    showFilters: '展开筛选',
+    hideFilters: '收起筛选',
     export: '导出',
     import: '导入',
     actions: '操作',
@@ -218,6 +221,13 @@ export default {
     promptAudit: '提示词审计',
     ipAccessControl: 'IP 访问控制',
     auditLogs: '操作日志',
+    sectionOverview: '概览',
+    sectionResources: '资源与渠道',
+    sectionCommerce: '账单与运营',
+    sectionGovernance: '安全与系统',
+    sectionWorkspace: '工作台',
+    sectionBilling: '账单与福利',
+    sectionAccount: '账户与集成',
   },
 
   // Auth

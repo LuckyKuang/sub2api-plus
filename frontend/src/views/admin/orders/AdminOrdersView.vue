@@ -89,7 +89,7 @@
           <div v-if="selectedOrder.refund_amount"><p class="text-xs surface-muted">{{ t('payment.admin.refundAmount') }}</p><p class="text-sm font-medium text-red-600 dark:text-red-400">{{ creditedAmountSymbol }}{{ selectedOrder.refund_amount.toFixed(2) }}</p></div>
           <div v-if="selectedOrder.refund_reason" class="sm:col-span-2"><p class="text-xs surface-muted">{{ t('payment.admin.refundReason') }}</p><p class="text-sm surface-muted">{{ selectedOrder.refund_reason }}</p></div>
           <!-- Refund request info -->
-          <div v-if="selectedOrder.refund_requested_at" class="border-t border-gray-200 pt-3 sm:col-span-2 dark:border-dark-600">
+          <div v-if="selectedOrder.refund_requested_at" class="border-t border-[var(--surface-edge)] pt-3 sm:col-span-2">
             <p class="mb-2 text-xs font-medium text-purple-600 dark:text-purple-400">{{ t('payment.admin.refundRequestInfo') }}</p>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
@@ -108,10 +108,10 @@
           </div>
         </div>
         <!-- Audit Logs -->
-        <div v-if="orderAuditLogs.length > 0" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-if="orderAuditLogs.length > 0" class="border-t border-[var(--surface-edge)] pt-4">
           <p class="mb-2 text-xs font-medium surface-muted">{{ t('payment.admin.auditLogs') }}</p>
           <div class="max-h-48 space-y-2 overflow-y-auto">
-            <div v-for="log in orderAuditLogs" :key="log.id" class="rounded-lg border border-gray-100 surface-inset p-2.5 dark:border-dark-600">
+            <div v-for="log in orderAuditLogs" :key="log.id" class="rounded-lg border border-[var(--surface-edge)] surface-inset p-2.5">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-medium surface-muted">{{ log.action }}</span>
                 <span class="text-xs surface-muted">{{ formatDateTime(log.created_at) }}</span>

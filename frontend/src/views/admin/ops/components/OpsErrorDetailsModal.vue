@@ -219,7 +219,7 @@ watch(
   <BaseDialog :show="show" :title="modalTitle" width="full" @close="close">
     <div class="flex h-full min-h-0 flex-col">
       <!-- Filters -->
-      <div class="mb-4 flex-shrink-0 border-b border-gray-200 pb-4 dark:border-dark-700">
+      <div class="mb-4 flex-shrink-0 border-b border-[var(--surface-edge)] pb-4">
         <div class="grid grid-cols-2 gap-2 md:grid-cols-8">
           <div class="col-span-2 compact-select">
             <div class="relative group">
@@ -236,7 +236,7 @@ watch(
               <input
                 v-model="q"
                 type="text"
-                class="w-full rounded-lg border-gray-200 surface-inset py-1.5 pl-9 pr-3 text-xs font-medium transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/10 dark:border-dark-700 dark:focus:bg-dark-800 surface-muted"
+                class="w-full rounded-lg border border-[var(--surface-edge)] surface-field py-1.5 pl-9 pr-3 text-xs font-medium transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 surface-muted"
                 :placeholder="t('admin.ops.errorDetails.searchPlaceholder')"
               />
             </div>

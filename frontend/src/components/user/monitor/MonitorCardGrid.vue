@@ -15,11 +15,11 @@
             <div class="h-4 w-2/3 rounded bg-gray-200 dark:bg-dark-700"></div>
             <div class="h-3 w-1/2 rounded bg-gray-200 dark:bg-dark-700"></div>
           </div>
-          <div class="h-6 w-16 rounded-full surface-inset"></div>
+          <div class="h-6 w-16 rounded-md surface-inset"></div>
         </div>
         <div class="mt-5 grid grid-cols-2 gap-2">
-          <div class="h-16 rounded-xl surface-inset"></div>
-          <div class="h-16 rounded-xl surface-inset"></div>
+          <div class="h-16 rounded-lg surface-inset"></div>
+          <div class="h-16 rounded-lg surface-inset"></div>
         </div>
         <div class="mt-6 h-5 w-full rounded surface-inset"></div>
       </div>

@@ -2,10 +2,10 @@
   <!-- 用量页"用户排行"tab 内容：无卡片外观，依赖父级统一卡片；筛选/时间范围复用页面级筛选栏 -->
   <div :class="{ 'workspace-body !gap-0': workspace }">
     <!-- Toolbar -->
-    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-dark-700/50 sm:px-6" :class="{ 'workspace-fixed': workspace }">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--surface-edge)] px-4 py-3 sm:px-6" :class="{ 'workspace-fixed': workspace }">
       <p class="text-xs surface-muted">{{ t('admin.usage.tokenRanking.subtitle') }}</p>
       <div class="flex items-center gap-3">
-        <span v-if="!loading && items.length > 0" class="text-xs surface-muted">
+        <span v-if="!loading && items.length > 0" class="text-xs tabular-nums surface-muted">
           {{ t('admin.usage.tokenRanking.userCount', { count: items.length }) }}
         </span>
         <div class="w-28">
@@ -16,8 +16,8 @@
 
     <!-- Table -->
     <div class="record-table-scroll overflow-x-auto" :class="{ 'workspace-table-viewport': workspace }">
-      <table class="record-table w-full min-w-max divide-y divide-gray-200 dark:divide-dark-700">
-        <thead class="surface-inset">
+      <table class="record-table w-full min-w-max divide-y divide-[var(--surface-edge)]">
+        <thead>
           <tr>
             <th class="w-16 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider sm:px-6 surface-muted">#</th>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider surface-muted">
@@ -35,7 +35,7 @@
             </th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-200 surface-inset dark:divide-dark-700">
+        <tbody class="divide-y divide-[var(--surface-edge)]">
           <tr v-if="loading">
             <td :colspan="sortableColumns.length + 2" class="py-12 text-center">
               <LoadingSpinner />
@@ -57,7 +57,7 @@
             <td class="px-4 py-3 sm:px-6">
               <span
                 v-if="index < 3"
-                class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold"
+                class="inline-flex h-6 w-6 items-center justify-center rounded-md text-xs font-semibold tabular-nums"
                 :class="RANK_BADGE_CLASSES[index]"
               >{{ index + 1 }}</span>
               <span v-else class="inline-block w-6 text-center text-sm tabular-nums surface-muted">{{ index + 1 }}</span>

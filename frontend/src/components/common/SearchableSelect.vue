@@ -612,7 +612,7 @@ onUnmounted(() => {
   @apply flex w-max min-w-[200px] flex-col;
   background-color: var(--surface-panel);
   border-radius: var(--surface-radius-panel);
-  @apply border border-gray-200 dark:border-dark-700;
+  @apply border border-[var(--surface-edge)];
   @apply shadow-lg shadow-black/10 dark:shadow-black/30;
   @apply overflow-hidden;
   pointer-events: auto !important;
@@ -620,7 +620,7 @@ onUnmounted(() => {
 
 .select-dropdown-portal .select-search {
   @apply flex shrink-0 items-center gap-2 px-3 py-2;
-  @apply border-b border-gray-100 dark:border-dark-700;
+  @apply border-b border-[var(--surface-edge)];
 }
 
 .select-dropdown-portal .select-search-input {

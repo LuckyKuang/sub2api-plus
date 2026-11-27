@@ -1,5 +1,5 @@
 <template>
-  <section class="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-dark-600" data-testid="native-access">
+  <section class="surface-subcard space-y-3 p-4" data-testid="native-access">
     <p class="text-sm font-medium">{{ t('nativeAccess.title') }}</p>
     <p class="input-hint">{{ t('nativeAccess.hint') }}</p>
     <label v-if="editable" class="flex items-center gap-2 text-sm"><input type="checkbox" class="checkbox" data-testid="composite-conversion-toggle" :checked="configured" @change="toggleConversion(($event.target as HTMLInputElement).checked)" />{{ t('nativeAccess.enableConversion') }}</label>

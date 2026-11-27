@@ -46,7 +46,7 @@
                 'rounded-lg border px-2.5 py-1 text-xs font-medium transition-all',
                 form.payment_mode === mode.value
                   ? 'border-primary-500 bg-primary-500 text-white shadow-sm'
-                  : 'border-gray-300 surface-inset text-gray-600 hover:border-gray-400 hover:surface-hover dark:border-dark-600 dark:surface-inset dark:text-gray-300 dark:hover:border-dark-500',
+                  : 'border-[var(--surface-edge)] surface-inset text-gray-600 hover:border-gray-400 hover:surface-hover dark:text-gray-300 dark:hover:border-dark-500',
               ]"
             >{{ mode.label }}</button>
           </div>
@@ -63,14 +63,14 @@
                 'rounded-lg border px-2.5 py-1 text-xs font-medium transition-all',
                 isTypeSelected(pt.value)
                   ? 'border-primary-500 bg-primary-500 text-white shadow-sm'
-                  : 'border-gray-300 surface-inset text-gray-600 hover:border-gray-400 hover:surface-hover dark:border-dark-600 dark:surface-inset dark:text-gray-300 dark:hover:border-dark-500',
+                  : 'border-[var(--surface-edge)] surface-inset text-gray-600 hover:border-gray-400 hover:surface-hover dark:text-gray-300 dark:hover:border-dark-500',
               ]"
             >{{ pt.label }}</button>
           </div>
         </div>
       </div>
 
-      <div v-if="form.provider_key === 'easypay'" class="space-y-3 rounded-lg border border-gray-100 p-3 dark:border-dark-700">
+      <div v-if="form.provider_key === 'easypay'" class="space-y-3 rounded-lg border border-[var(--surface-edge)] p-3">
         <div class="flex items-center justify-between gap-3">
           <div>
             <h5 class="text-sm font-medium text-gray-900 dark:text-white">
@@ -115,7 +115,7 @@
 
 
       <!-- Config fields -->
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-700">
+      <div class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center gap-2">
           <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
             {{ t('admin.settings.payment.providerConfig') }}
@@ -124,7 +124,7 @@
             <template #trigger>
               <button
                 type="button"
-                class="inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-[11px] font-semibold transition-colors hover:border-primary-500 hover:text-primary-600 dark:border-dark-500 dark:hover:border-primary-400 dark:hover:text-primary-400 surface-control surface-muted"
+                class="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[var(--surface-edge)] text-[11px] font-semibold transition-colors hover:border-primary-500 hover:text-primary-600 dark:hover:border-primary-400 dark:hover:text-primary-400 surface-control surface-muted"
                 :aria-label="t('admin.settings.payment.paymentGuideTrigger')"
               >
                 ?
@@ -216,14 +216,14 @@
             <label class="input-label">{{ t('admin.settings.payment.field_notifyUrl') }} <span class="text-red-500">*</span></label>
             <div class="flex">
               <input v-model="notifyBaseUrl" type="text" class="input min-w-0 flex-1 !rounded-r-none !border-r-0" :placeholder="defaultBaseUrl" />
-              <span class="inline-flex items-center whitespace-nowrap rounded-r-lg border border-gray-300 surface-inset px-3 text-xs dark:border-dark-600 surface-muted">{{ callbackPaths.notifyUrl }}</span>
+              <span class="inline-flex items-center whitespace-nowrap rounded-r-lg border border-[var(--surface-edge)] surface-inset px-3 text-xs surface-muted">{{ callbackPaths.notifyUrl }}</span>
             </div>
           </div>
           <div v-if="callbackPaths.returnUrl">
             <label class="input-label">{{ t('admin.settings.payment.field_returnUrl') }} <span class="text-red-500">*</span></label>
             <div class="flex">
               <input v-model="returnBaseUrl" type="text" class="input min-w-0 flex-1 !rounded-r-none !border-r-0" :placeholder="defaultBaseUrl" />
-              <span class="inline-flex items-center whitespace-nowrap rounded-r-lg border border-gray-300 surface-inset px-3 text-xs dark:border-dark-600 surface-muted">{{ callbackPaths.returnUrl }}</span>
+              <span class="inline-flex items-center whitespace-nowrap rounded-r-lg border border-[var(--surface-edge)] surface-inset px-3 text-xs surface-muted">{{ callbackPaths.returnUrl }}</span>
             </div>
           </div>
         </div>
@@ -243,7 +243,7 @@
       </div>
 
       <!-- Per-type limits (collapsible) -->
-      <div v-if="limitableTypes.length" class="border-t border-gray-200 pt-4 dark:border-dark-700">
+      <div v-if="limitableTypes.length" class="border-t border-[var(--surface-edge)] pt-4">
         <button type="button" @click="limitsExpanded = !limitsExpanded" class="flex w-full items-center justify-between surface-control">
           <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
             {{ t('admin.settings.payment.limitsTitle') }}
@@ -254,7 +254,7 @@
           <div
             v-for="lt in limitableTypes"
             :key="lt.value"
-            class="rounded-lg border border-gray-100 p-3 dark:border-dark-700"
+            class="rounded-lg border border-[var(--surface-edge)] p-3"
           >
             <p class="mb-2 text-xs font-medium surface-muted">{{ lt.label }}</p>
             <div class="grid grid-cols-3 gap-3">

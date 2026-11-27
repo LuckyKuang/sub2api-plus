@@ -243,7 +243,7 @@ const planBadgeClass = computed(() => {
     normalizedPlanType.value === 'basic' ||
     normalizedPlanType.value === 'xbasic'
   ) {
-    return 'surface-inset surface-muted dark:surface-inset'
+    return 'surface-inset surface-muted'
   }
   if (props.platform === 'grok' && normalizedPlanType.value) {
     // Heavy / SuperGrok Heavy → purple

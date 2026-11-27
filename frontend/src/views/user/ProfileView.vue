@@ -17,10 +17,10 @@
 
       <div
         v-if="contactInfo"
-        class="card workspace-shell bg-primary-50/[0.15] p-6 dark:bg-primary-900/20"
+        class="card workspace-shell bg-primary-50/[0.15] p-5 sm:p-6 dark:bg-primary-900/20"
       >
         <div class="flex items-center gap-4">
-          <div class="shrink-0 rounded-xl bg-primary-100/[0.15] p-3 text-primary-600">
+          <div class="shrink-0 rounded-lg bg-primary-100/[0.15] p-3 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">
             <Icon name="chat" size="lg" />
           </div>
           <div class="min-w-0">

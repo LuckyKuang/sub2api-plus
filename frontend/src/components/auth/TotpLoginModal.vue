@@ -3,7 +3,7 @@
     <div class="flex min-h-full items-center justify-center p-4">
       <div class="fixed inset-0 transition-opacity surface-overlay"></div>
 
-      <div class="relative w-full max-w-md transform rounded-xl p-6 shadow-xl transition-all surface-panel">
+      <div class="relative w-full max-w-md transform p-6 shadow-xl transition-all surface-panel">
         <!-- Header -->
         <div class="mb-6 text-center">
           <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary-100/[0.15] dark:bg-primary-900/30">
@@ -46,7 +46,7 @@
               inputmode="numeric"
               pattern="[0-9]"
               autocomplete="off"
-              class="h-12 min-w-0 max-w-10 flex-1 rounded-lg border border-gray-300 text-center text-lg font-semibold focus:border-primary-500 focus:ring-primary-500 dark:border-dark-600 dark:surface-inset"
+              class="h-12 min-w-0 max-w-10 flex-1 rounded-lg border border-[var(--surface-edge)] text-center text-lg font-semibold focus:border-primary-500 focus:ring-primary-500"
               :disabled="verifying"
               @input="handleCodeInput($event, index)"
               @keydown="handleKeydown($event, index)"

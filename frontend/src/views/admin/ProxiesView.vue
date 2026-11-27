@@ -101,7 +101,7 @@
           <template #header-select>
             <input
               type="checkbox"
-              class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="h-4 w-4 cursor-pointer rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
               :checked="allVisibleSelected"
               @click.stop
               @change="toggleSelectAllVisible($event)"
@@ -111,7 +111,7 @@
           <template #cell-select="{ row }">
             <input
               type="checkbox"
-              class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="h-4 w-4 cursor-pointer rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
               :checked="selectedProxyIds.has(row.id)"
               @click.stop
               @change="toggleSelectRow(row.id, $event)"
@@ -148,7 +148,7 @@
                 <!-- 右键展开格式选择菜单 -->
                 <div
                   v-if="copyMenuProxyId === row.id"
-                  class="absolute left-0 top-full z-50 mt-1 w-auto min-w-[180px] space-y-0.5 border border-gray-200 p-1 shadow-lg dark:border-dark-500 surface-panel"
+                  class="absolute left-0 top-full z-50 mt-1 w-auto min-w-[180px] space-y-0.5 border border-[var(--surface-edge)] p-1 shadow-lg surface-panel"
                 >
                   <button
                     v-for="fmt in getCopyFormats(row)"
@@ -846,7 +846,7 @@
       @close="closeQualityReportDialog"
     >
       <div v-if="qualityReport" class="space-y-4">
-        <div class="rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] surface-inset p-4">
           <div class="flex items-center justify-between gap-4">
             <div>
               <div class="text-sm surface-muted">
@@ -876,9 +876,9 @@
           </div>
         </div>
 
-        <div class="record-table-scroll max-h-80 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600">
-          <table class="record-table min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-700">
-            <thead class="surface-inset text-xs uppercase surface-muted">
+        <div class="record-table-scroll max-h-80 overflow-auto rounded-lg border border-[var(--surface-edge)]">
+          <table class="record-table min-w-full divide-y divide-[var(--surface-edge)] text-sm">
+            <thead class="text-xs uppercase surface-muted">
               <tr>
                 <th class="whitespace-nowrap px-3 py-2 text-left">{{ t('admin.proxies.qualityTableTarget') }}</th>
                 <th class="whitespace-nowrap px-3 py-2 text-left">{{ t('admin.proxies.qualityTableStatus') }}</th>
@@ -887,7 +887,7 @@
                 <th class="px-3 py-2 text-left">{{ t('admin.proxies.qualityTableMessage') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-200 surface-inset dark:divide-dark-700">
+            <tbody class="divide-y divide-[var(--surface-edge)]">
               <tr v-for="item in qualityReport.items" :key="item.target">
                 <td class="whitespace-nowrap px-3 py-2 text-gray-900 dark:text-white">{{ qualityTargetLabel(item.target) }}</td>
                 <td class="whitespace-nowrap px-3 py-2">
@@ -930,15 +930,15 @@
         {{ t('admin.proxies.accountsEmpty') }}
       </div>
       <div v-else class="record-table-scroll table-container max-h-80 overflow-auto">
-        <table class="record-table record-table-compact min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-700">
-          <thead class="surface-inset text-xs uppercase surface-muted">
+        <table class="record-table record-table-compact min-w-full divide-y divide-[var(--surface-edge)] text-sm">
+          <thead class="text-xs uppercase surface-muted">
             <tr>
               <th class="px-4 py-2 text-left">{{ t('admin.proxies.accountName') }}</th>
               <th class="px-4 py-2 text-left">{{ t('admin.accounts.columns.platformType') }}</th>
               <th class="px-4 py-2 text-left">{{ t('admin.proxies.accountNotes') }}</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-200 surface-inset dark:divide-dark-700">
+          <tbody class="divide-y divide-[var(--surface-edge)]">
             <tr v-for="account in proxyAccounts" :key="account.id">
               <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">{{ account.name }}</td>
               <td class="px-4 py-2">

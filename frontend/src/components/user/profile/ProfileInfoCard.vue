@@ -7,7 +7,7 @@
       <div class="px-6 py-6 md:px-8">
         <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
           <div
-            class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-2xl font-bold text-white shadow-lg shadow-primary-500/20"
+            class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 text-2xl font-bold text-white shadow-sm"
           >
             <img
               v-if="avatarUrl"
@@ -49,7 +49,7 @@
                   <span
                     v-for="hint in sourceHints"
                     :key="hint.key"
-                    class="inline-flex items-center gap-1 rounded-md surface-inset px-3 py-1 ring-1 ring-primary-100 dark:ring-primary-900/40"
+                    class="inline-flex items-center gap-1 rounded-md border border-[var(--surface-edge)] surface-inset px-2.5 py-1"
                   >
                     <Icon name="link" size="sm" />
                     {{ hint.text }}
@@ -61,34 +61,34 @@
             <div class="grid gap-3 sm:grid-cols-3">
               <div
                 data-testid="profile-overview-metric-balance"
-                class="glass-surface px-4 py-3 ring-1 ring-white/70 dark:ring-dark-700"
+                class="surface-subcard px-4 py-3"
               >
-                <p class="text-xs font-medium uppercase tracking-[0.16em] surface-muted">
+                <p class="text-xs font-medium uppercase tracking-[0.14em] surface-muted">
                   {{ t('profile.accountBalance') }}
                 </p>
-                <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                <p class="mt-1 text-lg font-semibold tabular-nums text-gray-900 dark:text-white">
                   {{ formatCurrency(user?.balance || 0) }}
                 </p>
               </div>
               <div
                 data-testid="profile-overview-metric-concurrency"
-                class="glass-surface px-4 py-3 ring-1 ring-white/70 dark:ring-dark-700"
+                class="surface-subcard px-4 py-3"
               >
-                <p class="text-xs font-medium uppercase tracking-[0.16em] surface-muted">
+                <p class="text-xs font-medium uppercase tracking-[0.14em] surface-muted">
                   {{ t('profile.concurrencyLimit') }}
                 </p>
-                <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                <p class="mt-1 text-lg font-semibold tabular-nums text-gray-900 dark:text-white">
                   {{ user?.concurrency || 0 }}
                 </p>
               </div>
               <div
                 data-testid="profile-overview-metric-member-since"
-                class="glass-surface px-4 py-3 ring-1 ring-white/70 dark:ring-dark-700"
+                class="surface-subcard px-4 py-3"
               >
-                <p class="text-xs font-medium uppercase tracking-[0.16em] surface-muted">
+                <p class="text-xs font-medium uppercase tracking-[0.14em] surface-muted">
                   {{ t('profile.memberSince') }}
                 </p>
-                <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                <p class="mt-1 text-lg font-semibold tabular-nums text-gray-900 dark:text-white">
                   {{ memberSinceLabel }}
                 </p>
               </div>
@@ -115,15 +115,15 @@
             </div>
           </div>
 
-          <div class="grid gap-6 sm:grid-cols-1 md:grid-cols-2">
-            <div class="glass-surface border p-5">
+          <div class="grid gap-5 sm:grid-cols-1 md:grid-cols-2">
+            <div class="surface-subcard p-5">
               <ProfileAvatarCard
                 :user="user"
                 embedded
               />
             </div>
 
-            <div class="glass-surface border p-5">
+            <div class="surface-subcard p-5">
               <ProfileEditForm
                 :initial-username="user?.username || ''"
                 embedded
@@ -167,7 +167,7 @@
             <div
               v-for="hint in sourceHints"
               :key="hint.key"
-              class="glass-surface flex items-start gap-3 border px-4 py-3 text-sm surface-muted"
+              class="surface-subcard flex items-start gap-3 px-4 py-3 text-sm surface-muted"
             >
               <Icon name="link" size="sm" class="mt-0.5 surface-muted" />
               <span>{{ hint.text }}</span>

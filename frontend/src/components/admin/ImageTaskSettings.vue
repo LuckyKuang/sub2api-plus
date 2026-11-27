@@ -6,7 +6,7 @@
         <p class="mt-1 text-sm surface-muted">{{ t('admin.imageTasks.switches.description') }}</p>
       </div>
       <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <label class="flex items-start justify-between gap-4 rounded border border-gray-200 p-4 surface-inset dark:border-dark-600">
+        <label class="flex items-start justify-between gap-4 rounded border border-[var(--surface-edge)] p-4 surface-inset">
           <span class="min-w-0">
             <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.imageTasks.switches.ordinary') }}</span>
             <span class="mt-1 block text-xs surface-muted">{{ t('admin.imageTasks.switches.ordinaryHint') }}</span>
@@ -19,7 +19,7 @@
             @update:model-value="value => persistSwitch('ordinary', value)"
           />
         </label>
-        <label class="flex items-start justify-between gap-4 rounded border border-gray-200 p-4 surface-inset dark:border-dark-600">
+        <label class="flex items-start justify-between gap-4 rounded border border-[var(--surface-edge)] p-4 surface-inset">
           <span class="min-w-0">
             <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.imageTasks.switches.batch') }}</span>
             <span class="mt-1 block text-xs surface-muted">{{ t('admin.imageTasks.switches.batchHint') }}</span>

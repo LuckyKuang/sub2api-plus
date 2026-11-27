@@ -127,7 +127,7 @@
         <div class="h-6 w-6 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"></div>
       </div>
       <div v-else-if="selectedOverview" class="space-y-4">
-        <div class="rounded-lg border border-gray-100 surface-inset p-4 dark:border-dark-700">
+        <div class="rounded-lg border border-[var(--surface-edge)] surface-inset p-4">
           <div class="font-mono text-sm text-gray-900 dark:text-white">#{{ selectedOverview.user_id }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ selectedOverview.email || '-' }}</div>
           <div class="mt-0.5 text-sm surface-muted">{{ selectedOverview.username || '-' }}</div>
@@ -395,7 +395,7 @@ const OverviewStat = defineComponent({
     mono: { type: Boolean, default: false },
   },
   setup(statProps) {
-    return () => h('div', { class: 'rounded-lg border border-gray-100 surface-inset p-3 dark:border-dark-700 dark:surface-inset' }, [
+    return () => h('div', { class: 'rounded-lg border border-[var(--surface-edge)] surface-inset p-3' }, [
       h('div', { class: 'text-sm surface-muted' }, statProps.label),
       h('div', {
         class: statProps.mono

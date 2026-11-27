@@ -27,10 +27,9 @@
           <LoadingSpinner size="md" />
         </div>
         <h3 class="mb-4 text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.modelDistribution') }}</h3>
-        <div class="model-distribution-body flex flex-col items-center gap-4">
+        <div v-if="modelData" class="model-distribution-body flex flex-col items-center gap-4">
           <div class="model-distribution-doughnut shrink-0">
-            <Doughnut v-if="modelData" :data="modelData" :options="doughnutOptions" />
-            <div v-else class="flex h-full items-center justify-center text-sm surface-muted">{{ t('dashboard.noDataAvailable') }}</div>
+            <Doughnut :data="modelData" :options="doughnutOptions" />
           </div>
           <div class="model-distribution-records record-table-scroll w-full min-w-0">
             <table class="model-distribution-table record-table record-table-compact w-full text-xs">
@@ -44,16 +43,20 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="model in models" :key="model.model" class="border-t border-gray-100 dark:border-dark-700">
+                <tr v-for="model in models" :key="model.model" class="border-t border-[var(--surface-edge)]">
                   <td class="py-1.5 font-medium text-gray-900 dark:text-white" :title="model.model">{{ model.model }}</td>
-                  <td class="py-1.5 text-left surface-muted" :data-label="t('dashboard.requests')">{{ formatNumber(model.requests) }}</td>
-                  <td class="py-1.5 text-left surface-muted" :data-label="t('dashboard.tokens')">{{ formatTokens(model.total_tokens) }} <span v-if="modelTokenShare(model.total_tokens)" class="surface-muted">({{ modelTokenShare(model.total_tokens) }})</span></td>
-                  <td class="py-1.5 text-left text-green-600 dark:text-green-400" :data-label="t('dashboard.actual')">${{ formatCost(model.actual_cost) }}</td>
-                  <td class="py-1.5 text-left surface-muted" :data-label="t('dashboard.standard')">${{ formatCost(model.cost) }}</td>
+                  <td class="py-1.5 text-left tabular-nums surface-muted" :data-label="t('dashboard.requests')">{{ formatNumber(model.requests) }}</td>
+                  <td class="py-1.5 text-left tabular-nums surface-muted" :data-label="t('dashboard.tokens')">{{ formatTokens(model.total_tokens) }} <span v-if="modelTokenShare(model.total_tokens)" class="surface-muted">({{ modelTokenShare(model.total_tokens) }})</span></td>
+                  <td class="py-1.5 text-left tabular-nums text-green-600 dark:text-green-400" :data-label="t('dashboard.actual')">${{ formatCost(model.actual_cost) }}</td>
+                  <td class="py-1.5 text-left tabular-nums surface-muted" :data-label="t('dashboard.standard')">${{ formatCost(model.cost) }}</td>
                 </tr>
               </tbody>
             </table>
           </div>
+        </div>
+        <div v-else class="flex min-h-[240px] flex-1 flex-col items-center justify-center gap-2 text-sm surface-muted">
+          <Icon name="chart" size="lg" class="opacity-40" />
+          <span>{{ t('dashboard.noDataAvailable') }}</span>
         </div>
       </div>
 
@@ -71,6 +74,7 @@ import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Select from '@/components/common/Select.vue'
+import Icon from '@/components/icons/Icon.vue'
 import { Doughnut } from 'vue-chartjs'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import type { TrendDataPoint, ModelStat } from '@/types'

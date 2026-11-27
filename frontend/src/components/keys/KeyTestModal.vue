@@ -6,7 +6,7 @@
     @close="emit('close')"
   >
     <div v-if="apiKey" class="space-y-4">
-      <div class="rounded-xl border border-gray-200 p-4 dark:border-dark-600" data-testid="key-test-summary">
+      <div class="surface-subcard p-4" data-testid="key-test-summary">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ apiKey.name }}</p>
@@ -76,6 +76,16 @@
             </p>
           </div>
 
+          <TextArea
+            id="key-test-prompt"
+            v-model="prompt"
+            :label="t('keys.testModal.prompt')"
+            :hint="t(isImageTest ? 'keys.testModal.imagePromptHint' : 'keys.testModal.promptHint')"
+            :disabled="testing"
+            :rows="3"
+            data-testid="key-test-prompt"
+          />
+
           <div
             v-if="result"
             role="status"
@@ -97,6 +107,35 @@
               {{ t('keys.testModal.requestId', { id: result.requestId }) }}
             </p>
           </div>
+
+          <section
+            v-if="result?.status === 'success'"
+            class="surface-subcard space-y-3 p-4"
+            :aria-label="t('keys.testModal.response')"
+          >
+            <h4 class="text-sm font-medium text-gray-900 dark:text-white">{{ t('keys.testModal.response') }}</h4>
+            <p
+              v-if="result.text"
+              class="max-h-80 overflow-y-auto whitespace-pre-wrap break-words text-sm text-gray-700 dark:text-gray-200"
+              data-testid="key-test-output-text"
+            >{{ result.text }}</p>
+            <div v-if="result.images.length" class="grid gap-3" :class="result.images.length > 1 ? 'sm:grid-cols-2' : ''">
+              <div
+                v-for="(image, index) in result.images"
+                :key="image"
+                class="min-w-0"
+              >
+                <img
+                  :src="image"
+                  :alt="t('keys.testModal.generatedImage', { index: index + 1 })"
+                  referrerpolicy="no-referrer"
+                  class="mx-auto max-h-96 max-w-full rounded-lg object-contain"
+                  data-testid="key-test-output-image"
+                  @error="handleImageError(image)"
+                />
+              </div>
+            </div>
+          </section>
         </template>
       </template>
     </div>
@@ -131,19 +170,24 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
+import TextArea from '@/components/common/TextArea.vue'
 import Icon from '@/components/icons/Icon.vue'
 import type { ApiKey } from '@/types'
 import { adminSupportContext } from '@/utils/adminSupportContext'
 import {
   KEY_TEST_TIMEOUT_MS,
+  KEY_TEST_IMAGE_TIMEOUT_MS,
+  KEY_TEST_PROMPT,
   accessPathForKey,
   buildCandidates,
   buildTestRequest,
   classifyFailure,
   extractOutputText,
+  extractOutputImages,
   fetchNativeAccess,
   hasErrorEnvelope,
   isSupportedTestEndpoint,
+  isImageTestCandidate,
   type KeyTestFailureReason,
   type KeyTestProtocol,
   type KeyTestRequest,
@@ -160,7 +204,7 @@ interface Props {
 type BlockedReason = 'readonly' | 'disabled' | 'expired' | 'quota' | 'ungrouped' | 'dedicatedClient' | 'conversionEndpoint'
 
 type TestResult =
-  | { status: 'success'; model: string; latencyMs: number; requestId: string }
+  | { status: 'success'; model: string; latencyMs: number; requestId: string; text: string; images: string[] }
   | { status: 'failure'; model: string; reason: KeyTestFailureReason; requestId: string }
 
 const props = withDefaults(defineProps<Props>(), { baseUrl: '' })
@@ -224,6 +268,7 @@ const loading = ref(false)
 const loadError = ref(false)
 const candidates = ref<TestCandidate[]>([])
 const selectedId = ref('')
+const prompt = ref(KEY_TEST_PROMPT)
 const testing = ref(false)
 const result = ref<TestResult | null>(null)
 
@@ -233,6 +278,7 @@ let loadController: AbortController | null = null
 let testController: AbortController | null = null
 
 const selectedCandidate = computed(() => candidates.value.find(candidate => candidate.id === selectedId.value) || null)
+const isImageTest = computed(() => !!selectedCandidate.value && isImageTestCandidate(selectedCandidate.value))
 const selectedEndpointPath = computed(() => selectedCandidate.value
   ? `${selectedCandidate.value.pathPrefix}${selectedCandidate.value.endpoint}`
   : '')
@@ -253,6 +299,7 @@ const canStart = computed(() => !!(
   props.show &&
   props.apiKey &&
   selectedCandidate.value &&
+  prompt.value.trim() &&
   !blockedReason.value &&
   !loading.value &&
   !loadError.value &&
@@ -264,6 +311,7 @@ const protocolLabels: Record<KeyTestProtocol, () => string> = {
   chat: () => t('keys.testModal.protocol.chat'),
   messages: () => t('keys.testModal.protocol.messages'),
   gemini: () => t('keys.testModal.protocol.gemini'),
+  images: () => t('keys.testModal.protocol.images'),
 }
 function protocolLabel(protocol: KeyTestProtocol): string {
   return protocolLabels[protocol]()
@@ -282,6 +330,7 @@ const failureMessages: Record<KeyTestFailureReason, () => string> = {
   network: () => t('keys.testModal.failure.network'),
   timeout: () => t('keys.testModal.failure.timeout'),
   noText: () => t('keys.testModal.failure.noText'),
+  noImage: () => t('keys.testModal.failure.noImage'),
   unknown: () => t('keys.testModal.failure.unknown'),
 }
 const failureText = computed(() => result.value?.status === 'failure' ? failureMessages[result.value.reason]() : '')
@@ -305,6 +354,7 @@ function reset() {
   clearTest()
   candidates.value = []
   selectedId.value = ''
+  prompt.value = KEY_TEST_PROMPT
   loadError.value = false
   result.value = null
 }
@@ -362,10 +412,20 @@ function fail(model: string, reason: KeyTestFailureReason, requestId = '') {
   result.value = { status: 'failure', model, reason, requestId }
 }
 
+function handleImageError(image: string) {
+  const current = result.value
+  if (current?.status !== 'success' || !current.images.includes(image)) return
+  const images = current.images.filter(source => source !== image)
+  if (!images.length) fail(current.model, 'noImage', current.requestId)
+  else result.value = { ...current, images }
+}
+
 async function startTest() {
   if (!canStart.value || !props.apiKey || !selectedCandidate.value) return
   const key = props.apiKey
   const candidate = selectedCandidate.value
+  const expectsImage = isImageTestCandidate(candidate)
+  const noOutputReason = expectsImage ? 'noImage' : 'noText'
   const sequence = ++testSequence
   testController?.abort()
   const controller = new AbortController()
@@ -377,11 +437,11 @@ async function startTest() {
   const timer = setTimeout(() => {
     timedOut = true
     controller.abort()
-  }, KEY_TEST_TIMEOUT_MS)
+  }, expectsImage ? KEY_TEST_IMAGE_TIMEOUT_MS : KEY_TEST_TIMEOUT_MS)
   const startedAt = now()
   let request: KeyTestRequest
   try {
-    request = buildTestRequest(props.baseUrl, key.key, candidate)
+    request = buildTestRequest(props.baseUrl, key.key, candidate, prompt.value.trim())
   } catch {
     clearTimeout(timer)
     testing.value = false
@@ -415,15 +475,16 @@ async function startTest() {
     }
     if (hasErrorEnvelope(payload)) {
       const reason = classifyFailure(response.status, payload)
-      fail(candidate.model, reason === 'unknown' ? 'noText' : reason, requestId)
+      fail(candidate.model, reason === 'unknown' ? noOutputReason : reason, requestId)
       return
     }
     const output = extractOutputText(candidate.protocol, payload)
-    if (!output.trim()) {
-      fail(candidate.model, 'noText', requestId)
+    const images = extractOutputImages(candidate.protocol, payload)
+    if (expectsImage ? !images.length : !output.trim() && !images.length) {
+      fail(candidate.model, noOutputReason, requestId)
       return
     }
-    result.value = { status: 'success', model: candidate.model, latencyMs, requestId }
+    result.value = { status: 'success', model: candidate.model, latencyMs, requestId, text: output, images }
   } catch {
     if (sequence !== testSequence) return
     if (controller.signal.aborted && !timedOut) return
@@ -447,6 +508,13 @@ watch(
 )
 
 watch(selectedId, () => {
+  if (!testing.value) result.value = null
+  if (selectedCandidate.value && (!prompt.value.trim() || prompt.value === KEY_TEST_PROMPT || prompt.value === t('admin.accounts.imagePromptDefault'))) {
+    prompt.value = isImageTest.value ? t('admin.accounts.imagePromptDefault') : KEY_TEST_PROMPT
+  }
+})
+
+watch(prompt, () => {
   if (!testing.value) result.value = null
 })
 

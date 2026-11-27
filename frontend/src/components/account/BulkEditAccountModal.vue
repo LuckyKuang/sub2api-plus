@@ -34,7 +34,7 @@
       <!-- OpenAI passthrough -->
       <div
         v-if="allOpenAIPassthroughCapable"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="mb-3 flex items-center justify-between">
           <div class="flex-1 pr-4">
@@ -54,7 +54,7 @@
             id="bulk-edit-openai-passthrough-enabled"
             type="checkbox"
             aria-controls="bulk-edit-openai-passthrough-body"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div
@@ -73,7 +73,7 @@
       <!-- OpenAI passthrough model filtering -->
       <div
         v-if="allOpenAIPassthroughCapable"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="mb-3 flex items-center justify-between">
           <div class="flex-1 pr-4">
@@ -93,7 +93,7 @@
             id="bulk-edit-openai-passthrough-model-filter-enabled"
             type="checkbox"
             aria-controls="bulk-edit-openai-passthrough-model-filter-body"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div
@@ -108,7 +108,7 @@
               type="checkbox"
               data-testid="bulk-openai-passthrough-model-filter"
               :disabled="!enableOpenAIPassthroughModelFilter"
-              class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
             />
             {{ t('common.enabled') }}
           </label>
@@ -118,7 +118,7 @@
       <!-- OpenAI Codex namespace 工具摊平（兼容开关，仅 OAuth） -->
       <div
         v-if="allOpenAIOAuthOnly"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="mb-3 flex items-center justify-between">
           <div class="flex-1 pr-4">
@@ -138,7 +138,7 @@
             id="bulk-edit-openai-flatten-namespaces-enabled"
             type="checkbox"
             aria-controls="bulk-edit-openai-flatten-namespaces-body"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div
@@ -157,7 +157,7 @@
       <!-- OpenAI API long-context billing -->
       <div
         v-if="allOpenAIPassthroughCapable"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="mb-3 flex items-center justify-between gap-4">
           <div class="flex-1">
@@ -177,7 +177,7 @@
             id="bulk-edit-openai-long-context-billing-enabled"
             type="checkbox"
             aria-controls="bulk-edit-openai-long-context-billing-body"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div
@@ -203,7 +203,7 @@
       <!-- OpenAI images: size tier routing -->
       <div
         v-if="allOpenAIPassthroughCapable"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="mb-3 flex items-center justify-between gap-4">
           <label
@@ -219,7 +219,7 @@
             data-testid="bulk-edit-openai-image-size-tiers-enabled"
             type="checkbox"
             aria-controls="bulk-edit-openai-image-size-tiers-body"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div
@@ -238,7 +238,7 @@
       </div>
 
       <!-- Base URL (API Key only) -->
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <label
             id="bulk-edit-base-url-label"
@@ -252,7 +252,7 @@
             id="bulk-edit-base-url-enabled"
             type="checkbox"
             aria-controls="bulk-edit-base-url"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <input
@@ -276,7 +276,7 @@
       </div>
 
       <!-- Model restriction -->
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <label
             id="bulk-edit-model-restriction-label"
@@ -290,7 +290,7 @@
             id="bulk-edit-model-restriction-enabled"
             type="checkbox"
             aria-controls="bulk-edit-model-restriction-body"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
 
@@ -318,7 +318,7 @@
                   'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                   modelRestrictionMode === 'whitelist'
                     ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
                 ]"
                 @click="modelRestrictionMode = 'whitelist'"
               >
@@ -343,7 +343,7 @@
                   'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                   modelRestrictionMode === 'mapping'
                     ? 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
                 ]"
                 @click="modelRestrictionMode = 'mapping'"
               >
@@ -471,7 +471,7 @@
 
               <button
                 type="button"
-                class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
+                class="mb-3 w-full rounded-lg border-2 border-dashed border-[var(--surface-edge)] px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
                 @click="addModelMapping"
               >
                 <svg
@@ -508,7 +508,7 @@
       </div>
 
       <!-- Custom error codes -->
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <div>
             <label
@@ -527,7 +527,7 @@
             id="bulk-edit-custom-error-codes-enabled"
             type="checkbox"
             aria-controls="bulk-edit-custom-error-codes-body"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
 
@@ -549,7 +549,7 @@
                 'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                 selectedErrorCodes.includes(code.value)
                   ? 'bg-red-100/[0.15] text-red-700 ring-1 ring-red-500 dark:bg-red-900/30 dark:text-red-400'
-                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
               @click="toggleErrorCode(code.value)"
             >
@@ -606,7 +606,7 @@
       </div>
 
       <!-- Intercept warmup requests (Anthropic only) -->
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div class="border-t border-[var(--surface-edge)] pt-4">
         <div class="flex items-center justify-between">
           <div class="flex-1 pr-4">
             <label
@@ -625,7 +625,7 @@
             id="bulk-edit-intercept-warmup-enabled"
             type="checkbox"
             aria-controls="bulk-edit-intercept-warmup-body"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div v-if="enableInterceptWarmup" id="bulk-edit-intercept-warmup-body" class="mt-3">
@@ -636,7 +636,7 @@
       </div>
 
       <!-- Header Override (eligible API-key platforms + grok OAuth) -->
-      <div v-if="allHeaderOverrideCapable" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="allHeaderOverrideCapable" class="border-t border-[var(--surface-edge)] pt-4">
         <div class="flex items-center justify-between">
           <div class="flex-1 pr-4">
             <label
@@ -655,7 +655,7 @@
             id="bulk-edit-header-override-enabled"
             type="checkbox"
             aria-controls="bulk-edit-header-override-body"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div v-if="enableHeaderOverride" id="bulk-edit-header-override-body" class="mt-3 space-y-3">
@@ -687,7 +687,7 @@
       </div>
 
       <!-- Proxy -->
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <label
             id="bulk-edit-proxy-label"
@@ -701,7 +701,7 @@
             id="bulk-edit-proxy-enabled"
             type="checkbox"
             aria-controls="bulk-edit-proxy-body"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div id="bulk-edit-proxy-body" :class="!enableProxy && 'pointer-events-none opacity-50'">
@@ -714,7 +714,7 @@
       </div>
 
       <!-- Concurrency & Priority -->
-      <div class="grid grid-cols-2 gap-4 border-t border-gray-200 pt-4 dark:border-dark-600 lg:grid-cols-4">
+      <div class="grid grid-cols-2 gap-4 border-t border-[var(--surface-edge)] pt-4 lg:grid-cols-4">
         <div>
           <div class="mb-3 flex items-center justify-between">
             <label
@@ -729,7 +729,7 @@
               id="bulk-edit-concurrency-enabled"
               type="checkbox"
               aria-controls="bulk-edit-concurrency"
-              class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
             />
           </div>
           <input
@@ -758,7 +758,7 @@
               id="bulk-edit-load-factor-enabled"
               type="checkbox"
               aria-controls="bulk-edit-load-factor"
-              class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
             />
           </div>
           <input
@@ -788,7 +788,7 @@
               id="bulk-edit-priority-enabled"
               type="checkbox"
               aria-controls="bulk-edit-priority"
-              class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
             />
           </div>
           <input
@@ -816,7 +816,7 @@
               id="bulk-edit-rate-multiplier-enabled"
               type="checkbox"
               aria-controls="bulk-edit-rate-multiplier"
-              class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
             />
           </div>
           <input
@@ -835,7 +835,7 @@
       </div>
 
       <!-- Status -->
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <label
             id="bulk-edit-status-label"
@@ -849,7 +849,7 @@
             id="bulk-edit-status-enabled"
             type="checkbox"
             aria-controls="bulk-edit-status"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div id="bulk-edit-status" :class="!enableStatus && 'pointer-events-none opacity-50'">
@@ -862,7 +862,7 @@
       </div>
 
       <!-- OpenAI OAuth WS mode -->
-      <div v-if="allOpenAIOAuth" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="allOpenAIOAuth" class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <label
             id="bulk-edit-openai-ws-mode-label"
@@ -876,7 +876,7 @@
             id="bulk-edit-openai-ws-mode-enabled"
             type="checkbox"
             aria-controls="bulk-edit-openai-ws-mode"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div
@@ -899,7 +899,7 @@
       </div>
 
       <!-- OpenAI OAuth Codex CLI only -->
-      <div v-if="allOpenAIOAuth" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="allOpenAIOAuth" class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <label
             id="bulk-edit-openai-codex-cli-only-label"
@@ -913,7 +913,7 @@
             id="bulk-edit-openai-codex-cli-only-enabled"
             type="checkbox"
             aria-controls="bulk-edit-openai-codex-cli-only"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div
@@ -931,7 +931,7 @@
       </div>
 
       <!-- Codex 指纹收敛模式（仅 OpenAI OAuth） -->
-      <div v-if="allOpenAIOAuthOnly" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="allOpenAIOAuthOnly" class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <label class="input-label mb-0">{{ t('admin.accounts.openai.codexFingerprintMode') }}</label>
           <input
@@ -939,7 +939,7 @@
             v-model="enableCodexFingerprintMode"
             data-testid="bulk-codex-fingerprint-mode-enabled"
             type="checkbox"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div :class="!enableCodexFingerprintMode && 'pointer-events-none opacity-50'">
@@ -951,7 +951,7 @@
       </div>
 
       <!-- OpenAI API Key endpoint capabilities -->
-      <div v-if="allOpenAIAPIKey" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="allOpenAIAPIKey" class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between gap-4">
           <div class="flex-1">
             <label
@@ -970,7 +970,7 @@
             id="bulk-edit-openai-endpoint-capabilities-enabled"
             type="checkbox"
             aria-controls="bulk-edit-openai-endpoint-capabilities-body"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div
@@ -983,12 +983,12 @@
             <label
               v-for="option in openAIEndpointCapabilityOptions"
               :key="option.value"
-              class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-dark-600"
+              class="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--surface-edge)] px-3 py-2 text-sm"
             >
               <input
                 type="checkbox"
                 :disabled="!enableOpenAIEndpointCapabilities"
-                class="rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-500"
+                class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
                 :data-testid="`bulk-edit-openai-endpoint-capability-${option.value}`"
                 :checked="openAIEndpointCapabilities.includes(option.value)"
                 @change="toggleOpenAIEndpointCapability(option.value, $event)"
@@ -1000,7 +1000,7 @@
       </div>
 
       <!-- OpenAI API Key Responses route -->
-      <div v-if="allOpenAIAPIKey" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="allOpenAIAPIKey" class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between gap-4">
           <div class="flex-1">
             <label
@@ -1019,7 +1019,7 @@
             id="bulk-edit-openai-responses-mode-enabled"
             type="checkbox"
             aria-controls="bulk-edit-openai-responses-mode-body"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div
@@ -1046,7 +1046,7 @@
       </div>
 
       <!-- OpenAI API Key WS mode -->
-      <div v-if="allOpenAIAPIKey" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="allOpenAIAPIKey" class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <label
             id="bulk-edit-openai-apikey-ws-mode-label"
@@ -1060,7 +1060,7 @@
             id="bulk-edit-openai-apikey-ws-mode-enabled"
             type="checkbox"
             aria-controls="bulk-edit-openai-apikey-ws-mode"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div
@@ -1083,7 +1083,7 @@
       </div>
 
       <!-- OpenAI Compact mode -->
-      <div v-if="allOpenAIPassthroughCapable" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="allOpenAIPassthroughCapable" class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <div class="flex-1 pr-4">
             <label
@@ -1102,7 +1102,7 @@
             id="bulk-edit-openai-compact-mode-enabled"
             type="checkbox"
             aria-controls="bulk-edit-openai-compact-mode"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div
@@ -1119,7 +1119,7 @@
       </div>
 
       <!-- OpenAI Compact model mapping -->
-      <div v-if="allOpenAIPassthroughCapable" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="allOpenAIPassthroughCapable" class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <div class="flex-1 pr-4">
             <label
@@ -1138,7 +1138,7 @@
             id="bulk-edit-openai-compact-model-mapping-enabled"
             type="checkbox"
             aria-controls="bulk-edit-openai-compact-model-mapping"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div
@@ -1177,7 +1177,7 @@
           </div>
           <button
             type="button"
-            class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
+            class="mb-3 w-full rounded-lg border-2 border-dashed border-[var(--surface-edge)] px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
             data-testid="bulk-edit-openai-compact-model-mapping-add"
             @click="addOpenAICompactModelMapping"
           >
@@ -1187,7 +1187,7 @@
       </div>
 
       <!-- RPM Limit (仅全部为 Anthropic OAuth/SetupToken 时显示) -->
-      <div v-if="allAnthropicOAuthOrSetupToken" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="allAnthropicOAuthOrSetupToken" class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <label
             id="bulk-edit-rpm-limit-label"
@@ -1201,7 +1201,7 @@
             id="bulk-edit-rpm-limit-enabled"
             type="checkbox"
             aria-controls="bulk-edit-rpm-limit-body"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
 
@@ -1243,7 +1243,7 @@
                     'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all',
                     bulkRpmStrategy === 'tiered'
                       ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                      : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                      : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
                   ]"
                 >
                   {{ t('admin.accounts.quotaControl.rpmLimit.strategyTiered') }}
@@ -1255,7 +1255,7 @@
                     'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all',
                     bulkRpmStrategy === 'sticky_exempt'
                       ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                      : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                      : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
                   ]"
                 >
                   {{ t('admin.accounts.quotaControl.rpmLimit.strategyStickyExempt') }}
@@ -1292,7 +1292,7 @@
                 'px-3 py-1.5 text-sm rounded-md border transition-colors',
                 userMsgQueueMode === opt.value
                   ? 'bg-primary-600 text-white border-primary-600'
-                  : 'surface-inset dark:surface-inset surface-muted border-gray-300 dark:border-dark-500 hover:surface-hover dark:hover:surface-hover'
+                  : 'surface-inset surface-muted border-[var(--surface-edge)] hover:surface-hover dark:hover:surface-hover'
               ]">
               {{ opt.label }}
             </button>
@@ -1301,7 +1301,7 @@
       </div>
 
       <!-- Groups -->
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div class="border-t border-[var(--surface-edge)] pt-4">
         <div class="mb-3 flex items-center justify-between">
           <label
             id="bulk-edit-groups-label"
@@ -1315,7 +1315,7 @@
             id="bulk-edit-groups-enabled"
             type="checkbox"
             aria-controls="bulk-edit-groups"
-            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div id="bulk-edit-groups" :class="!enableGroups && 'pointer-events-none opacity-50'">

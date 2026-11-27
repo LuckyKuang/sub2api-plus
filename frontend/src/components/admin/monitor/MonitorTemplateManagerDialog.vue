@@ -20,7 +20,7 @@
           {{ tab.label }}
           <span
             v-if="countByProvider[tab.value] > 0"
-            class="ml-1.5 rounded-md surface-inset px-2 py-0.5 text-xs"
+            class="ml-1.5 rounded-md border border-[var(--surface-edge)] px-2 py-0.5 text-xs tabular-nums"
           >
             {{ countByProvider[tab.value] }}
           </span>
@@ -52,7 +52,7 @@
         v-for="tpl in templatesForActiveProvider"
         v-else
         :key="tpl.id"
-        class="rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-700"
+        class="surface-subcard p-4"
       >
         <div class="flex flex-col items-start justify-between gap-3 sm:flex-row">
           <div class="min-w-0 flex-1">
@@ -492,7 +492,7 @@ function modeBadgeClass(mode: BodyOverrideMode): string {
     case 'replace':
       return 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-500/[0.15] dark:text-purple-300'
     default:
-      return 'surface-inset surface-muted dark:surface-inset'
+      return 'border border-[var(--surface-edge)] surface-muted'
   }
 }
 
@@ -527,9 +527,9 @@ function normalizeAPIMode(mode: APIMode | undefined | null): APIMode {
 function apiModeButtonClass(mode: APIMode): string {
   const active = form.api_mode === mode
   if (active) {
-    return 'border-primary-500 surface-inset text-primary-700 shadow-sm dark:border-primary-400 dark:bg-primary-500/[0.15] dark:text-primary-300'
+    return 'border-primary-500 bg-primary-50/[0.15] text-primary-700 shadow-sm dark:border-primary-400 dark:bg-primary-500/[0.15] dark:text-primary-300'
   }
-  return 'border-blue-100 surface-inset surface-muted hover:border-primary-300 dark:border-dark-700 dark:surface-inset'
+  return 'border-[var(--surface-edge)] surface-muted hover:border-primary-300'
 }
 
 function apiModeLabel(mode: APIMode): string {

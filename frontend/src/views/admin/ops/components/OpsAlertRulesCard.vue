@@ -391,7 +391,7 @@ function cancelDelete() {
 </script>
 
 <template>
-  <div class="glass-surface p-6 ring-1 ring-gray-900/5 dark:ring-dark-700">
+  <div class="glass-surface p-6">
     <div class="mb-4 flex flex-wrap items-start justify-between gap-3 sm:gap-4">
       <div>
         <h3 class="text-sm font-bold text-gray-900 dark:text-white">{{ t('admin.ops.alertRules.title') }}</h3>
@@ -403,7 +403,7 @@ function cancelDelete() {
           {{ t('admin.ops.alertRules.create') }}
         </button>
         <button
-          class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors hover:surface-hover disabled:cursor-not-allowed disabled:opacity-50 surface-control surface-muted"
+          class="flex items-center gap-1.5 rounded-lg border border-[var(--surface-edge)] px-3 py-1.5 text-xs font-bold transition-colors hover:surface-hover disabled:cursor-not-allowed disabled:opacity-50 surface-control surface-muted"
           :disabled="loading"
           @click="load"
         >
@@ -419,13 +419,13 @@ function cancelDelete() {
       {{ t('admin.ops.alertRules.loading') }}
     </div>
 
-    <div v-else-if="sortedRules.length === 0" class="rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm dark:border-dark-700 surface-muted">
+    <div v-else-if="sortedRules.length === 0" class="rounded-lg border border-dashed border-[var(--surface-edge)] p-8 text-center text-sm surface-muted">
       {{ t('admin.ops.alertRules.empty') }}
     </div>
 
-    <div v-else class="max-h-[520px] overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
+    <div v-else class="max-h-[520px] overflow-hidden rounded-lg border border-[var(--surface-edge)]">
       <div class="record-table-scroll max-h-[520px] overflow-y-auto">
-        <div v-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
+        <div v-if="!isDesktopViewport" class="divide-y divide-[var(--surface-edge)]">
           <div v-for="row in sortedRules" :key="row.id" class="space-y-2 p-4">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
@@ -439,7 +439,7 @@ function cancelDelete() {
             <div class="text-xs surface-muted">
               <span class="font-mono">{{ row.metric_type }}</span>
               <span class="mx-1 surface-muted">{{ row.operator }}</span>
-              <span class="font-mono">{{ row.threshold }}</span>
+              <span class="font-mono tabular-nums">{{ row.threshold }}</span>
             </div>
             <div class="flex items-center justify-between gap-2">
               <span class="text-xs surface-muted">
@@ -450,13 +450,13 @@ function cancelDelete() {
                 <button class="btn btn-sm btn-danger" @click="requestDelete(row)">{{ t('common.delete') }}</button>
               </div>
             </div>
-            <div v-if="row.updated_at" class="text-[10px] surface-muted">
+            <div v-if="row.updated_at" class="text-[10px] tabular-nums surface-muted">
               {{ formatDateTime(row.updated_at) }}
             </div>
           </div>
         </div>
-        <table v-else class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
-          <thead class="sticky top-0 z-10 surface-inset">
+        <table v-else class="record-table min-w-full divide-y divide-[var(--surface-edge)]">
+          <thead class="sticky top-0 z-10">
             <tr>
               <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider surface-muted">
                 {{ t('admin.ops.alertRules.table.name') }}
@@ -475,21 +475,21 @@ function cancelDelete() {
               </th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-200 surface-inset dark:divide-dark-700">
+          <tbody class="divide-y divide-[var(--surface-edge)]">
             <tr v-for="row in sortedRules" :key="row.id" class="hover:surface-hover">
               <td class="px-4 py-3">
                 <div class="text-xs font-bold text-gray-900 dark:text-white">{{ row.name }}</div>
                 <div v-if="row.description" class="mt-0.5 line-clamp-2 text-[11px] surface-muted">
                   {{ row.description }}
                 </div>
-                <div v-if="row.updated_at" class="mt-1 text-[10px] surface-muted">
+                <div v-if="row.updated_at" class="mt-1 text-[10px] tabular-nums surface-muted">
                   {{ formatDateTime(row.updated_at) }}
                 </div>
               </td>
               <td class="whitespace-nowrap px-4 py-3 text-xs surface-muted">
                 <span class="font-mono">{{ row.metric_type }}</span>
                 <span class="mx-1 surface-muted">{{ row.operator }}</span>
-                <span class="font-mono">{{ row.threshold }}</span>
+                <span class="font-mono tabular-nums">{{ row.threshold }}</span>
               </td>
               <td class="whitespace-nowrap px-4 py-3 text-xs font-bold surface-muted">
                 {{ row.severity }}
@@ -514,7 +514,7 @@ function cancelDelete() {
       @close="showEditor = false"
     >
       <div class="space-y-4">
-        <div v-if="!editorValidation.valid" class="rounded-xl bg-red-50/[0.15] p-4 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-300">
+        <div v-if="!editorValidation.valid" class="rounded-lg border border-red-200/70 bg-red-50/[0.15] p-4 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-900/30 dark:text-red-300">
           <div class="font-bold">{{ t('admin.ops.alertRules.validation.title') }}</div>
           <ul class="mt-1 list-disc pl-5">
             <li v-for="e in editorValidation.errors" :key="e">{{ e }}</li>
@@ -596,14 +596,14 @@ function cancelDelete() {
             <input v-model.number="draft!.cooldown_minutes" class="input" type="number" min="0" max="1440" />
           </div>
 
-          <div class="flex items-center justify-between rounded-lg surface-inset px-4 py-3 md:col-span-2">
+          <div class="surface-subcard flex items-center justify-between px-4 py-3 md:col-span-2">
             <span class="text-xs font-bold surface-muted">{{ t('admin.ops.alertRules.form.enabled') }}</span>
-            <input v-model="draft!.enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+            <input v-model="draft!.enabled" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500" />
           </div>
 
-          <div class="flex items-center justify-between rounded-lg surface-inset px-4 py-3 md:col-span-2">
+          <div class="surface-subcard flex items-center justify-between px-4 py-3 md:col-span-2">
             <span class="text-xs font-bold surface-muted">{{ t('admin.ops.alertRules.form.notifyEmail') }}</span>
-            <input v-model="draft!.notify_email" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+            <input v-model="draft!.notify_email" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500" />
           </div>
         </div>
       </div>

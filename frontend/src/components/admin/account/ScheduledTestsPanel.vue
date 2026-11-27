@@ -23,7 +23,7 @@
       <!-- Add Plan Form -->
       <div
         v-if="showAddForm"
-        class="rounded-xl border border-primary-200 bg-primary-50/50 p-4 dark:border-primary-800 dark:bg-primary-900/20"
+        class="rounded-lg border border-primary-200 bg-primary-50/50 p-4 dark:border-primary-800 dark:bg-primary-900/20"
       >
         <div class="mb-3 text-sm font-medium surface-muted">
           {{ t('admin.scheduledTests.addPlan') }}
@@ -135,7 +135,7 @@
       <!-- Empty State -->
       <div
         v-else-if="plans.length === 0"
-        class="rounded-xl border border-dashed border-gray-300 py-10 text-center dark:border-dark-600"
+        class="rounded-lg border border-dashed border-[var(--surface-edge)] py-10 text-center"
       >
         <Icon name="calendar" size="lg" class="mx-auto mb-2 text-gray-400" :stroke-width="1.5" />
         <p class="text-sm surface-muted">
@@ -148,7 +148,7 @@
         <div
           v-for="plan in plans"
           :key="plan.id"
-          class="rounded-xl border border-gray-200 surface-inset transition-all dark:border-dark-600"
+          class="rounded-lg border border-[var(--surface-edge)] surface-inset transition-all"
         >
           <!-- Plan Header -->
           <div
@@ -339,7 +339,7 @@
           <!-- Expanded Results Section -->
           <div
             v-if="expandedPlanId === plan.id"
-            class="border-t border-gray-100 px-4 py-3 dark:border-dark-700"
+            class="border-t border-[var(--surface-edge)] px-4 py-3"
           >
             <div class="mb-2 text-xs font-medium surface-muted">
               {{ t('admin.scheduledTests.results') }}
@@ -364,7 +364,7 @@
               <div
                 v-for="result in results"
                 :key="result.id"
-                class="rounded-lg border border-gray-100 surface-inset p-3 dark:border-dark-700"
+                class="rounded-lg border border-[var(--surface-edge)] surface-inset p-3"
               >
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">

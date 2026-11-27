@@ -1,5 +1,5 @@
 <template>
-  <section v-if="eligible && active && runtime?.bridge_enabled" class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600" data-testid="codex-cli-editor">
+  <section v-if="eligible && active && runtime?.bridge_enabled" class="space-y-4 border-t border-[var(--surface-edge)] pt-4" data-testid="codex-cli-editor">
     <div class="flex items-center justify-between gap-4">
       <div>
         <h3 class="input-label mb-0">{{ t('codexCli.account.title') }}</h3>

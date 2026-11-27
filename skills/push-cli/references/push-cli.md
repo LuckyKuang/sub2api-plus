@@ -98,6 +98,9 @@ The shared launcher sets `GOMEMLIMIT=6GiB` for Go processes, including cold-cach
 lint, while preserving the exact matrix commands. This per-process soft
 managed-memory target leaves runtime headroom and does not replace heavy-step
 serialization or cap total VM RSS.
+The launcher's fixed Node budget also keeps production `vue-tsc` builds
+independent of host heap defaults; see the
+[shared memory budgets](../../../docs/CI_VALIDATION.md#containers-and-platform-coverage).
 The frontend lane keeps install before lint, typecheck, full Vitest, build, and
 audit. Default parallel execution limits Vitest to two workers within the
 four-CPU container; `--serial` uses four. Every command and lane reports elapsed

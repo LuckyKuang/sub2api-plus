@@ -1,6 +1,6 @@
 <template>
   <div class="card p-4">
-    <div class="mb-4 flex items-center justify-between gap-3">
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
         {{ title || t('usage.endpointDistribution') }}
       </h3>
@@ -90,19 +90,19 @@
                   {{ item.endpoint }}
                 </span>
               </td>
-              <td class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right tabular-nums surface-muted">
                 {{ formatNumber(item.requests) }}
               </td>
-              <td class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right tabular-nums surface-muted">
                 {{ formatTokens(item.total_tokens) }} <span v-if="endpointTokenShare(item.total_tokens)" class="surface-muted">({{ endpointTokenShare(item.total_tokens) }})</span>
               </td>
-              <td class="py-1.5 text-right text-green-600 dark:text-green-400">
+              <td class="py-1.5 text-right tabular-nums text-green-600 dark:text-green-400">
                 ${{ formatCost(item.actual_cost) }}
               </td>
-              <td v-if="showAccountCost" class="py-1.5 text-right text-orange-500 dark:text-orange-400">
+              <td v-if="showAccountCost" class="py-1.5 text-right tabular-nums text-orange-500 dark:text-orange-400">
                 ${{ formatCost(item.account_cost) }}
               </td>
-              <td class="py-1.5 text-right surface-muted">
+              <td class="py-1.5 text-right tabular-nums surface-muted">
                 ${{ formatCost(item.cost) }}
               </td>
             </tr>

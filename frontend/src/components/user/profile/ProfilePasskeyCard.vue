@@ -1,6 +1,6 @@
 <template>
   <div class="card">
-    <div class="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex flex-col gap-4 border-b border-[var(--surface-edge)] px-6 py-4 sm:flex-row sm:items-start sm:justify-between">
       <div class="min-w-0">
         <h2 class="text-lg font-medium text-gray-900 dark:text-white">
           {{ t('profile.passkey.title') }}
@@ -30,7 +30,7 @@
       <div>
         <form v-support-readonly
           v-if="enabled && supported && showAddForm"
-          class="mb-5 flex flex-col gap-3 rounded-lg border border-gray-200 p-4 dark:border-dark-700"
+          class="surface-subcard mb-5 flex flex-col gap-3 p-4"
           @submit.prevent="addPasskey"
         >
           <div class="grid gap-3 sm:grid-cols-2">
@@ -75,12 +75,12 @@
 
         <div
           v-else-if="credentials.length === 0"
-          class="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-center text-sm dark:border-dark-700 surface-muted"
+          class="surface-subcard border-dashed px-4 py-8 text-center text-sm surface-muted"
         >
           {{ t('profile.passkey.empty') }}
         </div>
 
-        <div v-else class="divide-y divide-gray-100 dark:divide-dark-700">
+        <div v-else class="divide-y divide-[var(--surface-edge)]">
           <div
             v-for="credential in credentials"
             :key="credential.id"
@@ -134,7 +134,7 @@
       <div class="flex min-h-full items-center justify-center p-4">
         <div class="fixed inset-0 transition-opacity surface-overlay" @click="closeDeleteDialog"></div>
         <div
-          class="relative w-full max-w-md transform rounded-xl p-6 shadow-xl transition-all surface-panel"
+          class="relative w-full max-w-md transform border border-[var(--surface-edge)] p-6 shadow-xl transition-all surface-panel"
         >
           <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
             {{ t('profile.passkey.deleteTitle') }}

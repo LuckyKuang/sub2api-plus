@@ -69,7 +69,7 @@
       <!-- Error Body -->
       <div v-if="detail.error_body">
         <span class="font-medium surface-muted">{{ t('usage.errors.detail.responseBody') }}</span>
-        <pre class="mt-1 overflow-auto max-h-[40vh] whitespace-pre-wrap break-all rounded-lg surface-inset border border-gray-200 dark:border-dark-700 p-3 text-xs text-gray-800 dark:text-dark-200">{{ detail.error_body }}</pre>
+        <pre class="mt-1 overflow-auto max-h-[40vh] whitespace-pre-wrap break-all rounded-lg surface-inset border border-[var(--surface-edge)] p-3 text-xs text-gray-800 dark:text-dark-200">{{ detail.error_body }}</pre>
       </div>
     </div>
   </DetailContentHost>

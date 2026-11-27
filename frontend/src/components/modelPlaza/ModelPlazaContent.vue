@@ -6,14 +6,6 @@
       <p class="mt-1.5 text-sm surface-muted">{{ t('modelPlaza.description') }}</p>
     </div>
 
-    <!-- 全局价格说明(管理员配置,Markdown) -->
-    <div
-      v-if="descriptionHtml"
-      class="glass-surface plaza-description border px-5 py-4 text-sm shadow-card dark:border-dark-700/50"
-      :class="{ 'workspace-shell': embedded }"
-      v-html="descriptionHtml"
-    ></div>
-
     <!-- 未登录提示 -->
     <p
       v-if="!isAuthenticated"
@@ -36,7 +28,6 @@
       {{ t('modelPlaza.loadFailed') }}
     </div>
     <template v-else>
-      <!-- 筛选区:平台 → 分组 → 倍率 -->
       <PlazaFilterBar
         :class="{ 'workspace-shell': embedded }"
         :platforms="platforms"
@@ -46,24 +37,63 @@
         :group-id="selectedGroupId"
         :rate="selectedRate"
         :search="searchQuery"
+        :view="view"
         @update:platform="selectedPlatform = $event"
         @update:group-id="selectedGroupId = $event"
         @update:rate="selectedRate = $event"
         @update:search="searchQuery = $event"
+        @update:view="view = $event"
       />
 
-      <!-- 分组分节的模型清单(默认按生效倍率升序) -->
-      <div v-if="filteredGroups.length > 0" class="flex flex-col gap-[var(--shell-gap)]">
-        <PlazaGroupSection v-for="g in filteredGroups" :key="g.id" :group="g" />
-      </div>
+      <details v-if="descriptionHtml" class="plaza-notes">
+        <summary>{{ t('modelPlaza.catalog.pricingNotes') }}</summary>
+        <div class="plaza-description mt-2 text-sm" v-html="descriptionHtml"></div>
+      </details>
+
+      <section v-if="cards.length" :aria-label="t('modelPlaza.title')" class="space-y-3">
+        <h2 class="flex flex-wrap items-baseline gap-x-2" aria-live="polite" aria-atomic="true">
+          <span class="text-base font-semibold">{{ t('modelPlaza.catalog.models', cards.length) }}</span>
+          <span class="text-sm font-normal surface-muted">{{ t('modelPlaza.catalog.groups', filteredGroups.length) }}</span>
+        </h2>
+        <div v-if="view === 'cards'" class="plaza-grid">
+          <PlazaModelCard
+            v-for="card in cards"
+            :key="card.key"
+            :group="card.group"
+            :model="card.model"
+            :group-count="card.groupCount"
+            @open="openModel(card.group, card.model)"
+          />
+        </div>
+        <div v-else class="flex flex-col gap-[var(--shell-gap)]">
+          <PlazaGroupSection
+            v-for="group in filteredGroups"
+            :key="group.id"
+            :group="group"
+            @open="openModel(group, $event)"
+          />
+        </div>
+      </section>
       <div
         v-else
-        class="card border-dashed border-gray-300 px-5 py-12 text-center text-sm dark:border-dark-600 surface-muted"
+        class="card flex flex-col items-center gap-3 px-5 py-10 text-center text-sm surface-muted"
         :class="{ 'workspace-shell': embedded }"
       >
-        {{ searchActive ? t('modelPlaza.noSearchResult') : t('modelPlaza.empty') }}
+        <Icon name="search" size="lg" aria-hidden="true" />
+        <p role="status">{{ filtered ? t('modelPlaza.noSearchResult') : t('modelPlaza.empty') }}</p>
+        <button v-if="filtered" type="button" class="btn btn-secondary" @click="clearFilters">
+          {{ t('modelPlaza.catalog.reset') }}
+        </button>
       </div>
     </template>
+    <PlazaModelDetail
+      v-if="activeOffer && !error"
+      :show="true"
+      :group="activeOffer.group"
+      :model="activeOffer.model"
+      :offers="selectedOffers"
+      @close="selection = null"
+    />
   </div>
 </template>
 
@@ -75,7 +105,10 @@ import DOMPurify from 'dompurify'
 import Icon from '@/components/icons/Icon.vue'
 import PlazaFilterBar from './PlazaFilterBar.vue'
 import PlazaGroupSection from './PlazaGroupSection.vue'
-import type { ModelPlazaGroup, ModelPlazaResponse } from '@/api/modelPlaza'
+import PlazaModelCard from './PlazaModelCard.vue'
+import PlazaModelDetail from './PlazaModelDetail.vue'
+import type { PlazaOffer } from './pricing'
+import type { ModelPlazaGroup, ModelPlazaResponse, PlazaModel } from '@/api/modelPlaza'
 import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{
@@ -94,8 +127,18 @@ const selectedPlatform = ref<string>('all')
 const selectedGroupId = ref<number | 'all'>('all')
 const selectedRate = ref<number | 'all'>('all')
 const searchQuery = ref('')
+const view = ref<'cards' | 'table'>('cards')
+const selection = ref<{ key: string; groupId: number } | null>(null)
 
-const searchActive = computed(() => searchQuery.value.trim() !== '')
+const filtered = computed(() => !!searchQuery.value.trim() || selectedGroupId.value !== 'all'
+  || selectedPlatform.value !== 'all' || selectedRate.value !== 'all')
+
+function clearFilters() {
+  searchQuery.value = ''
+  selectedGroupId.value = 'all'
+  selectedPlatform.value = 'all'
+  selectedRate.value = 'all'
+}
 
 const descriptionHtml = computed(() => {
   const md = props.response?.description?.trim()
@@ -108,12 +151,16 @@ function effectiveRate(g: ModelPlazaGroup): number {
   return g.user_rate_multiplier ?? g.rate_multiplier
 }
 
+const groups = computed(() => [...(props.response?.groups ?? [])].sort(
+  (a, b) => effectiveRate(a) - effectiveRate(b) || a.name.localeCompare(b.name) || a.id - b.id
+))
+
 const platforms = computed(() =>
-  [...new Set((props.response?.groups ?? []).map((g) => g.platform).filter(Boolean))].sort()
+  [...new Set(groups.value.map((g) => g.platform).filter(Boolean))].sort()
 )
 
 const groupOptions = computed(() =>
-  (props.response?.groups ?? []).map((g) => ({
+  groups.value.map((g) => ({
     id: g.id,
     name: g.name,
     platform: g.platform,
@@ -123,42 +170,87 @@ const groupOptions = computed(() =>
 
 /** 全量生效倍率;当前组合下不可用的项由 FilterBar 置灰而非隐藏。 */
 const rates = computed(() =>
-  [...new Set((props.response?.groups ?? []).map(effectiveRate))].sort((a, b) => a - b)
+  [...new Set(groups.value.map(effectiveRate))].sort((a, b) => a - b)
 )
 
-/** 数据刷新后选中的倍率可能不复存在,重置为全部。 */
-watch(rates, (list) => {
-  if (selectedRate.value !== 'all' && !list.includes(selectedRate.value)) {
-    selectedRate.value = 'all'
+const matchingGroups = computed(() => groups.value.filter(g =>
+  (selectedPlatform.value === 'all' || g.platform === selectedPlatform.value) &&
+  (selectedGroupId.value === 'all' || g.id === selectedGroupId.value) &&
+  (selectedRate.value === 'all' || effectiveRate(g) === selectedRate.value)
+))
+
+const query = computed(() => searchQuery.value.trim().toLowerCase())
+const filteredGroups = computed(() => matchingGroups.value
+  .map(group => query.value ? { ...group, models: group.models.filter(m => matchesSearch(m)) } : group)
+  .filter(group => group.models.length > 0))
+
+function matchesSearch(model: PlazaModel) {
+  return model.name.toLowerCase().includes(query.value)
+}
+
+function modelKey(model: PlazaModel) {
+  return JSON.stringify([model.platform, model.name])
+}
+
+const offersByModel = computed(() => {
+  const offers = new Map<string, PlazaOffer[]>()
+  for (const group of groups.value) {
+    for (const model of group.models) {
+      const key = modelKey(model)
+      const existing = offers.get(key)
+      if (existing) existing.push({ group, model })
+      else offers.set(key, [{ group, model }])
+    }
   }
+  return offers
 })
 
-const filteredGroups = computed(() => {
-  let groups = props.response?.groups ?? []
-  if (selectedPlatform.value !== 'all') {
-    groups = groups.filter((g) => g.platform === selectedPlatform.value)
+const cards = computed(() => {
+  const allowed = new Set(matchingGroups.value.map(group => group.id))
+  const result = []
+  for (const [key, offers] of offersByModel.value) {
+    const first = offers.find(offer => allowed.has(offer.group.id))
+    if (first && matchesSearch(first.model)) result.push({ ...first, key, groupCount: offers.length })
   }
-  if (selectedGroupId.value !== 'all') {
-    groups = groups.filter((g) => g.id === selectedGroupId.value)
-  }
-  if (selectedRate.value !== 'all') {
-    groups = groups.filter((g) => effectiveRate(g) === selectedRate.value)
-  }
-  // 模型名搜索:分组内只留命中的模型,整组无命中则隐藏该分组。
-  const q = searchQuery.value.trim().toLowerCase()
-  if (q) {
-    groups = groups
-      .map((g) => ({ ...g, models: g.models.filter((m) => m.name.toLowerCase().includes(q)) }))
-      .filter((g) => g.models.length > 0)
-  }
-  // 专属倍率会改变生效值,不能只依赖后端按默认倍率的排序。
-  return [...groups].sort(
-    (a, b) => effectiveRate(a) - effectiveRate(b) || a.name.localeCompare(b.name)
-  )
+  return result
+})
+
+function openModel(group: ModelPlazaGroup, model: PlazaModel) {
+  selection.value = { key: modelKey(model), groupId: group.id }
+}
+
+const selectedOffers = computed(() => selection.value ? offersByModel.value.get(selection.value.key) ?? [] : [])
+const activeOffer = computed(() => selectedOffers.value.find(offer => offer.group.id === selection.value?.groupId))
+
+// A refresh can remove a group, change its effective rate or replace its translated label.
+watch(groups, (list) => {
+  const group = list.find(g => g.id === selectedGroupId.value)
+  if (!group) selectedGroupId.value = 'all'
+  const available = group ? [group] : list
+  if (!available.some(g => g.platform === selectedPlatform.value)) selectedPlatform.value = 'all'
+  if (!available.some(g => (selectedPlatform.value === 'all' || g.platform === selectedPlatform.value)
+    && effectiveRate(g) === selectedRate.value)) selectedRate.value = 'all'
+  if (!activeOffer.value) selection.value = null
 })
 </script>
 
 <style scoped>
+.plaza-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(19rem, calc((100% - 24px) / 3))), 1fr));
+  gap: 12px;
+}
+
+.plaza-notes {
+  color: var(--surface-muted);
+  font-size: .875rem;
+}
+
+.plaza-notes summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
 .plaza-description {
   line-height: 1.7;
   overflow-wrap: anywhere;
@@ -196,6 +288,6 @@ const filteredGroups = computed(() => {
 }
 
 .plaza-description :deep(blockquote) {
-  @apply my-2 border-l-4 border-gray-300 pl-3 text-gray-600 dark:border-dark-600 dark:text-dark-300;
+  @apply my-2 border-l-4 border-[var(--surface-edge)] pl-3 text-gray-600 dark:text-dark-300;
 }
 </style>

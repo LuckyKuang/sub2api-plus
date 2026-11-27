@@ -2,67 +2,68 @@
   <AppLayout workspace>
     <div class="workspace-page">
       <section
-        class="card workspace-fixed flex flex-col gap-4 px-6 py-4 sm:flex-row sm:items-end sm:justify-between"
+        class="card workspace-fixed flex flex-col gap-4 px-6 py-4"
       >
-        <div class="min-w-0">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-            {{ t("admin.plugins.title") }}
-          </h2>
-          <p class="mt-1 max-w-3xl text-sm surface-muted">
-            {{ t("admin.plugins.description") }}
-          </p>
-          <div
-            class="mt-3 flex flex-wrap gap-2 text-xs surface-muted"
-          >
-            <span class="rounded surface-inset px-2 py-1">{{
-              t("admin.plugins.onlyOpenAI")
-            }}</span>
-            <span class="rounded surface-inset px-2 py-1">{{
-              t("admin.plugins.noAccountCoupling")
-            }}</span>
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div class="min-w-0">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t("admin.plugins.title") }}
+            </h2>
+            <p class="mt-1 max-w-3xl text-sm surface-muted">
+              {{ t("admin.plugins.description") }}
+            </p>
+            <div
+              class="mt-3 flex flex-wrap items-center gap-2 text-xs surface-muted"
+            >
+              <span class="rounded-md surface-inset px-2 py-1">{{
+                t("admin.plugins.onlyOpenAI")
+              }}</span>
+              <span class="rounded-md surface-inset px-2 py-1">{{
+                t("admin.plugins.noAccountCoupling")
+              }}</span>
+              <span class="text-xs surface-muted">{{
+                t("admin.plugins.uploadHint")
+              }}</span>
+            </div>
+          </div>
+
+          <div class="flex flex-shrink-0 items-center gap-2">
+            <input
+              ref="fileInput"
+              class="hidden"
+              type="file"
+              accept=".s2plugin,application/zip"
+              @change="handleFileSelected"
+            />
+            <button
+              type="button"
+              class="btn btn-primary"
+              :disabled="uploading"
+              @click="fileInput?.click()"
+            >
+              <Icon name="upload" size="sm" />
+              {{ uploading ? t("common.processing") : t("admin.plugins.upload") }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :disabled="loading"
+              :title="t('common.refresh')"
+              @click="loadPlugins"
+            >
+              <Icon name="refresh" size="sm" />
+              <span class="sr-only">{{ t("common.refresh") }}</span>
+            </button>
           </div>
         </div>
 
-        <div class="flex flex-shrink-0 items-center gap-2">
-          <input
-            ref="fileInput"
-            class="hidden"
-            type="file"
-            accept=".s2plugin,application/zip"
-            @change="handleFileSelected"
-          />
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="uploading"
-            @click="fileInput?.click()"
-          >
-            <Icon name="upload" size="sm" />
-            {{ uploading ? t("common.processing") : t("admin.plugins.upload") }}
-          </button>
-          <button
-            type="button"
-            class="btn btn-secondary"
-            :disabled="loading"
-            :title="t('common.refresh')"
-            @click="loadPlugins"
-          >
-            <Icon name="refresh" size="sm" />
-            <span class="sr-only">{{ t("common.refresh") }}</span>
-          </button>
+        <div
+          class="rounded-lg border border-blue-200/80 bg-blue-50/[0.15] px-4 py-3 text-xs leading-relaxed text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
+        >
+          <p>{{ t("admin.plugins.runtimeNotice") }}</p>
+          <p class="mt-1">{{ t("admin.plugins.menuNotice") }}</p>
         </div>
       </section>
-
-      <p class="workspace-fixed text-xs surface-muted">
-        {{ t("admin.plugins.uploadHint") }}
-      </p>
-
-      <div
-        class="workspace-fixed rounded-lg border border-blue-200 bg-blue-50/[0.15] px-4 py-3 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
-      >
-        <p>{{ t("admin.plugins.runtimeNotice") }}</p>
-        <p class="mt-1">{{ t("admin.plugins.menuNotice") }}</p>
-      </div>
 
       <div class="workspace-shell workspace-scroll" data-test="plugin-list-scroll">
       <div
@@ -74,7 +75,7 @@
 
       <div
         v-else-if="plugins.length === 0"
-        class="flex min-h-56 flex-col items-center justify-center border border-dashed border-gray-300 px-6 text-center dark:border-dark-600"
+        class="flex min-h-56 flex-col items-center justify-center rounded-lg border border-dashed border-[var(--surface-edge)] surface-inset px-6 text-center"
       >
         <Icon name="cube" size="xl" class="text-gray-400" />
         <p class="mt-3 font-medium text-gray-800 dark:text-gray-200">
@@ -89,10 +90,10 @@
         <article
           v-for="plugin in plugins"
           :key="plugin.id"
-          class="card overflow-hidden border"
+          class="surface-subcard overflow-hidden"
         >
           <div
-            class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 p-5 dark:border-dark-700"
+            class="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--surface-edge)] p-5"
           >
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
@@ -178,11 +179,11 @@
               </p>
               <div class="mt-2 flex flex-wrap gap-2 text-xs">
                 <span
-                  class="whitespace-nowrap rounded px-2 py-0.5"
+                  class="whitespace-nowrap rounded-md px-2 py-0.5"
                   :class="
                     plugin.runtime_healthy
                       ? 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                      : 'surface-inset text-gray-600 dark:surface-inset dark:text-gray-300'
+                      : 'surface-inset text-gray-600 dark:text-gray-300'
                   "
                 >
                   {{
@@ -237,7 +238,7 @@
           </div>
 
           <div
-            class="flex flex-wrap justify-end gap-2 border-t border-gray-100 px-5 py-4 dark:border-dark-700"
+            class="flex flex-wrap justify-end gap-2 border-t border-[var(--surface-edge)] px-5 py-4"
           >
             <button
               type="button"
@@ -824,7 +825,7 @@ function stateClass(state: PluginInstallation["state"]): string {
     return "bg-red-100/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300";
   if (state === "starting")
     return "bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
-  return "surface-inset surface-muted dark:surface-inset";
+  return "surface-inset surface-muted";
 }
 
 function compatibilityClass(

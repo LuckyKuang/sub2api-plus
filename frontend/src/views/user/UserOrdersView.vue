@@ -66,14 +66,14 @@
     <!-- Refund Dialog -->
     <BaseDialog :show="!!refundTarget" :title="t('payment.orders.requestRefund')" @close="refundTarget = null">
       <div v-if="refundTarget" class="space-y-4">
-        <div class="rounded-xl surface-inset p-4">
-          <div class="flex justify-between text-sm">
+        <div class="surface-subcard space-y-2 p-4 text-sm tabular-nums">
+          <div class="flex justify-between">
             <span class="surface-muted">{{ t('payment.orders.orderId') }}</span>
             <span class="font-mono text-gray-900 dark:text-white">#{{ refundTarget.id }}</span>
           </div>
-          <div class="mt-2 flex justify-between text-sm">
+          <div class="flex justify-between">
             <span class="surface-muted">{{ t('payment.orders.amount') }}</span>
-            <span class="text-gray-900 dark:text-white">${{ refundTarget.amount.toFixed(2) }}</span>
+            <span class="font-medium text-gray-900 dark:text-white">${{ refundTarget.amount.toFixed(2) }}</span>
           </div>
         </div>
         <div>

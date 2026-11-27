@@ -1,5 +1,5 @@
 <template>
-  <section class="space-y-4 rounded-lg border border-gray-200 p-4 dark:border-dark-600" data-testid="codex-cli-runtime-settings">
+  <section class="space-y-4 rounded-lg border border-[var(--surface-edge)] p-4" data-testid="codex-cli-runtime-settings">
     <div>
       <h3 class="text-sm font-semibold">{{ t('codexCliRuntime.title') }}</h3>
       <p class="mt-1 text-xs surface-muted">{{ t('codexCliRuntime.description') }}</p>
@@ -28,7 +28,7 @@
         {{ t(ready ? 'codexCliRuntime.ready' : 'codexCliRuntime.notReady') }}
       </dd>
     </dl>
-    <div v-if="status" class="flex flex-wrap items-start justify-between gap-3 border-t border-gray-200 pt-4 dark:border-dark-600">
+    <div v-if="status" class="flex flex-wrap items-start justify-between gap-3 border-t border-[var(--surface-edge)] pt-4">
       <div class="min-w-0">
         <h4 class="text-sm font-medium">{{ t('codexCliRuntime.bridgeTitle') }}</h4>
         <p class="mt-1 text-xs surface-muted">{{ t('codexCliRuntime.bridgeHint') }}</p>

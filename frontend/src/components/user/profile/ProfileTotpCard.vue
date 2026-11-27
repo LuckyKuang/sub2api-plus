@@ -1,6 +1,6 @@
 <template>
   <div class="card">
-    <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+    <div class="border-b border-[var(--surface-edge)] px-6 py-4">
       <h2 class="text-lg font-medium text-gray-900 dark:text-white">
         {{ t('profile.totp.title') }}
       </h2>

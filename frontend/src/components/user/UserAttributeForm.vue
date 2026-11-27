@@ -71,7 +71,7 @@
             :value="opt.value"
             :checked="isOptionSelected(attr.id, opt.value)"
             @change="toggleMultiSelectOption(attr.id, opt.value)"
-            class="h-4 w-4 rounded border-gray-300 text-primary-600"
+            class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600"
           />
           <span class="text-sm surface-muted">{{ opt.label }}</span>
         </label>

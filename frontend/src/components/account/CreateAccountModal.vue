@@ -12,7 +12,7 @@
           <div
             :class="[
               'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold',
-              step >= 1 ? 'bg-primary-500 text-white' : 'surface-inset text-gray-500 dark:surface-inset'
+              step >= 1 ? 'bg-primary-500 text-white' : 'surface-inset text-gray-500'
             ]"
           >
             1
@@ -26,7 +26,7 @@
           <div
             :class="[
               'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold',
-              step >= 2 ? 'bg-primary-500 text-white' : 'surface-inset text-gray-500 dark:surface-inset'
+              step >= 2 ? 'bg-primary-500 text-white' : 'surface-inset text-gray-500'
             ]"
           >
             2
@@ -78,7 +78,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'anthropic'
-                ? 'surface-inset text-orange-600 shadow-sm dark:surface-inset dark:text-orange-400'
+                ? 'surface-inset text-orange-600 shadow-sm dark:text-orange-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -91,7 +91,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'openai'
-                ? 'surface-inset text-green-600 shadow-sm dark:surface-inset dark:text-green-400'
+                ? 'surface-inset text-green-600 shadow-sm dark:text-green-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -116,7 +116,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'gemini'
-                ? 'surface-inset text-blue-600 shadow-sm dark:surface-inset dark:text-blue-400'
+                ? 'surface-inset text-blue-600 shadow-sm dark:text-blue-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -141,7 +141,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'antigravity'
-                ? 'surface-inset text-purple-600 shadow-sm dark:surface-inset dark:text-purple-400'
+                ? 'surface-inset text-purple-600 shadow-sm dark:text-purple-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -154,7 +154,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'grok'
-                ? 'surface-inset text-zinc-900 shadow-sm dark:surface-inset dark:text-zinc-100'
+                ? 'surface-inset text-zinc-900 shadow-sm dark:text-zinc-100'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -167,7 +167,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'typesafe'
-                ? 'surface-inset text-sky-700 shadow-sm dark:surface-inset dark:text-sky-300'
+                ? 'surface-inset text-sky-700 shadow-sm dark:text-sky-300'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -183,7 +183,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'kimi'
-                ? 'surface-inset text-pink-600 shadow-sm dark:surface-inset dark:text-pink-400'
+                ? 'surface-inset text-pink-600 shadow-sm dark:text-pink-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -196,7 +196,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'zhipu'
-                ? 'surface-inset text-indigo-600 shadow-sm dark:surface-inset dark:text-indigo-400'
+                ? 'surface-inset text-indigo-600 shadow-sm dark:text-indigo-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -209,7 +209,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'deepseek'
-                ? 'surface-inset text-teal-600 shadow-sm dark:surface-inset dark:text-teal-400'
+                ? 'surface-inset text-teal-600 shadow-sm dark:text-teal-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -222,7 +222,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'minimax'
-                ? 'surface-inset text-rose-600 shadow-sm dark:surface-inset dark:text-rose-400'
+                ? 'surface-inset text-rose-600 shadow-sm dark:text-rose-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -235,7 +235,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'stepfun'
-                ? 'surface-inset text-cyan-600 shadow-sm dark:surface-inset dark:text-cyan-400'
+                ? 'surface-inset text-cyan-600 shadow-sm dark:text-cyan-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -253,7 +253,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'opencode_go'
-                ? 'surface-inset text-amber-700 shadow-sm dark:surface-inset dark:text-amber-300'
+                ? 'surface-inset text-amber-700 shadow-sm dark:text-amber-300'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -270,7 +270,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === spec.id
-                ? 'surface-inset text-primary-600 shadow-sm dark:surface-inset dark:text-primary-400'
+                ? 'surface-inset text-primary-600 shadow-sm dark:text-primary-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -291,7 +291,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'oauth-based'
                 ? 'border-orange-500 bg-orange-50/[0.15] dark:bg-orange-900/20'
-                : 'border-gray-200 hover:border-orange-300 dark:border-dark-600 dark:hover:border-orange-700'
+                : 'border-[var(--surface-edge)] hover:border-orange-300 dark:hover:border-orange-700'
             ]"
           >
             <div
@@ -299,7 +299,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'oauth-based'
                   ? 'bg-orange-500 text-white'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="sparkles" size="sm" />
@@ -321,7 +321,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'apikey'
                 ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
-                : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
+                : 'border-[var(--surface-edge)] hover:border-purple-300 dark:hover:border-purple-700'
             ]"
           >
             <div
@@ -329,7 +329,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'apikey'
                   ? 'bg-purple-500 text-white'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="key" size="sm" />
@@ -351,7 +351,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'bedrock'
                 ? 'border-amber-500 bg-amber-50/[0.15] dark:bg-amber-900/20'
-                : 'border-gray-200 hover:border-amber-300 dark:border-dark-600 dark:hover:border-amber-700'
+                : 'border-[var(--surface-edge)] hover:border-amber-300 dark:hover:border-amber-700'
             ]"
           >
             <div
@@ -359,7 +359,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'bedrock'
                   ? 'bg-amber-500 text-white'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="cloud" size="sm" />
@@ -381,7 +381,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'service_account'
                 ? 'border-sky-500 bg-sky-50/[0.15] dark:bg-sky-900/20'
-                : 'border-gray-200 hover:border-sky-300 dark:border-dark-600 dark:hover:border-sky-700'
+                : 'border-[var(--surface-edge)] hover:border-sky-300 dark:hover:border-sky-700'
             ]"
           >
             <div
@@ -389,7 +389,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'service_account'
                   ? 'bg-sky-500 text-white'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="cloud" size="sm" />
@@ -421,7 +421,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'oauth-based'
                 ? 'border-green-500 bg-green-50/[0.15] dark:bg-green-900/20'
-                : 'border-gray-200 hover:border-green-300 dark:border-dark-600 dark:hover:border-green-700'
+                : 'border-[var(--surface-edge)] hover:border-green-300 dark:hover:border-green-700'
             ]"
           >
             <div
@@ -429,7 +429,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'oauth-based'
                   ? 'bg-green-500 text-white'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="key" size="sm" />
@@ -447,7 +447,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'apikey'
                 ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
-                : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
+                : 'border-[var(--surface-edge)] hover:border-purple-300 dark:hover:border-purple-700'
             ]"
           >
             <div
@@ -455,7 +455,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'apikey'
                   ? 'bg-purple-500 text-white'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="key" size="sm" />
@@ -480,7 +480,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'oauth-based'
                 ? 'border-zinc-800 bg-zinc-50 dark:bg-zinc-900/30'
-                : 'border-gray-200 hover:border-zinc-400 dark:border-dark-600 dark:hover:border-zinc-600'
+                : 'border-[var(--surface-edge)] hover:border-zinc-400 dark:hover:border-zinc-600'
             ]"
           >
             <div
@@ -488,7 +488,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'oauth-based'
                   ? 'bg-zinc-900 text-white'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <PlatformIcon platform="grok" size="sm" />
@@ -507,7 +507,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'apikey'
                 ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
-                : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
+                : 'border-[var(--surface-edge)] hover:border-purple-300 dark:hover:border-purple-700'
             ]"
           >
             <div
@@ -515,7 +515,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'apikey'
                   ? 'bg-purple-500 text-white'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="key" size="sm" />
@@ -539,13 +539,13 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               openCodeAccountMode === 'zen'
                 ? cnAccentActiveClass
-                : 'border-gray-200 hover:border-gray-400 dark:border-dark-600 dark:hover:border-gray-600'
+                : 'border-[var(--surface-edge)] hover:border-gray-400 dark:hover:border-gray-600'
             ]"
           >
             <div
               :class="[
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                openCodeAccountMode === 'zen' ? cnAccentIconClass : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                openCodeAccountMode === 'zen' ? cnAccentIconClass : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="creditCard" size="sm" />
@@ -562,13 +562,13 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               openCodeAccountMode === 'go'
                 ? cnAccentActiveClass
-                : 'border-gray-200 hover:border-gray-400 dark:border-dark-600 dark:hover:border-gray-600'
+                : 'border-[var(--surface-edge)] hover:border-gray-400 dark:hover:border-gray-600'
             ]"
           >
             <div
               :class="[
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                openCodeAccountMode === 'go' ? cnAccentIconClass : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                openCodeAccountMode === 'go' ? cnAccentIconClass : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="bolt" size="sm" />
@@ -594,13 +594,13 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountMode === mode
                 ? cnAccentActiveClass
-                : 'border-gray-200 hover:border-gray-400 dark:border-dark-600 dark:hover:border-gray-600'
+                : 'border-[var(--surface-edge)] hover:border-gray-400 dark:hover:border-gray-600'
             ]"
           >
             <div
               :class="[
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                accountMode === mode ? cnAccentIconClass : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                accountMode === mode ? cnAccentIconClass : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="creditCard" size="sm" />
@@ -622,7 +622,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountMode === 'payg'
                 ? cnAccentActiveClass
-                : 'border-gray-200 hover:border-gray-400 dark:border-dark-600 dark:hover:border-gray-600'
+                : 'border-[var(--surface-edge)] hover:border-gray-400 dark:hover:border-gray-600'
             ]"
           >
             <div
@@ -630,7 +630,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountMode === 'payg'
                   ? cnAccentIconClass
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="creditCard" size="sm" />
@@ -649,7 +649,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountMode === 'coding'
                 ? cnAccentActiveClass
-                : 'border-gray-200 hover:border-gray-400 dark:border-dark-600 dark:hover:border-gray-600'
+                : 'border-[var(--surface-edge)] hover:border-gray-400 dark:hover:border-gray-600'
             ]"
           >
             <div
@@ -657,7 +657,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountMode === 'coding'
                   ? cnAccentIconClass
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="bolt" size="sm" />
@@ -683,7 +683,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               apiProtocol === opt.value
                 ? cnAccentActiveClass
-                : 'border-gray-200 hover:border-gray-400 dark:border-dark-600 dark:hover:border-gray-600'
+                : 'border-[var(--surface-edge)] hover:border-gray-400 dark:hover:border-gray-600'
             ]"
           >
             <div
@@ -691,7 +691,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 apiProtocol === opt.value
                   ? cnAccentIconClass
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon :name="opt.value === 'adaptive' ? 'swap' : opt.value === 'anthropic' ? 'sparkles' : opt.value === 'responses' ? 'terminal' : 'chat'" size="sm" />
@@ -772,7 +772,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'oauth-based'
                 ? 'border-blue-500 bg-blue-50/[0.15] dark:bg-blue-900/20'
-                : 'border-gray-200 hover:border-blue-300 dark:border-dark-600 dark:hover:border-blue-700'
+                : 'border-[var(--surface-edge)] hover:border-blue-300 dark:hover:border-blue-700'
             ]"
           >
             <div
@@ -780,7 +780,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'oauth-based'
                   ? 'bg-blue-500 text-white'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="key" size="sm" />
@@ -802,7 +802,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'apikey'
                 ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
-                : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
+                : 'border-[var(--surface-edge)] hover:border-purple-300 dark:hover:border-purple-700'
             ]"
           >
             <div
@@ -810,7 +810,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'apikey'
                   ? 'bg-purple-500 text-white'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <svg
@@ -844,7 +844,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               accountCategory === 'service_account'
                 ? 'border-sky-500 bg-sky-50/[0.15] dark:bg-sky-900/20'
-                : 'border-gray-200 hover:border-sky-300 dark:border-dark-600 dark:hover:border-sky-700'
+                : 'border-[var(--surface-edge)] hover:border-sky-300 dark:hover:border-sky-700'
             ]"
           >
             <div
@@ -852,7 +852,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 accountCategory === 'service_account'
                   ? 'bg-sky-500 text-white'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="cloud" size="sm" />
@@ -905,7 +905,7 @@
                 'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
                 geminiOAuthType === 'google_one'
                   ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
-                  : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
+                  : 'border-[var(--surface-edge)] hover:border-purple-300 dark:hover:border-purple-700'
               ]"
             >
               <div
@@ -913,7 +913,7 @@
                   'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                   geminiOAuthType === 'google_one'
                     ? 'bg-purple-500 text-white'
-                    : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                    : 'surface-inset text-gray-500 dark:text-gray-400'
                 ]"
               >
                 <Icon name="user" size="sm" />
@@ -948,7 +948,7 @@
                 'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
                 geminiOAuthType === 'code_assist'
                   ? 'border-blue-500 bg-blue-50/[0.15] dark:bg-blue-900/20'
-                  : 'border-gray-200 hover:border-blue-300 dark:border-dark-600 dark:hover:border-blue-700'
+                  : 'border-[var(--surface-edge)] hover:border-blue-300 dark:hover:border-blue-700'
               ]"
             >
               <div
@@ -956,7 +956,7 @@
                   'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                   geminiOAuthType === 'code_assist'
                     ? 'bg-blue-500 text-white'
-                    : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                    : 'surface-inset text-gray-500 dark:text-gray-400'
                 ]"
               >
                 <Icon name="cloud" size="sm" />
@@ -1032,7 +1032,7 @@
                 !geminiAIStudioOAuthEnabled ? 'cursor-not-allowed opacity-60' : '',
                 geminiOAuthType === 'ai_studio'
                   ? 'border-amber-500 bg-amber-50/[0.15] dark:bg-amber-900/20'
-                  : 'border-gray-200 hover:border-amber-300 dark:border-dark-600 dark:hover:border-amber-700'
+                  : 'border-[var(--surface-edge)] hover:border-amber-300 dark:hover:border-amber-700'
               ]"
             >
               <div
@@ -1040,7 +1040,7 @@
                   'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                   geminiOAuthType === 'ai_studio'
                     ? 'bg-amber-500 text-white'
-                    : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                    : 'surface-inset text-gray-500 dark:text-gray-400'
                 ]"
               >
                 <svg
@@ -1137,7 +1137,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               antigravityAccountType === 'oauth'
                 ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
-                : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
+                : 'border-[var(--surface-edge)] hover:border-purple-300 dark:hover:border-purple-700'
             ]"
           >
             <div
@@ -1145,7 +1145,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 antigravityAccountType === 'oauth'
                   ? 'bg-purple-500 text-white'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="key" size="sm" />
@@ -1163,7 +1163,7 @@
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
               antigravityAccountType === 'upstream'
                 ? 'border-purple-500 bg-purple-50/[0.15] dark:bg-purple-900/20'
-                : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
+                : 'border-[var(--surface-edge)] hover:border-purple-300 dark:hover:border-purple-700'
             ]"
           >
             <div
@@ -1171,7 +1171,7 @@
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                 antigravityAccountType === 'upstream'
                   ? 'bg-purple-500 text-white'
-                  : 'surface-inset text-gray-500 dark:surface-inset dark:text-gray-400'
+                  : 'surface-inset text-gray-500 dark:text-gray-400'
               ]"
             >
               <Icon name="cloud" size="sm" />
@@ -1302,7 +1302,7 @@
                 'rounded-lg border-2 border-dashed px-4 py-5 transition-colors',
                 vertexServiceAccountDragActive
                   ? 'border-sky-500 bg-sky-50/[0.15] dark:border-sky-500 dark:bg-sky-900/20'
-                  : 'border-gray-300 surface-inset hover:border-sky-400 hover:bg-sky-50/60 dark:border-dark-500 dark:surface-inset dark:hover:border-sky-600 dark:hover:bg-sky-900/10'
+                  : 'border-[var(--surface-edge)] surface-inset hover:border-sky-400 hover:bg-sky-50/60 dark:hover:border-sky-600 dark:hover:bg-sky-900/10'
               ]"
               @dragenter.prevent="vertexServiceAccountDragActive = true"
               @dragover.prevent="vertexServiceAccountDragActive = true"
@@ -1367,7 +1367,7 @@
 
       <!-- Antigravity model restriction (applies to OAuth + Upstream) -->
       <!-- Antigravity 只支持模型映射模式，不支持白名单模式 -->
-      <div v-if="form.platform === 'antigravity'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="form.platform === 'antigravity'" class="border-t border-[var(--surface-edge)] pt-4">
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
         <!-- Mapping Mode Only (no toggle for Antigravity) -->
@@ -1434,7 +1434,7 @@
           <button
             type="button"
             @click="addAntigravityModelMapping"
-            class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
+            class="mb-3 w-full rounded-lg border-2 border-dashed border-[var(--surface-edge)] px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
           >
             <svg class="mr-1 inline h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -1559,7 +1559,7 @@
         </div>
 
         <!-- Model Restriction Section (Antigravity 已在上层条件排除) -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="border-t border-[var(--surface-edge)] pt-4">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <div
@@ -1581,7 +1581,7 @@
                   'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                   modelRestrictionMode === 'whitelist'
                     ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
                 ]"
               >
                 <svg
@@ -1606,7 +1606,7 @@
                   'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                   modelRestrictionMode === 'mapping'
                     ? 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
                 ]"
               >
                 <svg
@@ -1717,7 +1717,7 @@
             <button
               type="button"
               @click="addModelMapping"
-              class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
+              class="mb-3 w-full rounded-lg border-2 border-dashed border-[var(--surface-edge)] px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
             >
               <svg
                 class="mr-1 inline h-4 w-4"
@@ -1752,7 +1752,7 @@
         </div>
 
         <!-- Pool Mode Section -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="border-t border-[var(--surface-edge)] pt-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.poolMode') }}</label>
@@ -1806,7 +1806,7 @@
         <!-- Gemini 显式缓存上游开关：仅自定义地址的 Gemini API Key 账号 -->
         <div
           v-if="form.platform === 'gemini' && !isOfficialGeminiBaseUrl(apiKeyBaseUrl)"
-          class="border-t border-gray-200 pt-4 dark:border-dark-600"
+          class="border-t border-[var(--surface-edge)] pt-4"
           data-testid="explicit-cache-upstream-section"
         >
           <div class="flex items-center justify-between gap-4">
@@ -1846,7 +1846,7 @@
         </div>
 
         <!-- Custom Error Codes Section -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="border-t border-[var(--surface-edge)] pt-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.customErrorCodes') }}</label>
@@ -1878,7 +1878,7 @@
                   'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                   selectedErrorCodes.includes(code.value)
                     ? 'bg-red-100/[0.15] text-red-700 ring-1 ring-red-500 dark:bg-red-900/30 dark:text-red-400'
-                    : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                    : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
                 ]"
               >
                 {{ code.value }} {{ code.label }}
@@ -1934,7 +1934,7 @@
         <!-- Header Override Section (eligible API-key platforms) -->
         <div
           v-if="isHeaderOverrideCapable(form.platform, 'apikey')"
-          class="border-t border-gray-200 pt-4 dark:border-dark-600"
+          class="border-t border-[var(--surface-edge)] pt-4"
         >
           <div class="mb-3 flex items-center justify-between">
             <div>
@@ -2053,7 +2053,7 @@
             <input
               v-model="bedrockForceGlobal"
               type="checkbox"
-              class="rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-500"
+              class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
             />
             <span class="text-sm surface-muted">{{ t('admin.accounts.bedrockForceGlobal') }}</span>
           </label>
@@ -2061,7 +2061,7 @@
         </div>
 
         <!-- Model Restriction Section for Bedrock -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="border-t border-[var(--surface-edge)] pt-4">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <!-- Mode Toggle -->
@@ -2073,7 +2073,7 @@
                 'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                 modelRestrictionMode === 'whitelist'
                   ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
             >
               {{ t('admin.accounts.modelWhitelist') }}
@@ -2085,7 +2085,7 @@
                 'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                 modelRestrictionMode === 'mapping'
                   ? 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
             >
               {{ t('admin.accounts.modelMapping') }}
@@ -2136,7 +2136,7 @@
         </div>
 
         <!-- Pool Mode Section for Bedrock -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="border-t border-[var(--surface-edge)] pt-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.poolMode') }}</label>
@@ -2191,7 +2191,7 @@
       <!-- 配额控制 (Anthropic apikey/bedrock: 配额限制 + 亲和) -->
       <div
         v-if="form.platform === 'anthropic' && (form.type === 'apikey' || form.type === 'bedrock')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="border-t border-[var(--surface-edge)] pt-4 space-y-4"
       >
         <div class="mb-3">
           <h3 class="input-label mb-0 text-base font-semibold">{{ t('admin.accounts.quotaControl.title') }}</h3>
@@ -2243,7 +2243,7 @@
       <!-- 配额控制 (非 Anthropic apikey/bedrock，以及 Vertex service_account) -->
       <div
         v-else-if="supportsAccountQuota(form.type)"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="border-t border-[var(--surface-edge)] pt-4 space-y-4"
       >
         <div class="mb-3">
           <h3 class="input-label mb-0 text-base font-semibold">{{ t('admin.accounts.quotaControl.title') }}</h3>
@@ -2295,7 +2295,7 @@
       <!-- Grok OAuth Custom Upstream URL (仅改写转发端点，OAuth 授权/刷新不受影响) -->
       <div
         v-if="form.platform === 'grok' && isOAuthFlow"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="mb-3 flex items-center justify-between">
           <div>
@@ -2324,7 +2324,7 @@
       <!-- Grok OAuth Header Override (OAuth 类型没有 apikey 容器，需要独立区域) -->
       <div
         v-if="form.platform === 'grok' && isOAuthFlow"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="mb-3 flex items-center justify-between">
           <div>
@@ -2357,7 +2357,7 @@
       <!-- OpenAI OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div
         v-if="(form.platform === 'openai' || form.platform === 'grok') && isOAuthFlow"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
@@ -2380,7 +2380,7 @@
                 'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                 modelRestrictionMode === 'whitelist'
                   ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
             >
               {{ t('admin.accounts.modelWhitelist') }}
@@ -2392,7 +2392,7 @@
                 'flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all',
                 modelRestrictionMode === 'mapping'
                   ? 'bg-purple-100/[0.15] text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                  : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                  : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
               ]"
             >
               {{ t('admin.accounts.modelMapping') }}
@@ -2475,7 +2475,7 @@
             <button
               type="button"
               @click="addModelMapping"
-              class="mb-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
+              class="mb-3 w-full rounded-lg border-2 border-dashed border-[var(--surface-edge)] px-4 py-2 transition-colors hover:border-gray-400 hover:text-gray-700 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
             >
               + {{ t('admin.accounts.addMapping') }}
             </button>
@@ -2497,7 +2497,7 @@
       </div>
 
       <!-- Temp Unschedulable Rules -->
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4">
+      <div class="border-t border-[var(--surface-edge)] pt-4 space-y-4">
         <div class="mb-3 flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.tempUnschedulable.title') }}</label>
@@ -2534,7 +2534,7 @@
             <div
               v-for="(rule, index) in tempUnschedRules"
               :key="getTempUnschedRuleKey(rule)"
-              class="rounded-lg border border-gray-200 p-3 dark:border-dark-600"
+              class="rounded-lg border border-[var(--surface-edge)] p-3"
             >
               <div class="mb-2 flex items-center justify-between">
                 <span class="text-xs font-medium surface-muted">
@@ -2610,13 +2610,13 @@
                         'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
                         rule.scope === option.value
                           ? 'border-primary-500 bg-primary-50/[0.15] dark:bg-primary-900/20'
-                          : 'border-gray-200 hover:border-gray-400 dark:border-dark-600 dark:hover:border-gray-600'
+                          : 'border-[var(--surface-edge)] hover:border-gray-400 dark:hover:border-gray-600'
                       ]"
                     >
                       <span
                         :class="[
                           'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2',
-                          rule.scope === option.value ? 'border-primary-500' : 'border-gray-300 dark:border-dark-500'
+                          rule.scope === option.value ? 'border-primary-500' : 'border-[var(--surface-edge)]'
                         ]"
                       >
                         <span v-if="rule.scope === option.value" class="console-data-mark h-1.5 w-1.5 rounded-full bg-primary-500" />
@@ -2655,7 +2655,7 @@
           <button
             type="button"
             @click="addTempUnschedRule()"
-            class="w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-sm transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
+            class="w-full rounded-lg border-2 border-dashed border-[var(--surface-edge)] px-4 py-2 text-sm transition-colors hover:border-gray-400 hover:text-gray-700 dark:hover:border-dark-400 dark:hover:text-gray-300 surface-control surface-muted"
           >
             <svg
               class="mr-1 inline h-4 w-4"
@@ -2673,7 +2673,7 @@
       <!-- Intercept Warmup Requests (Anthropic/Antigravity) -->
       <div
         v-if="form.platform === 'anthropic' || form.platform === 'antigravity'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -2693,7 +2693,7 @@
       <!-- 配额控制 (Anthropic OAuth/SetupToken: 亲和 + 窗口费用 + 会话 + RPM 等) -->
       <div
         v-if="form.platform === 'anthropic' && accountCategory === 'oauth-based'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="border-t border-[var(--surface-edge)] pt-4 space-y-4"
       >
         <div class="mb-3">
           <h3 class="input-label mb-0 text-base font-semibold">{{ t('admin.accounts.quotaControl.title') }}</h3>
@@ -2703,7 +2703,7 @@
         </div>
 
         <!-- Window Cost Limit -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.windowCost.label') }}</label>
@@ -2751,7 +2751,7 @@
         </div>
 
         <!-- Session Limit -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.sessionLimit.label') }}</label>
@@ -2796,7 +2796,7 @@
         </div>
 
         <!-- RPM Limit -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.rpmLimit.label') }}</label>
@@ -2834,7 +2834,7 @@
                     'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all',
                     rpmStrategy === 'tiered'
                       ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                      : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                      : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
                   ]"
                 >
                   <div class="text-center">
@@ -2849,7 +2849,7 @@
                     'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all',
                     rpmStrategy === 'sticky_exempt'
                       ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                      : 'surface-inset text-gray-600 hover:surface-hover dark:surface-inset dark:text-gray-400 dark:hover:bg-dark-500'
+                      : 'surface-inset text-gray-600 hover:surface-hover dark:text-gray-400 dark:hover:bg-dark-500'
                   ]"
                 >
                   <div class="text-center">
@@ -2888,7 +2888,7 @@
                   'px-3 py-1.5 text-sm rounded-md border transition-colors',
                   userMsgQueueMode === opt.value
                     ? 'bg-primary-600 text-white border-primary-600'
-                    : 'surface-inset dark:surface-inset surface-muted border-gray-300 dark:border-dark-500 hover:surface-hover dark:hover:surface-hover'
+                    : 'surface-inset surface-muted border-[var(--surface-edge)] hover:surface-hover dark:hover:surface-hover'
                 ]">
                 {{ opt.label }}
               </button>
@@ -2897,7 +2897,7 @@
         </div>
 
         <!-- TLS Fingerprint -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.tlsFingerprint.label') }}</label>
@@ -2920,7 +2920,7 @@
         </div>
 
         <!-- Session ID Masking -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.sessionIdMasking.label') }}</label>
@@ -2935,7 +2935,7 @@
         </div>
 
         <!-- Cache TTL Override -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.cacheTTLOverride.label') }}</label>
@@ -2962,7 +2962,7 @@
         </div>
 
         <!-- Custom Base URL Relay -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div class="rounded-lg border border-[var(--surface-edge)] p-4">
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.customBaseUrl.label') }}</label>
@@ -3026,7 +3026,7 @@
           <p class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
         </div>
       </div>
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div class="border-t border-[var(--surface-edge)] pt-4">
         <label class="input-label">{{ t('admin.accounts.expiresAt') }}</label>
         <DateTimePicker :aria-label="t('admin.accounts.expiresAt')" v-model="expiresAtInput" type="datetime-local" class="input" />
         <div class="mt-2 flex gap-2">
@@ -3046,7 +3046,7 @@
       <!-- OpenAI 自动透传开关（OAuth/API Key） -->
       <div
         v-if="form.platform === 'openai'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -3066,7 +3066,7 @@
             v-model="openaiPassthroughModelFilterEnabled"
             type="checkbox"
             data-testid="create-openai-passthrough-model-filter"
-            class="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="mt-1 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
           />
           <span class="text-sm">
             {{ t('admin.accounts.openai.passthroughModelFilter') }}
@@ -3079,7 +3079,7 @@
 
       <div
         v-if="form.platform === 'openai'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <label class="input-label" for="create-openai-account-user-agent">
           {{ t('admin.accounts.openai.accountUserAgent') }}
@@ -3110,7 +3110,7 @@
 
       <div
         v-if="form.platform === 'openai' && form.type === 'oauth'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -3131,7 +3131,7 @@
       <!-- OpenAI Codex namespace 工具摊平（兼容开关，仅 OAuth） -->
       <div
         v-if="form.platform === 'openai' && form.type === 'oauth'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -3151,7 +3151,7 @@
       <div
         v-if="form.platform === 'openai' && (accountCategory === 'oauth-based' || accountCategory === 'apikey')"
         data-testid="create-openai-ws-mode"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -3172,7 +3172,7 @@
       <!-- Anthropic API Key 自动透传开关 -->
       <div
         v-if="form.platform === 'anthropic' && accountCategory === 'apikey'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -3189,7 +3189,7 @@
 
       <div
         v-if="form.platform === 'anthropic' && accountCategory === 'apikey'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -3211,7 +3211,7 @@
       <!-- Anthropic API Key: Web Search Emulation (hidden when global disabled) -->
       <div
         v-if="form.platform === 'anthropic' && accountCategory === 'apikey' && webSearchGlobalEnabled"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -3233,7 +3233,7 @@
       <!-- OpenAI API 长上下文计费开关 -->
       <div
         v-if="form.platform === 'openai' && !hideAccountLongContextBilling && (accountCategory === 'oauth-based' || accountCategory === 'apikey')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -3251,7 +3251,7 @@
 
       <div
         v-if="form.platform === 'openai' && accountCategory === 'oauth-based'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -3269,7 +3269,7 @@
       <!-- Codex 指纹收敛模式（仅 OpenAI OAuth） -->
       <div
         v-if="form.platform === 'openai' && form.type === 'oauth'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between gap-4">
           <div class="min-w-0">
@@ -3313,7 +3313,7 @@
       <!-- OpenAI Compact 能力配置 -->
       <div
         v-if="form.platform === 'openai' && (accountCategory === 'oauth-based' || accountCategory === 'apikey')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="border-t border-[var(--surface-edge)] pt-4 space-y-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -3352,7 +3352,7 @@
       <!-- OpenAI APIKey Responses API support mode -->
       <div
         v-if="form.platform === 'openai' && accountCategory === 'apikey'"
-        class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="space-y-4 border-t border-[var(--surface-edge)] pt-4"
       >
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -3395,11 +3395,11 @@
             <label
               v-for="option in openAIEndpointCapabilityOptions"
               :key="option.value"
-              class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-dark-600"
+              class="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--surface-edge)] px-3 py-2 text-sm"
             >
               <input
                 type="checkbox"
-                class="rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-500"
+                class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
                 :data-testid="`openai-endpoint-capability-${option.value}`"
                 :checked="openAIEndpointCapabilities.includes(option.value)"
                 @change="toggleOpenAIEndpointCapability(option.value, $event)"
@@ -3414,7 +3414,7 @@
       <!-- OpenAI images: size tier routing -->
       <div
         v-if="form.platform === 'openai'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="border-t border-[var(--surface-edge)] pt-4"
       >
         <OpenAIImageSizeTiersField v-model="openAIImageSizeTiers" />
       </div>
@@ -3435,14 +3435,14 @@
         </div>
       </div>
 
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div class="border-t border-[var(--surface-edge)] pt-4">
         <!-- Mixed Scheduling (only for antigravity accounts) -->
         <div v-if="form.platform === 'antigravity'" class="flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
               v-model="mixedScheduling"
-              class="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
+              class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-500 focus:ring-primary-500"
             />
             <span class="text-sm font-medium surface-muted">
               {{ t('admin.accounts.mixedScheduling') }}
@@ -3455,7 +3455,7 @@
             <input
               type="checkbox"
               v-model="allowOverages"
-              class="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
+              class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-500 focus:ring-primary-500"
             />
             <span class="text-sm font-medium surface-muted">
               {{ t('admin.accounts.allowOverages') }}
@@ -3675,7 +3675,7 @@
       </div>
 
       <!-- Quota Policy Section -->
-      <div class="border-t border-gray-200 pt-6 dark:border-dark-600">
+      <div class="border-t border-[var(--surface-edge)] pt-6">
         <h3 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">
           {{ t('admin.accounts.gemini.quotaPolicy.title') }}
         </h3>
@@ -3684,7 +3684,7 @@
         </p>
         <div class="record-table-scroll record-table-dialog-scroll table-container overflow-x-auto">
           <table class="record-table w-full text-xs">
-            <thead class="surface-inset">
+            <thead>
               <tr>
                 <th class="px-3 py-2 text-left font-medium surface-muted">
                   {{ t('admin.accounts.gemini.quotaPolicy.columns.channel') }}
@@ -3697,7 +3697,7 @@
                 </th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-200 dark:divide-dark-600">
+            <tbody class="divide-y divide-[var(--surface-edge)]">
               <tr>
                 <td class="px-3 py-2 text-gray-900 dark:text-white">
                   {{ t('admin.accounts.gemini.quotaPolicy.rows.googleOne.channel') }}
@@ -3785,7 +3785,7 @@
       </div>
 
       <!-- API Key Links Section -->
-      <div class="border-t border-gray-200 pt-6 dark:border-dark-600">
+      <div class="border-t border-[var(--surface-edge)] pt-6">
         <h3 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">
           {{ t('admin.accounts.gemini.helpDialog.apiKeySection') }}
         </h3>

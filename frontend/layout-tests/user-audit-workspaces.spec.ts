@@ -163,11 +163,16 @@ test('available-channel list fits both themes and supports quote details, filter
 
   // Toolbar view switcher toggles card <-> list without extra catalog reads.
   const readsBeforeToggle = listReads
-  const viewSwitch = page.getByTestId('catalog-filters').locator('[role="radiogroup"] [role="radio"]')
+  // docs/AVAILABLE_CHANNELS.md specifies the shared pressed-button switch.
+  const viewSwitch = page.getByTestId('catalog-filters').locator('.segmented-control button[aria-pressed]')
+  await expect(viewSwitch.nth(0)).toHaveAttribute('aria-pressed', 'true')
   await viewSwitch.nth(1).click()
+  await expect(viewSwitch.nth(1)).toHaveAttribute('aria-pressed', 'true')
+  await expect(viewSwitch.nth(0)).toHaveAttribute('aria-pressed', 'false')
   await expect(page.locator('.catalog-model-card')).toHaveCount(9)
   expect(listReads).toBe(readsBeforeToggle)
   await viewSwitch.nth(0).click()
+  await expect(viewSwitch.nth(0)).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTestId('catalog-model-list')).toBeVisible()
   expect(listReads).toBe(readsBeforeToggle)
 
@@ -578,6 +583,95 @@ for (const width of [320, 390]) {
 }
 
 
+// API-key test acceptance: editable `hi` text prompts, the account connection
+// test's image prompt, and the actual text/image result remain usable in the
+// normal key page, including expanded model menus on phones and both themes.
+test('API key tests show editable prompts and text or image results without overflowing the dialog', async ({ page }, info) => {
+  await interceptAuditAPI(page)
+  const fixtureGroup = { id: 99901, name: 'Test connection', platform: 'openai', status: 'active', rate_multiplier: 1 }
+  await page.route(url => url.pathname === '/api/v1/keys', route => route.fulfill({ json: { code: 0, data: {
+    items: [{ id: 99901, name: 'Prompt and image review', key: 'sk-browser-fixture', status: 'active',
+      group_binding_mode: 'single', group_id: fixtureGroup.id, group: fixtureGroup,
+      created_at: '2026-01-01T00:00:00Z' }], total: 1, pages: 1, page: 1, page_size: 20,
+  } } }))
+  await page.route(url => url.pathname === '/api/v1/groups/available', route => route.fulfill({ json: { code: 0, data: [fixtureGroup] } }))
+  await page.route(url => url.pathname === '/api/v1/groups/rates', route => route.fulfill({ json: { code: 0, data: {} } }))
+  await page.route(url => url.pathname === '/api/v1/usage/dashboard/api-keys-usage', route => route.fulfill({ json: { code: 0, data: { stats: {} } } }))
+  const imageModel = 'illustration-' + 'public-model-alias-'.repeat(5)
+  await page.route(url => url.pathname === '/api/v1/groups/99901/native-access', route => route.fulfill({ json: { code: 0, data: {
+    endpoints: ['/v1/responses', '/v1/images/generations'], conversion_endpoints: [], models: [
+      ...['gpt-5', ...Array.from({ length: 5 }, (_, index) => `text-fixture-${index}`)].map(name => ({
+        name, platform: 'openai', endpoints: ['/v1/responses'], conversion_endpoints: [],
+      })),
+      { name: imageModel, platform: 'openai', endpoints: ['/v1/images/generations'], conversion_endpoints: [], is_image: true },
+    ],
+  } } }))
+  const image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII='
+  const answer = 'Hello.\n<em>Show this as text.</em>\n' + 'long-output-'.repeat(45)
+  const requests: Array<{ path: string; body: Record<string, unknown> }> = []
+  for (const path of ['/v1/responses', '/v1/images/generations']) {
+    await page.route(url => url.pathname === path, async route => {
+      const request = route.request()
+      expect(request.method()).toBe('POST')
+      expect(request.headers().authorization).toBe('Bearer sk-browser-fixture')
+      requests.push({ path, body: request.postDataJSON() })
+      await route.fulfill({ json: path === '/v1/responses' ? { output_text: answer } : { data: [{ b64_json: image }] } })
+    })
+  }
+  const pageErrors: string[] = []
+  page.on('pageerror', error => pageErrors.push(error.message))
+  for (const width of [375, 1440]) {
+    await openAuditPage(page, 'keys', info, width)
+    const before = requests.length
+    await page.getByTestId('test-key-action').click()
+    const dialog = page.getByRole('dialog')
+    const prompt = dialog.locator('textarea#key-test-prompt')
+    const trigger = dialog.locator('#key-test-model')
+    await trigger.click()
+    await page.getByRole('option', { name: 'gpt-5', exact: true }).click()
+    await expect(prompt).toHaveValue('hi')
+    expect(requests).toHaveLength(before)
+    await prompt.fill('Say hello to the reviewer.')
+    await page.getByTestId('key-test-start').click()
+    await expect(page.getByTestId('key-test-output-text')).toHaveText(answer)
+    expect(requests.slice(before)).toEqual([{ path: '/v1/responses', body: {
+      model: 'gpt-5', input: 'Say hello to the reviewer.', stream: false, max_output_tokens: 128,
+    } }])
+    await expect(dialog.locator('em')).toHaveCount(0)
+    expect(await dialog.locator('.modal-body').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+    await prompt.fill('hi')
+    await expect(page.getByTestId('key-test-output-text')).toHaveCount(0)
+
+    await trigger.click()
+    const panel = page.locator(`#${await trigger.getAttribute('aria-controls')}`)
+    await expect(panel).toBeVisible()
+    await expect(panel.getByRole('textbox')).toBeVisible()
+    const menu = (await panel.boundingBox())!
+    expect(menu.x).toBeGreaterThanOrEqual(0)
+    expect(menu.x + menu.width).toBeLessThanOrEqual(width)
+    expect(menu.y).toBeGreaterThanOrEqual(0)
+    expect(menu.y + menu.height).toBeLessThanOrEqual(900)
+    await panel.getByRole('option', { name: imageModel, exact: true }).click()
+    await expect(prompt).toHaveValue('Generate a cute orange cat astronaut sticker on a clean pastel background.')
+    await prompt.fill('Generate a blue cat sticker.')
+    await page.getByTestId('key-test-start').click()
+    const preview = page.getByTestId('key-test-output-image')
+    await expect(preview).toHaveAttribute('src', `data:image/png;base64,${image}`)
+    await expect.poll(() => preview.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+    expect(requests).toHaveLength(before + 2)
+    expect(requests.at(-1)).toMatchObject({ path: '/v1/images/generations', body: {
+      model: imageModel, prompt: 'Generate a blue cat sticker.', n: 1,
+    } })
+    const bounds = (await preview.boundingBox())!
+    const content = (await dialog.locator('.modal-content').boundingBox())!
+    expect(bounds.x).toBeGreaterThanOrEqual(content.x)
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(content.x + content.width)
+    expect(await dialog.locator('.modal-body').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+    await dialog.getByRole('button', { name: 'Close modal', exact: true }).click()
+  }
+  expect(pageErrors).toEqual([])
+})
+
 // Audit feedback: the aggregate action must be as prominent as the ordinary
 // creation action, and every selected group name must remain readable in place.
 async function interceptAggregateKeyAPI(page: Page, saved = false) {
@@ -607,15 +701,31 @@ async function interceptAggregateKeyAPI(page: Page, saved = false) {
 
 test('aggregate key creation is as prominent as ordinary key creation', async ({ page }, info) => {
   await interceptAggregateKeyAPI(page)
-  await openAuditPage(page, 'keys', info, 1440)
-  const aggregate = page.getByTestId('create-aggregate-key')
-  const ordinary = page.locator('[data-tour="keys-create-btn"]')
-  await expect(aggregate).toBeVisible()
   const appearance = (element: Element) => {
     const style = getComputedStyle(element)
     return { fill: style.backgroundColor, gradient: style.backgroundImage, border: style.borderColor, foreground: style.color }
   }
-  expect(await aggregate.evaluate(appearance)).toEqual(await ordinary.evaluate(appearance))
+  // Primary actions must stay reachable when only query fields are collapsed.
+  for (const width of [375, 768, 1440]) {
+    await openAuditPage(page, 'keys', info, width)
+    const aggregate = page.getByTestId('create-aggregate-key')
+    const ordinary = page.locator('[data-tour="keys-create-btn"]')
+    await expect(aggregate).toBeVisible()
+    await expect(ordinary).toBeVisible()
+    expect(await aggregate.evaluate(appearance)).toEqual(await ordinary.evaluate(appearance))
+    if (width < 1024) {
+      const toggle = page.locator('.mobile-filters-toggle')
+      const search = page.locator('.filter-field input').first()
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      await expect(search).toBeHidden()
+      await toggle.click()
+      await expect(search).toBeVisible()
+      await toggle.click()
+      await expect(search).toBeHidden()
+      await expect(aggregate).toBeVisible()
+      await expect(ordinary).toBeVisible()
+    }
+  }
 })
 
 test('aggregate group selections show every full name and keep the open menu clear of the growing field', async ({ page }, info) => {
@@ -695,7 +805,9 @@ test('aggregate editing retains the ordinary key platform colors for saved group
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Close modal', exact: true }).click()
 
-  await page.getByRole('button', { name: locale === 'zh' ? '编辑' : 'Edit', exact: true }).click()
+  // Row actions use the shared ActionMenu (AGENTS.md Console Shapes).
+  await page.getByRole('button', { name: locale === 'zh' ? '更多' : 'More', exact: true }).click()
+  await page.getByRole('menuitem', { name: locale === 'zh' ? '编辑' : 'Edit', exact: true }).click()
   const field = page.getByTestId('aggregate-key-fields')
   const trigger = field.getByRole('button', { name: locale === 'zh' ? '选择按量分组' : 'Select pay-as-you-go groups', exact: true })
   await expect(trigger.getByTestId('aggregate-selected-group')).toHaveCount(3)

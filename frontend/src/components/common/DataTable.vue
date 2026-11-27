@@ -1,13 +1,13 @@
 <template>
   <div v-if="!showDesktopTable" ref="cardsWrapperRef" v-bind="$attrs" class="record-cards space-y-3" :class="{ 'user-record-cards': userTableLayout }" :aria-busy="loading">
     <template v-if="loading && !data?.length">
-      <div v-for="i in 5" :key="i" class="glass-inset rounded-xl border border-gray-200 p-4 dark:border-dark-700">
+      <div v-for="i in 5" :key="i" class="surface-card rounded-xl p-4">
         <div class="space-y-3">
           <div v-for="column in dataColumns" :key="column.key" class="flex justify-between">
             <div class="h-4 w-20 animate-pulse rounded bg-gray-200 dark:bg-dark-700"></div>
             <div class="h-4 w-32 animate-pulse rounded bg-gray-200 dark:bg-dark-700"></div>
           </div>
-          <div v-if="hasActionsColumn" class="border-t border-gray-200 pt-3 dark:border-dark-700">
+          <div v-if="hasActionsColumn" class="border-t border-[var(--surface-edge)] pt-3">
             <div class="h-8 w-full animate-pulse rounded bg-gray-200 dark:bg-dark-700"></div>
           </div>
         </div>
@@ -15,25 +15,16 @@
     </template>
 
     <template v-else-if="!data || data.length === 0">
-      <div class="glass-inset rounded-xl border border-gray-200 p-12 text-center dark:border-dark-700">
+      <div class="surface-card rounded-xl p-6 text-center">
         <slot name="empty">
-          <div class="flex flex-col items-center">
-            <Icon
-              name="inbox"
-              size="xl"
-              class="mb-4 h-12 w-12 surface-muted"
-            />
-            <p class="text-lg font-medium text-gray-900 dark:text-gray-100">
-              {{ t('empty.noData') }}
-            </p>
-          </div>
+          <EmptyState size="sm" :title="t('empty.noData')" />
         </slot>
       </div>
     </template>
 
     <template v-else>
-      <div v-if="selectable" class="flex items-center justify-end gap-2 px-1">
-        <label class="flex items-center gap-2 text-sm font-medium surface-muted">
+      <div v-if="selectable" class="surface-subcard flex items-center justify-between gap-2 px-3 py-2">
+        <label class="flex cursor-pointer items-center gap-2 text-xs font-medium surface-muted">
           <input
             type="checkbox"
             class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-800"
@@ -44,19 +35,23 @@
           />
           <span>{{ t('common.selectAll') }}</span>
         </label>
+        <span v-if="selectedKeys.length > 0" class="badge badge-primary">
+          {{ t('common.selectedCount', { count: selectedKeys.length }) }}
+        </span>
       </div>
       <div
         v-for="(row, index) in sortedData"
         :key="resolveRowKey(row, index)"
-        class="glass-inset rounded-xl border border-gray-200 p-4 dark:border-dark-700"
+        class="surface-card rounded-xl p-3.5 transition-colors sm:p-4"
         :class="{
-          'cursor-pointer': clickableRows,
-          'table-row-selected': (selectable && isRowSelected(row, index)) || activeRowKey === resolveRowKey(row, index)
+          'cursor-pointer hover:border-[var(--console-control-hover-edge)]': clickableRows,
+          'table-row-selected border-[var(--console-control-hover-edge)]': (selectable && isRowSelected(row, index)) || activeRowKey === resolveRowKey(row, index)
         }"
         @click="handleRowClick($event, row)"
       >
         <div class="record-card-fields" :class="userTableLayout ? 'user-record-fields' : 'space-y-3'">
-          <div v-if="selectable" class="record-card-selection flex justify-end" :class="{ 'user-record-selection': userTableLayout }">
+          <div v-if="selectable" class="record-card-selection flex items-center justify-between border-b border-[var(--surface-edge)] pb-2.5" :class="{ 'user-record-selection': userTableLayout }">
+            <span class="text-xs font-medium surface-muted">#{{ resolveRowKey(row, index) }}</span>
             <input
               type="checkbox"
               class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-800"
@@ -72,17 +67,27 @@
             :key="column.key"
             :data-field="column.key"
             class="flex min-w-0 items-start justify-between gap-4"
+            :class="{
+              'record-card-primary': column.key === primaryDataColumnKey && !userTableLayout,
+              'record-card-select-row': column.key === 'select'
+            }"
           >
-            <span class="text-xs font-medium uppercase tracking-wider surface-muted">
+            <span v-if="column.label" class="text-xs font-medium surface-muted">
               {{ column.label }}
             </span>
-            <div class="min-w-0 max-w-full text-right text-sm text-gray-900 dark:text-gray-100">
+            <div
+              class="min-w-0 max-w-full text-sm text-gray-900 dark:text-gray-100"
+              :class="[
+                column.label ? 'text-right' : 'ml-auto',
+                column.key === primaryDataColumnKey && 'font-medium'
+              ]"
+            >
               <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]" :expanded="actionsExpanded">
                 {{ column.formatter ? column.formatter(row[column.key], row) : row[column.key] }}
               </slot>
             </div>
           </div>
-          <div v-if="hasActionsColumn" class="record-card-actions border-t border-gray-200 pt-3 dark:border-dark-700" :class="{ 'user-record-actions': userTableLayout }">
+          <div v-if="hasActionsColumn" class="record-card-actions border-t border-[var(--surface-edge)] pt-3" :class="{ 'user-record-actions': userTableLayout }">
             <slot name="cell-actions" :row="row" :value="row['actions']" :expanded="actionsExpanded"></slot>
           </div>
         </div>
@@ -199,16 +204,7 @@
           >
             <div class="empty-state-fill surface-muted">
               <slot name="empty">
-                <div class="flex flex-col items-center">
-                  <Icon
-                    name="inbox"
-                    size="xl"
-                    class="mb-4 h-12 w-12 surface-muted"
-                  />
-                  <p class="text-lg font-medium text-gray-900 dark:text-gray-100">
-                    {{ t('empty.noData') }}
-                  </p>
-                </div>
+                <EmptyState size="sm" :title="t('empty.noData')" />
               </slot>
             </div>
           </td>
@@ -288,7 +284,7 @@ import { computed, inject, ref, onMounted, onUnmounted, watch, nextTick } from '
 import { useVirtualizer, observeElementRect as observeElementRectDefault } from '@tanstack/vue-virtual'
 import { useI18n } from 'vue-i18n'
 import type { Column } from './types'
-import Icon from '@/components/icons/Icon.vue'
+import EmptyState from './EmptyState.vue'
 import { USER_TABLE_LAYOUT_KEY } from '@/composables/useUserTableLayout'
 
 defineOptions({ inheritAttrs: false })
@@ -735,6 +731,9 @@ const resolveStableRowKey = (row: any): string | number | undefined => {
 const resolveRowKey = (row: any, index: number) => resolveStableRowKey(row) ?? index
 
 const dataColumns = computed(() => props.columns.filter((column) => column.key !== 'actions'))
+const primaryDataColumnKey = computed(() =>
+  dataColumns.value.find((column) => column.key !== 'select')?.key ?? ''
+)
 const columnsSignature = computed(() =>
   props.columns.map((column) => `${column.key}:${column.label}:${column.sortable ? '1' : '0'}:${column.sticky}`).join('|')
 )

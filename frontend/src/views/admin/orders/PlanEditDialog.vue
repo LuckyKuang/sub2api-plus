@@ -22,7 +22,7 @@
       </div>
 
       <!-- Group Info Preview -->
-      <div v-if="selectedGroupInfo" class="rounded-lg border border-gray-200 surface-inset p-3 dark:border-dark-600">
+      <div v-if="selectedGroupInfo" class="rounded-lg border border-[var(--surface-edge)] surface-inset p-3">
         <div class="mb-2 flex items-center gap-2">
           <GroupBadge :name="selectedGroupInfo.name" :platform="selectedGroupInfo.platform" :rate-multiplier="selectedGroupInfo.rate_multiplier" />
         </div>

@@ -38,7 +38,7 @@
                 </button>
                 <div
                   v-if="showAutoRefreshDropdown"
-                  class="absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-lg border border-gray-200 shadow-lg dark:border-dark-700 surface-panel"
+                  class="absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-lg border border-[var(--surface-edge)] shadow-lg surface-panel"
                 >
                   <div class="p-2">
                     <button
@@ -48,7 +48,7 @@
                       <span>{{ t('admin.accounts.enableAutoRefresh') }}</span>
                       <Icon v-if="autoRefreshEnabled" name="check" size="sm" class="text-primary-500" />
                     </button>
-                    <div class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
+                    <div class="my-1 border-t border-[var(--surface-edge)]"></div>
                     <button
                       v-for="sec in autoRefreshIntervals"
                       :key="sec"
@@ -78,7 +78,7 @@
                 <Teleport to="body">
                   <div
                     v-if="showAccountToolsDropdown"
-                    class="fixed z-[9999] origin-top-right overflow-hidden rounded-lg border border-gray-200 shadow-xl dark:border-dark-700 surface-panel"
+                    class="fixed z-[9999] origin-top-right overflow-hidden rounded-lg border border-[var(--surface-edge)] shadow-xl surface-panel"
                     :style="accountToolsDropdownStyle"
                     @click.stop
                   >
@@ -115,7 +115,7 @@
                         </span>
                       </button>
 
-                      <div class="my-2 border-t border-gray-100 dark:border-dark-700"></div>
+                      <div class="my-2 border-t border-[var(--surface-edge)]"></div>
                       <div class="px-2 py-2">
                         <div class="text-xs font-semibold uppercase tracking-wide surface-muted">
                           {{ t('admin.accounts.toolActions') }}
@@ -134,7 +134,7 @@
                         <span class="flex-1 text-left">{{ t('admin.tlsFingerprintProfiles.title') }}</span>
                       </button>
 
-                      <div class="my-2 border-t border-gray-100 dark:border-dark-700"></div>
+                      <div class="my-2 border-t border-[var(--surface-edge)]"></div>
                       <div class="px-2 py-2">
                         <div class="flex items-center justify-between gap-3">
                           <span class="text-xs font-semibold uppercase tracking-wide surface-muted">
@@ -210,14 +210,14 @@
           <template #header-select>
             <input
               type="checkbox"
-              class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="h-4 w-4 cursor-pointer rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
               :checked="allVisibleSelected"
               @click.stop
               @change="toggleSelectAllVisible($event)"
             />
           </template>
           <template #cell-select="{ row }">
-            <input type="checkbox" :checked="isSelected(row.id)" @change="toggleSel(row.id)" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+            <input type="checkbox" :checked="isSelected(row.id)" @change="toggleSel(row.id)" class="rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500" />
           </template>
           <template #cell-id="{ value }">
             <span class="font-mono text-xs surface-muted">#{{ value }}</span>
@@ -235,7 +235,7 @@
                     :href="accountHomepageUrl(row)"
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="border-b border-dotted border-gray-300 font-medium text-gray-900 dark:border-dark-600 dark:text-white"
+                    class="border-b border-dotted border-[var(--surface-edge)] font-medium text-gray-900 dark:text-white"
                   >
                     {{ value }}
                   </a>
@@ -346,7 +346,7 @@
                 <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100/[0.15] text-yellow-800 dark:bg-yellow-900/25 dark:text-yellow-200" :title="t('admin.accounts.fallbackActiveTip', { origin: row.proxy_fallback_origin_name })">
                   {{ t('admin.accounts.fallbackActive') }}
                 </span>
-                <button class="text-xs px-1.5 py-0.5 rounded border border-gray-300 dark:border-dark-600 hover:surface-hover surface-control surface-muted" @click="onRevertFallback(row)">{{ t('admin.accounts.revertProxy') }}</button>
+                <button class="text-xs px-1.5 py-0.5 rounded border border-[var(--surface-edge)] hover:surface-hover surface-control surface-muted" @click="onRevertFallback(row)">{{ t('admin.accounts.revertProxy') }}</button>
               </div>
             </div>
           </template>
@@ -459,7 +459,7 @@
       <form id="account-export-form" class="space-y-4" @submit.prevent="handleExportData">
         <p class="text-sm surface-muted">{{ t('admin.accounts.dataExportConfirmMessage') }}</p>
         <label class="flex items-center gap-2 text-sm surface-muted">
-          <input v-model="includeProxyOnExport" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          <input v-model="includeProxyOnExport" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500" />
           <span>{{ t('admin.accounts.dataExportIncludeProxies') }}</span>
         </label>
         <div>
@@ -1695,7 +1695,7 @@ function getOpenAICompactTitle(row: any): string {
 function getAntigravityTierClass(row: any): string {
   const tier = getAntigravityTierFromRow(row)
   switch (tier) {
-    case 'free-tier': return 'surface-inset surface-muted dark:surface-inset'
+    case 'free-tier': return 'surface-inset surface-muted'
     case 'g1-pro-tier': return 'bg-blue-100/[0.15] text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
     case 'g1-ultra-tier': return 'bg-purple-100/[0.15] text-purple-600 dark:bg-purple-900/40 dark:text-purple-300'
     default: return ''

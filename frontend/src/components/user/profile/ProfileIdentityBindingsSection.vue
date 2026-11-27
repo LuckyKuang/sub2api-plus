@@ -2,7 +2,7 @@
   <div :class="props.embedded ? 'space-y-4' : 'card overflow-hidden'">
     <div
       v-if="!props.embedded"
-      class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+      class="border-b border-[var(--surface-edge)] px-6 py-4"
     >
       <h2 class="text-lg font-medium text-gray-900 dark:text-white">
         {{ t('profile.authBindings.title') }}
@@ -12,7 +12,7 @@
       </p>
     </div>
 
-    <div :class="props.embedded ? 'space-y-4' : 'divide-y divide-gray-100 dark:divide-dark-700'">
+    <div :class="props.embedded ? 'space-y-3' : 'divide-y divide-[var(--surface-edge)]'">
       <div v-if="props.embedded">
         <p class="text-sm font-semibold text-gray-900 dark:text-white">
           {{ t('profile.authBindings.title') }}
@@ -31,7 +31,7 @@
           <div class="flex min-w-0 flex-1 items-start gap-4">
             <div
               :class="providerIconClass(item.provider)"
-              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sm font-semibold"
+              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-semibold"
             >
               <Icon
                 v-if="item.provider === 'email'"
@@ -295,9 +295,7 @@ const currentUser = computed(() => localUser.value ?? props.user)
 const compact = computed(() => props.compact)
 const rowClass = computed(() =>
   props.embedded
-    ? compact.value
-      ? 'rounded-xl border border-gray-100 surface-inset p-4 shadow-sm dark:border-dark-700 dark:surface-inset'
-      : 'rounded-xl border border-gray-100 surface-inset p-4 dark:border-dark-700 dark:surface-inset'
+    ? 'surface-subcard p-4'
     : 'px-6 py-5'
 )
 const emailBound = computed(() => getBindingStatus('email'))

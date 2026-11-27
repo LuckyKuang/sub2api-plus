@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   KEY_TEST_MAX_TOKENS,
   KEY_TEST_PROMPT,
+  KEY_TEST_IMAGE_TIMEOUT_MS,
   accessPathForKey,
   buildCandidates,
   buildTestRequest,
   classifyFailure,
   extractOutputText,
+  extractOutputImages,
+  isImageTestCandidate,
   hasErrorEnvelope,
   normalizeGatewayRoot,
   requestIdFromPayload,
@@ -55,6 +58,124 @@ const apiKey = (overrides: Partial<ApiKey> = {}): ApiKey => ({
 })
 
 describe('key test request helpers', () => {
+  it('uses hi for text and allows five minutes for generated images', () => {
+    expect(KEY_TEST_PROMPT).toBe('hi')
+    expect(KEY_TEST_IMAGE_TIMEOUT_MS).toBe(300_000)
+  })
+
+  it('keeps a text model as the initial choice when image models are available', () => {
+    expect(buildCandidates([
+      model({ name: 'gpt-image-1', endpoints: ['/v1/images/generations'] }),
+      model({ name: 'gpt-5.4', endpoints: ['/v1/responses'] }),
+    ])[0]?.model).toBe('gpt-5.4')
+  })
+
+  it('includes advertised image routes and keeps their exact aggregate owner', () => {
+    const candidates = buildCandidates([
+      model({ name: 'shared-image', platform: 'gemini', endpoints: ['/v1beta'], group_ids: [1], is_image: true }),
+      model({ name: 'shared-image', platform: 'openai', endpoints: ['/v1/images/generations'], group_ids: [2], is_image: true }),
+      model({ name: 'gpt-5', endpoints: ['/v1/responses'], group_ids: [3] }),
+    ])
+    const image = candidates.find(candidate => candidate.model === 'shared-image')!
+    expect(image).toMatchObject({ protocol: 'images', isImage: true, groupId: 2, platform: 'openai' })
+    const request = buildTestRequest('https://api.example.com', 'sk-test', image, 'Draw an orange cat.')
+    expect(request.url).toBe('https://api.example.com/v1/images/generations')
+    expect(request.headers['X-Composite-Group-ID']).toBe('2')
+    expect(JSON.parse(request.body)).toEqual({ model: 'shared-image', prompt: 'Draw an orange cat.', n: 1 })
+    expect(buildTestRequest('', 'sk-test', candidates.find(candidate => candidate.model === 'gpt-5')!).headers)
+      .not.toHaveProperty('X-Composite-Group-ID')
+  })
+
+  it('pins the image group when the same platform exposes text and images under one public model', () => {
+    const candidate = buildCandidates([model({
+      name: 'gpt-image-1', platform: 'openai',
+      endpoints: ['/v1/responses', '/v1/images/generations'],
+      group_ids: [1, 2], image_group_ids: [2], is_image: true,
+    })])[0]!
+    expect(candidate).toMatchObject({ protocol: 'images', groupId: 2 })
+    expect(buildTestRequest('', 'sk-test', candidate, 'Draw a cat.').headers['X-Composite-Group-ID']).toBe('2')
+  })
+
+  it('never invents an image endpoint from a model name', () => {
+    const candidate = buildCandidates([model({ name: 'gpt-image-1', endpoints: ['/v1/responses'] })])[0]!
+    expect(candidate.endpoint).toBe('/v1/responses')
+    expect(isImageTestCandidate(candidate)).toBe(true)
+    expect(buildCandidates([model({ name: 'gpt-image-1', endpoints: [] })])).toEqual([])
+    expect(buildCandidates([model({ name: 'gpt-image-1', endpoints: ['/v1/images/generations'] })], {
+      conversionEndpoint: '/v1/messages',
+    })).toEqual([])
+  })
+
+  it('uses resolved image metadata and provider ownership instead of guessing across platforms', () => {
+    for (const modelEntry of [
+      model({ name: 'gpt-image-1', platform: 'anthropic', endpoints: ['/v1/messages'] }),
+      model({ name: 'gpt-image-1', platform: 'openai', endpoints: ['/v1/responses'], is_image: false }),
+    ]) {
+      expect(isImageTestCandidate(buildCandidates([modelEntry])[0]!)).toBe(false)
+    }
+  })
+
+  it('sends native GPT, Grok and Gemini image requests without text token limits', () => {
+    const prompt = 'Generate a cute orange cat astronaut sticker on a clean pastel background.'
+    const images = buildCandidates([
+      model({ name: 'gpt-image-1', endpoints: ['/v1/images/generations'] }),
+      model({ name: 'public-art', platform: 'grok', endpoints: ['/v1/images/generations'], is_image: true }),
+      model({ name: 'public-gemini-art', platform: 'gemini', endpoints: ['/v1beta'], is_image: true }),
+    ])
+    const gpt = JSON.parse(buildTestRequest('', 'sk-test', images.find(candidate => candidate.model === 'gpt-image-1')!, prompt).body)
+    expect(gpt).toEqual({ model: 'gpt-image-1', prompt, n: 1 })
+    const grok = JSON.parse(buildTestRequest('', 'sk-test', images.find(candidate => candidate.model === 'public-art')!, prompt).body)
+    expect(grok).toEqual({ model: 'public-art', prompt, n: 1, response_format: 'b64_json' })
+    const gemini = JSON.parse(buildTestRequest('', 'sk-test', images.find(candidate => candidate.model === 'public-gemini-art')!, prompt).body)
+    expect(gemini).toEqual({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ['TEXT', 'IMAGE'], imageConfig: { aspectRatio: '1:1' } },
+    })
+  })
+
+  it('preserves a custom text prompt for every supported text protocol', () => {
+    for (const [protocol, endpoint, field] of [
+      ['responses', '/v1/responses', 'input'],
+      ['chat', '/v1/chat/completions', 'messages'],
+      ['messages', '/v1/messages', 'messages'],
+      ['gemini', '/v1beta', 'contents'],
+    ] as const) {
+      const request = buildTestRequest('', 'sk-test', { id: 'text', model: 'text', protocol, endpoint, pathPrefix: '' }, 'custom prompt')
+      expect(JSON.stringify(JSON.parse(request.body)[field])).toContain('custom prompt')
+    }
+  })
+
+  it('extracts image-only success payloads in native Images, Responses and Gemini shapes', () => {
+    expect(extractOutputImages('images', { data: [{ b64_json: 'QUJD' }] })).toEqual(['data:image/png;base64,QUJD'])
+    expect(extractOutputImages('images', { output_format: 'webp', data: [{ b64_json: 'QUJD' }] })).toEqual(['data:image/webp;base64,QUJD'])
+    expect(extractOutputImages('images', { data: [{ url: 'https://images.example/result.png' }] })).toEqual(['https://images.example/result.png'])
+    expect(extractOutputImages('images', { data: [{ b64_json: 'invalid', url: 'https://images.example/result.png' }] }))
+      .toEqual(['https://images.example/result.png'])
+    expect(extractOutputImages('responses', { output: [{ type: 'image_generation_call', status: 'completed', result: 'QUJD' }] }))
+      .toEqual(['data:image/png;base64,QUJD'])
+    expect(extractOutputImages('gemini', { candidates: [{ content: { parts: [
+      { inlineData: { mimeType: 'image/jpeg', data: 'QUJD' } },
+      { inline_data: { mime_type: 'image/webp', data: 'REVG' } },
+    ] } }] })).toEqual(['data:image/jpeg;base64,QUJD', 'data:image/webp;base64,REVG'])
+  })
+
+  it('rejects unsafe, malformed and private image outputs', () => {
+    expect(extractOutputImages('images', { data: [
+      { url: 'javascript:alert(1)' }, { url: 'file:///tmp/private.png' },
+      { url: 'data:image/svg+xml;base64,QUJD' }, { b64_json: '<svg>' },
+      { b64_json: 'Q' }, { b64_json: 'QQ=' }, { b64_json: 'QUJD', mime_type: 'image/svg+xml' },
+      { url: 'https://user:secret@example.com/image.png' },
+    ] })).toEqual([])
+    expect(extractOutputImages('gemini', { candidates: [{ content: { parts: [
+      { thought: true, inlineData: { mimeType: 'image/png', data: 'QUJD' } },
+      { inlineData: { mimeType: 'text/html', data: 'QUJD' } },
+    ] } }] })).toEqual([])
+    expect(extractOutputImages('responses', { output: [
+      { type: 'image_generation_call', status: 'in_progress', result: 'QUJD' },
+      { type: 'function_call', arguments: { result: 'QUJD' } },
+    ] })).toEqual([])
+  })
+
   it('normalizes the public gateway root', () => {
     expect(normalizeGatewayRoot('https://api.example.com/')).toBe('https://api.example.com')
     expect(normalizeGatewayRoot('https://api.example.com/v1/')).toBe('https://api.example.com')

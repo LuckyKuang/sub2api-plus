@@ -36,7 +36,7 @@
           >
             <div class="toc-header">
               <span class="toc-title">{{ t('customPage.tableOfContents') }}</span>
-              <button class="toc-close-btn surface-control" @click="tocVisible = false">
+              <button class="toc-close-btn" @click="tocVisible = false">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
             </div>
@@ -60,7 +60,7 @@
           <!-- TOC Toggle Button (when collapsed) -->
           <button
             v-show="!tocVisible && tocItems.length > 0"
-            class="toc-toggle-btn surface-control"
+            class="toc-toggle-btn"
             @click="tocVisible = true"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
@@ -462,7 +462,7 @@ onUnmounted(() => {
 }
 
 .toc-sidebar {
-  @apply flex flex-col h-full border-r border-gray-200 dark:border-dark-600;
+  @apply flex flex-col h-full border-r border-[var(--surface-edge)];
   width: min(240px, 30%);
   min-width: 160px;
   max-width: 280px;
@@ -484,7 +484,7 @@ onUnmounted(() => {
 }
 
 .toc-header {
-  @apply flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-dark-600;
+  @apply flex items-center justify-between px-4 py-3 border-b border-[var(--surface-edge)];
 }
 
 .toc-title {
@@ -517,7 +517,7 @@ onUnmounted(() => {
 
 .toc-toggle-btn {
   @apply absolute left-2 top-2 z-10 flex items-center px-2 py-1.5 rounded-md text-sm;
-  @apply border border-gray-200 dark:border-dark-500;
+  @apply border border-[var(--surface-edge)];
   color: var(--surface-muted);
   @apply shadow-sm transition-colors cursor-pointer;
   background-color: var(--surface-soft);
@@ -526,7 +526,7 @@ onUnmounted(() => {
 
 .custom-embed-shell {
   @apply relative;
-  @apply h-full w-full overflow-hidden rounded-xl;
+  @apply h-full w-full overflow-hidden;
   @apply bg-gradient-to-b from-gray-50 to-white dark:from-dark-900 dark:to-dark-950;
   @apply p-0;
 }
@@ -554,7 +554,7 @@ onUnmounted(() => {
   line-height: 1.7;
   color: inherit;
 }
-.markdown-page-content h1 { @apply text-3xl font-bold mt-8 mb-4 pb-2 border-b border-gray-200 dark:border-dark-600; }
+.markdown-page-content h1 { @apply text-3xl font-bold mt-8 mb-4 pb-2 border-b border-[var(--surface-edge)]; }
 .markdown-page-content h2 { @apply text-2xl font-bold mt-6 mb-3; }
 .markdown-page-content h3 { @apply text-xl font-semibold mt-5 mb-2; }
 .markdown-page-content h4 { @apply text-lg font-semibold mt-4 mb-2; }
@@ -563,15 +563,15 @@ onUnmounted(() => {
 .markdown-page-content ol { @apply list-decimal pl-6 mb-4; }
 .markdown-page-content li { @apply mb-1; }
 .markdown-page-content a { @apply text-primary-500 hover:text-primary-600 underline; }
-.markdown-page-content blockquote { @apply border-l-4 border-gray-300 dark:border-dark-500 pl-4 italic my-4; color: var(--surface-muted); }
+.markdown-page-content blockquote { @apply border-l-4 border-[var(--surface-edge)] pl-4 italic my-4; color: var(--surface-muted); }
 .markdown-page-content img { @apply max-w-full h-auto rounded-lg my-4; }
 .markdown-page-content table { @apply w-full border-collapse my-4; }
-.markdown-page-content th { @apply border border-gray-300 dark:border-dark-500 px-3 py-2 font-semibold text-left;  background-color: var(--surface-soft);}
-.markdown-page-content td { @apply border border-gray-300 dark:border-dark-500 px-3 py-2; }
+.markdown-page-content th { @apply border border-[var(--surface-edge)] px-3 py-2 font-semibold text-left;  background-color: var(--surface-soft);}
+.markdown-page-content td { @apply border border-[var(--surface-edge)] px-3 py-2; }
 .markdown-page-content code { @apply px-1.5 py-0.5 rounded text-sm font-mono;  background-color: var(--surface-soft);}
 .markdown-page-content pre { @apply  p-4 rounded-lg overflow-x-auto my-4 relative;  background-color: var(--surface-soft); color: var(--surface-text);}
 .markdown-page-content pre code { @apply bg-transparent p-0 text-inherit; }
-.markdown-page-content hr { @apply my-6 border-gray-200 dark:border-dark-600; }
+.markdown-page-content hr { @apply my-6 border-[var(--surface-edge)]; }
 
 .copy-btn {
   position: absolute;

@@ -93,7 +93,7 @@
         </template>
 
         <template #cell-created_at="{ row }">
-          <button type="button" class="text-left text-sm text-primary-600 underline decoration-dotted surface-control" :aria-label="t('inspection.view')" @click.stop="openDetail(row.id)">{{ formatDateTime(row.created_at) }}</button>
+          <button type="button" class="text-left text-sm text-primary-600 underline decoration-dotted hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300" :aria-label="t('inspection.view')" @click.stop="openDetail(row.id)">{{ formatDateTime(row.created_at) }}</button>
         </template>
 
         <template #cell-user_agent="{ row }">

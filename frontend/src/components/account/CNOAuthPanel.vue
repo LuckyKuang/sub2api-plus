@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-3 rounded-lg border border-gray-200 p-4 dark:border-dark-600" data-testid="cn-oauth-panel">
+  <div class="space-y-3 rounded-lg border border-[var(--surface-edge)] p-4" data-testid="cn-oauth-panel">
     <p class="text-sm font-medium">{{ t('admin.accounts.oauth.domestic.title', { platform: label }) }}</p>
     <p class="input-hint">{{ t(platform === 'stepfun' ? 'admin.accounts.oauth.domestic.stepfunDescription' : 'admin.accounts.oauth.domestic.description') }}</p>
     <template v-if="!session">

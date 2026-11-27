@@ -1,5 +1,5 @@
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-canvas p-4 md:p-6 lg:p-8 dark:surface-inset">
+  <div class="flex min-h-screen items-center justify-center bg-canvas p-4 md:p-6 lg:p-8">
     <div class="card w-full min-w-0 max-w-md space-y-6 p-5 sm:p-8">
       <!-- Loading -->
       <div v-if="loading" class="flex items-center justify-center py-20">
@@ -33,8 +33,8 @@
           </p>
         </div>
         <!-- Order Info -->
-        <div v-if="order" class="rounded-[var(--surface-radius-panel)] surface-inset p-4">
-          <div class="space-y-3 text-sm">
+        <div v-if="order" class="surface-subcard p-4">
+          <div class="space-y-3 text-sm tabular-nums">
             <div v-if="hasOrderId(order)" class="flex justify-between">
               <span class="surface-muted">{{ t('payment.orders.orderId') }}</span>
               <span class="font-medium text-gray-900 dark:text-white">#{{ order.id }}</span>
@@ -74,8 +74,8 @@
           </div>
         </div>
         <!-- EasyPay return info (when no order loaded) -->
-        <div v-else-if="returnInfo" class="rounded-[var(--surface-radius-panel)] surface-inset p-4">
-          <div class="space-y-3 text-sm">
+        <div v-else-if="returnInfo" class="surface-subcard p-4">
+          <div class="space-y-3 text-sm tabular-nums">
             <div v-if="returnInfo.outTradeNo" class="flex justify-between gap-3">
               <span class="shrink-0 surface-muted">{{ t('payment.orders.orderId') }}</span>
               <span class="min-w-0 break-all text-right font-medium text-gray-900 dark:text-white">{{ returnInfo.outTradeNo }}</span>

@@ -323,11 +323,18 @@ test('real admin usage cards and paging remain reachable inside phone shell inse
   }
 })
 
-test('admin filter controls stack full width on a phone', async ({ page }, info) => {
+test('expanded admin filter controls stack full width on a phone', async ({ page }, info) => {
   const theme = info.project.use.colorScheme === 'dark' ? 'dark' : 'light'
   const locale = info.project.use.locale?.startsWith('zh') ? 'zh' : 'en'
   await page.setViewportSize({ width: 375, height: 812 })
   await page.goto(`/layout-tests/index.html?view=admin-layout&groups=1&theme=${theme}&locale=${locale}`)
+  await expect(page.locator('.app-layout-admin')).toBeVisible({ timeout: 60_000 })
+  // The documented mobile query row starts folded; field geometry applies
+  // after the user expands it, while page actions stay available throughout.
+  const toggle = page.locator('.mobile-filters-toggle')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
   const bar = page.locator('.filter-bar').first()
   await expect(bar).toBeVisible()
   const fields = await bar.locator('.filter-field').evaluateAll(elements => elements.map(element => {
@@ -365,6 +372,7 @@ test('risk heading places tabs between title and right aligned actions', async (
     await page.setViewportSize({ width, height: 800 })
     await page.goto(`/layout-tests/index.html?view=admin-layout&riskControl=1&theme=${theme}&locale=${locale}`)
     const header = page.getByTestId('risk-page-heading')
+    await expect(header).toBeVisible({ timeout: 60_000 })
     const title = header.locator('h1')
     const tabs = header.getByRole('tablist')
     const actions = page.getByTestId('risk-page-actions')
@@ -422,9 +430,14 @@ test('proxy filters and wrapping actions share control heights and stay within t
   for (const width of [390, 1024, 1280, 1818]) {
     await page.setViewportSize({ width, height: 800 })
     await page.goto(`/layout-tests/index.html?view=admin-layout&proxies=1&theme=${theme}&locale=${locale}`)
+    await expect(page.locator('.app-layout-admin')).toBeVisible({ timeout: 60_000 })
     const bar = page.locator('.filter-bar').first()
     const actions = bar.locator('.filter-actions')
     await expect(actions).toBeVisible()
+    if (width < 1024) {
+      await page.locator('.mobile-filters-toggle').click()
+      await expect(bar.locator('.filter-field').first()).toBeVisible()
+    }
     const barBox = (await bar.boundingBox())!
     const buttons = await actions.getByRole('button').evaluateAll(elements => elements.map(el => {
       const box = el.getBoundingClientRect()
@@ -453,6 +466,9 @@ test('settings save dock remains reachable without covering the final field in b
     await page.goto(`/layout-tests/index.html?view=admin-layout&settings=1&theme=${theme}&locale=${locale}`)
     const dock = page.locator('[data-test="settings-save-bar"]')
     const save = dock.getByRole('button')
+    // The first production Settings import may be cold on a WSL bind mount.
+    // Keep normal interaction/geometry timeouts after the page has mounted.
+    await expect(dock).toBeVisible({ timeout: 60_000 })
     await expect(save).toBeEnabled()
     const lastField = page.locator('form input:visible').last()
     await lastField.scrollIntoViewIfNeeded()

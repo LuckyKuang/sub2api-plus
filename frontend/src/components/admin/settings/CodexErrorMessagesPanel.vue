@@ -1,5 +1,5 @@
 <template>
-  <section class="mt-6 rounded-xl border border-[var(--border-color)] p-4 sm:p-5" data-testid="codex-error-messages-panel">
+  <section class="mt-6 rounded-lg border border-[var(--border-color)] p-4 sm:p-5" data-testid="codex-error-messages-panel">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="min-w-0 flex-1">
         <h3 class="text-sm font-semibold">

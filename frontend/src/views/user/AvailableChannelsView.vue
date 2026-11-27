@@ -134,7 +134,7 @@
         class="workspace-fixed flex flex-wrap items-center gap-3 rounded-lg bg-amber-50/[0.15] p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
       >
         {{ t('availableChannels.catalog.ratesUnavailable') }}
-        <button type="button" class="surface-control underline" @click="loadCatalog(true)">{{ t('availableChannels.catalog.retry') }}</button>
+        <button type="button" class="btn btn-ghost btn-xs underline" @click="loadCatalog(true)">{{ t('availableChannels.catalog.retry') }}</button>
       </div>
 
       <section class="workspace-shell workspace-scroll" :aria-label="t('availableChannels.title')" data-testid="catalog-results">

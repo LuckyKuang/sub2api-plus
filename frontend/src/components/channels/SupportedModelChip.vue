@@ -6,7 +6,7 @@
         'inline-flex cursor-help items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium transition-colors',
         effectivePlatform
           ? platformBadgeClass(effectivePlatform)
-          : 'border-gray-200 surface-inset text-gray-700 dark:border-dark-600 dark:surface-inset dark:text-gray-300',
+          : 'border-[var(--surface-edge)] surface-inset text-gray-700 dark:text-gray-300',
       ]"
       @mouseenter="onEnter"
       @mouseleave="onLeave"
@@ -221,12 +221,12 @@ const perMillionScale = 1_000_000
 const popoverBorderClass = computed(() =>
   effectivePlatform.value
     ? platformBorderClass(effectivePlatform.value)
-    : 'border-gray-200 dark:border-dark-600',
+    : 'border-[var(--surface-edge)]',
 )
 const popoverHeaderClass = computed(() =>
   effectivePlatform.value
     ? platformBadgeLightClass(effectivePlatform.value)
-    : 'surface-inset surface-muted dark:surface-inset',
+    : 'surface-inset surface-muted',
 )
 
 function prefixKey(k: string): string {

@@ -1,14 +1,12 @@
 <template>
-  <div class="empty-state">
+  <div :class="['empty-state', sizeClass]">
     <!-- Icon -->
-    <div
-      class="mb-5 flex h-20 w-20 items-center justify-center rounded-xl surface-inset surface-decoration"
-    >
+    <div :class="['flex items-center justify-center surface-subcard', iconBoxClass]">
       <slot name="icon">
-        <component v-if="icon" :is="icon" class="empty-state-icon h-10 w-10" aria-hidden="true" />
+        <component v-if="icon" :is="icon" :class="['empty-state-icon', iconSizeClass]" aria-hidden="true" />
         <svg
           v-else
-          class="empty-state-icon h-10 w-10"
+          :class="['empty-state-icon', iconSizeClass]"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -29,21 +27,21 @@
     </h3>
 
     <!-- Description -->
-    <p class="empty-state-description">
-      {{ description }}
+    <p v-if="displayDescription" class="empty-state-description">
+      {{ displayDescription }}
     </p>
 
     <!-- Action -->
-    <div v-if="actionText || $slots.action" class="mt-6">
+    <div v-if="actionText || $slots.action" :class="size === 'sm' ? 'mt-4' : 'mt-5'">
       <slot name="action">
         <component
           :is="actionTo ? 'RouterLink' : 'button'"
           v-if="actionText"
           :to="actionTo"
           @click="!actionTo && $emit('action')"
-          class="btn btn-primary"
+          :class="['btn btn-primary', size === 'sm' && 'btn-sm']"
         >
-          <Icon v-if="actionIcon" name="plus" size="md" class="mr-2" />
+          <Icon v-if="actionIcon" name="plus" :size="size === 'sm' ? 'sm' : 'md'" class="mr-1.5" />
           {{ actionText }}
         </component>
       </slot>
@@ -67,14 +65,28 @@ interface Props {
   actionTo?: string | object
   actionIcon?: boolean
   message?: string
+  size?: 'sm' | 'md' | 'lg'
 }
 
 const props = withDefaults(defineProps<Props>(), {
   description: '',
-  actionIcon: true
+  actionIcon: true,
+  size: 'md'
 })
 
 const displayTitle = computed(() => props.title || t('common.noData'))
+const displayDescription = computed(() => props.description || props.message || '')
+const sizeClass = computed(() => (props.size === 'md' ? '' : `empty-state--${props.size}`))
+const iconBoxClass = computed(() => {
+  if (props.size === 'sm') return 'mb-3 h-11 w-11 rounded-lg'
+  if (props.size === 'lg') return 'mb-5 h-16 w-16 rounded-xl'
+  return 'mb-4 h-14 w-14 rounded-xl'
+})
+const iconSizeClass = computed(() => {
+  if (props.size === 'sm') return 'h-5 w-5'
+  if (props.size === 'lg') return 'h-8 w-8'
+  return 'h-7 w-7'
+})
 
 defineEmits(['action'])
 </script>

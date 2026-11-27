@@ -5,7 +5,7 @@
       <div class="flex items-center justify-end">
         <div class="flex flex-wrap items-center justify-end gap-2">
           <Select v-model="sourceFilter" :options="sourceFilters" class="w-36" />
-          <div class="flex rounded-lg border border-gray-200 dark:border-dark-600">
+          <div class="flex rounded-lg border border-[var(--surface-edge)]">
             <button
               v-for="d in DAYS_OPTIONS"
               :key="d"
@@ -106,9 +106,9 @@ function methodColor(type: string): string {
 
 function rankClass(idx: number): string {
   if (idx === 0) return 'bg-yellow-100/[0.15] text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-  if (idx === 1) return 'surface-inset surface-muted dark:surface-inset'
+  if (idx === 1) return 'surface-inset surface-muted'
   if (idx === 2) return 'bg-amber-100/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-  return 'surface-inset surface-muted dark:surface-inset'
+  return 'surface-inset surface-muted'
 }
 
 function sortedAmounts(amounts: CurrencyAmounts): [string, number][] {

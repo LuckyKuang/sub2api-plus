@@ -9,7 +9,7 @@
     </button>
     <BaseDialog :show="open" :title="t('billingRates.models')" width="wide" @close="open = false">
       <div class="space-y-3 text-xs">
-        <p class="rounded-lg surface-inset px-3 py-2 leading-5 surface-muted">{{ t('billingRates.catalogDialogHint') }}</p>
+        <p class="surface-subcard px-3 py-2 leading-5 surface-muted">{{ t('billingRates.catalogDialogHint') }}</p>
         <PlanModelCatalogList :catalog="catalog" />
       </div>
       <template #footer>
@@ -20,7 +20,7 @@
       </template>
     </BaseDialog>
   </div>
-  <details v-else-if="catalog" class="space-y-3 rounded-lg surface-inset p-3 text-xs">
+  <details v-else-if="catalog" class="surface-subcard space-y-3 p-3 text-xs">
     <summary class="cursor-pointer font-medium">{{ t('billingRates.models') }} · {{ catalog.models.length }}</summary>
     <PlanModelCatalogList :catalog="catalog" />
   </details>

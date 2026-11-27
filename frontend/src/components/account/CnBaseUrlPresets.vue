@@ -13,7 +13,7 @@
         'rounded-lg px-3 py-1 text-xs transition-colors',
         isActive(preset)
           ? 'bg-primary-100/[0.15] text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-          : 'surface-inset text-gray-700 hover:bg-primary-50/25 hover:text-primary-700 dark:surface-inset dark:text-gray-300 dark:hover:bg-primary-900/30 dark:hover:text-primary-400'
+          : 'surface-inset text-gray-700 hover:bg-primary-50/25 hover:text-primary-700 dark:text-gray-300 dark:hover:bg-primary-900/30 dark:hover:text-primary-400'
       ]"
       @click="emit('select', preset)"
     >

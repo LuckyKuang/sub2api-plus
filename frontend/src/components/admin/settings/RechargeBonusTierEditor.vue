@@ -1,7 +1,7 @@
 <template>
   <div class="card" data-testid="recharge-bonus-tier-editor">
     <!-- Header：与服务商管理卡片同款 -->
-    <div class="border-b border-gray-100 px-4 py-3 dark:border-dark-700">
+    <div class="border-b border-[var(--surface-edge)] px-4 py-3">
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0">
           <h2 class="text-base font-semibold text-gray-900 dark:text-white">
@@ -57,11 +57,11 @@
       <!-- 档位列表：紧凑表格 -->
       <div
         v-if="tiers.length === 0"
-        class="rounded-lg border border-dashed border-gray-300 px-4 py-3 text-sm dark:border-dark-600 surface-muted"
+        class="rounded-lg border border-dashed border-[var(--surface-edge)] px-4 py-3 text-sm surface-muted"
       >
         {{ t('admin.settings.payment.rechargeBonus.empty') }}
       </div>
-      <div v-else class="overflow-hidden rounded-xl border border-gray-200 dark:border-dark-600">
+      <div v-else class="overflow-hidden rounded-lg border border-[var(--surface-edge)]">
         <div
           class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2rem] items-center gap-3 surface-inset px-3 py-2 text-xs font-medium surface-muted"
         >
@@ -73,7 +73,7 @@
           </span>
           <span></span>
         </div>
-        <div class="divide-y divide-gray-100 dark:divide-dark-700">
+        <div class="divide-y divide-[var(--surface-edge)]">
           <div
             v-for="(tier, index) in tiers"
             :key="index"
@@ -151,7 +151,7 @@
       </p>
 
       <!-- 活动文案 -->
-      <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+      <div class="border-t border-[var(--surface-edge)] pt-4">
         <label class="input-label">
           {{ t('admin.settings.payment.rechargeBonus.noticeLabel') }}
         </label>

@@ -1,7 +1,7 @@
 <template>
   <div class="card">
     <div
-      class="flex flex-col gap-3 border-b border-gray-100 px-6 py-4 dark:border-dark-700 lg:flex-row lg:items-start lg:justify-between"
+      class="flex flex-col gap-3 border-b border-[var(--surface-edge)] px-6 py-4 lg:flex-row lg:items-start lg:justify-between"
     >
       <div>
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
@@ -151,7 +151,7 @@
             </div>
 
             <div
-              class="rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-700"
+              class="rounded-lg border border-[var(--surface-edge)] surface-inset p-4"
             >
               <div class="text-sm font-medium text-gray-900 dark:text-white">
                 {{ t("admin.settings.emailTemplates.placeholders") }}
@@ -164,7 +164,7 @@
                   v-for="placeholder in placeholderList"
                   :key="placeholder"
                   type="button"
-                  class="rounded-md border border-gray-200 px-3 py-1 font-mono text-xs transition-colors hover:border-primary-300 hover:text-primary-600 dark:border-dark-600 dark:hover:border-primary-500 dark:hover:text-primary-300 surface-control surface-muted"
+                  class="rounded-md border border-[var(--surface-edge)] px-3 py-1 font-mono text-xs transition-colors hover:border-primary-300 hover:text-primary-600 dark:hover:border-primary-500 dark:hover:text-primary-300 surface-control surface-muted"
                   @click="copyPlaceholder(placeholder)"
                 >
                   {{ placeholder }}
@@ -175,10 +175,10 @@
 
           <div class="space-y-4">
             <div
-              class="rounded-lg border border-gray-200 surface-inset dark:border-dark-700"
+              class="rounded-lg border border-[var(--surface-edge)] surface-inset"
             >
               <div
-                class="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-dark-700"
+                class="flex items-center justify-between border-b border-[var(--surface-edge)] px-4 py-3"
               >
                 <div>
                   <div class="text-sm font-medium text-gray-900 dark:text-white">
@@ -197,7 +197,7 @@
               </div>
               <div class="surface-inset p-3">
                 <iframe
-                  class="h-[36rem] w-full rounded-md border border-gray-200 bg-white dark:border-dark-700"
+                  class="h-[36rem] w-full rounded-md border border-[var(--surface-edge)] bg-white"
                   sandbox=""
                   :srcdoc="previewHtml"
                   :title="t('admin.settings.emailTemplates.livePreview')"

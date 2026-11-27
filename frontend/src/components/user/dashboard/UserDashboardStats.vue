@@ -18,28 +18,28 @@
     <div class="card p-5">
       <p class="text-sm surface-muted">{{ t('dashboard.todayTokens') }}</p>
       <p class="stat-value mt-3 text-2xl font-semibold tabular-nums">{{ formatTokens(stats.today_tokens) }}</p>
-      <div class="mt-2 flex flex-wrap gap-x-2 text-xs surface-muted">
-        <span>{{ t('dashboard.input') }}: {{ formatTokens(stats.today_input_tokens) }} ({{ todayTokenShare(stats.today_input_tokens) }})</span>
-        <span>{{ t('dashboard.output') }}: {{ formatTokens(stats.today_output_tokens) }} ({{ todayTokenShare(stats.today_output_tokens) }})</span>
-        <span>{{ t('dashboard.cache') }}: {{ formatTokens(todayCacheTokens) }} ({{ todayTokenShare(todayCacheTokens) }})</span>
+      <div class="mt-2 flex flex-wrap gap-x-2.5 gap-y-0.5 text-xs tabular-nums surface-muted">
+        <span>{{ t('dashboard.input') }}: {{ formatTokens(stats.today_input_tokens) }}<template v-if="todayTokenShare(stats.today_input_tokens)"> ({{ todayTokenShare(stats.today_input_tokens) }})</template></span>
+        <span>{{ t('dashboard.output') }}: {{ formatTokens(stats.today_output_tokens) }}<template v-if="todayTokenShare(stats.today_output_tokens)"> ({{ todayTokenShare(stats.today_output_tokens) }})</template></span>
+        <span>{{ t('dashboard.cache') }}: {{ formatTokens(todayCacheTokens) }}<template v-if="todayTokenShare(todayCacheTokens)"> ({{ todayTokenShare(todayCacheTokens) }})</template></span>
       </div>
     </div>
   </div>
-  <section v-if="section !== 'summary'" class="card p-4" data-testid="dashboard-performance" :aria-label="t('dashboard.performance')">
+  <section v-if="section !== 'summary'" class="card p-4 sm:p-5" data-testid="dashboard-performance" :aria-label="t('dashboard.performance')">
     <h3 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.performance') }}</h3>
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <div data-testid="performance-card" class="min-w-0 rounded-lg border border-gray-200 p-3 dark:border-dark-600"><p class="text-xs surface-muted">{{ t('dashboard.apiKeys') }}</p><p class="mt-1 font-semibold">{{ stats.active_api_keys }} / {{ stats.total_api_keys }}</p></div>
-      <div data-testid="performance-card" class="min-w-0 rounded-lg border border-gray-200 p-3 dark:border-dark-600"><p class="text-xs surface-muted">RPM / TPM</p><p class="mt-1 font-semibold tabular-nums">{{ formatNumber(stats.rpm) }} / {{ formatTokens(stats.tpm) }}</p><p class="mt-2 text-xs surface-muted">{{ t('inspection.performanceHint') }}</p></div>
-      <div data-testid="performance-card" class="min-w-0 rounded-lg border border-gray-200 p-3 dark:border-dark-600"><p class="text-xs surface-muted">{{ t('dashboard.avgResponse') }}</p><p class="mt-1 font-semibold">{{ stats.total_requests ? formatDuration(stats.average_duration_ms) : '—' }}</p><p class="mt-2 text-xs surface-muted">{{ t('inspection.durationHint') }}</p></div>
-      <div data-testid="performance-card" class="min-w-0 rounded-lg border border-gray-200 p-3 dark:border-dark-600"><p class="text-xs surface-muted">{{ t('dashboard.totalTokens') }}</p><p class="mt-1 font-semibold">{{ formatTokens(stats.total_tokens) }}</p><p class="mt-2 text-xs surface-muted">{{ t('dashboard.cache') }} {{ formatTokens(totalCacheTokens) }} {{ totalTokenShare(totalCacheTokens) }}</p></div>
+      <div data-testid="performance-card" class="surface-subcard min-w-0 p-3.5"><p class="text-xs surface-muted">{{ t('dashboard.apiKeys') }}</p><p class="mt-1.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">{{ stats.active_api_keys }} / {{ stats.total_api_keys }}</p></div>
+      <div data-testid="performance-card" class="surface-subcard min-w-0 p-3.5"><p class="text-xs surface-muted">RPM / TPM</p><p class="mt-1.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">{{ formatNumber(stats.rpm) }} / {{ formatTokens(stats.tpm) }}</p><p class="mt-1.5 text-xs surface-muted">{{ t('inspection.performanceHint') }}</p></div>
+      <div data-testid="performance-card" class="surface-subcard min-w-0 p-3.5"><p class="text-xs surface-muted">{{ t('dashboard.avgResponse') }}</p><p class="mt-1.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">{{ stats.total_requests ? formatDuration(stats.average_duration_ms) : '—' }}</p><p class="mt-1.5 text-xs surface-muted">{{ t('inspection.durationHint') }}</p></div>
+      <div data-testid="performance-card" class="surface-subcard min-w-0 p-3.5"><p class="text-xs surface-muted">{{ t('dashboard.totalTokens') }}</p><p class="mt-1.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">{{ formatTokens(stats.total_tokens) }}</p><p class="mt-1.5 text-xs tabular-nums surface-muted">{{ t('dashboard.cache') }} {{ formatTokens(totalCacheTokens) }}<template v-if="totalTokenShare(totalCacheTokens)"> ({{ totalTokenShare(totalCacheTokens) }})</template></p></div>
     </div>
   </section>
 
   <!-- Row 3: Per-platform breakdown -->
-  <div v-if="section !== 'summary' && !isSimple && platformCards.length > 0" class="card p-4">
-    <div class="mb-3 flex items-center justify-between">
+  <div v-if="section !== 'summary' && !isSimple && platformCards.length > 0" class="card p-4 sm:p-5">
+    <div class="mb-3 flex items-center justify-between gap-2">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.platformBreakdown') }}</h3>
-      <span class="text-xs surface-muted">
+      <span class="badge badge-gray">
         {{ t('dashboard.platformCount', { count: platformCount }) }}
       </span>
     </div>
@@ -50,10 +50,8 @@
         data-testid="platform-card"
         :data-platform="item.platform"
         :class="[
-          'rounded-lg border p-3',
-          item.isOther
-            ? 'border-dashed border-gray-300 surface-inset dark:border-dark-500 dark:surface-inset'
-            : 'border-gray-200 dark:border-dark-600'
+          'surface-subcard min-w-0 p-3.5',
+          item.isOther ? 'border-dashed' : ''
         ]"
       >
         <div class="flex items-center justify-between">
@@ -87,7 +85,7 @@
         </div>
 
         <!-- Quota 区：仅当 quota 配置存在、非 __other__ 且至少有一个窗口配了 limit 时显示 -->
-        <div v-if="hasAnyLimit(item.quota) && !item.isOther" class="mt-3 space-y-1.5 border-t border-gray-200 pt-2 dark:border-dark-700">
+        <div v-if="hasAnyLimit(item.quota) && !item.isOther" class="mt-3 space-y-1.5 border-t border-[var(--surface-edge)] pt-2.5">
           <p class="text-[10px] uppercase tracking-wide surface-muted">
             {{ t('dashboard.platformQuota.title') }}
           </p>

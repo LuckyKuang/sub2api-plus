@@ -39,7 +39,7 @@
               <!-- User Dropdown -->
               <div
                 v-if="showFilterUserDropdown && (filterUserResults.length > 0 || filterUserKeyword)"
-                class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 shadow-lg dark:border-dark-700 surface-panel"
+                class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-[var(--surface-edge)] shadow-lg surface-panel"
               >
                 <div
                   v-if="filterUserLoading"
@@ -118,11 +118,11 @@
               <!-- Dropdown menu -->
               <div
                 v-if="showColumnDropdown"
-                class="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-lg border border-gray-200 shadow-lg dark:border-dark-700 surface-panel"
+                class="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-lg border border-[var(--surface-edge)] shadow-lg surface-panel"
               >
                 <div class="p-2">
                   <!-- User column mode selection -->
-                  <div class="mb-2 border-b border-gray-200 pb-2 dark:border-dark-700">
+                  <div class="mb-2 border-b border-[var(--surface-edge)] pb-2">
                     <div class="px-3 py-1 text-xs font-medium surface-muted">
                       {{ t('admin.subscriptions.columns.user') }}
                     </div>
@@ -169,7 +169,7 @@
         </div>
         <div
           v-if="selectedCount > 0"
-          class="mt-3 space-y-2 rounded-xl border border-primary-200 bg-primary-50/[0.15] p-3 dark:border-primary-800 dark:bg-primary-900/20"
+          class="mt-3 space-y-2 rounded-lg border border-primary-200 bg-primary-50/[0.15] p-3 dark:border-primary-800 dark:bg-primary-900/20"
           data-test="subscription-bulk-actions"
         >
           <div class="flex flex-wrap items-center gap-2">
@@ -563,7 +563,7 @@
             <!-- User Dropdown -->
             <div
               v-if="showUserDropdown && (userSearchResults.length > 0 || userSearchKeyword)"
-              class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 shadow-lg dark:border-dark-700 surface-panel"
+              class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-[var(--surface-edge)] shadow-lg surface-panel"
             >
               <div
                 v-if="userSearchLoading"
@@ -595,7 +595,7 @@
               {{ t('admin.subscriptions.batchAssign.selected', { count: assignUsers.length }) }}
             </p>
             <ul class="max-h-40 space-y-1 overflow-y-auto">
-              <li v-for="user in assignUsers" :key="user.id" class="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1 text-sm dark:bg-dark-700">
+              <li v-for="user in assignUsers" :key="user.id" class="flex items-center justify-between gap-2 rounded-lg border border-[var(--surface-edge)] surface-inset px-3 py-1 text-sm">
                 <span class="truncate">{{ user.email }} <span class="surface-muted">#{{ user.id }}</span></span>
                 <button
                   type="button"
@@ -863,7 +863,7 @@
                 v-model="resetQuotaForm[window]"
                 :name="window"
                 type="checkbox"
-                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                class="h-4 w-4 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500"
                 :disabled="resettingQuota"
               />
               {{ t(`admin.subscriptions.${window}`) }}
@@ -895,7 +895,7 @@
       <transition name="modal">
         <div v-if="showGuideModal" class="fixed inset-0 z-50 flex items-center justify-center p-4" @mousedown.self="showGuideModal = false">
           <div class="fixed inset-0 surface-overlay" @click="showGuideModal = false"></div>
-          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl p-6 shadow-2xl surface-panel">
+          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto p-6 shadow-2xl surface-panel">
             <button type="button" class="absolute right-4 top-4 hover:text-gray-600 dark:hover:text-gray-200 surface-control surface-muted" @click="showGuideModal = false">
               <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
@@ -945,10 +945,10 @@
                 <span class="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100/[0.15] text-xs font-bold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">3</span>
                 {{ t('admin.subscriptions.guide.step3.title') }}
               </h3>
-              <div class="record-table-scroll ml-8 overflow-hidden rounded-lg border border-gray-200 dark:border-dark-600">
+              <div class="record-table-scroll ml-8 overflow-hidden rounded-lg border border-[var(--surface-edge)]">
                 <table class="record-table w-full text-sm">
                   <tbody>
-                    <tr v-for="(row, i) in guideActionRows" :key="i" class="border-b border-gray-100 dark:border-dark-700 last:border-0">
+                    <tr v-for="(row, i) in guideActionRows" :key="i" class="border-b border-[var(--surface-edge)] last:border-0">
                       <td class="whitespace-nowrap surface-inset px-3 py-2 font-medium surface-muted">{{ row.action }}</td>
                       <td class="px-3 py-2 surface-muted">{{ row.desc }}</td>
                     </tr>

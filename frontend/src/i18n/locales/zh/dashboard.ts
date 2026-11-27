@@ -177,13 +177,19 @@ export default {
       scopeAll: '全部已授权的按量分组',
       scopeCustom: '自定义分组（{count} 个）',
       scopeUngrouped: '未绑定分组',
-      model: '文本模型',
+      model: '测试模型',
       modelPlaceholder: '选择模型',
+      prompt: '测试问题 / 提示词',
+      promptHint: '可修改问题，测试后查看模型的实际回答。',
+      imagePromptHint: '描述你想生成的图片，图片生成可能需要几分钟。',
+      response: '模型回答',
+      generatedImage: '生成的图片 {index}',
       protocol: {
         responses: 'Responses',
         chat: 'Chat Completions',
         messages: 'Messages',
-        gemini: 'Gemini'
+        gemini: 'Gemini',
+        images: '图片生成'
       },
       endpointHint: '将向 {endpoint} 发送 1 次 {protocol} 请求。',
       costHint: '将发送 1 次请求，按该分组规则计费；取消或超时仍可能计费。',
@@ -193,10 +199,10 @@ export default {
       failed: '测试失败',
       successDetail: '模型 {model} · {ms} 毫秒',
       requestId: '请求 ID：{id}',
-      loading: '正在读取可用文本模型…',
+      loading: '正在读取可用模型…',
       retry: '重试',
       loadFailed: '未能读取可用模型。这不代表密钥失效，请稍后重试。',
-      noCapability: '当前密钥没有可通过网页测试的文本模型。',
+      noCapability: '当前密钥没有可通过网页测试的模型。',
       emptyScope: '该聚合密钥当前没有可用模型。',
       blocked: {
         readonly: '只读协助模式不能发送测试请求。',
@@ -220,7 +226,8 @@ export default {
         network: '未能确认：网络请求失败或跨域响应不可读。',
         timeout: '未能确认：请求超时。',
         noText: '未能确认有效文本响应。',
-        unknown: '未能确认有效文本响应。'
+        noImage: '未返回有效的生成图片，请更换提示词或模型重试。',
+        unknown: '未能确认有效响应。'
       }
     },
     useKey: '使用密钥',
@@ -855,8 +862,29 @@ export default {
       groupLabel: '分组',
       rateLabel: '倍率',
       modelLabel: '模型',
-      searchPlaceholder: '搜索模型名称',
+      searchPlaceholder: '搜索模型 ID',
+      allGroups: '全部分组',
+      view: '切换视图',
+      cards: '卡片',
+      table: '表格',
+      remove: '移除{filter}筛选',
       all: '全部'
+    },
+    catalog: {
+      models: '{count} 个模型',
+      groups: '来自 {count} 个分组',
+      pricingNotes: '价格说明',
+      reset: '清除搜索和筛选',
+      details: '价格明细',
+      compareGroups: '比较 {count} 个分组',
+      standardPrice: '标准时段价',
+      paid: '实付',
+      perMillion: '每百万 token',
+      billingRules: '计费规则',
+      comparison: '分组比价',
+      price: '价格',
+      cacheWriteDuration: '缓存写入 · {duration}',
+      cacheRead: '缓存读取'
     },
     badges: {
       exclusive: '专属分组',
@@ -895,6 +923,8 @@ export default {
       unitPerMillion: '$ / 1M token',
       perUnitRequest: '/ 次',
       perUnitImage: '/ 张',
+      perUnitSecond: '/ 秒',
+      perSecond: '按秒计费',
       perRequest: '按次计费',
       perImage: '按图片计费'
     },
@@ -1240,6 +1270,9 @@ export default {
   errors: {
     somethingWentWrong: '出错了',
     pageNotFound: '页面未找到',
+    pageNotFoundDescription: '您访问的页面不存在或已被移动。',
+    goBack: '返回上一页',
+    backToHome: '返回首页',
     unauthorized: '未授权',
     forbidden: '禁止访问',
     serverError: '服务器错误',

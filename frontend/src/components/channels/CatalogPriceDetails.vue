@@ -50,12 +50,12 @@
       </div>
 
       <div
-        class="record-table-scroll record-table-dialog-scroll max-w-full overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-700"
+        class="record-table-scroll record-table-dialog-scroll max-w-full overflow-x-auto rounded-lg border border-[var(--surface-edge)]"
         tabindex="0"
         :aria-label="t('availableChannels.catalog.quoteComparison')"
       >
         <table class="record-table catalog-comparison w-full text-left text-xs surface-muted">
-          <thead class="surface-inset surface-muted">
+          <thead class="surface-muted">
             <tr>
               <th class="px-3 py-2">{{ t('modelPlaza.filters.groupLabel') }}</th>
               <th class="px-3 py-2">{{ t('availableChannels.catalog.effectiveRateLabel') }}</th>
@@ -64,7 +64,7 @@
               <th class="px-3 py-2">{{ t('availableChannels.catalog.billingUnit') }}</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+          <tbody class="divide-y divide-[var(--surface-edge)]">
             <tr
               v-for="quote in model.quotes"
               :key="quote.offer.offer_key"

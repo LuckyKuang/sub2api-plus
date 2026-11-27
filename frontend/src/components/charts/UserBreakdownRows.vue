@@ -18,19 +18,19 @@
       <td class="py-1 pl-6 surface-muted">
         <span class="block max-w-[120px] truncate" :title="user.email">{{ user.email || `User #${user.user_id}` }}</span>
       </td>
-      <td class="py-1 text-right surface-muted">
+      <td class="py-1 text-right tabular-nums surface-muted">
         {{ user.requests.toLocaleString() }}
       </td>
-      <td class="py-1 text-right surface-muted">
+      <td class="py-1 text-right tabular-nums surface-muted">
         {{ formatTokens(user.total_tokens) }} <span v-if="tokenShare(user.total_tokens)" class="surface-muted">({{ tokenShare(user.total_tokens) }})</span>
       </td>
-      <td class="py-1 text-right text-green-600 dark:text-green-400">
+      <td class="py-1 text-right tabular-nums text-green-600 dark:text-green-400">
         ${{ formatCost(user.actual_cost) }}
       </td>
-      <td v-if="showAccountCost" class="py-1 text-right text-orange-500 dark:text-orange-400">
+      <td v-if="showAccountCost" class="py-1 text-right tabular-nums text-orange-500 dark:text-orange-400">
         ${{ formatCost(user.account_cost) }}
       </td>
-      <td class="py-1 text-right surface-muted">
+      <td class="py-1 text-right tabular-nums surface-muted">
         ${{ formatCost(user.cost) }}
       </td>
     </tr>

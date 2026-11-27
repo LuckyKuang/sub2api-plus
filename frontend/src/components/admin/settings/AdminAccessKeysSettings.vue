@@ -16,7 +16,7 @@
       <button type="button" class="btn btn-secondary" :disabled="busy || loading" @click="load">{{ t('adminAccessKeys.refresh') }}</button>
     </div>
     <p v-if="loading">{{ t('adminAccessKeys.loading') }}</p>
-    <div v-for="item in items" :key="item.id" class="space-y-2 rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+    <div v-for="item in items" :key="item.id" class="space-y-2 rounded-lg border border-[var(--surface-edge)] p-4">
       <p class="font-medium">{{ item.name }} <code>{{ item.key_prefix }}…</code> · {{ status(item) }}</p>
       <p class="text-sm text-gray-500">{{ item.description || t('adminAccessKeys.noDescription') }} · {{ t('adminAccessKeys.expires', { value: item.expires_at || t('adminAccessKeys.never') }) }}</p>
       <p class="text-sm text-gray-500">{{ t('adminAccessKeys.lastUsed', { value: item.last_used_at || t('adminAccessKeys.neverUsed') }) }} {{ item.last_used_ip }}</p>
@@ -35,7 +35,7 @@
         <button type="button" class="btn btn-secondary btn-sm text-red-600" :disabled="busy" @click="deleteRecord(item)">{{ t('adminAccessKeys.deleteRecord') }}</button>
       </div>
     </div>
-    <div v-if="draft" class="space-y-4 rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+    <div v-if="draft" class="space-y-4 rounded-lg border border-[var(--surface-edge)] p-4">
       <h3 class="font-semibold">{{ editingID ? t('adminAccessKeys.editTitle') : t('adminAccessKeys.createTitle') }}</h3>
       <label class="block">{{ t('adminAccessKeys.name') }}<input v-model="draft.name" data-test="name" class="input mt-1" maxlength="100" /></label>
       <label class="block">{{ t('adminAccessKeys.description') }}<textarea v-model="draft.description" class="input mt-1" maxlength="1000" /></label>
@@ -48,7 +48,7 @@
         <p v-if="draft.policy.full_access" class="text-sm">{{ t('adminAccessKeys.rulesSuspended') }}</p>
       </div>
       <fieldset :disabled="busy || !!draft.policy.full_access" class="space-y-4">
-      <fieldset v-for="(rule, index) in draft.policy.rules" :key="index" class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-700">
+      <fieldset v-for="(rule, index) in draft.policy.rules" :key="index" class="space-y-3 rounded-lg border border-[var(--surface-edge)] p-3">
         <legend>{{ t('adminAccessKeys.ruleLegend', { index: index + 1 }) }}</legend>
         <label class="flex gap-2"><input v-model="rule.all_groups" type="checkbox" />{{ t('adminAccessKeys.allGroups') }}</label>
         <div class="space-y-1">{{ t('adminAccessKeys.groups') }}<CheckboxDropdown v-model="rule.group_ids" :data-test="`groups-${index}`" :options="groups.map(group => ({ value: group.id, label: group.name }))" :label="t('adminAccessKeys.groups')" :disabled="rule.all_groups" /></div>
@@ -66,7 +66,7 @@
       <button type="button" data-test="add-rule" class="btn btn-secondary btn-sm" @click="draft.policy.rules.push(emptyRule())">{{ t('adminAccessKeys.addRule') }}</button>
       <fieldset class="space-y-3 rounded-lg border border-amber-300 p-3">
         <legend>{{ t('adminAccessKeys.globalPermissions') }}</legend>
-        <fieldset v-for="category in globalCategories" :key="category.name" class="space-y-2 rounded border border-gray-200 p-3 dark:border-dark-700">
+        <fieldset v-for="category in globalCategories" :key="category.name" class="space-y-2 rounded border border-[var(--surface-edge)] p-3">
           <legend class="text-sm font-medium">{{ category.name }}</legend>
           <label v-for="permission in category.permissions" :key="permission.id" class="flex gap-2"><input v-model="draft.policy.global_permissions" type="checkbox" :value="permission.id" />{{ permissionLabel(permission) }} <span class="text-xs text-gray-500">{{ permission.id }}</span></label>
         </fieldset>

@@ -19,7 +19,7 @@
       <div>
         <label class="input-label">{{ t('admin.proxies.dataImportFile') }}</label>
         <div
-          class="flex items-center justify-between gap-3 rounded-lg border border-dashed border-gray-300 surface-inset px-4 py-3 dark:border-dark-600"
+          class="flex items-center justify-between gap-3 rounded-lg border border-dashed border-[var(--surface-edge)] surface-inset px-4 py-3"
         >
           <div class="min-w-0">
             <div class="truncate text-sm surface-muted">
@@ -42,7 +42,7 @@
 
       <div
         v-if="result"
-        class="space-y-2 rounded-xl border border-gray-200 p-4 dark:border-dark-700"
+        class="space-y-2 rounded-lg border border-[var(--surface-edge)] p-4"
       >
         <div class="text-sm font-medium text-gray-900 dark:text-white">
           {{ t('admin.proxies.dataImportResult') }}

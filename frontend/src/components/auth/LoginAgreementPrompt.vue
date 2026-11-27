@@ -8,7 +8,7 @@
         id="login-agreement-consent"
         type="checkbox"
         :checked="accepted"
-        class="mt-[2px] h-4 w-4 flex-shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-900"
+        class="mt-[2px] h-4 w-4 flex-shrink-0 rounded border-[var(--surface-edge)] text-primary-600 focus:ring-primary-500 dark:bg-dark-900"
         @change="handleCheckboxChange"
       />
       <div class="min-w-0 flex-1">
@@ -63,10 +63,10 @@
         v-if="dialogVisible"
         class="fixed inset-0 z-[140] flex items-center justify-center overflow-y-auto surface-overlay p-4"
       >
-        <div class="glass-surface w-full max-w-[600px] overflow-hidden ring-1 ring-black/10 dark:ring-white/10">
-          <div class="border-b border-gray-100 surface-inset px-6 py-6 dark:border-dark-800">
+        <div class="surface-panel w-full max-w-[600px] overflow-hidden ring-1 ring-black/10 dark:ring-white/10">
+          <div class="border-b border-[var(--surface-edge)] surface-inset px-6 py-6">
             <div class="flex items-start gap-4">
-              <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50/[0.15] text-primary-700 ring-1 ring-primary-100 dark:bg-primary-500/10 dark:text-primary-300 dark:ring-primary-500/20">
+              <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-primary-50/[0.15] text-primary-700 ring-1 ring-primary-100 dark:bg-primary-500/10 dark:text-primary-300 dark:ring-primary-500/20">
                 <Icon name="shield" size="md" />
               </span>
               <div class="min-w-0 flex-1">
@@ -103,7 +103,7 @@
                 :to="documentRoute(doc)"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="group flex min-h-[72px] w-full items-center gap-3 rounded-lg border border-gray-200 bg-gray-50/70 px-4 py-3 text-left transition hover:-translate-y-0.5 hover:border-primary-200 hover:bg-white hover:shadow-sm dark:border-dark-700 dark:bg-dark-800/70 dark:hover:border-primary-500/30 dark:hover:bg-dark-800"
+                class="group surface-subcard flex min-h-[72px] w-full items-center gap-3 px-4 py-3 text-left transition hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-sm dark:hover:border-primary-500/40"
               >
                 <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg surface-inset ring-1 ring-gray-200 transition group-hover:bg-primary-50/25 group-hover:text-primary-700 group-hover:ring-primary-100 dark:ring-dark-700 dark:group-hover:bg-primary-500/10 dark:group-hover:text-primary-200 dark:group-hover:ring-primary-500/20 surface-muted">
                   <Icon :name="documentIcon(index, doc.title)" size="sm" />
@@ -118,11 +118,11 @@
             </div>
           </div>
 
-          <div class="border-t border-gray-100 surface-inset px-6 py-4 dark:border-dark-800">
+          <div class="border-t border-[var(--surface-edge)] surface-inset px-6 py-4">
             <div class="grid grid-cols-2 gap-3">
               <button
                 type="button"
-                class="rounded-lg border border-gray-200 px-4 py-3 text-sm font-semibold transition hover:surface-hover dark:border-dark-700 surface-control surface-muted"
+                class="rounded-lg border border-[var(--surface-edge)] px-4 py-3 text-sm font-semibold transition hover:surface-hover surface-control surface-muted"
                 @click="emit('reject')"
               >
                 {{ t('legal.loginAgreementPrompt.reject') }}

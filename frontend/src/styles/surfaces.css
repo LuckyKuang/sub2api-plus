@@ -5,6 +5,20 @@
 .surface-card { background-color: var(--surface-fill); }
 .surface-control { background-color: var(--surface-field); color: var(--surface-text); }
 :where(.surface-control) { border-radius: var(--surface-radius-control); }
+/* Nested sub-cards inside a 12px card or 16px zone take the 8px control/item radius so corners stay concentric. */
+.surface-subcard,
+.surface-subcard-interactive {
+  border: 1px solid var(--surface-edge);
+  border-radius: var(--surface-radius-control);
+  background-color: var(--surface-soft);
+}
+.surface-subcard-interactive {
+  transition: background-color 150ms, border-color 150ms, box-shadow 150ms;
+}
+.surface-subcard-interactive:where(:hover:not(:disabled):not([aria-disabled="true"])) {
+  border-color: var(--console-control-hover-edge);
+  background-color: var(--surface-hover);
+}
 /* Surface roles keep their shape even when older callers carry rounded utilities. */
 :root :is(.card, .glass, .glass-card, .card-glass, .glass-surface, .surface-card, .stat-card, .subscription-plan-card) { border-radius: var(--surface-radius-card); }
 /* Zone containers own the outermost curve; they are never business cards. A

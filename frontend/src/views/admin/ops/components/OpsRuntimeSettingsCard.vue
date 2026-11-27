@@ -237,14 +237,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="glass-surface p-6 ring-1 ring-gray-900/5 dark:ring-dark-700">
-    <div class="mb-4 flex items-start justify-between gap-4">
+  <div class="glass-surface p-6">
+    <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
       <div>
         <h3 class="text-sm font-bold text-gray-900 dark:text-white">{{ t('admin.ops.runtime.title') }}</h3>
         <p class="mt-1 text-xs surface-muted">{{ t('admin.ops.runtime.description') }}</p>
       </div>
       <button
-        class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors hover:surface-hover disabled:cursor-not-allowed disabled:opacity-50 surface-control surface-muted"
+        class="flex items-center gap-1.5 rounded-lg border border-[var(--surface-edge)] px-3 py-1.5 text-xs font-bold transition-colors hover:surface-hover disabled:cursor-not-allowed disabled:opacity-50 surface-control surface-muted"
         :disabled="loading"
         @click="loadSettings"
       >
@@ -261,7 +261,7 @@ onMounted(() => {
     </div>
 
     <div v-else class="space-y-6">
-      <div class="rounded-xl surface-inset p-4">
+      <div class="surface-subcard p-4">
         <div class="mb-3 flex items-center justify-between">
           <h4 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.runtime.alertTitle') }}</h4>
           <button class="btn btn-sm btn-secondary" @click="openAlertEditor">{{ t('common.edit') }}</button>
@@ -269,21 +269,21 @@ onMounted(() => {
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div class="text-xs surface-muted">
             {{ t('admin.ops.runtime.evalIntervalSeconds') }}:
-            <span class="ml-1 font-medium text-gray-900 dark:text-white">{{ alertSettings.evaluation_interval_seconds }}s</span>
+            <span class="ml-1 font-medium tabular-nums text-gray-900 dark:text-white">{{ alertSettings.evaluation_interval_seconds }}s</span>
           </div>
           <div
             v-if="alertSettings.silencing?.enabled && alertSettings.silencing.global_until_rfc3339"
             class="text-xs md:col-span-2 surface-muted"
           >
             {{ t('admin.ops.runtime.silencing.globalUntil') }}:
-            <span class="ml-1 font-mono text-gray-900 dark:text-white">{{ alertSettings.silencing.global_until_rfc3339 }}</span>
+            <span class="ml-1 font-mono tabular-nums text-gray-900 dark:text-white">{{ alertSettings.silencing.global_until_rfc3339 }}</span>
           </div>
 
           <details class="col-span-1 md:col-span-2">
             <summary class="cursor-pointer text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400">
               {{ t('admin.ops.runtime.showAdvancedDeveloperSettings') }}
             </summary>
-            <div class="mt-2 grid grid-cols-1 gap-3 rounded-lg surface-inset p-3 md:grid-cols-2">
+            <div class="mt-2 grid grid-cols-1 gap-3 rounded-lg border border-[var(--surface-edge)] surface-field p-3 md:grid-cols-2">
               <div class="text-xs surface-muted">
                 {{ t('admin.ops.runtime.lockEnabled') }}:
                 <span class="ml-1 font-mono surface-muted">{{ alertSettings.distributed_lock.enabled }}</span>
@@ -328,7 +328,7 @@ onMounted(() => {
         <p class="mt-1 text-xs surface-muted">{{ t('admin.ops.runtime.evalIntervalHint') }}</p>
       </div>
 
-      <div class="rounded-xl surface-inset p-4">
+      <div class="surface-subcard p-4">
         <div class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.runtime.metricThresholds') }}</div>
         <p class="mb-4 text-xs surface-muted">{{ t('admin.ops.runtime.metricThresholdsHint') }}</p>
 
@@ -392,11 +392,11 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="rounded-xl surface-inset p-4">
+      <div class="surface-subcard p-4">
         <div class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.runtime.silencing.title') }}</div>
 
         <label class="inline-flex items-center gap-2 text-sm surface-muted">
-          <input v-model="draftAlert.silencing.enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+          <input v-model="draftAlert.silencing.enabled" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)]" />
           <span>{{ t('admin.ops.runtime.silencing.enabled') }}</span>
         </label>
 
@@ -422,7 +422,7 @@ onMounted(() => {
             />
           </div>
 
-          <div class="rounded-xl border border-gray-200 surface-inset p-4 dark:border-dark-700">
+          <div class="rounded-lg border border-[var(--surface-edge)] surface-field p-4">
             <div class="flex items-start justify-between gap-4">
               <div>
                 <div class="text-xs font-bold text-gray-900 dark:text-white">{{ t('admin.ops.runtime.silencing.entries.title') }}</div>
@@ -433,7 +433,7 @@ onMounted(() => {
               </button>
             </div>
 
-            <div v-if="!draftAlert.silencing.entries?.length" class="mt-3 rounded-lg surface-inset p-3 text-xs surface-muted">
+            <div v-if="!draftAlert.silencing.entries?.length" class="mt-3 rounded-lg border border-dashed border-[var(--surface-edge)] p-3 text-xs surface-muted">
               {{ t('admin.ops.runtime.silencing.entries.empty') }}
             </div>
 
@@ -441,7 +441,7 @@ onMounted(() => {
               <div
                 v-for="(entry, idx) in draftAlert.silencing.entries"
                 :key="idx"
-                class="rounded-lg border border-gray-200 surface-inset p-4 dark:border-dark-700"
+                class="surface-subcard p-4"
               >
                 <div class="mb-3 flex items-center justify-between">
                   <div class="text-xs font-bold text-gray-900 dark:text-white">
@@ -499,12 +499,12 @@ onMounted(() => {
         </div>
       </div>
 
-      <details class="rounded-lg border border-gray-200 surface-inset p-3 dark:border-dark-600">
+      <details class="surface-subcard p-3">
         <summary class="cursor-pointer text-xs font-medium surface-muted">{{ t('admin.ops.runtime.advancedSettingsSummary') }}</summary>
         <div class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label class="inline-flex items-center gap-2 text-xs surface-muted">
-              <input v-model="draftAlert.distributed_lock.enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+              <input v-model="draftAlert.distributed_lock.enabled" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)]" />
               <span>{{ t('admin.ops.runtime.lockEnabled') }}</span>
             </label>
           </div>

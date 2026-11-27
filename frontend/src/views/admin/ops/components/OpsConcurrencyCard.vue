@@ -341,7 +341,7 @@ watch(
 </script>
 
 <template>
-  <div class="glass-surface flex h-full flex-col p-6 ring-1 ring-gray-900/5 dark:ring-dark-700">
+  <div class="glass-surface flex h-full flex-col p-6">
     <!-- 头部 -->
     <div class="mb-4 flex shrink-0 items-center justify-between gap-3">
       <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
@@ -356,7 +356,7 @@ watch(
           class="flex items-center justify-center rounded-lg px-2 py-1 transition-colors surface-control"
           :class="showByUser
             ? 'bg-blue-100/[0.15] text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-            : 'surface-field text-gray-500 hover:surface-hover hover:text-gray-700 dark:surface-field dark:text-gray-400 dark:hover:surface-hover dark:hover:text-gray-300'"
+            : 'surface-field text-gray-500 hover:surface-hover hover:text-gray-700 dark:text-gray-400 dark:hover:surface-hover dark:hover:text-gray-300'"
           :title="showByUser ? t('admin.ops.concurrency.switchToPlatform') : t('admin.ops.concurrency.switchToUser')"
           @click="showByUser = !showByUser"
         >
@@ -379,26 +379,26 @@ watch(
     </div>
 
     <!-- 错误提示 -->
-    <div v-if="errorMessage" class="mb-3 shrink-0 rounded-xl bg-red-50/[0.15] p-2.5 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400">
+    <div v-if="errorMessage" class="mb-3 shrink-0 rounded-lg border border-red-200/70 bg-red-50/[0.15] p-2.5 text-xs text-red-600 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-400">
       {{ errorMessage }}
     </div>
 
     <!-- 禁用状态 -->
     <div
       v-if="!realtimeEnabled"
-      class="flex flex-1 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm dark:border-dark-700 surface-muted"
+      class="flex flex-1 items-center justify-center rounded-lg border border-dashed border-[var(--surface-edge)] text-sm surface-muted"
     >
       {{ t('admin.ops.concurrency.disabledHint') }}
     </div>
 
     <!-- 数据展示区域 -->
-    <div v-else class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
+    <div v-else class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--surface-edge)]">
       <!-- 维度标题栏 -->
-      <div class="flex shrink-0 items-center justify-between border-b border-gray-200 surface-inset px-3 py-2 dark:border-dark-700">
+      <div class="flex shrink-0 items-center justify-between border-b border-[var(--surface-edge)] px-3 py-2">
         <span class="text-[10px] font-bold uppercase tracking-wider surface-muted">
           {{ displayTitle }}
         </span>
-        <span class="text-[10px] surface-muted">
+        <span class="text-[10px] tabular-nums surface-muted">
           {{ t('admin.ops.concurrency.totalRows', { count: displayRows.length }) }}
         </span>
       </div>
@@ -410,7 +410,7 @@ watch(
 
       <!-- 用户视图 -->
       <div v-else-if="displayDimension === 'user'" class="custom-scrollbar max-h-[360px] flex-1 space-y-2 overflow-y-auto p-3">
-        <div v-for="row in (displayRows as UserRow[])" :key="row.key" class="rounded-lg surface-inset p-2.5">
+        <div v-for="row in (displayRows as UserRow[])" :key="row.key" class="surface-subcard p-2.5">
           <!-- 用户信息和并发 -->
           <div class="mb-1.5 flex items-center justify-between gap-2">
             <div class="flex min-w-0 flex-1 items-center gap-1.5">
@@ -421,7 +421,7 @@ watch(
                 {{ row.user_email }}
               </span>
             </div>
-            <div class="flex shrink-0 items-center gap-2 text-[10px]">
+            <div class="flex shrink-0 items-center gap-2 text-[10px] tabular-nums">
               <span class="font-mono font-bold text-gray-900 dark:text-white"> {{ row.current_in_use }}/{{ row.max_capacity }} </span>
               <span :class="['font-bold', getLoadTextClass(row.load_percentage)]"> {{ Math.round(row.load_percentage) }}% </span>
             </div>
@@ -434,7 +434,7 @@ watch(
 
           <!-- 等待队列 -->
           <div v-if="row.waiting_in_queue > 0" class="mt-1.5 flex justify-end">
-            <span class="rounded-md bg-purple-100/[0.15] px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+            <span class="rounded-md bg-purple-100/[0.15] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
               {{ t('admin.ops.concurrency.queued', { count: row.waiting_in_queue }) }}
             </span>
           </div>
@@ -443,7 +443,7 @@ watch(
 
       <!-- 汇总视图（平台/分组） -->
       <div v-else-if="displayDimension === 'platform' || displayDimension === 'group'" class="custom-scrollbar max-h-[360px] flex-1 space-y-2 overflow-y-auto p-3">
-        <div v-for="row in (displayRows as SummaryRow[])" :key="row.key" class="rounded-lg surface-inset p-3">
+        <div v-for="row in (displayRows as SummaryRow[])" :key="row.key" class="surface-subcard p-3">
           <!-- 标题行 -->
           <div class="mb-2 flex items-center justify-between gap-2">
             <div class="flex items-center gap-2">
@@ -454,7 +454,7 @@ watch(
                 {{ row.platform.toUpperCase() }}
               </span>
             </div>
-            <div class="flex shrink-0 items-center gap-2 text-[10px]">
+            <div class="flex shrink-0 items-center gap-2 text-[10px] tabular-nums">
               <span class="font-mono font-bold text-gray-900 dark:text-white"> {{ row.used_concurrency }}/{{ row.total_concurrency }} </span>
               <span :class="['font-bold', getLoadTextClass(row.concurrency_percentage)]"> {{ row.concurrency_percentage }}% </span>
             </div>
@@ -470,7 +470,7 @@ watch(
           </div>
 
           <!-- 统计信息 -->
-          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] tabular-nums">
             <!-- 账号统计 -->
             <div class="flex items-center gap-1">
               <svg class="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -517,7 +517,7 @@ watch(
 
       <!-- 账号详细视图 -->
       <div v-else class="custom-scrollbar max-h-[360px] flex-1 space-y-2 overflow-y-auto p-3">
-        <div v-for="row in (displayRows as AccountRow[])" :key="row.key" class="rounded-lg surface-inset p-2.5">
+        <div v-for="row in (displayRows as AccountRow[])" :key="row.key" class="surface-subcard p-2.5">
           <!-- 账号名称和并发 -->
           <div class="mb-1.5 flex items-center justify-between gap-2">
             <div class="min-w-0 flex-1">
@@ -530,7 +530,7 @@ watch(
             </div>
             <div class="flex shrink-0 items-center gap-2">
               <!-- 并发使用 -->
-              <span class="font-mono text-[11px] font-bold text-gray-900 dark:text-white"> {{ row.current_in_use }}/{{ row.max_capacity }} </span>
+              <span class="font-mono text-[11px] font-bold tabular-nums text-gray-900 dark:text-white"> {{ row.current_in_use }}/{{ row.max_capacity }} </span>
               <!-- 状态徽章 -->
               <span
                 v-if="row.is_available"
@@ -575,7 +575,7 @@ watch(
               </span>
               <span
                 v-else
-                class="inline-flex items-center gap-1 rounded surface-inset px-1.5 py-0.5 text-[10px] font-medium surface-muted"
+                class="inline-flex items-center gap-1 rounded border border-[var(--surface-edge)] px-1.5 py-0.5 text-[10px] font-medium surface-muted"
               >
                 {{ t('admin.ops.accountAvailability.unavailable') }}
               </span>
@@ -589,7 +589,7 @@ watch(
 
           <!-- 等待队列 -->
           <div v-if="row.waiting_in_queue > 0" class="mt-1.5 flex justify-end">
-            <span class="rounded-md bg-purple-100/[0.15] px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+            <span class="rounded-md bg-purple-100/[0.15] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
               {{ t('admin.ops.concurrency.queued', { count: row.waiting_in_queue }) }}
             </span>
           </div>

@@ -6,9 +6,9 @@
       </div>
 
       <template v-else>
-        <div class="card workspace-fixed flex flex-col gap-3 px-6 py-4" data-testid="risk-page-heading">
-          <div>
-            <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.title') }}</h1>
+        <div class="card workspace-fixed flex flex-col gap-3 px-5 py-4 sm:px-6" data-testid="risk-page-heading">
+          <div class="min-w-0">
+            <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.title') }}</h1>
             <p class="mt-1 text-sm surface-muted">{{ t('admin.riskControl.description') }}</p>
           </div>
           <!-- Tabs live inside the header card so the page keeps one surface. -->
@@ -34,7 +34,7 @@
             v-for="item in overviewItems"
             :key="item.key"
             :data-test="`risk-overview-${item.key}`"
-            class="risk-overview-card border border-gray-100 surface-inset px-4 py-3 shadow-sm dark:border-dark-700"
+            class="card px-4 py-3.5"
           >
             <div class="flex min-w-0 items-center gap-3">
               <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" :class="item.iconClass">
@@ -52,7 +52,7 @@
                   </span>
                 </div>
                 <div class="mt-1 flex min-w-0 items-baseline gap-2">
-                  <p class="truncate text-xl font-semibold leading-7 text-gray-900 dark:text-white">{{ item.value }}</p>
+                  <p class="truncate text-xl font-semibold leading-7 tabular-nums text-gray-900 dark:text-white">{{ item.value }}</p>
                   <p v-if="item.meta" class="truncate text-xs surface-muted">{{ item.meta }}</p>
                 </div>
               </div>
@@ -81,12 +81,12 @@
           class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)]"
         >
           <div data-test="pre-block-sync-card" class="card">
-            <div class="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex flex-col gap-4 border-b border-[var(--surface-edge)] px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.preBlockSyncStatus') }}</h2>
                 <p class="mt-1 text-sm surface-muted">{{ t('admin.riskControl.preBlockSyncHint') }}</p>
               </div>
-              <span class="inline-flex w-fit items-center rounded-md surface-inset px-2.5 py-1 text-xs font-medium surface-muted">
+              <span class="inline-flex w-fit items-center rounded-md border border-[var(--surface-edge)] px-2.5 py-1 text-xs font-medium surface-muted">
                 {{ modeLabel(status?.mode ?? configForm.mode) }}
               </span>
             </div>
@@ -100,7 +100,7 @@
                   :class="item.class"
                 >
                   <p class="text-xs surface-muted">{{ item.label }}</p>
-                  <p class="mt-2 truncate text-2xl font-semibold leading-8" :class="item.valueClass">{{ item.value }}</p>
+                  <p class="mt-2 truncate text-2xl font-semibold leading-8 tabular-nums" :class="item.valueClass">{{ item.value }}</p>
                   <p v-if="item.meta" class="mt-1 truncate text-xs surface-muted">{{ item.meta }}</p>
                 </div>
               </div>
@@ -108,14 +108,14 @@
           </div>
 
           <div data-test="pre-block-api-key-load-card" class="card">
-            <div class="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex flex-col gap-4 border-b border-[var(--surface-edge)] px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.preBlockAPIKeyLoad') }}</h2>
                 <p class="mt-1 text-sm surface-muted">
                   {{ t('admin.riskControl.preBlockAPIKeyLoadHint') }}
                 </p>
               </div>
-              <span class="inline-flex w-fit items-center rounded-md surface-inset px-2.5 py-1 text-xs font-medium surface-muted">
+              <span class="inline-flex w-fit items-center rounded-md border border-[var(--surface-edge)] px-2.5 py-1 text-xs font-medium surface-muted">
                 {{ preBlockAPIKeyLoadSummaryText }}
               </span>
             </div>
@@ -129,7 +129,7 @@
                 <div
                   v-for="item in preBlockAPIKeyLoads"
                   :key="item.key_hash || item.index"
-                  class="rounded-lg surface-inset p-3"
+                  class="surface-subcard p-3"
                 >
                   <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div class="min-w-0">
@@ -138,11 +138,11 @@
                         <span class="truncate font-mono text-sm surface-muted">{{ item.masked || '-' }}</span>
                         <span class="console-data-mark h-2 w-2 flex-shrink-0 rounded-full" :class="apiKeyStatusDotClass(item.status)"></span>
                       </div>
-                      <p class="mt-1 text-xs surface-muted">
+                      <p class="mt-1 text-xs tabular-nums surface-muted">
                         {{ t('admin.riskControl.preBlockAPIKeyTotals', { total: formatNumber(item.total), success: formatNumber(item.success), errors: formatNumber(item.errors) }) }}
                       </p>
                     </div>
-                    <div class="grid grid-cols-4 gap-2 text-right text-xs sm:min-w-[280px] surface-muted">
+                    <div class="grid grid-cols-4 gap-2 text-right text-xs tabular-nums sm:min-w-[280px] surface-muted">
                       <div>
                         <p>{{ t('admin.riskControl.preBlockKeyActiveShort') }}</p>
                         <p class="mt-1 text-sm font-semibold text-sky-700 dark:text-sky-300">{{ formatNumber(item.active) }}</p>
@@ -161,12 +161,12 @@
                       </div>
                     </div>
                   </div>
-                  <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-white dark:bg-dark-900">
+                  <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-200/70 dark:bg-dark-900">
                     <div class="console-data-mark h-full rounded-full bg-sky-500" :style="{ width: preBlockAPIKeyLoadWidth(item.total) }"></div>
                   </div>
                 </div>
               </div>
-              <p v-else class="rounded-lg surface-inset p-4 text-sm surface-muted">
+              <p v-else class="surface-subcard p-4 text-sm surface-muted">
                 {{ t('admin.riskControl.preBlockAPIKeyLoadEmpty') }}
               </p>
             </div>
@@ -174,14 +174,14 @@
         </div>
 
         <div v-if="showWorkerRuntimeCard" class="card">
-          <div class="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700 lg:flex-row lg:items-center lg:justify-between">
+          <div class="flex flex-col gap-4 border-b border-[var(--surface-edge)] px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.workerStatus') }}</h2>
               <p class="mt-1 text-sm surface-muted">{{ t('admin.riskControl.workerStatusHint') }}</p>
             </div>
             <div class="flex flex-wrap items-center gap-2 text-sm surface-muted">
               <span>{{ t('admin.riskControl.autoRefresh') }}</span>
-              <span v-if="status?.last_cleanup_at">
+              <span v-if="status?.last_cleanup_at" class="tabular-nums">
                 {{ t('admin.riskControl.lastCleanup', { time: formatDateTime(status.last_cleanup_at) }) }}
               </span>
             </div>
@@ -189,15 +189,15 @@
 
           <div class="grid grid-cols-1 gap-6 p-6 xl:grid-cols-[minmax(0,360px)_1fr]">
             <div class="space-y-4">
-              <div class="rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+              <div class="surface-subcard p-4">
                 <div class="flex items-center justify-between gap-3">
                   <div>
                     <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.queueUsage') }}</p>
-                    <p class="mt-1 text-xs surface-muted">
+                    <p class="mt-1 text-xs tabular-nums surface-muted">
                       {{ formatNumber(status?.queue_length ?? 0) }} / {{ formatNumber(status?.queue_size ?? configForm.queue_size) }}
                     </p>
                   </div>
-                  <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ queueUsagePercent }}</span>
+                  <span class="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{{ queueUsagePercent }}</span>
                 </div>
                 <div class="mt-4 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
                   <div class="console-data-mark h-full rounded-full bg-primary-500 transition-all duration-300" :style="queueUsageStyle"></div>
@@ -205,21 +205,21 @@
               </div>
 
               <div class="grid grid-cols-2 gap-3">
-                <div class="rounded-lg surface-inset p-4">
+                <div class="surface-subcard p-4">
                   <p class="text-xs surface-muted">{{ t('admin.riskControl.activeWorkers') }}</p>
-                  <p class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ status?.active_workers ?? 0 }}</p>
+                  <p class="mt-2 text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">{{ status?.active_workers ?? 0 }}</p>
                 </div>
-                <div class="rounded-lg bg-emerald-50/[0.15] p-4 dark:bg-emerald-900/10">
+                <div class="rounded-lg border border-emerald-200/60 bg-emerald-50/[0.15] p-4 dark:border-emerald-800/40 dark:bg-emerald-900/10">
                   <p class="text-xs surface-muted">{{ t('admin.riskControl.idleWorkers') }}</p>
-                  <p class="mt-2 text-2xl font-semibold text-emerald-700 dark:text-emerald-300">{{ status?.idle_workers ?? configForm.worker_count }}</p>
+                  <p class="mt-2 text-2xl font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">{{ status?.idle_workers ?? configForm.worker_count }}</p>
                 </div>
-                <div class="rounded-lg surface-inset p-4">
+                <div class="surface-subcard p-4">
                   <p class="text-xs surface-muted">{{ t('admin.riskControl.processed') }}</p>
-                  <p class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ formatNumber(status?.processed ?? 0) }}</p>
+                  <p class="mt-2 text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">{{ formatNumber(status?.processed ?? 0) }}</p>
                 </div>
-                <div class="rounded-lg surface-inset p-4">
+                <div class="surface-subcard p-4">
                   <p class="text-xs surface-muted">{{ t('admin.riskControl.droppedErrors') }}</p>
-                  <p class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ formatNumber((status?.dropped ?? 0) + (status?.errors ?? 0)) }}</p>
+                  <p class="mt-2 text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">{{ formatNumber((status?.dropped ?? 0) + (status?.errors ?? 0)) }}</p>
                 </div>
               </div>
             </div>
@@ -228,11 +228,11 @@
               <div class="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.workerPool') }}</p>
-                  <p class="mt-1 text-xs surface-muted">
+                  <p class="mt-1 text-xs tabular-nums surface-muted">
                     {{ t('admin.riskControl.workerPoolMeta', { active: status?.active_workers ?? 0, idle: status?.idle_workers ?? configForm.worker_count, total: status?.worker_count ?? configForm.worker_count }) }}
                   </p>
                 </div>
-                <span class="inline-flex items-center rounded-md surface-inset px-2.5 py-1 text-xs font-medium surface-muted">
+                <span class="inline-flex items-center rounded-md border border-[var(--surface-edge)] px-2.5 py-1 text-xs font-medium surface-muted">
                   {{ modeLabel(status?.mode ?? configForm.mode) }}
                 </span>
               </div>
@@ -256,7 +256,7 @@
         </div>
 
         <div v-show="activePageTab === 'records'" id="risk-records-panel" role="tabpanel" :aria-label="t('workspace.auditRecords')" class="card workspace-table-card workspace-shell" data-test="risk-records">
-          <div class="risk-records-toolbar workspace-fixed flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <div class="risk-records-toolbar workspace-fixed flex flex-col gap-4 border-b border-[var(--surface-edge)] px-6 py-4">
             <div class="risk-records-heading flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div class="min-w-0">
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.records') }}</h2>
@@ -268,7 +268,7 @@
               </button>
             </div>
 
-            <div class="flex flex-col gap-2 rounded-lg border border-gray-100 surface-inset px-3 py-2 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
+            <div class="surface-subcard flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
               <div class="flex min-w-0 items-center gap-2 text-sm surface-muted">
                 <Icon name="filter" size="sm" class="flex-shrink-0 text-gray-400" />
                 <span class="font-medium">{{ t('admin.riskControl.modelFilter') }}</span>
@@ -278,11 +278,11 @@
                 <span
                   v-for="model in modelFilterPreviewModels"
                   :key="model"
-                  class="inline-flex max-w-[180px] items-center truncate rounded-md surface-inset px-2 py-1 font-mono text-xs shadow-sm surface-muted"
+                  class="inline-flex max-w-[180px] items-center truncate rounded-md border border-[var(--surface-edge)] px-2 py-1 font-mono text-xs surface-muted"
                 >
                   {{ model }}
                 </span>
-                <span v-if="hiddenModelFilterModelCount > 0" class="inline-flex rounded-md surface-inset px-2 py-1 text-xs shadow-sm surface-muted">
+                <span v-if="hiddenModelFilterModelCount > 0" class="inline-flex rounded-md border border-[var(--surface-edge)] px-2 py-1 text-xs tabular-nums surface-muted">
                   +{{ hiddenModelFilterModelCount }}
                 </span>
               </div>
@@ -299,8 +299,8 @@
           </div>
 
           <div class="record-table-scroll table-container workspace-table-viewport" data-test="risk-records-scroll">
-            <table class="record-table min-w-full divide-y divide-gray-200 dark:divide-dark-700">
-              <thead class="surface-inset">
+            <table class="record-table min-w-full divide-y divide-[var(--surface-edge)]">
+              <thead>
                 <tr>
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider surface-muted">{{ t('admin.riskControl.table.time') }}</th>
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider surface-muted">{{ t('admin.riskControl.table.group') }}</th>
@@ -315,7 +315,7 @@
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider surface-muted">{{ t('admin.riskControl.table.input') }}</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-gray-100 surface-inset dark:divide-dark-800">
+              <tbody class="divide-y divide-[var(--surface-edge)]">
                 <tr v-if="logsLoading">
                   <td colspan="11" class="px-5 py-12 text-center text-sm surface-muted">{{ t('common.loading') }}</td>
                 </tr>
@@ -324,11 +324,11 @@
                 </tr>
                 <template v-else>
                   <tr v-for="row in logs" :key="row.id" class="hover:surface-hover">
-                    <td class="whitespace-nowrap px-5 py-4 text-sm surface-muted">{{ formatDateTime(row.created_at) }}</td>
+                    <td class="whitespace-nowrap px-5 py-4 text-sm tabular-nums surface-muted">{{ formatDateTime(row.created_at) }}</td>
                     <td class="whitespace-nowrap px-5 py-4 text-sm surface-muted">{{ row.group_name || '-' }}</td>
                     <td class="whitespace-nowrap px-5 py-4 text-sm surface-muted">
                       <div>{{ row.user_email || '-' }}</div>
-                      <div v-if="row.user_id" class="text-xs surface-muted">UID {{ row.user_id }}</div>
+                      <div v-if="row.user_id" class="text-xs tabular-nums surface-muted">UID {{ row.user_id }}</div>
                     </td>
                     <td class="whitespace-nowrap px-5 py-4 text-sm surface-muted">{{ row.api_key_name || '-' }}</td>
                     <td class="whitespace-nowrap px-5 py-4 text-sm surface-muted">{{ row.moderation_endpoint_name || '-' }}</td>
@@ -343,7 +343,7 @@
                     </td>
                     <td class="whitespace-nowrap px-5 py-4 text-sm surface-muted">
                       <div>{{ row.highest_category || '-' }}</div>
-                      <div class="text-xs surface-muted">{{ percent(row.highest_score) }}</div>
+                      <div class="text-xs tabular-nums surface-muted">{{ percent(row.highest_score) }}</div>
                       <div v-if="row.matched_keyword" class="mt-0.5 text-xs font-medium text-red-600 dark:text-red-300" :title="t('admin.riskControl.matchedKeyword') + ': ' + row.matched_keyword">
                         {{ t('admin.riskControl.matchedKeyword') }}: {{ row.matched_keyword }}
                       </div>
@@ -365,7 +365,7 @@
                         {{ unbanningUserID === row.user_id ? t('common.processing') : t('admin.riskControl.unbanUser') }}
                       </button>
                     </td>
-                    <td class="whitespace-nowrap px-5 py-4 text-sm surface-muted">
+                    <td class="whitespace-nowrap px-5 py-4 text-sm tabular-nums surface-muted">
                       <div>{{ latencyText(row.upstream_latency_ms) }}</div>
                       <div v-if="row.queue_delay_ms !== null && row.queue_delay_ms !== undefined" class="text-xs surface-muted">
                         {{ t('admin.riskControl.queueDelay', { ms: row.queue_delay_ms }) }}
@@ -418,7 +418,7 @@
 
           <div v-if="activeSettingsTab === 'basic'" class="space-y-5">
             <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
-              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+              <div class="surface-subcard flex items-center justify-between p-4">
                 <div>
                   <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.enabled') }}</p>
                   <p class="mt-1 text-xs surface-muted">{{ t('admin.riskControl.enabledHint') }}</p>
@@ -477,7 +477,7 @@
               </div>
             </div>
 
-            <section data-test="moderation-endpoint-pool" class="border-t border-gray-200 pt-5 dark:border-dark-700">
+            <section data-test="moderation-endpoint-pool" class="border-t border-[var(--surface-edge)] pt-5">
               <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.endpointPool.title') }}</h3>
@@ -493,11 +493,11 @@
                 <div
                   v-for="(endpoint, index) in configForm.endpoints"
                   :key="endpoint.id"
-                  class="border border-gray-200 p-4 dark:border-dark-700"
+                  class="surface-subcard p-4"
                 >
                   <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div class="flex min-w-0 items-center gap-3">
-                      <span class="flex h-8 w-8 flex-shrink-0 items-center justify-center surface-inset text-sm font-semibold surface-muted">{{ index + 1 }}</span>
+                      <span class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md surface-inset text-sm font-semibold tabular-nums surface-muted">{{ index + 1 }}</span>
                       <div class="min-w-0">
                         <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ endpoint.name || t('admin.riskControl.endpointPool.unnamed') }}</p>
                         <span class="mt-1 inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium" :class="endpointStatusBadgeClass(endpoint)">
@@ -540,8 +540,8 @@
               </div>
             </section>
 
-            <div v-if="configForm.endpoints.length === 0" class="overflow-hidden rounded-xl border border-gray-100 surface-inset shadow-sm dark:border-dark-700">
-              <div class="flex flex-col gap-4 border-b border-gray-100 surface-inset px-4 py-4 dark:border-dark-700 lg:flex-row lg:items-center lg:justify-between">
+            <div v-if="configForm.endpoints.length === 0" class="surface-subcard overflow-hidden">
+              <div class="flex flex-col gap-4 border-b border-[var(--surface-edge)] px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
                 <div class="flex items-start gap-3">
                   <span class="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary-50/[0.15] text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
                     <Icon name="key" size="md" />
@@ -586,12 +586,12 @@
 
               <div class="grid grid-cols-1 gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)]">
                 <div class="space-y-3">
-                  <div class="flex flex-col gap-2 rounded-lg border border-gray-100 surface-inset p-2 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
+                  <div class="surface-subcard flex flex-col gap-2 p-2.5 sm:flex-row sm:items-center sm:justify-between">
                     <div class="text-xs leading-5 surface-muted">
                       <span class="font-medium surface-muted">{{ t('admin.riskControl.apiKeysWriteMode') }}</span>
                       <span class="ml-2">{{ apiKeysModeHint }}</span>
                     </div>
-                    <div class="inline-flex rounded-lg surface-inset p-1 shadow-sm">
+                    <div class="inline-flex rounded-lg border border-[var(--surface-edge)] surface-inset p-1">
                       <button
                         type="button"
                         class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors surface-control"
@@ -620,16 +620,16 @@
                     :disabled="configForm.clear_api_key"
                   ></textarea>
                   <div class="flex flex-wrap items-center gap-2 text-xs surface-muted">
-                    <span class="inline-flex rounded-md surface-inset px-2 py-1">
+                    <span class="inline-flex rounded-md surface-inset px-2 py-1 tabular-nums">
                       {{ t('admin.riskControl.inputApiKeyCount', { count: inputApiKeyCount }) }}
                     </span>
-                    <span v-if="configForm.api_key_configured" class="inline-flex rounded-md surface-inset px-2 py-1">
+                    <span v-if="configForm.api_key_configured" class="inline-flex rounded-md surface-inset px-2 py-1 tabular-nums">
                       {{ t('admin.riskControl.storedApiKeyCount', { count: configForm.api_key_count }) }}
                     </span>
                     <span v-if="configForm.clear_api_key" class="inline-flex rounded-md bg-red-50/[0.15] px-2 py-1 text-red-700 dark:bg-red-900/20 dark:text-red-300">
                       {{ t('admin.riskControl.apiKeyWillClear') }}
                     </span>
-                    <span v-else-if="pendingDeletedApiKeyCount > 0" class="inline-flex rounded-md bg-amber-50/[0.15] px-2 py-1 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                    <span v-else-if="pendingDeletedApiKeyCount > 0" class="inline-flex rounded-md bg-amber-50/[0.15] px-2 py-1 text-amber-700 tabular-nums dark:bg-amber-900/20 dark:text-amber-300">
                       {{ t('admin.riskControl.apiKeyPendingDeleteCount', { count: pendingDeletedApiKeyCount }) }}
                     </span>
                     <span v-if="configForm.api_keys_mode === 'replace'" class="inline-flex rounded-md bg-amber-50/[0.15] px-2 py-1 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
@@ -637,7 +637,7 @@
                     </span>
                   </div>
 
-                  <div class="rounded-lg border border-gray-100 surface-inset p-3 dark:border-dark-700" @paste="handleModerationImagePaste">
+                  <div class="surface-subcard p-3" @paste="handleModerationImagePaste">
                     <div class="mb-3 flex items-center justify-between gap-3">
                       <div>
                         <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.auditTestInput') }}</p>
@@ -659,7 +659,7 @@
                       :placeholder="t('admin.riskControl.auditTestPromptPlaceholder')"
                     ></textarea>
                     <div
-                      class="mt-3 rounded-lg border border-dashed border-gray-200 surface-inset p-3 dark:border-dark-700"
+                      class="mt-3 rounded-lg border border-dashed border-[var(--surface-edge)] surface-inset p-3"
                       @dragover.prevent
                       @drop.prevent="handleModerationImageDrop"
                     >
@@ -681,7 +681,7 @@
                         <div
                           v-for="(image, index) in moderationTestImages"
                           :key="image.slice(0, 64) + index"
-                          class="group relative aspect-square overflow-hidden rounded-lg border border-gray-100 surface-inset dark:border-dark-700"
+                          class="group relative aspect-square overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset"
                         >
                           <img :src="image" alt="" class="h-full w-full object-cover" />
                           <button
@@ -697,18 +697,18 @@
                   </div>
                 </div>
 
-                <div class="rounded-lg border border-gray-100 surface-inset p-3 dark:border-dark-700">
+                <div class="surface-subcard p-3">
                   <div class="mb-3 flex items-start justify-between gap-3">
                     <div class="min-w-0">
                       <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.apiKeyHealth') }}</p>
                       <p class="mt-1 text-xs surface-muted">{{ t('admin.riskControl.apiKeyFreezeRule') }}</p>
                     </div>
-                    <span class="inline-flex shrink-0 items-center whitespace-nowrap rounded-md surface-inset px-2 py-0.5 text-[11px] font-medium leading-5 shadow-sm surface-muted">
+                    <span class="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-[var(--surface-edge)] surface-inset px-2 py-0.5 text-[11px] font-medium leading-5 tabular-nums surface-muted">
                       {{ t('admin.riskControl.apiKeyRows', { count: apiKeyRows.length }) }}
                     </span>
                   </div>
 
-                  <div v-if="apiKeyRows.length === 0" class="flex min-h-32 flex-col items-center justify-center rounded-lg border border-dashed border-gray-200 surface-inset px-4 py-6 text-center dark:border-dark-700">
+                  <div v-if="apiKeyRows.length === 0" class="flex min-h-32 flex-col items-center justify-center rounded-lg border border-dashed border-[var(--surface-edge)] surface-inset px-4 py-6 text-center">
                     <Icon name="infoCircle" size="lg" class="text-gray-300 dark:text-dark-500" />
                     <p class="mt-2 text-sm font-medium surface-muted">{{ t('admin.riskControl.apiKeyHealthEmpty') }}</p>
                     <p class="mt-1 text-xs surface-muted">{{ t('admin.riskControl.apiKeyHealthEmptyHint') }}</p>
@@ -718,8 +718,8 @@
                       <div
                         v-for="(row, index) in visibleApiKeyRows"
                         :key="apiKeyRowKey(row, index)"
-                        class="rounded-lg border surface-inset p-2.5 shadow-sm"
-                        :class="isStoredApiKeyPendingDelete(row) ? 'border-amber-200 opacity-70 dark:border-amber-800/60' : 'border-gray-100 dark:border-dark-700'"
+                        class="rounded-lg border surface-field p-2.5"
+                        :class="isStoredApiKeyPendingDelete(row) ? 'border-amber-200 opacity-70 dark:border-amber-800/60' : 'border-[var(--surface-edge)]'"
                       >
                         <div class="flex items-start justify-between gap-2">
                           <div class="min-w-0">
@@ -732,7 +732,7 @@
                                 {{ isStoredApiKeyPendingDelete(row) ? t('admin.riskControl.apiKeyPendingDelete') : row.configured ? t('admin.riskControl.apiKeyConfigured') : t('admin.riskControl.apiKeyTemporary') }}
                               </span>
                             </div>
-                            <p class="mt-1 text-xs leading-5 surface-muted">{{ apiKeyStatusMeta(row) }}</p>
+                            <p class="mt-1 text-xs leading-5 tabular-nums surface-muted">{{ apiKeyStatusMeta(row) }}</p>
                           </div>
                           <div class="flex flex-shrink-0 items-center gap-1.5">
                             <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium" :class="apiKeyStatusBadgeClass(row.status)">
@@ -756,8 +756,8 @@
                       </div>
                     </div>
 
-                    <div v-if="canToggleApiKeyRows" class="flex items-center justify-between gap-3 rounded-lg border border-dashed border-gray-200 surface-inset px-3 py-2 text-xs dark:border-dark-700 surface-muted">
-                      <span class="min-w-0 truncate">
+                    <div v-if="canToggleApiKeyRows" class="flex items-center justify-between gap-3 rounded-lg border border-dashed border-[var(--surface-edge)] surface-inset px-3 py-2 text-xs surface-muted">
+                      <span class="min-w-0 truncate tabular-nums">
                         {{ apiKeyRowsExpanded ? t('admin.riskControl.apiKeyRowsExpanded', { count: apiKeyRows.length }) : t('admin.riskControl.apiKeyRowsCollapsed', { count: hiddenApiKeyRowCount }) }}
                       </span>
                       <button
@@ -771,11 +771,11 @@
                     </div>
                   </div>
 
-                  <div v-if="moderationTestResult" class="mt-4 rounded-lg border border-gray-100 surface-inset p-3 dark:border-dark-700">
+                  <div v-if="moderationTestResult" class="surface-subcard mt-4 p-3">
                     <div class="flex items-start justify-between gap-3">
                       <div>
                         <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.auditTestResult') }}</p>
-                        <p class="mt-1 text-xs surface-muted">
+                        <p class="mt-1 text-xs tabular-nums surface-muted">
                           {{ t('admin.riskControl.auditTestHighest', { category: moderationTestResult.highest_category || '-', score: percent(moderationTestResult.highest_score) }) }}
                         </p>
                       </div>
@@ -786,7 +786,7 @@
                     <div class="mt-3">
                       <div class="mb-2 flex items-center justify-between text-xs surface-muted">
                         <span>{{ t('admin.riskControl.auditTestComposite') }}</span>
-                        <span class="font-semibold text-gray-900 dark:text-white">{{ percent(moderationTestResult.composite_score) }}</span>
+                        <span class="font-semibold tabular-nums text-gray-900 dark:text-white">{{ percent(moderationTestResult.composite_score) }}</span>
                       </div>
                       <div class="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
                         <div class="console-data-mark h-full rounded-full" :class="moderationTestResult.flagged ? 'bg-red-500' : 'bg-emerald-500'" :style="{ width: percentWidth(moderationTestResult.composite_score) }"></div>
@@ -796,7 +796,7 @@
                       <div v-for="score in moderationScoreRows" :key="score.category">
                         <div class="mb-1 flex items-center justify-between gap-3 text-xs">
                           <span class="truncate surface-muted">{{ score.category }}</span>
-                          <span class="font-mono surface-muted">{{ percent(score.score) }} / {{ percent(score.threshold) }}</span>
+                          <span class="font-mono tabular-nums surface-muted">{{ percent(score.score) }} / {{ percent(score.threshold) }}</span>
                         </div>
                         <div class="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
                           <div class="console-data-mark h-full rounded-full" :class="score.hit ? 'bg-red-500' : 'bg-primary-500'" :style="{ width: percentWidth(score.score) }"></div>
@@ -846,7 +846,7 @@
                   :key="group.id"
                   type="button"
                   class="flex min-h-20 items-center justify-between rounded-lg border p-4 text-left transition-colors surface-control"
-                  :class="isGroupSelected(group.id) ? 'border-primary-300 bg-primary-50/[0.15] dark:border-primary-700 dark:bg-primary-900/20' : 'border-gray-100 hover:surface-hover dark:border-dark-700 dark:hover:surface-hover'"
+                  :class="isGroupSelected(group.id) ? 'border-primary-300 bg-primary-50/[0.15] dark:border-primary-700 dark:bg-primary-900/20' : 'border-[var(--surface-edge)] hover:surface-hover'"
                   @click="toggleGroup(group.id)"
                 >
                   <span class="min-w-0">
@@ -855,7 +855,7 @@
                   </span>
                   <span
                     class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border"
-                    :class="isGroupSelected(group.id) ? 'border-primary-500 bg-primary-500 text-white' : 'border-gray-300 text-transparent dark:border-dark-500'"
+                    :class="isGroupSelected(group.id) ? 'border-primary-500 bg-primary-500 text-white' : 'border-[var(--surface-edge)] text-transparent'"
                   >
                     <Icon name="check" size="xs" :stroke-width="2" />
                   </span>
@@ -864,13 +864,13 @@
               </div>
             </div>
 
-            <div class="space-y-4 rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+            <div class="surface-subcard space-y-4 p-4">
               <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.modelFilter') }}</h3>
                   <p class="mt-1 text-sm surface-muted">{{ t('admin.riskControl.modelFilterHint') }}</p>
                 </div>
-                <span class="inline-flex w-fit rounded-md surface-inset px-2.5 py-1 text-xs font-medium surface-muted">
+                <span class="inline-flex w-fit rounded-md border border-[var(--surface-edge)] surface-inset px-2.5 py-1 text-xs font-medium surface-muted">
                   {{ modelFilterSummary }}
                 </span>
               </div>
@@ -883,7 +883,7 @@
                   class="rounded-lg border p-3 text-left transition-colors surface-control"
                   :class="configForm.model_filter_type === option.value
                     ? 'border-primary-300 bg-primary-50/[0.15] text-primary-900 shadow-sm dark:border-primary-700 dark:bg-primary-900/20 dark:text-primary-100'
-                    : 'border-gray-100 hover:surface-hover dark:border-dark-700 dark:hover:surface-hover'"
+                    : 'border-[var(--surface-edge)] hover:surface-hover'"
                   @click="setModelFilterType(option.value)"
                 >
                   <div class="flex items-center justify-between gap-2">
@@ -892,7 +892,7 @@
                       class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border"
                       :class="configForm.model_filter_type === option.value
                         ? 'border-primary-500 bg-primary-500 text-white'
-                        : 'border-gray-300 text-transparent dark:border-dark-500'"
+                        : 'border-[var(--surface-edge)] text-transparent'"
                     >
                       <Icon name="check" size="xs" :stroke-width="2" />
                     </span>
@@ -920,14 +920,14 @@
               <label class="input-label">{{ t('admin.riskControl.queueSize') }}</label>
               <input v-model.number="configForm.queue_size" type="number" min="100" max="100000" class="input" />
             </div>
-            <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700 lg:col-span-2">
+            <div class="surface-subcard flex items-center justify-between p-4 lg:col-span-2">
               <div>
                 <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.recordNonHits') }}</p>
                 <p class="mt-1 text-xs surface-muted">{{ t('admin.riskControl.recordNonHitsHint') }}</p>
               </div>
               <Toggle v-model="configForm.record_non_hits" />
             </div>
-            <div class="space-y-4 rounded-lg border border-gray-100 p-4 dark:border-dark-700 lg:col-span-2">
+            <div class="surface-subcard space-y-4 p-4 lg:col-span-2">
               <div class="flex items-center justify-between gap-4">
                 <div>
                   <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.preHashCheck') }}</p>
@@ -935,10 +935,10 @@
                 </div>
                 <Toggle v-model="configForm.pre_hash_check_enabled" />
               </div>
-              <div class="rounded-lg surface-inset p-3">
+              <div class="rounded-lg border border-[var(--surface-edge)] surface-field p-3">
                 <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                   <div>
-                    <p class="text-sm font-medium text-gray-900 dark:text-white">
+                    <p class="text-sm font-medium tabular-nums text-gray-900 dark:text-white">
                       {{ t('admin.riskControl.flaggedHashCount', { count: formatNumber(status?.flagged_hash_count ?? 0) }) }}
                     </p>
                     <p class="mt-1 text-xs surface-muted">{{ t('admin.riskControl.flaggedHashHint') }}</p>
@@ -984,28 +984,28 @@
                 <label class="input-label">{{ t('admin.riskControl.blockMessage') }}</label>
                 <input v-model.trim="configForm.block_message" type="text" class="input" />
               </div>
-              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+              <div class="surface-subcard flex items-center justify-between p-4">
                 <div>
                   <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.emailOnHit') }}</p>
                   <p class="mt-1 text-xs surface-muted">{{ t('admin.riskControl.emailOnHitHint') }}</p>
                 </div>
                 <Toggle v-model="configForm.email_on_hit" />
               </div>
-              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+              <div class="surface-subcard flex items-center justify-between p-4">
                 <div>
                   <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.autoBan') }}</p>
                   <p class="mt-1 text-xs surface-muted">{{ t('admin.riskControl.autoBanHint') }}</p>
                 </div>
                 <Toggle v-model="configForm.auto_ban_enabled" />
               </div>
-              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+              <div class="surface-subcard flex items-center justify-between p-4">
                 <div>
                   <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberPolicyAutoBan') }}</p>
                   <p class="mt-1 text-xs surface-muted">{{ t('admin.riskControl.cyberPolicyAutoBanHint') }}</p>
                 </div>
                 <Toggle v-model="configForm.cyber_policy_auto_ban_enabled" />
               </div>
-              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700 lg:col-span-2">
+              <div class="surface-subcard flex items-center justify-between p-4 lg:col-span-2">
                 <div>
                   <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberPolicyExcludeBan') }}</p>
                   <p class="mt-1 text-xs surface-muted">{{ t('admin.riskControl.cyberPolicyExcludeBanHint') }}</p>
@@ -1020,7 +1020,7 @@
                 <label class="input-label">{{ t('admin.riskControl.violationWindowHours') }}</label>
                 <input v-model.number="configForm.violation_window_hours" type="number" min="1" max="8760" class="input" />
               </div>
-              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700 lg:col-span-2">
+              <div class="surface-subcard flex items-center justify-between p-4 lg:col-span-2">
                 <div>
                   <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.sessionBlock') }}</p>
                   <p class="mt-1 text-xs surface-muted">{{ t('admin.riskControl.sessionBlockHint') }}</p>
@@ -1055,18 +1055,18 @@
               <div
                 v-for="row in riskThresholdRows"
                 :key="row.category"
-                class="rounded-lg border border-gray-100 surface-inset p-4 dark:border-dark-700"
+                class="surface-subcard p-4"
               >
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0">
                     <label class="block truncate text-sm font-semibold text-gray-900 dark:text-white" :for="`risk-threshold-${row.category}`">
                       {{ row.category }}
                     </label>
-                    <p class="mt-1 text-xs surface-muted">
+                    <p class="mt-1 text-xs tabular-nums surface-muted">
                       {{ t('admin.riskControl.riskThresholdDefault', { value: formatThresholdPercent(row.defaultValue) }) }}
                     </p>
                   </div>
-                  <span class="inline-flex shrink-0 rounded-md surface-inset px-2 py-1 font-mono text-xs font-medium shadow-sm surface-muted">
+                  <span class="inline-flex shrink-0 rounded-md border border-[var(--surface-edge)] surface-inset px-2 py-1 font-mono text-xs font-medium tabular-nums surface-muted">
                     {{ formatThresholdPercent(row.value) }}
                   </span>
                 </div>
@@ -1114,8 +1114,8 @@
               <button type="button" class="btn btn-secondary shrink-0 whitespace-nowrap" :disabled="sessionBlocksLoading" @click="reloadSessionBlocksFromFirstPage">{{ t('admin.riskControl.refresh') }}</button>
             </div>
             <div class="record-table-scroll record-table-dialog-scroll table-container overflow-x-auto">
-              <table class="record-table w-full min-w-[760px] divide-y divide-gray-200 dark:divide-dark-700">
-                <thead class="surface-inset [&_th]:whitespace-nowrap">
+              <table class="record-table w-full min-w-[760px] divide-y divide-[var(--surface-edge)]">
+                <thead class="[&_th]:whitespace-nowrap">
                   <tr>
                     <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider surface-muted">{{ t('admin.riskControl.table.time') }}</th>
                     <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider surface-muted">session_id</th>
@@ -1125,7 +1125,7 @@
                     <th class="px-4 py-3"></th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100 surface-inset dark:divide-dark-800">
+                <tbody class="divide-y divide-[var(--surface-edge)]">
                   <tr v-if="sessionBlocksLoading">
                     <td colspan="6" class="px-4 py-10 text-center text-sm surface-muted">{{ t('common.loading') }}</td>
                   </tr>
@@ -1133,11 +1133,11 @@
                     <td colspan="6" class="px-4 py-10 text-center text-sm surface-muted">{{ t('admin.riskControl.sessionBlockEmpty') }}</td>
                   </tr>
                   <tr v-for="row in sessionBlocks" :key="row.id" class="hover:surface-hover">
-                    <td class="whitespace-nowrap px-4 py-3 text-sm surface-muted">{{ formatDateTime(row.created_at) }}</td>
+                    <td class="whitespace-nowrap px-4 py-3 text-sm tabular-nums surface-muted">{{ formatDateTime(row.created_at) }}</td>
                     <td class="px-4 py-3 font-mono text-sm surface-muted">{{ row.session_id }}</td>
                     <td class="whitespace-nowrap px-4 py-3 text-sm surface-muted">{{ row.user_email || '-' }}</td>
                     <td class="whitespace-nowrap px-4 py-3 text-sm surface-muted">{{ row.api_key_name || '-' }}</td>
-                    <td class="whitespace-nowrap px-4 py-3 text-sm surface-muted">{{ formatDateTime(row.expires_at) }}</td>
+                    <td class="whitespace-nowrap px-4 py-3 text-sm tabular-nums surface-muted">{{ formatDateTime(row.expires_at) }}</td>
                     <td class="px-4 py-3 text-right">
                       <button type="button" class="btn btn-secondary text-xs" :disabled="sessionActionLoading" @click="deleteSessionBlock(row.block_key)">
                         {{ t('admin.riskControl.deleteSessionBlock') }}
@@ -1183,7 +1183,7 @@
                   class="rounded-lg border p-3 text-left transition-colors surface-control"
                   :class="configForm.keyword_blocking_mode === option.value
                     ? 'border-primary-300 bg-primary-50/[0.15] text-primary-900 shadow-sm dark:border-primary-700 dark:bg-primary-900/20 dark:text-primary-100'
-                    : 'border-gray-100 hover:surface-hover dark:border-dark-700 dark:hover:surface-hover'"
+                    : 'border-[var(--surface-edge)] hover:surface-hover'"
                   @click="configForm.keyword_blocking_mode = option.value"
                 >
                   <div class="flex items-center justify-between gap-2">
@@ -1192,7 +1192,7 @@
                       class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border"
                       :class="configForm.keyword_blocking_mode === option.value
                         ? 'border-primary-500 bg-primary-500 text-white'
-                        : 'border-gray-300 text-transparent dark:border-dark-500'"
+                        : 'border-[var(--surface-edge)] text-transparent'"
                     >
                       <Icon name="check" size="xs" :stroke-width="2" />
                     </span>
@@ -1205,7 +1205,7 @@
             <div>
               <div class="mb-2 flex items-center justify-between">
                 <label class="input-label mb-0">{{ t('admin.riskControl.blockedKeywords') }}</label>
-                <span class="inline-flex rounded-md surface-inset px-2 py-1 text-xs surface-muted">
+                <span class="inline-flex rounded-md border border-[var(--surface-edge)] surface-inset px-2 py-1 text-xs tabular-nums surface-muted">
                   {{ t('admin.riskControl.blockedKeywordCount', { count: blockedKeywordCount }) }}
                 </span>
               </div>
@@ -1230,8 +1230,8 @@
               <label class="input-label">{{ t('admin.riskControl.nonHitRetentionDays') }}</label>
               <input v-model.number="configForm.non_hit_retention_days" type="number" min="1" max="3" class="input" />
             </div>
-            <div class="rounded-lg border border-gray-100 p-4 text-sm dark:border-dark-700 lg:col-span-2 surface-muted">
-              <div class="flex flex-wrap items-center gap-3">
+            <div class="surface-subcard p-4 text-sm lg:col-span-2 surface-muted">
+              <div class="flex flex-wrap items-center gap-3 tabular-nums">
                 <Icon name="database" size="md" class="text-gray-400" />
                 <span>{{ t('admin.riskControl.cleanupStats', { hit: status?.last_cleanup_deleted_hit ?? 0, nonHit: status?.last_cleanup_deleted_non_hit ?? 0 }) }}</span>
               </div>
@@ -1258,7 +1258,7 @@
         @close="policyHelpOpen = false"
       >
         <div class="space-y-5">
-          <div class="rounded-lg border border-primary-500 surface-inset px-4 py-3">
+          <div class="surface-subcard border-primary-500/60 px-4 py-3">
             <p class="text-sm surface-muted">{{ t('admin.riskControl.policyHelp.summary') }}</p>
             <p class="mt-2 text-sm font-semibold text-gray-900 dark:text-white">
               {{ t('admin.riskControl.policyHelp.current') }}{{ effectiveTextPolicyDescription }}
@@ -1266,7 +1266,7 @@
           </div>
           <div class="record-table-scroll record-table-dialog-scroll table-container overflow-x-auto">
             <table class="record-table min-w-[900px] w-full text-left text-sm">
-              <thead class="border-b border-gray-200 text-xs dark:border-dark-700 surface-muted">
+              <thead class="border-b border-[var(--surface-edge)] text-xs surface-muted">
                 <tr>
                   <th class="px-3 py-2">{{ t('admin.riskControl.policyHelp.globalMode') }}</th>
                   <th class="px-3 py-2">{{ t('admin.riskControl.policyHelp.textPolicy') }}</th>
@@ -1274,7 +1274,7 @@
                   <th class="px-3 py-2">{{ t('admin.riskControl.policyHelp.canBlock') }}</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+              <tbody class="divide-y divide-[var(--surface-edge)]">
                 <tr v-for="row in policyMatrixRows" :key="`${row.mode}-${row.policy}`">
                   <td class="px-3 py-3 font-medium text-gray-900 dark:text-white">{{ row.modeLabel }}</td>
                   <td class="px-3 py-3 surface-muted">{{ row.policyLabel }}</td>
@@ -1298,37 +1298,37 @@
       >
         <div v-if="inputDetailRow" class="space-y-5">
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div class="rounded-lg border border-gray-100 surface-inset p-4 dark:border-dark-700">
+            <div class="surface-subcard p-4">
               <p class="text-xs font-medium surface-muted">{{ t('admin.riskControl.table.time') }}</p>
-              <p class="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white">{{ formatDateTime(inputDetailRow.created_at) }}</p>
+              <p class="mt-1 truncate text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{{ formatDateTime(inputDetailRow.created_at) }}</p>
             </div>
-            <div class="rounded-lg border border-gray-100 surface-inset p-4 dark:border-dark-700">
+            <div class="surface-subcard p-4">
               <p class="text-xs font-medium surface-muted">{{ t('admin.riskControl.table.user') }}</p>
               <p class="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white">{{ inputDetailRow.user_email || '-' }}</p>
             </div>
-            <div class="rounded-lg border border-gray-100 surface-inset p-4 dark:border-dark-700">
+            <div class="surface-subcard p-4">
               <p class="text-xs font-medium surface-muted">{{ t('admin.riskControl.table.result') }}</p>
               <span class="mt-1 inline-flex rounded-md px-2 py-1 text-xs font-medium" :class="resultBadgeClass(inputDetailRow)">
                 {{ resultLabel(inputDetailRow) }}
               </span>
             </div>
-            <div class="rounded-lg border border-gray-100 surface-inset p-4 dark:border-dark-700">
+            <div class="surface-subcard p-4">
               <p class="text-xs font-medium surface-muted">{{ t('admin.riskControl.table.highest') }}</p>
-              <p class="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white">
+              <p class="mt-1 truncate text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
                 {{ inputDetailRow.highest_category || '-' }} / {{ percent(inputDetailRow.highest_score) }}
               </p>
             </div>
-            <div class="rounded-lg border border-gray-100 surface-inset p-4 dark:border-dark-700">
+            <div class="surface-subcard p-4">
               <p class="text-xs font-medium surface-muted">{{ t('admin.riskControl.table.moderationPlatform') }}</p>
               <p class="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white" :title="inputDetailRow.moderation_endpoint_name || ''">{{ inputDetailRow.moderation_endpoint_name || '-' }}</p>
             </div>
-            <div v-if="inputDetailRow.matched_keyword" class="rounded-lg border border-red-100 bg-red-50/[0.15] p-4 dark:border-red-900/60 dark:bg-red-900/20">
+            <div v-if="inputDetailRow.matched_keyword" class="rounded-lg border border-red-200 bg-red-50/[0.15] p-4 dark:border-red-900/60 dark:bg-red-900/20">
               <p class="text-xs font-medium text-red-500 dark:text-red-300">{{ t('admin.riskControl.matchedKeyword') }}</p>
               <p class="mt-1 truncate text-sm font-semibold text-red-700 dark:text-red-200" :title="inputDetailRow.matched_keyword">{{ inputDetailRow.matched_keyword }}</p>
             </div>
           </div>
 
-          <div class="rounded-xl border border-gray-100 surface-inset p-4 shadow-sm dark:border-dark-700">
+          <div class="surface-subcard p-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.inputDetailContent') }}</p>
@@ -1343,7 +1343,7 @@
                 {{ inputDetailRow.group_name }}
               </span>
             </div>
-            <pre class="mt-4 max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-lg surface-inset p-4 text-sm leading-6 text-gray-100 shadow-inner dark:bg-black/50">{{ inputDetailText }}</pre>
+            <pre class="mt-4 max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--surface-edge)] surface-field p-4 font-mono text-sm leading-6 text-gray-900 dark:text-gray-100">{{ inputDetailText }}</pre>
           </div>
         </div>
 
@@ -1830,7 +1830,7 @@ const overviewItems = computed<OverviewItem[]>(() => [
     icon: 'shield',
     iconClass: configForm.enabled
       ? 'bg-emerald-50/[0.15] text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-300'
-      : 'surface-inset surface-muted dark:surface-inset',
+      : 'surface-inset surface-muted',
     badge: runtimeBadgeText.value,
     badgeClass: runtimeBadgeClass.value,
   },
@@ -1944,7 +1944,7 @@ const preBlockMetricItems = computed(() => [
     label: t('admin.riskControl.preBlockChecked'),
     value: formatNumber(status.value?.pre_block_checked ?? 0),
     meta: t('admin.riskControl.preBlockCheckedHint'),
-    class: 'surface-inset dark:surface-inset',
+    class: 'surface-subcard',
     valueClass: 'text-gray-900 dark:text-white',
   },
   {
@@ -2022,7 +2022,7 @@ const runtimeBadgeText = computed(() => {
 
 const runtimeBadgeClass = computed(() => {
   if (!status.value?.risk_control_enabled || !configForm.enabled || configForm.mode === 'off') {
-    return 'surface-inset surface-muted dark:surface-inset'
+    return 'surface-inset surface-muted'
   }
   return 'bg-emerald-50/[0.15] text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
 })
@@ -2432,7 +2432,7 @@ function endpointStatusBadgeClass(endpoint: ModerationEndpointDraft): string {
   const status = effectiveEndpointStatus(endpoint)
   if (status === 'healthy') return 'bg-emerald-50/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
   if (status === 'error') return 'bg-red-50/[0.15] text-red-700 dark:bg-red-900/30 dark:text-red-300'
-  if (status === 'disabled') return 'surface-inset surface-muted dark:surface-inset'
+  if (status === 'disabled') return 'surface-inset surface-muted'
   return 'bg-amber-50/[0.15] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
 }
 
@@ -2695,7 +2695,7 @@ function workerSlotClass(state: WorkerSlotState): string {
   if (state === 'idle') {
     return 'border-emerald-200 bg-emerald-50/[0.15] text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300'
   }
-  return 'border-gray-100 surface-inset surface-muted dark:border-dark-700 dark:surface-inset'
+  return 'border-[var(--surface-edge)] surface-inset surface-muted'
 }
 
 function workerDotClass(state: WorkerSlotState): string {
@@ -2738,7 +2738,7 @@ function apiKeyStatusBadgeClass(statusValue: ContentModerationAPIKeyStatus['stat
     ok: 'bg-emerald-50/[0.15] text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
     error: 'bg-amber-50/[0.15] text-amber-700 dark:bg-amber-900/20 dark:text-amber-300',
     frozen: 'bg-red-50/[0.15] text-red-700 dark:bg-red-900/20 dark:text-red-300',
-    unknown: 'surface-inset surface-muted dark:surface-inset',
+    unknown: 'surface-inset surface-muted',
   }
   return classes[statusValue] ?? classes.unknown
 }
@@ -2915,8 +2915,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.risk-overview-card { border-radius: var(--surface-radius); }
-
 @media (min-width: 1024px) {
   .risk-records-toolbar { gap: 10px; padding: 12px 20px; }
   .risk-records-heading { gap: 12px; }

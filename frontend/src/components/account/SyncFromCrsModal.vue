@@ -62,7 +62,7 @@
           <input
             v-model="form.sync_proxies"
             type="checkbox"
-            class="rounded border-gray-300 dark:border-dark-600"
+            class="rounded border-[var(--surface-edge)]"
           />
           {{ t('admin.accounts.syncProxies') }}
         </label>
@@ -115,7 +115,7 @@
           </div>
         </div>
         <div
-          class="max-h-48 overflow-auto rounded-lg border border-gray-200 p-2 dark:border-dark-600"
+          class="max-h-48 overflow-auto rounded-lg border border-[var(--surface-edge)] p-2"
         >
           <label
             v-for="acc in previewResult.new_accounts"
@@ -125,7 +125,7 @@
             <input
               type="checkbox"
               :checked="selectedIds.has(acc.crs_account_id)"
-              class="rounded border-gray-300 dark:border-dark-600"
+              class="rounded border-[var(--surface-edge)]"
               @change="toggleSelect(acc.crs_account_id)"
             />
             <span
@@ -162,7 +162,7 @@
     <!-- Step 3: Result -->
     <div v-else-if="currentStep === 'result' && result" class="space-y-4">
       <div
-        class="space-y-2 rounded-xl border border-gray-200 p-4 dark:border-dark-700"
+        class="space-y-2 rounded-lg border border-[var(--surface-edge)] p-4"
       >
         <div class="text-sm font-medium text-gray-900 dark:text-white">
           {{ t('admin.accounts.syncResult') }}

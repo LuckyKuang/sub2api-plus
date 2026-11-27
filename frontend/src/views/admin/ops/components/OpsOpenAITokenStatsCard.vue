@@ -182,12 +182,12 @@ watch(
     />
 
     <div v-else class="space-y-3">
-      <div class="overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
+      <div class="overflow-hidden rounded-lg border border-[var(--surface-edge)]">
         <div class="record-table-scroll max-h-[420px] overflow-auto">
-          <div v-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
+          <div v-if="!isDesktopViewport" class="divide-y divide-[var(--surface-edge)]">
             <div v-for="row in items" :key="row.model" class="space-y-2 p-3">
               <div class="break-all text-xs font-medium text-gray-900 dark:text-gray-100">{{ row.model }}</div>
-              <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+              <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs tabular-nums">
                 <div class="flex items-baseline justify-between gap-2">
                   <span class="surface-muted">{{ t('admin.ops.openaiTokenStats.table.requestCount') }}</span>
                   <span class="surface-muted">{{ formatInt(row.request_count) }}</span>
@@ -216,8 +216,8 @@ watch(
             </div>
           </div>
           <table v-else class="record-table record-table-compact min-w-full text-left text-xs md:text-sm">
-            <thead class="sticky top-0 z-10 surface-inset">
-              <tr class="border-b border-gray-200 dark:border-dark-700 surface-muted">
+            <thead class="sticky top-0 z-10">
+              <tr class="border-b border-[var(--surface-edge)] surface-muted">
                 <th class="px-2 py-2 font-semibold">{{ t('admin.ops.openaiTokenStats.table.model') }}</th>
                 <th class="px-2 py-2 font-semibold">{{ t('admin.ops.openaiTokenStats.table.requestCount') }}</th>
                 <th class="px-2 py-2 font-semibold">{{ t('admin.ops.openaiTokenStats.table.avgTokensPerSec') }}</th>
@@ -231,7 +231,7 @@ watch(
               <tr
                 v-for="row in items"
                 :key="row.model"
-                class="border-b border-gray-100 last:border-b-0 dark:border-dark-800 surface-muted"
+                class="border-b border-[var(--surface-edge)] last:border-b-0 tabular-nums surface-muted"
               >
                 <td class="px-2 py-2 font-medium">{{ row.model }}</td>
                 <td class="px-2 py-2">{{ formatInt(row.request_count) }}</td>

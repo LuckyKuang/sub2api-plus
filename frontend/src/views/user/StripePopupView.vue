@@ -1,12 +1,12 @@
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-canvas p-4 md:p-6 lg:p-8 dark:surface-inset">
+  <div class="flex min-h-screen items-center justify-center bg-canvas p-4 md:p-6 lg:p-8">
     <div
       class="card w-full min-w-0 max-w-md space-y-4 p-6"
     >
       <!-- Amount + Order ID -->
       <div v-if="amount" class="text-center">
-        <p class="text-3xl font-bold" :style="{ color: methodColor }">¥{{ amount }}</p>
-        <p v-if="orderId" class="mt-1 text-sm dark:text-slate-400 surface-muted">
+        <p class="text-3xl font-bold tabular-nums" :style="{ color: methodColor }">¥{{ amount }}</p>
+        <p v-if="orderId" class="mt-1 text-sm tabular-nums surface-muted">
           {{ t('payment.orders.orderId') }}: {{ orderId }}
         </p>
       </div>
@@ -29,8 +29,12 @@
 
       <!-- Success -->
       <div v-else-if="success" class="space-y-3 py-4 text-center">
-        <div class="text-5xl text-green-600 dark:text-green-400">✓</div>
-        <p class="text-sm dark:text-slate-400 surface-muted">{{ t('payment.result.success') }}</p>
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100/[0.15] dark:bg-green-900/30">
+          <svg class="h-8 w-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <p class="text-sm surface-muted">{{ t('payment.result.success') }}</p>
         <button
           class="btn btn-secondary"
           :style="{ color: methodColor }"

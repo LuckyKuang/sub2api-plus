@@ -339,11 +339,12 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   /* ============ 统计卡片 ============ */
   .stat-card {
     @apply card p-5;
-    @apply flex items-start gap-4;
+    @apply flex min-w-0 items-start gap-3.5;
   }
 
   .stat-icon {
-    @apply h-12 w-12 rounded-xl;
+    @apply h-11 w-11 shrink-0;
+    border-radius: var(--surface-radius-control);
     @apply flex items-center justify-center;
     @apply text-xl;
   }
@@ -621,21 +622,41 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
 
   /* ============ 空状态 ============ */
   .empty-state {
-    @apply flex flex-col items-center justify-center px-4 py-12;
+    @apply flex flex-col items-center justify-center px-4 py-10;
     @apply text-center;
   }
 
+  .empty-state--sm {
+    @apply px-4 py-6;
+  }
+
+  .empty-state--lg {
+    @apply px-4 py-12;
+  }
+
   .empty-state-icon {
-    @apply mb-4 h-16 w-16;
-    @apply text-gray-300 dark:text-dark-600;
+    @apply text-gray-400 dark:text-dark-500;
   }
 
   .empty-state-title {
-    @apply mb-1 text-lg font-medium text-gray-900 dark:text-white;
+    @apply mb-1 text-base font-semibold text-gray-900 dark:text-white;
+  }
+
+  .empty-state--sm .empty-state-title {
+    @apply text-sm font-medium;
+  }
+
+  .empty-state--lg .empty-state-title {
+    @apply text-lg font-semibold;
   }
 
   .empty-state-description {
-    @apply max-w-sm text-sm text-gray-500 dark:text-dark-400;
+    @apply max-w-sm text-sm;
+    color: var(--surface-muted);
+  }
+
+  .empty-state--sm .empty-state-description {
+    @apply text-xs;
   }
 
   /* ============ 加载状态 ============ */
@@ -695,8 +716,9 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   .code-block {
     @apply font-mono text-sm;
     background-color: var(--surface-soft);
+    border: 1px solid var(--surface-edge);
     color: var(--surface-text);
-    @apply overflow-x-auto rounded-xl p-4;
+    @apply overflow-x-auto rounded-lg p-4;
   }
 
   /* ============ Tour Description ============ */
@@ -717,22 +739,22 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   }
 
   .tour-info-box {
-    @apply rounded-xl border border-blue-500 bg-blue-50 px-3 py-2 text-xs text-blue-900;
+    @apply rounded-lg border border-blue-500 bg-blue-50 px-3 py-2 text-xs text-blue-900;
     @apply dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-200;
   }
 
   .tour-success-box {
-    @apply rounded-xl border border-emerald-500 bg-emerald-50 px-3 py-2 text-xs text-emerald-900;
+    @apply rounded-lg border border-emerald-500 bg-emerald-50 px-3 py-2 text-xs text-emerald-900;
     @apply dark:border-emerald-400 dark:bg-emerald-950/40 dark:text-emerald-200;
   }
 
   .tour-warning-box {
-    @apply rounded-xl border border-amber-500 bg-amber-50 px-3 py-2 text-xs text-amber-900;
+    @apply rounded-lg border border-amber-500 bg-amber-50 px-3 py-2 text-xs text-amber-900;
     @apply dark:border-amber-400 dark:bg-amber-950/40 dark:text-amber-200;
   }
 
   .tour-error-box {
-    @apply rounded-xl border border-red-500 bg-red-50 px-3 py-2 text-xs text-red-900;
+    @apply rounded-lg border border-red-500 bg-red-50 px-3 py-2 text-xs text-red-900;
     @apply dark:border-red-400 dark:bg-red-950/40 dark:text-red-200;
   }
 

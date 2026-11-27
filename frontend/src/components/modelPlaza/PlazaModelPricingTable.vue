@@ -18,7 +18,7 @@
           <th
             rowspan="2"
             data-header-edge-bottom
-            class="border-r border-gray-100 py-2.5 pl-5 pr-4 text-left align-middle dark:border-dark-700/60"
+            class="border-r border-[var(--surface-edge)] py-2.5 pl-5 pr-4 text-left align-middle"
           >
             {{ t('modelPlaza.table.model') }}
           </th>
@@ -30,7 +30,7 @@
           </th>
           <th
             colspan="3"
-            class="border-l border-gray-100 pt-2 text-center dark:border-dark-700/60"
+            class="border-l border-[var(--surface-edge)] pt-2 text-center"
           >
             <div class="pb-2 surface-muted">
               {{ t('modelPlaza.table.officialPrice') }}
@@ -40,18 +40,18 @@
           <th
             rowspan="2"
             data-header-edge-bottom
-            class="border-l border-gray-100 py-2.5 pl-3 pr-5 text-right align-middle dark:border-dark-700/60"
+            class="border-l border-[var(--surface-edge)] py-2.5 pl-3 pr-5 text-right align-middle"
           >
             {{ t('modelPlaza.table.rate') }}
           </th>
         </tr>
         <tr
-          class="border-b border-gray-200 text-left text-[11px] font-medium uppercase leading-4 tracking-wide dark:border-dark-700 surface-muted"
+          class="border-b border-[var(--surface-edge)] text-left text-[11px] font-medium uppercase leading-4 tracking-wide surface-muted"
         >
           <th class="px-3 py-2 font-medium">{{ t('modelPlaza.table.input') }}</th>
           <th class="px-3 py-2 font-medium">{{ t('modelPlaza.table.output') }}</th>
           <th class="px-3 py-2 font-medium">{{ t('modelPlaza.table.cache') }}</th>
-          <th class="border-l border-gray-100 px-3 py-2 font-medium dark:border-dark-700/60">
+          <th class="border-l border-[var(--surface-edge)] px-3 py-2 font-medium">
             {{ t('modelPlaza.table.input') }}
           </th>
           <th class="px-3 py-2 font-medium">{{ t('modelPlaza.table.output') }}</th>
@@ -68,7 +68,11 @@
           <td :data-record-edges="recordEdges(rowIndex, group.rows.length, 'left')" class="py-2.5 pl-5 pr-4 align-middle">
             <div class="flex flex-wrap items-center gap-1.5">
               <span class="inline-flex min-w-0 items-center gap-1">
-                <span class="min-w-0 break-words font-medium text-gray-900 dark:text-white">{{ m.name }}</span>
+                <button
+                  type="button"
+                  class="min-w-0 break-all text-left font-medium text-gray-900 hover:underline focus-visible:underline dark:text-white"
+                  @click="emit('open', m)"
+                >{{ m.name }}</button>
                 <button
                   type="button"
                   class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-dark-300 dark:hover:bg-dark-700 dark:hover:text-primary-400"
@@ -177,7 +181,7 @@
                 </div>
               </template>
               <div
-                v-else-if="hasCachePricing(m)"
+                v-else-if="hasCachePrices(m.pricing)"
                 class="space-y-0.5 font-mono text-xs text-gray-800 dark:text-gray-200"
               >
                 <div>
@@ -214,14 +218,14 @@
                 >
                   <span class="font-sans surface-muted">{{ tierLabel(iv) }}</span>
                   {{ paidRequestPrice(m, iv.per_request_price)
-                  }}<span class="font-sans surface-muted">{{ perUnitSuffix(m) }}</span>
+                  }}<span class="font-sans surface-muted">{{ t(priceUnit(m)) }}</span>
                 </span>
               </div>
               <template v-else-if="m.pricing?.per_request_price != null">
                 <span class="font-mono font-semibold text-gray-900 dark:text-gray-50">
                   {{ paidRequestPrice(m, m.pricing.per_request_price) }}
                 </span>
-                <span class="ml-1 text-xs surface-muted">{{ perUnitSuffix(m) }}</span>
+                <span class="ml-1 text-xs surface-muted">{{ t(priceUnit(m)) }}</span>
               </template>
               <span v-else class="surface-muted">-</span>
             </td>
@@ -239,10 +243,10 @@
                 class="whitespace-nowrap leading-5"
               >
                 <span class="mr-1 font-sans surface-muted" :title="t('modelPlaza.table.tierHint')">{{ tierLabel(iv) }}</span>
-                {{ official(iv.input_price) }}
+                {{ tokenPrice(iv.input_price) }}
               </div>
             </template>
-            <template v-else>{{ official(m.official_pricing?.input_price) }}</template>
+            <template v-else>{{ tokenPrice(m.official_pricing?.input_price) }}</template>
           </td>
           <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" class="px-3 py-2.5 align-middle font-mono text-xs surface-muted">
             <template v-if="officialIntervals(m).length">
@@ -252,10 +256,10 @@
                 class="whitespace-nowrap leading-5"
                 :title="t('modelPlaza.table.tierHint')"
               >
-                {{ official(iv.output_price) }}
+                {{ tokenPrice(iv.output_price) }}
               </div>
             </template>
-            <template v-else>{{ official(m.official_pricing?.output_price) }}</template>
+            <template v-else>{{ tokenPrice(m.official_pricing?.output_price) }}</template>
           </td>
           <td :data-record-edges="recordEdges(rowIndex, group.rows.length)" class="px-3 py-2.5 align-middle">
             <template v-if="hasTierCachePricing(officialIntervals(m))">
@@ -267,38 +271,38 @@
               >
                 <template v-if="iv.cache_write_price != null || iv.cache_write_1h_price != null || iv.cache_write_12h_price != null || iv.cache_read_price != null">
                   <span class="font-sans surface-muted">{{ t('modelPlaza.table.cacheWriteShort') }}</span>
-                  {{ official(iv.cache_write_price) }}
+                  {{ tokenPrice(iv.cache_write_price) }}
                   <template v-if="iv.cache_write_1h_price != null"
-                    ><span class="font-sans surface-muted"> (1h </span>{{ official(iv.cache_write_1h_price)
+                    ><span class="font-sans surface-muted"> (1h </span>{{ tokenPrice(iv.cache_write_1h_price)
                     }}<span class="font-sans surface-muted">)</span></template
                   ><template v-if="iv.cache_write_12h_price != null"
-                    ><span class="font-sans surface-muted"> (12h </span>{{ official(iv.cache_write_12h_price)
+                    ><span class="font-sans surface-muted"> (12h </span>{{ tokenPrice(iv.cache_write_12h_price)
                     }}<span class="font-sans surface-muted">)</span></template
                   >
                   <span class="ml-1 font-sans surface-muted">{{ t('modelPlaza.table.cacheReadShort') }}</span>
-                  {{ official(iv.cache_read_price) }}
+                  {{ tokenPrice(iv.cache_read_price) }}
                 </template>
                 <span v-else class="surface-muted">-</span>
               </div>
             </template>
             <div
-              v-else-if="m.official_pricing && hasOfficialCache(m.official_pricing)"
+              v-else-if="m.official_pricing && hasCachePrices(m.official_pricing)"
               class="space-y-0.5 font-mono text-xs surface-muted"
             >
               <div>
                 <span class="mr-1 font-sans font-normal surface-muted">{{ t('modelPlaza.table.cacheWrite') }}</span>
-                {{ official(m.official_pricing.cache_write_price)
+                {{ tokenPrice(m.official_pricing.cache_write_price)
                 }}<template v-if="m.official_pricing.cache_write_1h_price != null"
-                  ><span class="font-sans surface-muted"> (1h </span>{{ official(m.official_pricing.cache_write_1h_price)
+                  ><span class="font-sans surface-muted"> (1h </span>{{ tokenPrice(m.official_pricing.cache_write_1h_price)
                   }}<span class="font-sans surface-muted">)</span></template
                 ><template v-if="m.official_pricing.cache_write_12h_price != null"
-                  ><span class="font-sans surface-muted"> (12h </span>{{ official(m.official_pricing.cache_write_12h_price)
+                  ><span class="font-sans surface-muted"> (12h </span>{{ tokenPrice(m.official_pricing.cache_write_12h_price)
                   }}<span class="font-sans surface-muted">)</span></template
                 >
               </div>
               <div>
                 <span class="mr-1 font-sans font-normal surface-muted">{{ t('modelPlaza.table.cacheRead') }}</span>
-                {{ official(m.official_pricing.cache_read_price) }}
+                {{ tokenPrice(m.official_pricing.cache_read_price) }}
               </div>
             </div>
             <span v-else class="surface-muted">-</span>
@@ -316,9 +320,9 @@
               >{{ periodRate(period) }}x</span
             >
             <span
-              v-else-if="usesIndependentMediaRate(m)"
+              v-else-if="usesIndependentMediaRate(m, props)"
               class="font-bold surface-muted"
-              >{{ requestRate(m) }}x</span
+              >{{ modelRate(m, props) }}x</span
             >
             <template v-else-if="hasCustomRate">
               <span class="mr-1 line-through surface-muted">{{ rateMultiplier }}x</span>
@@ -337,27 +341,14 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import { useClipboard } from '@/composables/useClipboard'
-import { formatScaled, resolveIntervalPrices } from '@/utils/pricing'
 import { platformAccentColor, platformBadgeLightClass, platformLabel } from '@/utils/platformColors'
-import {
-  BILLING_MODE_TOKEN,
-  BILLING_MODE_IMAGE,
-  BILLING_MODE_VIDEO,
-  REASONING_EFFORT_LEVELS,
-  type BillingMode
-} from '@/constants/channel'
+import { BILLING_MODE_TOKEN, BILLING_MODE_IMAGE, BILLING_MODE_VIDEO } from '@/constants/channel'
 import type { PlazaModel, PlazaTimePricingPeriod } from '@/api/modelPlaza'
-import type { UserPricingInterval } from '@/api/channels'
-
-function reasoningEffortMultipliers(model: PlazaModel): [string, number][] {
-  const multipliers = model.pricing?.reasoning_effort_multipliers
-  return REASONING_EFFORT_LEVELS.flatMap(effort => {
-    const multiplier = multipliers?.[effort]
-    return typeof multiplier === 'number' && Number.isFinite(multiplier) && multiplier > 0
-      ? [[effort, multiplier] as [string, number]]
-      : []
-  })
-}
+import {
+  billingMode, formatTimeWindow, hasCachePrices, hasTierCachePricing, modelRate, officialIntervals, periodRate as applyPeriodRate,
+  reasoningEffortMultipliers, requestIntervals, requestPrice, tierLabel, tokenIntervals,
+  timePricing, tokenPrice, usesIndependentMediaRate, priceUnit
+} from './pricing'
 
 const props = defineProps<{
   models: PlazaModel[]
@@ -382,13 +373,12 @@ const props = defineProps<{
   peakRateMultiplier?: number | null
 }>()
 
+const emit = defineEmits<{ open: [model: PlazaModel] }>()
 const { t } = useI18n()
 const { copyToClipboard } = useClipboard()
 
 /** 实付分区只从平台拿一个主色,浅底/标题/下划线全部由 scoped CSS 用 color-mix 派生。 */
 const accentStyle = computed(() => ({ '--plaza-accent': platformAccentColor(props.platform ?? '') }))
-
-const PER_MILLION = 1_000_000
 
 /**
  * 展示顺序:
@@ -415,18 +405,13 @@ const hasCustomRate = computed(
   () => props.userRateMultiplier != null && props.userRateMultiplier !== props.rateMultiplier
 )
 
-function billingMode(m: PlazaModel): BillingMode {
-  return (m.pricing?.billing_mode || BILLING_MODE_TOKEN) as BillingMode
-}
-
 function billingModeLabel(m: PlazaModel): string {
-  return billingMode(m) === BILLING_MODE_IMAGE
-    ? t('modelPlaza.table.perImage')
-    : t('modelPlaza.table.perRequest')
+  switch (billingMode(m)) {
+    case BILLING_MODE_IMAGE: return t('modelPlaza.table.perImage')
+    case BILLING_MODE_VIDEO: return t('modelPlaza.table.perSecond')
+    default: return t('modelPlaza.table.perRequest')
+  }
 }
-
-/** 价格统一保底 2 位小数,更长的有效小数原样保留。 */
-const MIN_DECIMALS = 2
 
 /** 表格行:每个模型一行标准价;配置了分时倍率的模型再按时段各加一行。 */
 interface PlazaRow {
@@ -460,62 +445,21 @@ function recordEdges(index: number, count: number, side?: 'left' | 'right'): str
 
 /** 时段行的生效倍率 = 生效倍率 × 时段倍率(去掉浮点噪声)。 */
 function periodRate(period: PlazaTimePricingPeriod): number {
-  return Math.round(effectiveRate.value * period.multiplier * 1000) / 1000
+  return applyPeriodRate(effectiveRate.value, period)
 }
 
 /** 实付价 = 渠道单价 × 生效倍率(时段行再乘时段倍率),按 $/1M token 展示。 */
 function paidPerMillion(value: number | null | undefined, period: PlazaTimePricingPeriod | null = null): string {
-  if (value == null) return '-'
-  const rate = period ? periodRate(period) : effectiveRate.value
-  return formatScaled(value * rate, PER_MILLION, MIN_DECIMALS)
+  return tokenPrice(value, period ? periodRate(period) : effectiveRate.value)
 }
 
-/** 图片和视频分别使用对应的独立倍率开关。 */
-function usesIndependentMediaRate(m: PlazaModel): boolean {
-  return (billingMode(m) === BILLING_MODE_IMAGE && props.imageRateIndependent === true) ||
-    (billingMode(m) === BILLING_MODE_VIDEO && props.videoRateIndependent === true)
-}
-
-/** 非 token 行的生效倍率，图片和视频可分别覆盖通用倍率。 */
-function requestRate(m: PlazaModel): number {
-  if (billingMode(m) === BILLING_MODE_VIDEO && props.videoRateIndependent === true) {
-    return Math.max(0, props.videoRateMultiplier ?? 1)
-  }
-  return billingMode(m) === BILLING_MODE_IMAGE && props.imageRateIndependent === true
-    ? (props.imageRateMultiplier ?? 1)
-    : effectiveRate.value
-}
-
-/** 非 token 单价乘该行生效倍率，不换算为每百万 token。 */
 function paidRequestPrice(m: PlazaModel, value: number | null | undefined): string {
-  if (value == null) return '-'
-  return formatScaled(value * requestRate(m), 1, MIN_DECIMALS)
-}
-
-/** 官方参考价不乘倍率。 */
-function official(value: number | null | undefined): string {
-  if (value == null) return '-'
-  return formatScaled(value, PER_MILLION, MIN_DECIMALS)
-}
-
-/** 非 token 计费的单位后缀:按图片 → “/ 张”,按次 → “/ 次”。 */
-function perUnitSuffix(m: PlazaModel): string {
-  return billingMode(m) === BILLING_MODE_IMAGE
-    ? t('modelPlaza.table.perUnitImage')
-    : t('modelPlaza.table.perUnitRequest')
-}
-
-function hasCachePricing(m: PlazaModel): boolean {
-  return m.pricing?.cache_write_price != null || m.pricing?.cache_write_1h_price != null || m.pricing?.cache_write_12h_price != null || m.pricing?.cache_read_price != null
-}
-
-function hasOfficialCache(o: NonNullable<PlazaModel['official_pricing']>): boolean {
-  return o.cache_write_price != null || o.cache_read_price != null || o.cache_write_1h_price != null || o.cache_write_12h_price != null
+  return requestPrice(value, modelRate(m, props))
 }
 
 /** 分时倍率时段(后端只给出倍率 ≠ 1 的时段,已升序)。 */
 function timePeriods(m: PlazaModel): PlazaTimePricingPeriod[] {
-  return m.time_pricing?.periods ?? []
+  return timePricing(m)?.periods ?? []
 }
 
 /**
@@ -536,35 +480,6 @@ function timePricingRowHint(m: PlazaModel): string {
   return hint
 }
 
-/** “00:30–08:30”;整分钟的 HH:mm:ss 省略秒。 */
-function formatTimeWindow(p: PlazaTimePricingPeriod): string {
-  const clock = (v: string) => v.replace(/^(\d{2}:\d{2}):00$/, '$1')
-  return `${clock(p.start_time)}–${clock(p.end_time)}`
-}
-
-/** 上下文档位按下限升序展示(后端已升序,此处兜底)。 */
-function sortByContext(intervals: UserPricingInterval[]): UserPricingInterval[] {
-  return [...intervals].sort((a, b) => a.min_tokens - b.min_tokens)
-}
-
-/** token 模式的阶梯定价(内联进输入/输出/缓存列)。 */
-function tokenIntervals(m: PlazaModel): UserPricingInterval[] {
-  return sortByContext(m.pricing?.intervals ?? []).map(iv => resolveIntervalPrices(iv, m.pricing!))
-}
-
-/** 官方阶梯(后端按目录规则合成,不受分组开关影响)。 */
-function officialIntervals(m: PlazaModel): UserPricingInterval[] {
-  return sortByContext(m.official_pricing?.intervals ?? [])
-}
-
-/** 任一档带缓存价才按档渲染缓存列;否则沿用平价的写入/读取两行。 */
-function hasTierCachePricing(intervals: UserPricingInterval[]): boolean {
-  return intervals.some((iv) =>
-    iv.cache_write_price != null || iv.cache_write_1h_price != null || iv.cache_write_12h_price != null || iv.cache_read_price != null ||
-    iv.cache_write_multiplier != null || iv.cache_read_multiplier != null
-  )
-}
-
 /** 档位说明:整单按档计价,或(平台旧规则)仅超出部分按档计价。 */
 function tierHint(m: PlazaModel): string {
   return m.long_context_basis === 'marginal'
@@ -573,30 +488,6 @@ function tierHint(m: PlazaModel): string {
 }
 
 
-/** 按次/按图模式的阶梯定价(仅保留配了按次价的档位)。 */
-function requestIntervals(m: PlazaModel): UserPricingInterval[] {
-  return (m.pricing?.intervals ?? []).filter((iv) => iv.per_request_price != null)
-}
-
-/**
- * 档位标签:优先后端/管理员给出的 tier_label,否则按区间生成统一形态——
- * 有上限为「≤上限」,末档为「>下限」;档位升序排列,相邻的 ≤100K / ≤200K 即表示 (100K,200K]。
- */
-function tierLabel(iv: UserPricingInterval): string {
-  if (iv.tier_label) return iv.tier_label
-  const { min_tokens: min, max_tokens: max } = iv
-  return max == null ? `>${formatTokenCount(min)}` : `≤${formatTokenCount(max)}`
-}
-
-function formatTokenCount(n: number): string {
-  if (n >= 1_000_000) return `${trimZero(n / 1_000_000)}M`
-  if (n >= 1_000) return `${trimZero(n / 1_000)}K`
-  return String(n)
-}
-
-function trimZero(n: number): string {
-  return String(Math.round(n * 100) / 100)
-}
 </script>
 
 <style scoped>

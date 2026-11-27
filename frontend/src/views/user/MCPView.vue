@@ -3,7 +3,7 @@
     <div class="mx-auto max-w-5xl space-y-6">
       <section class="card p-5 sm:p-6" aria-labelledby="mcp-connection-title" :aria-busy="connectionLoading">
         <div class="flex items-start gap-3">
-          <div class="rounded-xl bg-primary-50 p-3 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400">
+          <div class="rounded-lg bg-primary-50 p-3 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400">
             <Icon name="mcp" size="lg" />
           </div>
           <div>
@@ -27,11 +27,11 @@
             <li>{{ t('mcp.connectStep3') }}</li>
           </ol>
         </div>
-        <p class="mt-5 border-t border-gray-100 pt-4 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400">{{ t('mcp.capabilities') }}</p>
+        <p class="mt-5 border-t border-[var(--surface-edge)] pt-4 text-sm text-gray-500 dark:text-gray-400">{{ t('mcp.capabilities') }}</p>
       </section>
 
       <section class="card" aria-labelledby="mcp-grants-title">
-        <div class="flex flex-wrap items-start justify-between gap-4 border-b border-gray-100 p-5 dark:border-dark-700 sm:p-6">
+        <div class="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--surface-edge)] p-5 sm:p-6">
           <div class="max-w-xl">
             <h2 id="mcp-grants-title" class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('mcp.grantsTitle') }}</h2>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('mcp.grantsDescription') }}</p>
@@ -41,9 +41,9 @@
         <div class="p-5 sm:p-6" :aria-busy="loading">
           <p v-if="loadError" role="alert" class="text-sm text-red-600 dark:text-red-400">{{ loadError }}</p>
           <p v-else-if="loading" role="status" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('mcp.loading') }}</p>
-          <p v-else-if="grants.length === 0" class="rounded-xl border border-dashed border-gray-200 px-4 py-10 text-center text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400">{{ t('mcp.empty') }}</p>
-          <ul v-else class="divide-y divide-gray-100 dark:divide-dark-700">
-            <li v-for="grant in grants" :key="grant.id" class="flex items-start justify-between gap-4 py-5 first:pt-0 last:pb-0" :data-grant-id="grant.id">
+          <p v-else-if="grants.length === 0" class="rounded-lg border border-dashed border-[var(--surface-edge)] surface-inset px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('mcp.empty') }}</p>
+          <ul v-else class="divide-y divide-[var(--surface-edge)]">
+            <li v-for="grant in grants" :key="grant.id" class="flex flex-col items-start justify-between gap-3 py-5 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:gap-4" :data-grant-id="grant.id">
               <div class="min-w-0 space-y-2">
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="break-all font-medium text-gray-900 dark:text-white">{{ grant.client_name }}</span>

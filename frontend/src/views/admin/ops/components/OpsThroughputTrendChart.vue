@@ -170,7 +170,7 @@ function downloadChart() {
 </script>
 
 <template>
-  <div class="glass-surface flex h-full min-w-0 flex-col p-6 ring-1 ring-gray-900/5 dark:ring-dark-700">
+  <div class="glass-surface flex h-full min-w-0 flex-col p-6">
     <div
       data-testid="throughput-chart-header"
       class="mb-4 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
@@ -191,7 +191,7 @@ function downloadChart() {
         <template v-if="!props.fullscreen">
           <button
             type="button"
-            class="inline-flex shrink-0 items-center rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 dark:border-dark-700 surface-control surface-muted"
+            class="inline-flex shrink-0 items-center rounded-lg border border-[var(--surface-edge)] px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 surface-control surface-muted"
             :disabled="state !== 'ready'"
             :title="t('admin.ops.requestDetails.title')"
             @click="emit('openDetails')"
@@ -200,7 +200,7 @@ function downloadChart() {
           </button>
           <button
             type="button"
-            class="inline-flex shrink-0 items-center rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 dark:border-dark-700 surface-control surface-muted"
+            class="inline-flex shrink-0 items-center rounded-lg border border-[var(--surface-edge)] px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 surface-control surface-muted"
             :disabled="state !== 'ready'"
             :title="t('admin.ops.charts.resetZoomHint')"
             @click="resetZoom"
@@ -209,7 +209,7 @@ function downloadChart() {
           </button>
           <button
             type="button"
-            class="inline-flex shrink-0 items-center rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 dark:border-dark-700 surface-control surface-muted"
+            class="inline-flex shrink-0 items-center rounded-lg border border-[var(--surface-edge)] px-2 py-1 text-[11px] font-semibold hover:surface-hover disabled:opacity-50 surface-control surface-muted"
             :disabled="state !== 'ready'"
             :title="t('admin.ops.charts.downloadChartHint')"
             @click="downloadChart"
@@ -226,11 +226,11 @@ function downloadChart() {
         v-for="g in props.topGroups"
         :key="g.group_id"
         type="button"
-        class="inline-flex items-center gap-2 rounded-md border border-gray-200 px-3 py-1 text-[11px] font-semibold hover:surface-hover dark:border-dark-700 surface-control surface-muted"
+        class="inline-flex items-center gap-2 rounded-md border border-[var(--surface-edge)] px-3 py-1 text-[11px] font-semibold hover:surface-hover surface-control surface-muted"
         @click="emit('selectGroup', g.group_id)"
       >
         <span class="max-w-[180px] truncate">{{ g.group_name || `#${g.group_id}` }}</span>
-        <span class="surface-muted">{{ formatNumber(g.request_count) }}</span>
+        <span class="tabular-nums surface-muted">{{ formatNumber(g.request_count) }}</span>
       </button>
     </div>
 
@@ -239,11 +239,11 @@ function downloadChart() {
         v-for="p in props.byPlatform"
         :key="p.platform"
         type="button"
-        class="inline-flex items-center gap-2 rounded-md border border-gray-200 px-3 py-1 text-[11px] font-semibold hover:surface-hover dark:border-dark-700 surface-control surface-muted"
+        class="inline-flex items-center gap-2 rounded-md border border-[var(--surface-edge)] px-3 py-1 text-[11px] font-semibold hover:surface-hover surface-control surface-muted"
         @click="emit('selectPlatform', p.platform)"
       >
         <span class="uppercase">{{ p.platform }}</span>
-        <span class="surface-muted">{{ formatNumber(p.request_count) }}</span>
+        <span class="tabular-nums surface-muted">{{ formatNumber(p.request_count) }}</span>
       </button>
     </div>
 

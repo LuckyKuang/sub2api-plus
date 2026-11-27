@@ -11,12 +11,12 @@
           :key="amt"
           type="button"
           :class="[
-            'relative rounded-lg border-2 px-3 py-3 text-center font-medium transition-colors',
+            'relative rounded-lg border-2 px-3 py-3 text-center font-medium tabular-nums transition-colors',
             modelValue === amt
               ? 'border-primary-500 bg-primary-50/[0.15] text-primary-700 dark:border-primary-400 dark:bg-primary-900/40 dark:text-primary-300'
               : quoteFor(amt).percent > 0
-                ? 'border-red-200 surface-inset text-gray-700 hover:border-red-300 dark:border-red-500/40 dark:surface-inset dark:text-gray-200 dark:hover:border-red-400/60'
-                : 'border-gray-200 surface-inset text-gray-700 hover:border-gray-300 dark:border-dark-600 dark:surface-inset dark:text-gray-200 dark:hover:border-dark-500',
+                ? 'border-red-200 surface-inset text-gray-700 hover:border-red-300 dark:border-red-500/40 dark:text-gray-200 dark:hover:border-red-400/60'
+                : 'border-[var(--surface-edge)] surface-inset text-gray-700 hover:border-[var(--surface-edge)] dark:text-gray-200 dark:hover:border-dark-500',
           ]"
           :data-testid="`quick-amount-${amt}`"
           :aria-pressed="modelValue === amt"

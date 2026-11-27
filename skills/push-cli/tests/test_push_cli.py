@@ -945,7 +945,7 @@ class ValidationLaunchTest(unittest.TestCase):
     def test_macos_launch_uses_apple_container_run(self) -> None:
         runtime = push_cli.Runtime("apple-containers", compose_required=False)
         with (
-            mock.patch.dict(os.environ, {"GOMEMLIMIT": "off"}),
+            mock.patch.dict(os.environ, {"GOMEMLIMIT": "off", "NODE_OPTIONS": "--max-old-space-size=256"}),
             mock.patch.object(push_cli, "ROOT", Path("/repo")),
             mock.patch.object(push_cli, "SCRIPT", Path("/repo/skills/push-cli/scripts/push_cli.py")),
             mock.patch.object(
@@ -987,6 +987,11 @@ class ValidationLaunchTest(unittest.TestCase):
         self.assertIn("GOMEMLIMIT=6GiB", command)
         self.assertNotIn("GOMEMLIMIT=off", command)
         self.assertNotIn("GOMEMLIMIT", command)
+        # CI production builds exceed the host-dependent 2-GiB default. Keep
+        # the documented 4-GiB Node budget inside the 8-GiB container.
+        self.assertIn("NODE_OPTIONS=--max-old-space-size=4096", command)
+        self.assertNotIn("NODE_OPTIONS=--max-old-space-size=256", command)
+        self.assertNotIn("NODE_OPTIONS", command)
         self.assertIn(
             "type=bind,source=/repo,target=/repo",
             command,
@@ -1006,7 +1011,7 @@ class ValidationLaunchTest(unittest.TestCase):
             "/mnt/c/repo",
         )
         with (
-            mock.patch.dict(os.environ, {"GOMEMLIMIT": "off"}),
+            mock.patch.dict(os.environ, {"GOMEMLIMIT": "off", "NODE_OPTIONS": "--max-old-space-size=256"}),
             mock.patch.object(push_cli, "ROOT", Path("/repo")),
             mock.patch.object(push_cli, "SCRIPT", Path("/repo/skills/push-cli/scripts/push_cli.py")),
             mock.patch.object(
@@ -1048,13 +1053,16 @@ class ValidationLaunchTest(unittest.TestCase):
         self.assertIn("GOMEMLIMIT=6GiB", command)
         self.assertNotIn("GOMEMLIMIT=off", command)
         self.assertNotIn("GOMEMLIMIT", command)
+        self.assertIn("NODE_OPTIONS=--max-old-space-size=4096", command)
+        self.assertNotIn("NODE_OPTIONS=--max-old-space-size=256", command)
+        self.assertNotIn("NODE_OPTIONS", command)
         self.assertNotIn("go", command)
         cleanup.assert_called_once()
 
     def test_linux_launch_uses_docker_run(self) -> None:
         runtime = push_cli.Runtime("docker")
         with (
-            mock.patch.dict(os.environ, {"GOMEMLIMIT": "off"}),
+            mock.patch.dict(os.environ, {"GOMEMLIMIT": "off", "NODE_OPTIONS": "--max-old-space-size=256"}),
             mock.patch.object(push_cli, "ROOT", Path("/repo")),
             mock.patch.object(push_cli, "SCRIPT", Path("/repo/skills/push-cli/scripts/push_cli.py")),
             mock.patch.object(
@@ -1092,6 +1100,9 @@ class ValidationLaunchTest(unittest.TestCase):
         self.assertIn("GOMEMLIMIT=6GiB", command)
         self.assertNotIn("GOMEMLIMIT=off", command)
         self.assertNotIn("GOMEMLIMIT", command)
+        self.assertIn("NODE_OPTIONS=--max-old-space-size=4096", command)
+        self.assertNotIn("NODE_OPTIONS=--max-old-space-size=256", command)
+        self.assertNotIn("NODE_OPTIONS", command)
         self.assertNotIn("go", command)
         self.assertNotIn("pnpm", command)
         cleanup.assert_called_once()

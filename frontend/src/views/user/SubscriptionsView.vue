@@ -6,7 +6,7 @@
           <h2 class="text-base font-semibold">{{ t('userSubscriptions.title') }}</h2>
           <p class="mt-1 text-xs surface-muted">{{ t('userSubscriptions.description') }}</p>
         </div>
-        <span class="rounded-lg border px-3 py-2 text-xs surface-muted">
+        <span class="rounded-lg border border-[var(--surface-edge)] surface-inset px-3 py-1.5 text-xs tabular-nums surface-muted">
           {{ t('userSubscriptions.count', { count: subscriptions.length }) }} · {{ t('userSubscriptions.pageSize', { count: PAGE_SIZE }) }}
         </span>
       </header>
@@ -44,7 +44,7 @@
         >
           <!-- Header -->
           <div
-            class="flex flex-col items-stretch gap-3 border-b border-gray-100 p-4 dark:border-dark-700"
+            class="flex flex-col items-stretch gap-3 border-b border-[var(--surface-edge)] p-4"
           >
             <div class="flex min-w-0 flex-1 items-start gap-3">
               <div :class="['console-data-mark h-1.5 w-1.5 shrink-0 rounded-full', platformAccentDotClass(subscription.group?.platform || '')]" />
@@ -60,7 +60,7 @@
                 <p v-if="subscription.group?.description" class="mt-0.5 break-words text-xs surface-muted [overflow-wrap:anywhere]">
                   {{ subscription.group.description }}
                 </p>
-                <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] surface-muted">
+                <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] tabular-nums surface-muted">
                   <span>{{ t('payment.planCard.rate') }}: ×{{ subscription.group?.rate_multiplier ?? 1 }}</span>
                   <span v-if="subscriptionHasPeakRate(subscription)" class="text-amber-700 dark:text-amber-300">
                     {{ t('payment.planCard.peakRate') }}: {{ subscriptionPeakRateLabel(subscription) }}
@@ -75,7 +75,7 @@
                   subscription.status === 'active'
                     ? 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                     : subscription.status === 'expired'
-                      ? 'surface-inset text-gray-600 dark:surface-inset dark:text-gray-400'
+                      ? 'surface-inset text-gray-600 dark:text-gray-400'
                       : 'bg-red-100/[0.15] text-red-700 dark:bg-red-900/40 dark:text-red-300'
                 ]"
               >
@@ -117,7 +117,7 @@
                 <span class="text-sm font-medium surface-muted">
                   {{ t('userSubscriptions.fiveHour') }}
                 </span>
-                <span class="text-sm surface-muted">
+                <span class="text-sm tabular-nums surface-muted">
                   &#36;{{ (subscription.five_hour_usage_usd || 0).toFixed(2) }} / &#36;{{
                     subscription.group.five_hour_limit_usd.toFixed(2)
                   }}
@@ -144,7 +144,7 @@
                 <span class="text-sm font-medium surface-muted">
                   {{ t('userSubscriptions.daily') }}
                 </span>
-                <span class="text-sm surface-muted">
+                <span class="text-sm tabular-nums surface-muted">
                   ${{ (subscription.daily_usage_usd || 0).toFixed(2) }} / ${{
                     subscription.group.daily_limit_usd.toFixed(2)
                   }}
@@ -181,7 +181,7 @@
                 <span class="text-sm font-medium surface-muted">
                   {{ t('userSubscriptions.weekly') }}
                 </span>
-                <span class="text-sm surface-muted">
+                <span class="text-sm tabular-nums surface-muted">
                   ${{ (subscription.weekly_usage_usd || 0).toFixed(2) }} / ${{
                     subscription.group.weekly_limit_usd.toFixed(2)
                   }}
@@ -222,7 +222,7 @@
                 <span class="text-sm font-medium surface-muted">
                   {{ t('userSubscriptions.monthly') }}
                 </span>
-                <span class="text-sm surface-muted">
+                <span class="text-sm tabular-nums surface-muted">
                   ${{ (subscription.monthly_usage_usd || 0).toFixed(2) }} / ${{
                     subscription.group.monthly_limit_usd.toFixed(2)
                   }}
@@ -265,7 +265,7 @@
                 !subscription.group?.monthly_limit_usd &&
                 !subscription.group?.five_hour_limit_usd
               "
-              class="flex items-center justify-center rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 py-6 dark:from-emerald-900/20 dark:to-teal-900/20"
+              class="surface-subcard flex items-center justify-center bg-gradient-to-r from-emerald-50/70 to-teal-50/70 py-6 dark:from-emerald-900/20 dark:to-teal-900/20"
             >
               <div class="flex items-center gap-3">
                 <span class="text-4xl text-emerald-600 dark:text-emerald-400">∞</span>

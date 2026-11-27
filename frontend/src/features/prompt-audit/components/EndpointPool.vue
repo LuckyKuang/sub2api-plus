@@ -1,5 +1,5 @@
 <template>
-  <section aria-labelledby="prompt-pool-title" class="border-b border-gray-200 py-6 dark:border-dark-700/60">
+  <section aria-labelledby="prompt-pool-title" class="border-b border-[var(--surface-edge)] py-6">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h2 id="prompt-pool-title" class="text-base font-semibold text-gray-950 dark:text-white">{{ t('admin.promptAudit.pool.title') }}</h2>
@@ -10,11 +10,11 @@
       </button>
     </div>
 
-    <div v-if="endpoints.length === 0" class="mt-5 rounded-xl border border-dashed border-gray-300 px-5 py-10 text-center text-sm dark:border-dark-600 dark:surface-inset surface-muted">
+    <div v-if="endpoints.length === 0" class="mt-5 rounded-lg border border-dashed border-[var(--surface-edge)] px-5 py-10 text-center text-sm surface-muted">
       {{ t('admin.promptAudit.pool.empty') }}
     </div>
-    <div v-else class="mt-5 overflow-hidden rounded-xl border border-gray-200 surface-inset dark:border-dark-700/60">
-      <div class="hidden grid-cols-[minmax(260px,1.45fr)_minmax(210px,1fr)_minmax(190px,.8fr)_minmax(230px,1.15fr)_auto] gap-5 border-x border-b border-x-transparent border-b-gray-200 surface-inset px-7 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] dark:border-b-dark-700/60 xl:grid surface-muted">
+    <div v-else class="mt-5 overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset">
+      <div class="hidden grid-cols-[minmax(260px,1.45fr)_minmax(210px,1fr)_minmax(190px,.8fr)_minmax(230px,1.15fr)_auto] gap-5 border-x border-b border-x-transparent border-b-[var(--surface-edge)] surface-inset px-7 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] xl:grid surface-muted">
         <span>{{ t('admin.promptAudit.pool.node') }}</span>
         <span>{{ t('admin.promptAudit.pool.model') }}</span>
         <span>{{ t('admin.promptAudit.pool.limits') }}</span>
@@ -27,7 +27,7 @@
           v-for="endpoint in endpoints"
           :key="endpoint.id"
           :data-test="`endpoint-${endpoint.id}`"
-          class="group grid gap-4 rounded-xl border border-gray-200 px-4 py-4 transition-[background-color,border-color] duration-200 hover:border-primary-500 hover:surface-hover dark:border-dark-700 sm:px-5 xl:grid-cols-[minmax(260px,1.45fr)_minmax(210px,1fr)_minmax(190px,.8fr)_minmax(230px,1.15fr)_auto] xl:items-center xl:gap-5"
+          class="group grid gap-4 rounded-lg border border-[var(--surface-edge)] px-4 py-4 transition-[background-color,border-color] duration-200 hover:border-primary-500 hover:surface-hover sm:px-5 xl:grid-cols-[minmax(260px,1.45fr)_minmax(210px,1fr)_minmax(190px,.8fr)_minmax(230px,1.15fr)_auto] xl:items-center xl:gap-5"
         >
           <div class="flex min-w-0 items-center gap-3">
             <Toggle
@@ -71,7 +71,7 @@
             </p>
           </div>
 
-          <div class="flex flex-wrap items-center justify-end gap-1 border-t border-gray-100 pt-3 dark:border-dark-800 xl:flex-nowrap xl:border-0 xl:pt-0">
+          <div class="flex flex-wrap items-center justify-end gap-1 border-t border-[var(--surface-edge)] pt-3 xl:flex-nowrap xl:border-0 xl:pt-0">
             <button type="button" class="btn btn-secondary btn-sm" :disabled="probingIds.includes(endpoint.id)" @click="$emit('probe', endpoint)">
               {{ probingIds.includes(endpoint.id) ? t('admin.promptAudit.pool.probing') : t('admin.promptAudit.pool.probe') }}
             </button>

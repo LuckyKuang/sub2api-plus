@@ -14,7 +14,7 @@
         {{ t('admin.usage.cleanup.warning') }}
       </div>
 
-      <div class="rounded-xl border border-gray-200 p-4 dark:border-dark-700">
+      <div class="surface-subcard p-4">
         <div class="flex items-center justify-between">
           <h4 class="text-sm font-semibold surface-muted">
             {{ t('admin.usage.cleanup.recentTasks') }}
@@ -35,7 +35,7 @@
             <div
               v-for="task in tasks"
               :key="task.id"
-              class="flex flex-col gap-2 rounded-lg border border-gray-100 px-3 py-2 text-sm dark:border-dark-700 surface-muted"
+              class="flex flex-col gap-2 rounded-lg border border-[var(--surface-edge)] px-3 py-2 text-sm tabular-nums surface-muted"
             >
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="flex items-center gap-2">
@@ -211,7 +211,7 @@ const statusClass = (status: string) => {
     running: 'bg-blue-100/[0.15] text-blue-700 dark:bg-blue-500/20 dark:text-blue-200',
     succeeded: 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200',
     failed: 'bg-rose-100/[0.15] text-rose-700 dark:bg-rose-500/20 dark:text-rose-200',
-    canceled: 'surface-inset surface-muted dark:surface-inset'
+    canceled: 'surface-inset surface-muted'
   }
   return map[status] || 'surface-inset surface-muted'
 }

@@ -1,5 +1,5 @@
 <template>
-  <section class="mt-3 space-y-3 rounded-xl border border-gray-200 p-4 dark:border-dark-600" data-testid="long-context-policy">
+  <section class="mt-3 space-y-3 rounded-lg border border-[var(--surface-edge)] p-4" data-testid="long-context-policy">
     <h4 class="text-sm font-medium">{{ t('longContext.title') }}</h4>
     <p class="input-hint">{{ t('longContext.hint') }}</p>
     <details open>

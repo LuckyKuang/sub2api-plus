@@ -149,7 +149,7 @@
                 <!-- Dropdown menu -->
                 <div
                   v-if="showFilterDropdown"
-                  class="absolute right-0 top-full z-50 mt-1 w-48 rounded-lg border border-gray-200 py-1 shadow-lg dark:border-dark-600 surface-panel"
+                  class="absolute right-0 top-full z-50 mt-1 w-48 rounded-lg border border-[var(--surface-edge)] py-1 shadow-lg surface-panel"
                 >
                   <!-- Built-in filters -->
                   <button
@@ -170,7 +170,7 @@
                   <!-- Divider if custom attributes exist -->
                   <div
                     v-if="filterableAttributes.length > 0"
-                    class="my-1 border-t border-gray-100 dark:border-dark-700"
+                    class="my-1 border-t border-[var(--surface-edge)]"
                   ></div>
                   <!-- Custom attribute filters -->
                   <button
@@ -205,7 +205,7 @@
                 <!-- Dropdown menu -->
                 <div
                   v-if="showColumnDropdown"
-                  class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-gray-200 py-1 shadow-lg dark:border-dark-600 surface-panel"
+                  class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-[var(--surface-edge)] py-1 shadow-lg surface-panel"
                 >
                   <button
                     v-for="col in toggleableColumns"
@@ -365,9 +365,9 @@
                 <!-- 点击展开分组操作菜单 -->
                 <div
                   v-if="expandedGroupUserId === row.id"
-                  class="absolute left-0 top-full z-50 mt-1.5 min-w-[160px] overflow-hidden border border-gray-200 p-1 text-xs shadow-xl dark:border-dark-600 surface-panel"
+                  class="absolute left-0 top-full z-50 mt-1.5 min-w-[160px] overflow-hidden border border-[var(--surface-edge)] p-1 text-xs shadow-xl surface-panel"
                 >
-                  <div class="border-b border-gray-100 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider dark:border-dark-600 surface-muted">
+                  <div class="border-b border-[var(--surface-edge)] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider surface-muted">
                     {{ t('admin.users.clickToReplace') }}
                   </div>
                   <div
@@ -510,7 +510,7 @@
                 <!-- 弹出菜单：今日 / 近30天，点击进行三态循环切换。 -->
                 <div
                   v-if="openUsageSortMenu === usageKey"
-                  class="absolute right-0 top-full z-50 mt-1 min-w-[120px] rounded-lg border border-gray-200 py-1 shadow-lg dark:border-dark-600 surface-panel"
+                  class="absolute right-0 top-full z-50 mt-1 min-w-[120px] rounded-lg border border-[var(--surface-edge)] py-1 shadow-lg surface-panel"
                 >
                   <button
                     v-for="metric in (['today', 'total'] as const)"
@@ -538,7 +538,7 @@
                       />
                     </svg>
                   </button>
-                  <div class="mt-1 border-t border-gray-100 px-3 py-1 text-[10px] normal-case tracking-normal dark:border-dark-700 surface-muted">
+                  <div class="mt-1 border-t border-[var(--surface-edge)] px-3 py-1 text-[10px] normal-case tracking-normal surface-muted">
                     {{ t('admin.users.sortCurrentPageOnly') }}
                   </div>
                 </div>
@@ -674,7 +674,7 @@
     <Teleport to="body">
       <div
         v-if="activeMenuId !== null && menuPosition"
-        class="action-menu-content fixed z-[9999] w-48 overflow-hidden rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10 surface-panel"
+        class="action-menu-content fixed z-[9999] w-48 overflow-hidden shadow-lg ring-1 ring-black/5 dark:ring-white/10 surface-panel"
         :style="{ top: menuPosition.top + 'px', left: menuPosition.left + 'px' }"
       >
         <div class="py-1">
@@ -698,7 +698,7 @@
                 {{ t('admin.users.groups') }}
               </button>
 
-              <div class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
+              <div class="my-1 border-t border-[var(--surface-edge)]"></div>
 
               <!-- Deposit -->
               <button
@@ -738,7 +738,7 @@
                 {{ t('admin.users.balanceHistory') }}
               </button>
 
-              <div class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
+              <div class="my-1 border-t border-[var(--surface-edge)]"></div>
 
               <!-- Delete (not for admin) -->
               <button

@@ -181,15 +181,15 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="glass-surface p-6 ring-1 ring-gray-900/5 dark:ring-dark-700">
-    <div class="mb-4 flex items-start justify-between gap-4">
+  <div class="glass-surface p-6">
+    <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
       <div>
         <h3 class="text-sm font-bold text-gray-900 dark:text-white">{{ t('admin.ops.email.title') }}</h3>
         <p class="mt-1 text-xs surface-muted">{{ t('admin.ops.email.description') }}</p>
       </div>
       <div class="flex items-center gap-2">
         <button
-          class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors hover:surface-hover disabled:cursor-not-allowed disabled:opacity-50 surface-control surface-muted"
+          class="flex items-center gap-1.5 rounded-lg border border-[var(--surface-edge)] px-3 py-1.5 text-xs font-bold transition-colors hover:surface-hover disabled:cursor-not-allowed disabled:opacity-50 surface-control surface-muted"
           :disabled="loading"
           @click="loadConfig"
         >
@@ -208,7 +208,7 @@ onMounted(() => {
     </div>
 
     <div v-else class="space-y-6">
-      <div class="rounded-xl surface-inset p-4">
+      <div class="surface-subcard p-4">
         <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.email.alertTitle') }}</h4>
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div class="text-xs surface-muted">
@@ -219,7 +219,7 @@ onMounted(() => {
           </div>
           <div class="text-xs surface-muted">
             {{ t('admin.ops.email.recipients') }}:
-            <span class="ml-1 font-medium text-gray-900 dark:text-white">{{ config.alert.recipients.length }}</span>
+            <span class="ml-1 font-medium tabular-nums text-gray-900 dark:text-white">{{ config.alert.recipients.length }}</span>
           </div>
           <div class="text-xs surface-muted">
             {{ t('admin.ops.email.minSeverity') }}:
@@ -229,12 +229,12 @@ onMounted(() => {
           </div>
           <div class="text-xs surface-muted">
             {{ t('admin.ops.email.rateLimitPerHour') }}:
-            <span class="ml-1 font-medium text-gray-900 dark:text-white">{{ config.alert.rate_limit_per_hour }}</span>
+            <span class="ml-1 font-medium tabular-nums text-gray-900 dark:text-white">{{ config.alert.rate_limit_per_hour }}</span>
           </div>
         </div>
       </div>
 
-      <div class="rounded-xl surface-inset p-4">
+      <div class="surface-subcard p-4">
         <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.email.reportTitle') }}</h4>
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div class="text-xs surface-muted">
@@ -245,7 +245,7 @@ onMounted(() => {
           </div>
           <div class="text-xs surface-muted">
             {{ t('admin.ops.email.recipients') }}:
-            <span class="ml-1 font-medium text-gray-900 dark:text-white">{{ config.report.recipients.length }}</span>
+            <span class="ml-1 font-medium tabular-nums text-gray-900 dark:text-white">{{ config.report.recipients.length }}</span>
           </div>
         </div>
       </div>
@@ -263,13 +263,13 @@ onMounted(() => {
           <li v-for="msg in editorValidation.errors" :key="msg">{{ msg }}</li>
         </ul>
       </div>
-      <div class="rounded-xl surface-inset p-4">
+      <div class="surface-subcard p-4">
         <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.email.alertTitle') }}</h4>
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <div class="mb-1 text-xs font-medium surface-muted">{{ t('common.enabled') }}</div>
             <label class="inline-flex items-center gap-2 text-sm surface-muted">
-              <input v-model="draft.alert.enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+              <input v-model="draft.alert.enabled" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)]" />
               <span>{{ draft.alert.enabled ? t('common.enabled') : t('common.disabled') }}</span>
             </label>
           </div>
@@ -326,20 +326,20 @@ onMounted(() => {
           <div>
             <div class="mb-1 text-xs font-medium surface-muted">{{ t('admin.ops.email.includeResolved') }}</div>
             <label class="inline-flex items-center gap-2 text-sm surface-muted">
-              <input v-model="draft.alert.include_resolved_alerts" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+              <input v-model="draft.alert.include_resolved_alerts" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)]" />
               <span>{{ draft.alert.include_resolved_alerts ? t('common.enabled') : t('common.disabled') }}</span>
             </label>
           </div>
         </div>
       </div>
 
-      <div class="rounded-xl surface-inset p-4">
+      <div class="surface-subcard p-4">
         <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.email.reportTitle') }}</h4>
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <div class="mb-1 text-xs font-medium surface-muted">{{ t('common.enabled') }}</div>
             <label class="inline-flex items-center gap-2 text-sm surface-muted">
-              <input v-model="draft.report.enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+              <input v-model="draft.report.enabled" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)]" />
               <span>{{ draft.report.enabled ? t('common.enabled') : t('common.disabled') }}</span>
             </label>
           </div>
@@ -383,7 +383,7 @@ onMounted(() => {
                 <div class="mb-1 text-xs font-medium surface-muted">{{ t('admin.ops.email.dailySummary') }}</div>
                 <div class="flex items-center gap-2">
                   <label class="inline-flex items-center gap-2 text-sm surface-muted">
-                    <input v-model="draft.report.daily_summary_enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+                    <input v-model="draft.report.daily_summary_enabled" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)]" />
                   </label>
                   <input v-model="draft.report.daily_summary_schedule" type="text" class="input" :placeholder="t('admin.ops.email.cronPlaceholder')" />
                 </div>
@@ -392,7 +392,7 @@ onMounted(() => {
                 <div class="mb-1 text-xs font-medium surface-muted">{{ t('admin.ops.email.weeklySummary') }}</div>
                 <div class="flex items-center gap-2">
                   <label class="inline-flex items-center gap-2 text-sm surface-muted">
-                    <input v-model="draft.report.weekly_summary_enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+                    <input v-model="draft.report.weekly_summary_enabled" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)]" />
                   </label>
                   <input v-model="draft.report.weekly_summary_schedule" type="text" class="input" :placeholder="t('admin.ops.email.cronPlaceholder')" />
                 </div>
@@ -401,7 +401,7 @@ onMounted(() => {
                 <div class="mb-1 text-xs font-medium surface-muted">{{ t('admin.ops.email.errorDigest') }}</div>
                 <div class="flex items-center gap-2">
                   <label class="inline-flex items-center gap-2 text-sm surface-muted">
-                    <input v-model="draft.report.error_digest_enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+                    <input v-model="draft.report.error_digest_enabled" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)]" />
                   </label>
                   <input v-model="draft.report.error_digest_schedule" type="text" class="input" :placeholder="t('admin.ops.email.cronPlaceholder')" />
                 </div>
@@ -414,7 +414,7 @@ onMounted(() => {
                 <div class="mb-1 text-xs font-medium surface-muted">{{ t('admin.ops.email.accountHealth') }}</div>
                 <div class="flex items-center gap-2">
                   <label class="inline-flex items-center gap-2 text-sm surface-muted">
-                    <input v-model="draft.report.account_health_enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+                    <input v-model="draft.report.account_health_enabled" type="checkbox" class="h-4 w-4 rounded border-[var(--surface-edge)]" />
                   </label>
                   <input v-model="draft.report.account_health_schedule" type="text" class="input" :placeholder="t('admin.ops.email.cronPlaceholder')" />
                 </div>

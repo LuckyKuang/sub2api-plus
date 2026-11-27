@@ -210,7 +210,7 @@
 
         <button
           type="button"
-          class="usage-filter-more inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium surface-muted surface-control transition-colors hover:surface-hover dark:border-dark-600"
+          class="usage-filter-more inline-flex items-center gap-1 rounded-lg border border-[var(--surface-edge)] px-3 py-2 text-sm font-medium surface-muted surface-control transition-colors hover:surface-hover"
           :aria-expanded="showAdvanced"
           @click="showAdvanced = !showAdvanced"
         >
