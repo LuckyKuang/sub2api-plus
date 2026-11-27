@@ -84,6 +84,11 @@ metadata, image/cache generation, dependency-cache initial state, step duration,
 heavy-slot waiting, exit code and whole-container cgroup peak/limit/CPU counters.
 Container counters are aggregate, not per-step RSS or CPU measurements.
 
+The seven-provider Python gates execute Go tests and acquire the same memory
+slot as the full Go suites, lint and frontend production build. Their package
+deadlines and required-case checks follow the
+[seven-provider matrix](SEVEN_PROVIDER_TEST_MATRIX.md#verification-and-remaining-boundaries).
+
 Host reports live in `~/.local/state/sub2api-validation/reports`; on Windows this
 is the selected WSL user's home. They mount at `/tmp/sub2api-validation-report`.
 These private files contain no command arguments, environment values, raw test

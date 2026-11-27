@@ -828,6 +828,16 @@ class GoEventCoverageTests(unittest.TestCase):
         self.assertIn("Go package build failed", errors)
         self.assertIn("go test exited 1", self.errors(successful_events(), returncode=1))
 
+    def test_package_timeout_is_classified_without_raw_output(self) -> None:
+        errors = self.errors([
+            event("run", TEST),
+            {**event("output"), "Output": "panic: test timed out after 5m0s\nprivate fixture output"},
+            event("fail"),
+        ], returncode=1)
+        self.assertIn("Go package test timeout", errors)
+        self.assertIn(TEST + ": incomplete test", errors)
+        self.assertNotIn("private fixture output", "\n".join(errors))
+
     def test_package_failure_skip_and_missing_completion_reject_test_success(self) -> None:
         for action in ("fail", "skip", "output"):
             with self.subTest(action=action):
@@ -942,7 +952,7 @@ class ManifestAndExecutionTests(unittest.TestCase):
                     self.assertEqual(coverage.run_profile("storage", root=root), int(failed_step is not None))
                 expected_steps = steps[:1] if failed_step == 0 else steps
                 self.assertEqual([call.args[0] for call in run.call_args_list], [
-                    ["go", "test", "-json", "-count=1", "-tags=integration", "-timeout=5m",
+                    ["go", "test", "-json", "-count=1", "-tags=integration", "-timeout=10m",
                      "-run", "^(" + test + ")$", package]
                     for package, test in expected_steps
                 ])
@@ -1267,7 +1277,7 @@ class ManifestAndExecutionTests(unittest.TestCase):
 
     def test_gate_executes_uncached_exact_tests_and_the_requested_build_tag(self) -> None:
         group = coverage.RegressionGroup("./internal/service", (TEST, "TestSecondFlow"), (CHILD,))
-        for profile in ("unit", "integration"):
+        for profile, timeout in (("unit", "5m"), ("integration", "10m")):
             with self.subTest(profile=profile), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 backend = root / "backend"
@@ -1282,11 +1292,30 @@ class ManifestAndExecutionTests(unittest.TestCase):
                     self.assertEqual(coverage.run_profile(profile, root=root), 0)
                 boundary.assert_called_once()
                 self.assertEqual(run.call_args.args[0], [
-                    "go", "test", "-json", "-count=1", f"-tags={profile}", "-timeout=5m",
+                    "go", "test", "-json", "-count=1", f"-tags={profile}", f"-timeout={timeout}",
                     "-run", "^(TestRequiredBusinessFlow|TestSecondFlow)$", "./internal/service",
                 ])
                 self.assertEqual(run.call_args.kwargs["cwd"], backend)
                 self.assertEqual(run.call_args.kwargs["stderr"], subprocess.STDOUT)
+
+    def test_integration_deadline_covers_eight_minute_tls_subprocess(self) -> None:
+        group = coverage.RegressionGroup("./internal/integration", ("TestStepFunBusinessMatrix",))
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "backend").mkdir()
+            (root / "backend/go.mod").write_text("module example.invalid/sub2api\n")
+            output = "\n".join(json.dumps(item) for item in successful_events(
+                tests=group.tests, package="example.invalid/sub2api/internal/integration"))
+            with mock.patch.dict(coverage.PROFILES, {"integration": (group,)}), \
+                 mock.patch.object(validation_runtime, "require_in_validation"), \
+                 mock.patch.object(coverage.subprocess, "run", return_value=subprocess.CompletedProcess(
+                     [], 0, stdout=output)) as run, contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(coverage.run_profile("integration", root=root), 0)
+            deadline = next(arg for arg in run.call_args.args[0] if arg.startswith("-timeout="))
+            # The production TLS fixture permits its child eight minutes. Its
+            # parent must allow that budget within the ordinary full-suite
+            # ten-minute package bound.
+            self.assertEqual(deadline, "-timeout=10m")
 
     def test_zero_exit_without_tests_fails_and_diagnostics_omit_raw_output(self) -> None:
         group = coverage.RegressionGroup("./internal/service", (TEST,))

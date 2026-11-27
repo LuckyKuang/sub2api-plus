@@ -646,6 +646,14 @@ the network fixtures; PostgreSQL/Redis cases require the integration environment
 Frontend changes require lint, typecheck, relevant Vitest and locale checks.
 Identity changes also retain the complete existing Codex identity regressions.
 
+The critical Go gate uses five-minute unit and ten-minute integration package
+deadlines. The integration deadline matches the ordinary Go suite and leaves
+room for the StepFun business matrix's eight-minute trusted-CA subprocess.
+Storage checks use the same integration deadline. Every required parent and
+child must still execute and pass; missing, skipped, failed and unfinished cases
+reject the gate. A Go package timeout reports a stable diagnostic without
+printing captured test payloads or credentials.
+
 ### Post-commit branch verification
 
 The reviewed capability checkpoint is `488ca736c`; production fixes and their

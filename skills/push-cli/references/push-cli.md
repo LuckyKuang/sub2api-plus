@@ -92,8 +92,9 @@ the local proof remains required. CI full suites do not produce local success.
 The backend-test lane keeps module tidiness before unit and integration tests.
 The backend-lint/policy lane starts after the backend-test lane finishes,
 preventing two large Go heaps from exhausting the 8-GiB container. It serializes
-lint and repository policy commands. Go test/lint commands and the frontend
-production build share one memory slot; cold compilation must not overlap the
+lint and repository policy commands. Go test/lint commands, including the Go
+tests launched by the seven-provider Python gates, and the frontend production
+build share one memory slot; cold compilation must not overlap the
 production build in the 8-GiB VM.
 The shared launcher sets `GOMEMLIMIT=6GiB` for Go processes, including cold-cache
 lint, while preserving the exact matrix commands. This per-process soft

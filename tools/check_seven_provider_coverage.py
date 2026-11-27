@@ -1594,6 +1594,9 @@ def coverage_errors(
             errors.append("Go package build failed")
         if event.get("Package") != package:
             continue
+        if (action == "output" and isinstance(event.get("Output"), str)
+                and event["Output"].startswith("panic: test timed out after ")):
+            errors.append("Go package test timeout")
         test = event.get("Test")
         if test is not None and not isinstance(test, str):
             errors.append(f"line {number}: invalid test name")
@@ -1668,8 +1671,11 @@ def run_profile(profile: str, *, root: Path = ROOT) -> int:
     for group in groups:
         expression = "^(" + "|".join(re.escape(name) for name in group.tests) + ")$"
         build_tag = "integration" if profile == "storage" else profile
+        # The Step TLS child has an eight-minute budget. Match the ordinary
+        # Go suite's ten-minute package bound rather than killing it at five.
+        timeout = "10m" if build_tag == "integration" else "5m"
         command = ["go", "test", "-json", "-count=1", f"-tags={build_tag}",
-                   "-timeout=5m", "-run", expression, group.package]
+                   f"-timeout={timeout}", "-run", expression, group.package]
         print(f"Seven-provider {profile}: {group.package}", flush=True)
         result = subprocess.run(command, cwd=backend, text=True, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, check=False)

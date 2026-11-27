@@ -61,8 +61,9 @@ inputs; do not use them to accelerate an ordinary or release-candidate PR.
 
 `check` runs the same full local matrix without pushing or creating a PR. It
 runs Go tests before Go lint, concurrently with frontend checks by default;
-Go test/lint and frontend production builds share one memory slot; `check --serial` preserves the original
-ordering for diagnosis and same-commit timing comparisons. Both modes run the
+Go test/lint, including the seven-provider Go gates, and frontend production
+builds share one memory slot; `check --serial` preserves the original ordering
+for diagnosis and same-commit timing comparisons. Both modes run the
 same command and test set. `ensure` only prepares the platform runtime and
 validation image. `watch` observes pull-request Actions for the current branch and SHA when a
 PR exists, otherwise the push-triggered runs (used on `main`).

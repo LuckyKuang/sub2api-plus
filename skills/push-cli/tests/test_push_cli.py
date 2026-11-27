@@ -437,6 +437,44 @@ class FrontendSecurityCheckTest(unittest.TestCase):
 
 
 class LocalChecksTest(unittest.TestCase):
+    def test_required_provider_go_commands_do_not_overlap_frontend_build(self):
+        for provider_step in ("Seven-provider required unit regressions",
+                              "Seven-provider required integration regressions"):
+            with self.subTest(provider_step=provider_step):
+                frontend_started = threading.Event()
+                go_started = threading.Event()
+                go_active = threading.Event()
+                steps = [
+                    push_cli.validation_checks.ValidationStep(
+                        provider_step, ["python3", "gate.py"], Path("/repo"), "backend-tests"),
+                    push_cli.validation_checks.ValidationStep(
+                        "Frontend frozen install", ["pnpm", "install"], Path("/repo"), "frontend"),
+                    push_cli.validation_checks.ValidationStep(
+                        "Frontend production build", ["pnpm", "build"], Path("/repo"), "frontend"),
+                ]
+
+                def step(name, *args, **kwargs):
+                    if name == "Frontend frozen install":
+                        frontend_started.set()
+                        self.assertTrue(go_started.wait(3))
+                    elif name == provider_step:
+                        self.assertTrue(frontend_started.wait(3))
+                        go_active.set()
+                        go_started.set()
+                        time.sleep(0.05)
+                        go_active.clear()
+                    elif name == "Frontend production build":
+                        self.assertFalse(go_active.is_set(), "provider Go gate and frontend build must share the memory slot")
+
+                with (
+                    mock.patch.object(push_cli, "ROOT", Path("/repo")),
+                    mock.patch.object(push_cli, "run_command", return_value=subprocess.CompletedProcess([], 1, "")),
+                    mock.patch.object(push_cli.validation_checks, "full_steps", return_value=steps),
+                    mock.patch.object(push_cli, "run_step", side_effect=step),
+                    mock.patch.object(push_cli, "run_frontend_security_check"),
+                ):
+                    push_cli.run_local_checks("origin", "feature", push_cli.Runtime("docker"))
+
     def test_cold_go_compilation_and_frontend_build_do_not_share_the_memory_budget(self):
         # Observed cold compilation plus frontend production build exhausted the
         # required 8-GiB VM. Frontend install/tests may overlap; heavy builds may not.

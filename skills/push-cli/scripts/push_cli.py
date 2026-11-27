@@ -568,6 +568,8 @@ def run_local_checks(
         stop_requested = threading.Event()
         memory_slot = threading.Lock()
         memory_steps = {"Backend unit tests", "Backend integration tests", "Backend lint",
+                        "Seven-provider required unit regressions",
+                        "Seven-provider required integration regressions",
                         "Frontend production build"}
 
         def run_lane(lane_name: str) -> None:

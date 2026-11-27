@@ -400,8 +400,9 @@ default-branch base and runs the complete matrix inside Apple Containers on
 macOS, Docker inside WSL2 Debian or Ubuntu on Windows, and Docker on Linux.
 Backend tests run before backend lint/policy while the frontend lane runs
 concurrently within the 4-CPU/8-GiB container and report step/lane wall-clock durations; no check is
-removed. Go test/lint and frontend production builds share one memory slot to
-avoid cold-cache memory exhaustion; other frontend checks may overlap Go work.
+removed. Go test/lint, including the seven-provider Go gates, and frontend
+production builds share one memory slot to avoid cold-cache memory exhaustion;
+other frontend checks may overlap Go work.
 The launcher fixes `GOMEMLIMIT=6GiB` for Go processes inside the 8-GiB VM,
 including cold-cache lint. This soft managed-memory target leaves runtime
 headroom; it is not a hard RSS limit or a replacement for the shared memory slot.
