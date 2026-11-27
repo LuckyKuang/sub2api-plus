@@ -120,7 +120,6 @@ type probeRecorder struct {
 	offsets  []probeCheckpoint
 	firstAt  time.Time
 	hasFirst bool
-	body     []byte
 }
 
 type probeCheckpoint struct {
