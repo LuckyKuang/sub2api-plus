@@ -12,10 +12,13 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
 from typing import Sequence
 
 import validation_checks
 import validation_runtime as runtime
+import validation_output
 
 
 ROOT = Path(os.environ.get("SUB2API_VALIDATION_ROOT", str(Path(__file__).resolve().parents[1]))).resolve()
@@ -32,21 +35,24 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 def capture(command: Sequence[str]) -> str:
-    result = subprocess.run(command, cwd=ROOT, text=True, stdout=subprocess.PIPE,
+    result = subprocess.run(command, cwd=ROOT, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, check=True)
-    return result.stdout.strip()
+    return runtime.decode_output(result.stdout).strip()
 
 
 def optional_capture(command: Sequence[str]) -> tuple[bool, str]:
     try:
         return True, capture(command)
     except subprocess.CalledProcessError as error:
-        return False, error.stdout or ""
+        return False, runtime.decode_output(error.stdout) or ""
 
 
 def execute(name: str, command: Sequence[str], *, cwd: Path = ROOT) -> None:
     print(f"[{name}]", flush=True)
-    result = subprocess.run(command, cwd=cwd)
+    started = time.monotonic()
+    result = validation_output.stream(command, cwd=cwd, lock=threading.Lock(), label=name)
+    if validation_output.ACTIVE_REPORT:
+        validation_output.ACTIVE_REPORT.step(name, None, time.monotonic() - started, result.returncode)
     if result.returncode:
         raise RuntimeError(f"{name} failed with exit code {result.returncode}")
 
@@ -100,10 +106,12 @@ def launch(
             ]
         execute(name, command)
 
-    runtime.launch_in_validation(
-        selected, argv, root=ROOT, capture=capture, run_step=run_step,
-        toolchain_root=INPUT_ROOT,
-    )
+    with runtime.runtime_session(selected):
+        runtime.launch_in_validation(
+            selected, argv, root=ROOT, capture=capture, run_step=run_step,
+            toolchain_root=INPUT_ROOT,
+            reports=True,
+        )
 
 
 def run_lane(lane: str, *, base: str, tag: str | None = None) -> None:
@@ -128,7 +136,7 @@ def run_lane(lane: str, *, base: str, tag: str | None = None) -> None:
         subprocess.run(["goreleaser", "check"], cwd=ROOT, env=env, check=True)
     elif lane == "frontend-security":
         execute("Frontend frozen install",
-                ["pnpm", "--dir", "frontend", "install", "--frozen-lockfile"])
+                validation_checks.frontend_install_command())
         sys.path.insert(0, str(ROOT / "skills/push-cli/scripts"))
         import push_cli
         push_cli.run_frontend_security_check()
@@ -146,6 +154,7 @@ def run_lane(lane: str, *, base: str, tag: str | None = None) -> None:
 
 
 def main() -> int:
+    validation_output.configure_console()
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     identity = commands.add_parser("identity")
@@ -187,9 +196,13 @@ def main() -> int:
             expected_go = "go" + runtime.declared_validation_pins(ROOT)["GO_VERSION"]
             if capture(["go", "env", "GOVERSION"]) != expected_go:
                 raise RuntimeError("validation image does not match the declared Go version")
-            run_lane(args.lane, base=args.base, tag=args.tag)
+            with validation_output.report_scope(ROOT, base=args.base,
+                                                profile="release-finalization" if args.lane == "finalization" else "full"):
+                run_lane(args.lane, base=args.base, tag=args.tag)
         else:
-            argv = ["python3", str(Path(__file__).resolve()), "lane", "--inside",
+            # The launcher sets cwd to ROOT's container mount. Host absolute
+            # paths (especially Windows drive paths) are not container paths.
+            argv = ["python3", "tools/ci_validation.py", "lane", "--inside",
                     "--lane", args.lane, "--base", args.base]
             if args.tag:
                 argv.extend(["--tag", args.tag])

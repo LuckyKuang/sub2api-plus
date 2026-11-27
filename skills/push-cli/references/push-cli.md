@@ -5,7 +5,7 @@
 | Action | Local matrix | GitHub mutation | Result |
 | --- | --- | --- | --- |
 | `push` | None | Exact current-branch push | Fast intermediate branch publication. |
-| `submit-pr` | Full platform-container matrix by default; deterministic published-release gate only for release-cli finalization | Exact push, typed commit status, PR create/update | Final candidate with exact typed proof. |
+| `submit-pr` | Full platform-container matrix by default; deterministic published-release gate only for release-cli finalization | Exact push, verified PR create/update, typed commit status | Final candidate with exact typed proof. |
 | `check` | Complete platform-container matrix | None | Read-only validation result. |
 | `ensure` | Image preparation only | None | Runtime and validation image ready. |
 | `watch` | None | None | Watches PR Actions at current HEAD, or push Actions on `main`. |
@@ -46,8 +46,9 @@ The default `full` `submit-pr` performs this fail-closed sequence:
 6. Require a clean worktree and unchanged HEAD.
 7. Refetch the default branch and require the same base SHA.
 8. Push exactly `HEAD:<current-branch>`.
-9. Publish commit status context `sub2api/local-validation` for the head.
-10. Create or update one PR whose base/head marker matches those SHAs.
+9. Create or update one PR and read back its exact base/head and unique typed marker.
+10. Publish commit status context `sub2api/local-validation` for the head as the
+    final GitHub mutation. Auto-merge may act immediately; no open-PR query follows.
 
 The full marker format is implementation-owned and must occur exactly once:
 
@@ -83,7 +84,7 @@ the local proof remains required. CI full suites do not produce local success.
   audit exception policy.
 - Release policy, release metadata, README synchronization, Codex outbound
   identity, and migration checks against the validated default-branch base.
-- Shared CI-coverage regressions, release archive/OCI/pricing/workflow regressions,
+- Shared CI-coverage, validation operations/workspace regressions, release archive/OCI/pricing/workflow regressions,
   image-script syntax and Go test build-tag regressions.
 - Installer syntax, Docker deployment security/resources, Caddy cache policy,
   and the Apple Container lifecycle fixture.
@@ -124,6 +125,9 @@ the launcher runs an idempotent cleanup so a run always starts clean after a
 previous crash. Automatic cleanup also removes stopped project containers
 (`status=exited` and `status=created`) matching that label, which is how a
 hard-killed `--rm` container is reclaimed without a forbidden global prune.
+If another labelled validation is running, defer automatic cleanup entirely.
+Docker cleanup also prunes precisely owned validation BuildKit records; generic
+base-image records and unrelated descendants are retained.
 Apple Containers has no label-filtered container listing here, so it is not
 swept automatically and keeps relying on `--rm`.
 
@@ -134,6 +138,12 @@ never touching the cross-project Apple Builder cache (`deploy/APPLE_CONTAINER.md
 It is never run automatically because deleting the current generation forces
 the next validation to rebuild the whole toolchain and re-download every
 dependency.
+
+WSL starts an installed supported distribution when needed and holds an owned
+foreground session until exit. Full checks default to a disposable exact-commit
+Linux checkout; `--wsl-workspace bind` selects direct-bind diagnosis. Streaming
+progress, durable summaries, proxy setup, I/O comparison and precise cleanup
+ownership are documented in [validation operations](../../../docs/VALIDATION_OPERATIONS.md).
 
 ## Recovery
 

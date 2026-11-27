@@ -165,6 +165,7 @@ deploy/docker-compose.override.yml
 .gocache/
 vite.config.js
 docs/*
+!docs/VALIDATION_OPERATIONS.md
 !docs/AGGREGATE_API_KEYS.md
 !docs/CODEX_CLI.md
 !docs/CHANNEL_MONITOR.md

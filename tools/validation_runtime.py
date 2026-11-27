@@ -8,6 +8,7 @@ run on the host.
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
 import json
 import os
 import platform
@@ -16,6 +17,8 @@ import re
 import shlex
 import shutil
 import stat
+import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
@@ -48,6 +51,7 @@ CONTAINER_HOME = "/tmp/sub2api-home"
 VALIDATION_GIT_NAME = "sub2api-validation"
 VALIDATION_GIT_EMAIL = "validation@sub2api.local"
 NODE_VERSION = "24.22.2"
+CACHE_LAYOUT_VERSION = "2"
 GO_VERSION_RE = re.compile(r"^go\s+(\d+\.\d+(?:\.\d+)?)\s*$", re.MULTILINE)
 VALIDATION_GENERATION_RE = re.compile(r"^[0-9a-f]{16}$")
 LEGACY_CACHE_DIRECTORIES = frozenset({"go", "pnpm", "frontend-node-modules"})
@@ -110,6 +114,16 @@ def normalize_wsl_list_output(output: str) -> str:
     # replacement characters, leftover NULs still split tokens.
     cleaned = output.replace("\x00", "").replace("\ufeff", "")
     return cleaned.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def decode_output(value: bytes | str | None) -> str | None:
+    if value is None or isinstance(value, str):
+        return value
+    if value.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return value.decode("utf-16", errors="replace")
+    if b"\x00" in value[:256]:
+        return value.decode("utf-16-le", errors="replace")
+    return value.decode("utf-8", errors="replace")
 
 
 def parse_wsl_distributions(output: str) -> list[tuple[str, str]]:
@@ -187,33 +201,57 @@ def probe_windows_runtime(
             f"distribution; found: {found}. Host Docker fallback is forbidden"
         )
 
-    running = [name for name, state in supported if state == "Running"]
-    if not running:
-        names = ", ".join(name for name, _ in supported)
-        raise ValidationRuntimeError(
-            "WSL2 Debian/Ubuntu distributions exist but none are running: "
-            f"{names}"
-        )
-
-    for distro in running:
+    # Invoking an installed supported distribution starts it. Prefer an already
+    # running one, but an idle shutdown must not require an unmanaged sleep.
+    candidates = sorted(supported, key=lambda item: item[1] != "Running")
+    for distro, state in candidates:
         configure_wsl_environment()
-        prefix = (wsl, "-d", distro, "--")
-        docker_ok, detail = probe_docker_fn(prefix)
+        prefix = (wsl, "-d", distro, "--exec")
+        for attempt in range(6 if state == "Stopped" else 1):
+            docker_ok, detail = probe_docker_fn(prefix)
+            if docker_ok:
+                break
+            if state == "Stopped" and attempt < 5:
+                time.sleep(1)
         if not docker_ok:
             continue
-        # wsl.exe forwards the remaining arguments through a Linux command line,
-        # where Windows backslashes are interpreted as escapes. Use the equivalent
-        # slash-separated Windows spelling so wslpath receives the path intact.
+        # --exec preserves argv without a login shell interpreting regular
+        # expressions, parentheses, paths or command substitutions.
         windows_root = str(root).replace("\\", "/")
         linux_root = capture(
-            [wsl, "-d", distro, "--", "wslpath", "-a", windows_root]
+            [*prefix, "wslpath", "-a", windows_root]
         )
         print(f"Runtime: WSL2/{distro} with Docker ({detail})")
         return Runtime("wsl2-docker", prefix, linux_root)
     raise ValidationRuntimeError(
-        "a running WSL2 Debian/Ubuntu distribution was found, but Docker and "
+        "a supported WSL2 Debian/Ubuntu distribution was found, but Docker and "
         "Docker Compose are not usable inside it. Host Docker fallback is forbidden"
     )
+
+
+@contextmanager
+def runtime_session(runtime: Runtime):
+    """Own a foreground WSL client until this action ends; EOF releases it."""
+    if runtime.name != "wsl2-docker":
+        yield
+        return
+    process = subprocess.Popen([*runtime.prefix, "cat"], stdin=subprocess.PIPE,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        if process.poll() is not None:
+            raise ValidationRuntimeError("unable to hold the WSL validation session")
+        yield
+    finally:
+        if process.stdin:
+            try:
+                process.stdin.close()
+            except BrokenPipeError:
+                pass
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.terminate()
+            process.wait(timeout=10)
 
 
 def probe_macos_runtime(
@@ -305,6 +343,7 @@ def validation_image_ref(root: Path) -> str:
 
 def validation_cache_digest(root: Path) -> str:
     hasher = hashlib.sha256()
+    hasher.update(f"cache-layout:{CACHE_LAYOUT_VERSION}\0".encode("utf-8"))
     hasher.update(validation_image_digest(root).encode("utf-8"))
     hasher.update(b"\0")
     for relative in (
@@ -391,6 +430,13 @@ def runtime_user(runtime: Runtime, *, capture: Capture) -> str | None:
     return None
 
 
+def wsl_home_directory(runtime: Runtime, *, capture: Capture) -> str:
+    value = capture([*runtime.prefix, "printenv", "HOME"])
+    if not posixpath.isabs(value) or posixpath.normpath(value) == "/" or any(character in value for character in "\r\n"):
+        raise ValidationRuntimeError("invalid WSL home; refusing cache/report path")
+    return posixpath.normpath(value)
+
+
 def cache_mounts(
     runtime: Runtime,
     *,
@@ -400,7 +446,8 @@ def cache_mounts(
 ) -> list[tuple[str, str]]:
     generation = generation or validation_cache_digest(root)
     if runtime.name == "wsl2-docker":
-        base = f"/tmp/sub2api-validation-cache/{generation}"
+        base = posixpath.join(wsl_home_directory(runtime, capture=capture),
+                              ".cache/sub2api-validation", generation)
         capture(
             [
                 *runtime.prefix,
@@ -415,6 +462,7 @@ def cache_mounts(
         return [
             (f"{base}/go", f"{CONTAINER_HOME}/go"),
             (f"{base}/pnpm", f"{CONTAINER_HOME}/pnpm"),
+            (f"{base}/frontend-node-modules", f"{mount_root(runtime, root)}/frontend/node_modules"),
         ]
     base = home_directory() / ".cache" / "sub2api-validation" / generation
     (base / "go").mkdir(parents=True, exist_ok=True)
@@ -425,28 +473,8 @@ def cache_mounts(
     return [
         (str(base / "go"), f"{CONTAINER_HOME}/go"),
         (str(base / "pnpm"), f"{CONTAINER_HOME}/pnpm"),
+        (str(base / "frontend-node-modules"), f"{mount_root(runtime, root)}/frontend/node_modules"),
     ]
-
-
-def node_modules_overlay(
-    runtime: Runtime,
-    root: Path,
-    *,
-    generation: str | None = None,
-) -> tuple[str, str]:
-    repo = mount_root(runtime, root)
-    generation = generation or validation_cache_digest(root)
-    if runtime.name == "wsl2-docker":
-        source = f"/tmp/sub2api-validation-cache/{generation}/frontend-node-modules"
-    else:
-        source = str(
-            home_directory()
-            / ".cache"
-            / "sub2api-validation"
-            / generation
-            / "frontend-node-modules"
-        )
-    return source, f"{repo.rstrip('/')}/frontend/node_modules"
 
 
 def image_inspect_command(runtime: Runtime, image: str) -> list[str]:
@@ -520,6 +548,13 @@ def image_build_command(runtime: Runtime, root: Path, image: str) -> list[str]:
         "-f",
         dockerfile,
     ]
+    if runtime.name == "wsl2-docker":
+        command.extend(validation_network_args(runtime))
+    for name in PROXY_ENV_NAMES if runtime.name != "apple-containers" else ():
+        if os.environ.get(name):
+            # Docker's predefined proxy arguments are inherited by name. Their
+            # values must not appear in argv, logs, Dockerfile ENV or image IDs.
+            command.extend(["--build-arg", name])
     for key, value in declared_validation_pins(root).items():
         command.extend(["--build-arg", f"{key}={value}"])
     command.append(context)
@@ -550,10 +585,6 @@ def validation_run_command(
         f"sub2api-validation={image.rsplit(':', 1)[-1]}",
         *bind_mount_args(runtime, repo, repo),
         *worktree_git_mount(runtime, root),
-        *bind_mount_args(
-            runtime,
-            *node_modules_overlay(runtime, root, generation=cache_generation),
-        ),
         "--workdir",
         repo,
         "--env",
@@ -572,6 +603,10 @@ def validation_run_command(
         f"GOMODCACHE={CONTAINER_HOME}/go/pkg/mod",
         "--env",
         f"PNPM_HOME={CONTAINER_HOME}/pnpm",
+        "--env",
+        # Otherwise a Windows project mount can select a store on that disk,
+        # forcing cross-filesystem copies despite the Linux node_modules mount.
+        f"npm_config_store_dir={CONTAINER_HOME}/pnpm/store",
         "--env",
         f"GOLANGCI_LINT_CACHE={CONTAINER_HOME}/go/golangci-lint",
         "--env",
@@ -672,6 +707,7 @@ def launch_in_validation(
     capture: Capture,
     run_step: Callable[[str, Sequence[str]], None],
     toolchain_root: Path | None = None,
+    reports: bool = False,
 ) -> None:
     if in_validation_container():
         raise ValidationRuntimeError(
@@ -681,20 +717,23 @@ def launch_in_validation(
     image = validation_image_ref(inputs)
     cache_generation = validation_cache_digest(inputs)
     try:
+        caches = cache_mounts(runtime, root=root, capture=capture, generation=cache_generation)
+        if reports:
+            caches.append(validation_report_mount(runtime, capture=capture))
         command = validation_run_command(
             runtime,
             argv,
             root=root,
             image=image,
             user=runtime_user(runtime, capture=capture),
-            caches=cache_mounts(
-                runtime,
-                root=root,
-                capture=capture,
-                generation=cache_generation,
-            ),
+            caches=caches,
             cache_generation=cache_generation,
         )
+        if reports:
+            index = command.index(image)
+            command[index:index] = ["--env", "SUB2API_VALIDATION_REPORT_DIR=/tmp/sub2api-validation-report",
+                                    "--env", f"SUB2API_VALIDATION_IMAGE_GENERATION={validation_image_digest(inputs)}",
+                                    "--env", f"SUB2API_VALIDATION_CACHE_GENERATION={cache_generation}"]
         run_step("In-container validation", command)
     except BaseException:
         try:
@@ -716,6 +755,21 @@ def launch_in_validation(
             capture=capture,
             run_step=run_step,
         )
+
+
+def validation_report_mount(runtime: Runtime, *, capture: Capture) -> tuple[str, str]:
+    """Evidence is persistent state, separate from disposable dependency caches."""
+    if runtime.name == "wsl2-docker":
+        linux_home = wsl_home_directory(runtime, capture=capture)
+        source = posixpath.join(linux_home, ".local/state/sub2api-validation/reports")
+        capture([*runtime.prefix, "mkdir", "-p", source])
+        capture([*runtime.prefix, "chmod", "700", source])
+    else:
+        path = home_directory() / ".local/state/sub2api-validation/reports"
+        path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        source = str(path)
+    print(f"Validation summaries: {source}")
+    return source, "/tmp/sub2api-validation-report"
 
 
 def remove_validation_cache(path: Path) -> None:
@@ -772,6 +826,18 @@ def cleanup_validation_runtime(
     current_tag = image.rsplit(":", 1)[-1]
     if not VALIDATION_GENERATION_RE.fullmatch(current_tag):
         raise ValidationRuntimeError(f"invalid validation image reference: {image!r}")
+    if runtime.name != "apple-containers":
+        active = capture([*engine, "container", "ls", "--quiet", "--filter",
+                          "label=sub2api-validation", "--filter", "status=running"])
+        if active.strip():
+            print("Validation cleanup deferred: another project validation is running.")
+            return
+        # Remove orphan references before attempting any stale image deletion.
+        for status in ("exited", "created"):
+            listed = capture([*engine, "container", "ls", "--all", "--quiet",
+                              "--filter", "label=sub2api-validation", "--filter", f"status={status}"])
+            for container_id in listed.split():
+                run_step("Remove orphan validation container", [*engine, "container", "rm", container_id])
     image_list_command = [*engine, "image", "list"]
     if runtime.name != "apple-containers":
         image_list_command.extend(["--format", "table {{.Repository}}\t{{.Tag}}"])
@@ -794,7 +860,7 @@ def cleanup_validation_runtime(
         )
 
     if runtime.name == "wsl2-docker":
-        cache_root = "/tmp/sub2api-validation-cache"
+        cache_root = posixpath.join(wsl_home_directory(runtime, capture=capture), ".cache/sub2api-validation")
         run_step(
             "Initialize validation cache root",
             [*runtime.prefix, "mkdir", "-p", cache_root],
@@ -829,6 +895,9 @@ def cleanup_validation_runtime(
                     "Remove stale validation cache",
                     [*runtime.prefix, "rm", "-rf", f"{cache_root}/{generation}"],
                 )
+        run_step("Remove legacy temporary validation cache", [
+            *runtime.prefix, "rm", "-rf", "/tmp/sub2api-validation-cache",
+        ])
     else:
         cache_root = home_directory() / ".cache" / "sub2api-validation"
         if cache_root.exists():
@@ -840,32 +909,62 @@ def cleanup_validation_runtime(
                 elif path.is_dir():
                     remove_validation_cache(path)
 
-    # `--rm` only removes a container on graceful exit; SIGKILL/crash leaves a
-    # stopped, unlabeled-by-nothing container behind. The sub2api-validation
-    # label makes them individually addressable without a forbidden global
-    # prune. Scope to stopped project containers; running and unrelated
-    # containers are never touched. Apple Containers CLI has no label filter
-    # here, so it is skipped and still relies on --rm.
-    if runtime.name != "apple-containers":
-        for status in ("exited", "created"):
-            listed = capture(
-                [
-                    *engine,
-                    "container",
-                    "ls",
-                    "--all",
-                    "--quiet",
-                    "--filter",
-                    "label=sub2api-validation",
-                    "--filter",
-                    f"status={status}",
-                ]
-            )
-            for container_id in listed.split():
-                run_step(
-                    "Remove orphan validation container",
-                    [*engine, "container", "rm", container_id],
-                )
+
+    # Current images keep their layers; obsolete validation build records must
+    # not outlive removed image generations in BuildKit's independent cache.
+    prune_validation_build_cache(runtime, capture=capture, run_step=run_step)
+
+
+def validation_build_cache_ids(records: Sequence[dict]) -> list[str]:
+    """Identify only the validation Dockerfile chain, excluding generic bases.
+
+    The marker-producing layer is an ownership anchor. Do not infer ownership
+    from age, size, an unused flag or a generic WORKDIR/apt description alone.
+    """
+    entries = {entry["ID"]: entry for entry in records
+               if isinstance(entry.get("ID"), str)
+               and re.fullmatch(r"[a-z0-9]{25}", entry["ID"])}
+    owned = {key for key, entry in entries.items()
+             if "/etc/sub2api-validation" in entry.get("Description", "")}
+    pending = list(owned)
+    while pending:
+        entry = entries[pending.pop()]
+        for parent in entry.get("Parents") or []:
+            if parent in entries and parent not in owned and not entries[parent].get("Description", "").startswith("pulled from "):
+                owned.add(parent)
+                pending.append(parent)
+    changed = True
+    while changed:
+        changed = False
+        for key, entry in entries.items():
+            description = entry.get("Description", "")
+            continuation = ("/opt/sub2api-playwright" in description
+                            or "corepack prepare" in description
+                            or description.endswith("WORKDIR /workspace"))
+            if key not in owned and continuation and any(parent in owned for parent in entry.get("Parents") or []):
+                owned.add(key)
+                changed = True
+    # Shared records are referenced by retained images. Deleting them removes
+    # only reusable build metadata, not layer storage. See buildx du's Shared.
+    return sorted(key for key in owned if not entries[key].get("Shared", False))
+
+
+def prune_validation_build_cache(runtime: Runtime, *, capture: Capture,
+                                 run_step: Callable[[str, Sequence[str]], None]) -> None:
+    if runtime.name == "apple-containers":
+        return  # Apple Builder cache is shared across projects.
+    engine = engine_command(runtime)
+    output = capture([*engine, "buildx", "du", "--format=json"])
+    try:
+        records = [json.loads(line) for line in output.splitlines() if line.strip()]
+        ids = validation_build_cache_ids(records)
+    except (ValueError, TypeError, AttributeError) as error:
+        raise ValidationRuntimeError("cannot safely identify validation BuildKit records") from error
+    if ids:
+        run_step("Remove owned validation build cache", [
+            *engine, "buildx", "prune", "--all", "--force", "--filter",
+            "id~=^(" + "|".join(ids) + ")$",
+        ])
 
 
 def purge_validation_resources(
@@ -874,7 +973,6 @@ def purge_validation_resources(
     root: Path,
     capture: Capture,
     run_step: Callable[[str, Sequence[str]], None],
-    assume_yes: bool = False,
 ) -> None:
     """Manually remove every Sub2API validation image, cache generation, and
     project container.
@@ -888,6 +986,14 @@ def purge_validation_resources(
     """
 
     engine = engine_command(runtime)
+    # Release references before removing images. Manual clean explicitly owns
+    # all project containers; ordinary cleanup still sweeps stopped ones only.
+    if runtime.name != "apple-containers":
+        listed = capture([*engine, "container", "ls", "--all", "--quiet",
+                          "--filter", "label=sub2api-validation"])
+        for container_id in listed.split():
+            run_step("Stop validation container", [*engine, "container", "stop", container_id])
+            run_step("Remove validation container", [*engine, "container", "rm", container_id])
     image_delete = "delete" if runtime.name == "apple-containers" else "rm"
     list_command = [*engine, "image", "list"]
     if runtime.name != "apple-containers":
@@ -903,31 +1009,16 @@ def purge_validation_resources(
             "Remove validation image",
             [*engine, "image", image_delete, f"{repository}:{tag}"],
         )
-    if runtime.name != "apple-containers":
-        listed = capture(
-            [
-                *engine,
-                "container",
-                "ls",
-                "--all",
-                "--quiet",
-                "--filter",
-                "label=sub2api-validation",
-            ]
-        )
-        for container_id in listed.split():
-            run_step(
-                "Stop validation container",
-                [*engine, "container", "stop", container_id],
-            )
-            run_step(
-                "Remove validation container",
-                [*engine, "container", "rm", container_id],
-            )
     if runtime.name == "wsl2-docker":
+        linux_home = wsl_home_directory(runtime, capture=capture)
+        run_step("Remove validation dependency cache", [
+            *runtime.prefix, "rm", "-rf", "--",
+            posixpath.join(linux_home, ".cache/sub2api-validation"),
+        ])
         run_step(
             "Remove validation cache",
             [*runtime.prefix, "rm", "-rf", "/tmp/sub2api-validation-cache"],
         )
     else:
         remove_validation_cache(home_directory() / ".cache" / "sub2api-validation")
+    prune_validation_build_cache(runtime, capture=capture, run_step=run_step)

@@ -59,8 +59,14 @@ RUN set -eu; \
     ln -s "/usr/local/node-v${NODE_VERSION}-linux-${nodearch}" /usr/local/node; \
     corepack enable; \
     corepack prepare "pnpm@${PNPM_VERSION}" --activate; \
-    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
-        | sh -s -- -b /usr/local/bin "v${GOLANGCI_LINT_VERSION}"; \
+    lint_archive="golangci-lint-${GOLANGCI_LINT_VERSION}-linux-${goarch}"; \
+    curl -fsSL --retry 3 --connect-timeout 20 --max-time 180 \
+        "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/${lint_archive}.tar.gz" \
+        -o /tmp/golangci-lint.tar.gz; \
+    tar -C /usr/local/bin -xzf /tmp/golangci-lint.tar.gz --strip-components=1 \
+        "${lint_archive}/golangci-lint"; \
+    rm /tmp/golangci-lint.tar.gz; \
+    golangci-lint --version; \
     curl -fsSL "https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}/goreleaser_Linux_${goreleaser_arch}.tar.gz" \
         | tar -C /usr/local/bin -xz goreleaser; \
     GOBIN=/usr/local/bin go install "golang.org/x/vuln/cmd/govulncheck@v${GOVULNCHECK_VERSION}"; \

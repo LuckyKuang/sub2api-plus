@@ -24,6 +24,20 @@ BASE = "a" * 40
 
 
 class WindowsIntegrationEnvironmentTests(unittest.TestCase):
+    def test_host_lane_launches_the_entrypoint_from_the_mounted_repository(self) -> None:
+        # A Windows absolute __file__ is not a path in the Linux container.
+        # The launcher sets cwd to the mounted repository on every platform.
+        with mock.patch.object(ci_validation, "__file__", r"C:\source with spaces\tools\ci_validation.py"), \
+             mock.patch.object(sys, "argv", ["ci_validation.py", "lane", "--lane", "repository-policy", "--base", BASE]), \
+             mock.patch.object(ci_validation, "launch") as launch, \
+             mock.patch.object(ci_validation, "run_lane") as run_lane:
+            self.assertEqual(0, ci_validation.main())
+        launch.assert_called_once_with(
+            ["python3", "tools/ci_validation.py", "lane", "--inside", "--lane", "repository-policy", "--base", BASE],
+            integration=False,
+        )
+        run_lane.assert_not_called()
+
     def test_wsl_exports_configured_names_without_values_or_duplicate_entries(self) -> None:
         # CONTRIBUTING: --env NAME must reach Docker inside WSL, including
         # isolated external DSNs; credential values never enter command text.
@@ -54,7 +68,7 @@ class FullCoverageTests(unittest.TestCase):
     def test_full_frontend_coverage_includes_test_suite_and_production_build(self) -> None:
         # Requirement: replacing local full must preserve full tests and build.
         self.assertEqual(self.commands("frontend"), [
-            ("pnpm", "--dir", "frontend", "install", "--frozen-lockfile"),
+            ("pnpm", "--dir", "frontend", "install", "--frozen-lockfile", "--config.confirmModulesPurge=false"),
             ("pnpm", "--dir", "frontend", "run", "lint:check"),
             ("pnpm", "--dir", "frontend", "run", "typecheck"),
             ("pnpm", "--dir", "frontend", "run", "test:run", "--maxWorkers=2"),

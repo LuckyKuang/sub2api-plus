@@ -18,6 +18,13 @@ class ValidationStep:
     lane: str
 
 
+def frontend_install_command() -> list[str]:
+    # pnpm 9 otherwise exits zero at a closed-stdin modules-purge prompt.
+    # Only the validation-owned dependency mount may be rebuilt this way.
+    return ["pnpm", "--dir", "frontend", "install", "--frozen-lockfile",
+            "--config.confirmModulesPurge=false"]
+
+
 def full_steps(
     root: Path, *, python: str, frontend_workers: int = 2, migration_base: str | None = None,
 ) -> list[ValidationStep]:
@@ -97,7 +104,7 @@ def full_steps(
         ),
         ValidationStep(
             "Frontend frozen install",
-            ["pnpm", "--dir", "frontend", "install", "--frozen-lockfile"],
+            frontend_install_command(),
             root,
             "frontend",
         ),
@@ -219,6 +226,10 @@ def full_steps(
                        [python, "tools/test_test_build_tags.py"], root, "backend-lint-policy"),
         ValidationStep("CI validation regressions",
                        [python, "tools/test_ci_validation.py"], root, "backend-lint-policy"),
+        ValidationStep("Validation operations regressions",
+                       [python, "tools/test_validation_operations.py"], root, "backend-lint-policy"),
+        ValidationStep("Validation workspace regressions",
+                       [python, "tools/test_validation_workspace.py"], root, "backend-lint-policy"),
         ValidationStep("Seven-provider coverage gate regressions",
                        [python, "tools/test_seven_provider_coverage.py"], root, "backend-lint-policy"),
         ValidationStep("Seven-provider browser runner regressions",
@@ -260,6 +271,7 @@ CI_STEP_NAMES = {
         "Release policy tests", "Codex outbound identity", "Codex identity guard tests", "README synchronization",
         "Go test build tags", "Go test build-tag regressions",
         "CI validation regressions", "Release metadata sources", "Migration policy",
+        "Validation operations regressions", "Validation workspace regressions",
         "Seven-provider coverage gate regressions",
         "Seven-provider browser runner regressions",
         "Seven-provider frontend gate regressions",

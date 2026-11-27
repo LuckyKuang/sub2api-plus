@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { setAdminSupportContext } from '@/utils/adminSupportContext'
 import type { ApiKey } from '@/types'
@@ -16,6 +17,15 @@ import zh from '@/i18n/locales/zh'
 import { notifyLocaleChanged } from '@/utils/localeRefresh'
 
 let statusLocale: 'en' | 'zh' = 'en'
+
+beforeEach(() => { vi.spyOn(console, 'warn') })
+afterEach(() => {
+  try {
+    expect(vi.mocked(console.warn).mock.calls.filter(([message]) =>
+      /injection.*Symbol\(router\).*not found/.test(String(message)),
+    )).toEqual([])
+  } finally { vi.mocked(console.warn).mockRestore() }
+})
 
 const {
   listKeys,
@@ -249,8 +259,15 @@ const IconStub = {
 }
 
 const mountView = async () => {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],
+  })
+  await router.push('/keys')
+  await router.isReady()
   const wrapper = mount(KeysView, {
     global: {
+      plugins: [router],
       stubs: {
         AppLayout: AppLayoutStub,
         TablePageLayout: TablePageLayoutStub,

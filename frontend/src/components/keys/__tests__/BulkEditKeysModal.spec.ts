@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import BulkEditKeysModal from '../BulkEditKeysModal.vue'
 import DateTimePicker from '@/components/common/DateTimePicker.vue'
 import type { Group } from '@/types'
@@ -23,6 +24,10 @@ const mountModal = () => mount(BulkEditKeysModal, {
     groups: [{ id: 7, name: 'Available group' }] as Group[]
   },
   global: {
+    plugins: [createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],
+    })],
     stubs: {
       BaseDialog: {
         name: 'BaseDialog',

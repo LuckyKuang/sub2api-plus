@@ -20,7 +20,7 @@ Install frontend dependencies with pnpm only and synchronize
 Inside the validation container:
 
 ```bash
-pnpm --dir frontend install --frozen-lockfile
+pnpm --dir frontend install --frozen-lockfile --config.confirmModulesPurge=false
 ```
 
 ## Documentation and Skill Maintenance
@@ -242,6 +242,13 @@ validation images and caches, plus project containers on Docker, run
 and it deletes the current generation, so the next validation rebuilds the
 toolchain and redownloads dependencies.
 
+WSL full checks use a fresh exact-commit checkout on Linux storage and retain
+only deterministic dependency caches. The launcher owns the WSL session until
+exit. Automatic cleanup defers when another validation is running; otherwise it
+also removes precisely owned validation BuildKit records. See
+[validation operations](docs/VALIDATION_OPERATIONS.md) for the direct-bind
+comparison option, I/O benchmark, proxy setup and persistent timing summaries.
+
 Inside that container, with GNU Make available, run the repository checks from
 the root:
 
@@ -277,6 +284,7 @@ GOGC=35 GOMEMLIMIT=4GiB golangci-lint run --concurrency=1 --timeout=10m ./...
 pnpm --dir frontend run lint:check
 pnpm --dir frontend run typecheck
 pnpm --dir frontend run test:run
+pnpm --dir frontend run build
 
 # Repository AGENTS.md contract
 python3 skills/compress-cli/scripts/compress_cli.py check AGENTS.md
@@ -399,6 +407,14 @@ including cold-cache lint. This soft managed-memory target leaves runtime
 headroom; it is not a hard RSS limit or a replacement for the shared memory slot.
 Host-side execution of any validation is forbidden. For diagnosis or a
 same-commit timing baseline, pass `--serial` to `check`.
+Production builds force fresh TypeScript compiler state with `vue-tsc -b --force`;
+dependency caches remain reusable. This ensures incremental state cannot hide a
+production compiler memory failure. Every step streams progress and records a
+content-free execution summary outside the disposable dependency cache.
+
+After validation, `submit-pr` rechecks and pushes the exact candidate, writes and
+reads back the PR's typed base/head marker, then publishes local success last so
+immediate auto-merge cannot race the marker update.
 
 Linked worktrees use the same launcher. It also mounts their shared Git
 metadata so base/head and policy checks can inspect the actual branch. On

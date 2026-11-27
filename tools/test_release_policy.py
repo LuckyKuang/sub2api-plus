@@ -153,7 +153,7 @@ class ReleaseContainerTests(unittest.TestCase):
 
     def test_validation_container_forwards_proxy_names_without_values(self) -> None:
         runtime = validation_runtime.Runtime("linux-docker", (), None)
-        with mock.patch.dict(
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(
             os.environ,
             {
                 "HTTP_PROXY": "http://proxy-user:proxy-secret@example.invalid:8080",
@@ -164,23 +164,45 @@ class ReleaseContainerTests(unittest.TestCase):
                 "no_proxy": "",
             },
             clear=True,
-        ), mock.patch.object(Path, "home", side_effect=RuntimeError):
+        ), mock.patch.object(Path, "home", return_value=Path(directory)):
+            # The launcher owns all cache preparation; the command builder
+            # consumes these mounts without creating hidden dependency overlays.
+            generation = "a" * 16
+            caches = validation_runtime.cache_mounts(
+                runtime, root=ROOT, generation=generation,
+                capture=mock.Mock(side_effect=AssertionError("Linux cache preparation must not run host commands")),
+            )
             argv = validation_runtime.validation_run_command(
                 runtime,
                 self.command,
                 root=ROOT,
                 image="sub2api-validation:test",
                 user=None,
-                caches=[],
+                caches=caches,
+                cache_generation=generation,
             )
         self.assertIn("HTTP_PROXY", argv)
         self.assertIn("https_proxy", argv)
         self.assertNotIn("HTTPS_PROXY", argv)
         self.assertNotIn("proxy-secret", " ".join(argv))
         self.assertIn(
-            f"{validation_runtime.CONTAINER_HOME}/.cache/sub2api-validation/",
+            f"{directory}/.cache/sub2api-validation/",
             " ".join(argv),
         )
+        cache_root = f"{directory}/.cache/sub2api-validation/{generation}"
+        for source, target in ((f"{cache_root}/go", f"{validation_runtime.CONTAINER_HOME}/go"),
+                               (f"{cache_root}/pnpm", f"{validation_runtime.CONTAINER_HOME}/pnpm"),
+                               (f"{cache_root}/frontend-node-modules", f"{ROOT}/frontend/node_modules")):
+            self.assertIn(f"{source}:{target}", argv)
+        self.assertIn(f"GOCACHE={validation_runtime.CONTAINER_HOME}/go/cache", argv)
+        self.assertIn(f"npm_config_store_dir={validation_runtime.CONTAINER_HOME}/pnpm/store", argv)
+
+    def test_home_lookup_failure_returns_the_container_home_without_writing(self) -> None:
+        # A fallback-path assertion must not create caches in the real image
+        # home, whose package-manager files can belong to a different UID.
+        with mock.patch.object(Path, "home", side_effect=RuntimeError), \
+             mock.patch.object(Path, "mkdir", side_effect=AssertionError("home lookup must not write")):
+            self.assertEqual(Path(validation_runtime.CONTAINER_HOME), validation_runtime.home_directory())
 
     def test_unavailable_runtime_never_runs_check_on_host(self) -> None:
         with (

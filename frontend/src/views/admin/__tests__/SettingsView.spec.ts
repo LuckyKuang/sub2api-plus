@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineComponent, h } from "vue";
-import { flushPromises, mount } from "@vue/test-utils";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { defineComponent, h, ref } from "vue";
+import { flushPromises, mount, RouterLinkStub } from "@vue/test-utils";
 
 import enCommon from "@/i18n/locales/en/common";
 import enSettings from "@/i18n/locales/en/admin/settings";
@@ -127,7 +127,16 @@ const {
   showSuccess: vi.fn(),
 }));
 
-const localeRef = vi.hoisted(() => ({ value: "zh-CN" }));
+const localeRef = ref("zh-CN");
+
+beforeEach(() => { vi.spyOn(console, "warn"); });
+afterEach(() => {
+  try {
+    expect(vi.mocked(console.warn).mock.calls.filter(([message]) =>
+      /Invalid watch source|Failed to resolve component: (?:RouterLink|router-link)/.test(String(message)),
+    )).toEqual([]);
+  } finally { vi.mocked(console.warn).mockRestore(); }
+});
 
 vi.mock("@/api", () => ({
   adminAPI: {
@@ -637,6 +646,7 @@ function mountView(attachTo?: HTMLElement) {
     global: {
       stubs: {
         AppLayout: AppLayoutStub,
+        RouterLink: RouterLinkStub,
         teleport: true,
         Select: SelectStub,
         Toggle: ToggleStub,
@@ -1919,6 +1929,7 @@ describe("admin SettingsView payment visible method controls", () => {
       global: {
         stubs: {
           AppLayout: AppLayoutStub,
+          RouterLink: RouterLinkStub,
           Select: SelectStub,
           Toggle: ToggleStub,
           Icon: true,
@@ -2175,6 +2186,7 @@ describe("admin SettingsView payment visible method controls", () => {
       global: {
         stubs: {
           AppLayout: AppLayoutStub,
+          RouterLink: RouterLinkStub,
           Select: SelectStub,
           Toggle: ToggleStub,
           Icon: true,

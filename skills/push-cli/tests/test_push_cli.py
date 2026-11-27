@@ -121,29 +121,22 @@ class ProbeRuntimeTest(unittest.TestCase):
 
         probe_docker.assert_not_called()
 
-    def test_windows_requires_a_running_wsl2_linux_distribution(self) -> None:
+    def test_windows_starts_a_supported_stopped_distribution(self) -> None:
+        # An idle WSL shutdown must not require a user-owned keepalive process.
         wsl = "C:/Windows/System32/wsl.exe"
+        def captured(command, **kwargs):
+            if command == [wsl, "-l", "-v"]:
+                return "NAME STATE VERSION\nUbuntu Stopped 2\nFedora Running 2"
+            return "/mnt/c/repo"
         with (
             mock.patch.object(push_cli.platform, "system", return_value="Windows"),
-            mock.patch.object(
-                push_cli.shutil,
-                "which",
-                side_effect=lambda command: wsl if command == "wsl.exe" else None,
-            ),
-            mock.patch.object(
-                push_cli,
-                "capture",
-                return_value="NAME STATE VERSION\nUbuntu Stopped 2",
-            ),
-            mock.patch.object(push_cli, "probe_docker") as probe_docker,
+            mock.patch.object(push_cli.shutil, "which", return_value=wsl),
+            mock.patch.object(push_cli, "capture", side_effect=captured),
+            mock.patch.object(push_cli, "probe_docker", return_value=(True, "Docker Compose")) as probe,
         ):
-            with self.assertRaisesRegex(
-                push_cli.PushCliError,
-                "Debian/Ubuntu distributions exist but none are running: Ubuntu",
-            ):
-                push_cli.probe_runtime()
-
-        probe_docker.assert_not_called()
+            runtime = push_cli.probe_runtime()
+        self.assertEqual("wsl2-docker", runtime.name)
+        probe.assert_called_once_with((wsl, "-d", "Ubuntu", "--exec"))
 
     def test_windows_uses_docker_inside_running_wsl2_linux(self) -> None:
         wsl = "C:/Windows/System32/wsl.exe"
@@ -156,7 +149,7 @@ class ProbeRuntimeTest(unittest.TestCase):
                 wsl,
                 "-d",
                 "Ubuntu-24.04",
-                "--",
+                "--exec",
                 "wslpath",
                 "-a",
                 "C:/DevTools/code/github/sub2api-plus",
@@ -181,7 +174,7 @@ class ProbeRuntimeTest(unittest.TestCase):
         ):
             runtime = push_cli.probe_runtime()
 
-        prefix = (wsl, "-d", "Ubuntu-24.04", "--")
+        prefix = (wsl, "-d", "Ubuntu-24.04", "--exec")
         self.assertEqual("wsl2-docker", runtime.name)
         self.assertEqual(prefix, runtime.prefix)
         self.assertEqual(
@@ -216,7 +209,7 @@ class ProbeRuntimeTest(unittest.TestCase):
             ):
                 push_cli.probe_runtime()
 
-        probe_docker.assert_called_once_with((wsl, "-d", "Ubuntu", "--"))
+        probe_docker.assert_called_once_with((wsl, "-d", "Ubuntu", "--exec"))
 
     def test_windows_rejects_non_debian_ubuntu_distributions(self) -> None:
         wsl = "C:/Windows/System32/wsl.exe"
@@ -256,7 +249,7 @@ class ProbeRuntimeTest(unittest.TestCase):
                     "FedoraLinux-42 Running 2\n"
                     "Debian Running 2"
                 )
-            if command == [wsl, "-d", "Debian", "--", "wslpath", "-a", "/repo"]:
+            if command == [wsl, "-d", "Debian", "--exec", "wslpath", "-a", "/repo"]:
                 return "/mnt/c/repo"
             self.fail(f"unexpected command: {command}")
 
@@ -277,37 +270,9 @@ class ProbeRuntimeTest(unittest.TestCase):
         ):
             runtime = push_cli.probe_runtime()
 
-        probe_docker.assert_called_once_with((wsl, "-d", "Debian", "--"))
+        probe_docker.assert_called_once_with((wsl, "-d", "Debian", "--exec"))
         self.assertEqual("wsl2-docker", runtime.name)
         self.assertEqual("/mnt/c/repo", runtime.compose_root)
-
-    def test_windows_does_not_use_fedora_when_ubuntu_is_stopped(self) -> None:
-        wsl = "C:/Windows/System32/wsl.exe"
-        with (
-            mock.patch.object(push_cli.platform, "system", return_value="Windows"),
-            mock.patch.object(
-                push_cli.shutil,
-                "which",
-                side_effect=lambda command: wsl if command == "wsl.exe" else None,
-            ),
-            mock.patch.object(
-                push_cli,
-                "capture",
-                return_value=(
-                    "NAME STATE VERSION\n"
-                    "FedoraLinux-42 Running 2\n"
-                    "Ubuntu-24.04 Stopped 2"
-                ),
-            ),
-            mock.patch.object(push_cli, "probe_docker") as probe_docker,
-        ):
-            with self.assertRaisesRegex(
-                push_cli.PushCliError,
-                "none are running: Ubuntu-24.04",
-            ):
-                push_cli.probe_runtime()
-
-        probe_docker.assert_not_called()
 
     def test_windows_parses_utf16_default_marker_and_ignores_other_distros(self) -> None:
         wsl = "C:/Windows/System32/wsl.exe"
@@ -320,7 +285,7 @@ class ProbeRuntimeTest(unittest.TestCase):
         def captured(command: list[str], **_: object) -> str:
             if command == [wsl, "-l", "-v"]:
                 return listing
-            if command == [wsl, "-d", "Ubuntu-24.04", "--", "wslpath", "-a", "/repo"]:
+            if command == [wsl, "-d", "Ubuntu-24.04", "--exec", "wslpath", "-a", "/repo"]:
                 return "/mnt/c/repo"
             self.fail(f"unexpected command: {command}")
 
@@ -341,7 +306,7 @@ class ProbeRuntimeTest(unittest.TestCase):
         ):
             runtime = push_cli.probe_runtime()
 
-        probe_docker.assert_called_once_with((wsl, "-d", "Ubuntu-24.04", "--"))
+        probe_docker.assert_called_once_with((wsl, "-d", "Ubuntu-24.04", "--exec"))
         self.assertEqual("wsl2-docker", runtime.name)
 
 
@@ -737,13 +702,20 @@ class PullRequestUpdateTest(unittest.TestCase):
             "baseRefOid": proof.base,
             "body": existing_body,
         }
+        written = {}
+        def write_marker(name, command):
+            written.update(json.loads(Path(command[-1]).read_text()))
+        def read_marker(command, **kwargs):
+            return json.dumps({"state": "open", "head": {"sha": proof.head},
+                               "base": {"sha": proof.base}, **written})
         with (
             mock.patch.object(
                 push_cli,
                 "open_pull_requests",
                 return_value=[pull_request],
             ),
-            mock.patch.object(push_cli, "run_step") as run_step,
+            mock.patch.object(push_cli, "run_step", side_effect=write_marker) as run_step,
+            mock.patch.object(push_cli, "capture", side_effect=read_marker),
         ):
             url = push_cli.create_or_update_pull_request(
                 repository,
@@ -758,19 +730,11 @@ class PullRequestUpdateTest(unittest.TestCase):
         run_step.assert_called_once()
         command = run_step.call_args.args[1]
         expected_body = push_cli.with_validation_marker(existing_body, proof)
-        self.assertEqual(
-            [
-                "gh",
-                "api",
-                "--method",
-                "PATCH",
-                "repos/LuckyKuang/sub2api-plus/pulls/22",
-                "-f",
-                f"body={expected_body}",
-            ],
-            command,
-        )
-        updated_body = command[-1].removeprefix("body=")
+        self.assertEqual(["gh", "api", "--method", "PATCH",
+                          "repos/LuckyKuang/sub2api-plus/pulls/22", "--silent", "--input"], command[:-1])
+        self.assertFalse(Path(command[-1]).exists(), "temporary PR payload leaked")
+        self.assertEqual(expected_body, written["body"])
+        updated_body = written["body"]
         self.assertEqual(1, len(push_cli.VALIDATION_MARKER_RE.findall(updated_body)))
         self.assertIn('"base":"' + proof.base + '"', updated_body)
         self.assertIn('"head":"' + proof.head + '"', updated_body)
@@ -847,6 +811,7 @@ class ValidationGenerationTest(unittest.TestCase):
                 [
                     (str(generation_root / "go"), "/tmp/sub2api-home/go"),
                     (str(generation_root / "pnpm"), "/tmp/sub2api-home/pnpm"),
+                    (str(generation_root / "frontend-node-modules"), "/unused/frontend/node_modules"),
                 ],
                 mounts,
             )
@@ -925,7 +890,7 @@ class ValidationLaunchTest(unittest.TestCase):
             )
             (git_dir / "commondir").write_text("../..\n", encoding="utf-8")
             runtime = push_cli.Runtime(
-                "wsl2-docker", ("wsl", "-d", "Debian", "--"),
+                "wsl2-docker", ("wsl", "-d", "Debian", "--exec"),
                 "/mnt/c/project/tmp/candidate",
             )
             mount = push_cli.validation_runtime.worktree_git_mount(runtime, worktree)
@@ -1007,7 +972,7 @@ class ValidationLaunchTest(unittest.TestCase):
         wsl = "C:/Windows/System32/wsl.exe"
         runtime = push_cli.Runtime(
             "wsl2-docker",
-            (wsl, "-d", "Ubuntu-24.04", "--"),
+            (wsl, "-d", "Ubuntu-24.04", "--exec"),
             "/mnt/c/repo",
         )
         with (
@@ -1046,7 +1011,7 @@ class ValidationLaunchTest(unittest.TestCase):
 
         command = run_step.call_args.args[1]
         self.assertEqual(
-            [wsl, "-d", "Ubuntu-24.04", "--", "docker", "run", "--rm", "--cpus", "4", "--memory", "8G"],
+            [wsl, "-d", "Ubuntu-24.04", "--exec", "docker", "run", "--rm", "--cpus", "4", "--memory", "8G"],
             command[:11],
         )
         self.assertIn("/mnt/c/repo:/mnt/c/repo", command)
@@ -1160,6 +1125,63 @@ class ValidationLaunchTest(unittest.TestCase):
 
 
 class ValidationCleanupTest(unittest.TestCase):
+    def test_full_wsl_clean_removes_home_cache_as_well_as_legacy_tmp_cache(self) -> None:
+        # Manual full clean promises every validation cache generation. The
+        # persistent home generation and historical temporary root are owned.
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory)
+            legacy = fixture / "home/.cache/sub2api-validation/aaaaaaaaaaaaaaaa"
+            legacy.mkdir(parents=True)
+            (legacy / "dependency").write_text("cached")
+
+            def captured(command):
+                if command[-2:] == ["printenv", "HOME"]:
+                    return str(fixture / "home")
+                if "image" in command:
+                    return "REPOSITORY TAG\n"
+                return ""
+
+            def execute(name, command):
+                if "rm" in command and str(fixture) in command[-1]:
+                    push_cli.validation_runtime.remove_validation_cache(Path(command[-1]))
+
+            push_cli.validation_runtime.purge_validation_resources(
+                push_cli.Runtime("wsl2-docker", ("fake-wsl",)),
+                root=fixture, capture=captured, run_step=execute,
+            )
+            self.assertFalse(legacy.exists(), "legacy dependency data survived full clean")
+
+    def test_manual_clean_releases_project_container_before_its_image(self) -> None:
+        # Docker rejects removing an image referenced by the project container.
+        # Model that real boundary, including its externally visible outcome.
+        containers = {"abc123"}
+        images = {"sub2api-validation:aaaaaaaaaaaaaaaa"}
+
+        def captured(command):
+            if "image" in command:
+                return "REPOSITORY TAG\nsub2api-validation aaaaaaaaaaaaaaaa\n"
+            if "container" in command:
+                return "abc123" if containers else ""
+            return ""
+
+        def execute(name, command):
+            if command[:3] == ["docker", "container", "rm"]:
+                containers.discard(command[-1])
+            elif command[:3] == ["docker", "image", "rm"]:
+                if containers:
+                    raise push_cli.PushCliError("image is referenced by project container")
+                images.discard(command[-1])
+
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(
+            push_cli.validation_runtime, "home_directory", return_value=Path(directory)
+        ):
+            push_cli.validation_runtime.purge_validation_resources(
+                push_cli.Runtime("docker"), root=Path(directory),
+                capture=captured, run_step=execute,
+            )
+        self.assertEqual(set(), containers)
+        self.assertEqual(set(), images)
+
     def test_cleanup_removes_read_only_go_modules_without_touching_other_trees(self) -> None:
         runtime = push_cli.Runtime("apple-containers", compose_required=False)
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1254,11 +1276,13 @@ class ValidationCleanupTest(unittest.TestCase):
         self.assertEqual([], commands)
 
     def test_wsl_cleanup_deletes_only_stale_project_generations(self) -> None:
-        prefix = ("wsl.exe", "-d", "Ubuntu-24.04", "--")
+        prefix = ("wsl.exe", "-d", "Ubuntu-24.04", "--exec")
         runtime = push_cli.Runtime("wsl2-docker", prefix, "/mnt/c/repo")
         commands: list[tuple[str, list[str]]] = []
 
         def capture(command: list[str]) -> str:
+            if command == [*prefix, "printenv", "HOME"]:
+                return "/home/fixture"
             if command == [*prefix, "docker", "image", "list", "--format", "table {{.Repository}}\t{{.Tag}}"]:
                 return (
                     "REPOSITORY TAG IMAGE ID\n"
@@ -1267,19 +1291,21 @@ class ValidationCleanupTest(unittest.TestCase):
                 )
             if command[: len(prefix) + 1] == [*prefix, "find"]:
                 self.assertIn(
-                    ("Initialize validation cache root", [*prefix, "mkdir", "-p", "/tmp/sub2api-validation-cache"]),
+                    ("Initialize validation cache root", [*prefix, "mkdir", "-p", "/home/fixture/.cache/sub2api-validation"]),
                     commands,
                 )
                 self.assertNotIn("-printf", command)
                 self.assertTrue(all("\n" not in arg for arg in command))
                 return (
-                    "/tmp/sub2api-validation-cache/aaaaaaaaaaaaaaaa\n"
-                    "/tmp/sub2api-validation-cache/bbbbbbbbbbbbbbbb\n"
-                    "/tmp/sub2api-validation-cache/go\n"
+                    "/home/fixture/.cache/sub2api-validation/aaaaaaaaaaaaaaaa\n"
+                    "/home/fixture/.cache/sub2api-validation/bbbbbbbbbbbbbbbb\n"
+                    "/home/fixture/.cache/sub2api-validation/go\n"
                     "/tmp/unrelated/bbbbbbbbbbbbbbbb\n"
-                    "/tmp/sub2api-validation-cache/../../bbbbbbbbbbbbbbbb\n"
+                    "/home/fixture/.cache/sub2api-validation/../../bbbbbbbbbbbbbbbb\n"
                 )
             if command[: len(prefix) + 2] == [*prefix, "docker", "container"]:
+                return ""
+            if command == [*prefix, "docker", "buildx", "du", "--format=json"]:
                 return ""
             self.fail(f"unexpected command: {command}")
 
@@ -1299,16 +1325,17 @@ class ValidationCleanupTest(unittest.TestCase):
                 ),
                 (
                     "Initialize validation cache root",
-                    [*prefix, "mkdir", "-p", "/tmp/sub2api-validation-cache"],
+                    [*prefix, "mkdir", "-p", "/home/fixture/.cache/sub2api-validation"],
                 ),
                 (
                     "Remove stale validation cache",
-                    [*prefix, "rm", "-rf", "/tmp/sub2api-validation-cache/bbbbbbbbbbbbbbbb"],
+                    [*prefix, "rm", "-rf", "/home/fixture/.cache/sub2api-validation/bbbbbbbbbbbbbbbb"],
                 ),
                 (
                     "Remove stale validation cache",
-                    [*prefix, "rm", "-rf", "/tmp/sub2api-validation-cache/go"],
+                    [*prefix, "rm", "-rf", "/home/fixture/.cache/sub2api-validation/go"],
                 ),
+                ("Remove legacy temporary validation cache", [*prefix, "rm", "-rf", "/tmp/sub2api-validation-cache"]),
             ],
             commands,
         )
@@ -1323,7 +1350,7 @@ class ValidationCleanupTest(unittest.TestCase):
                 return "REPOSITORY TAG IMAGE ID\n"
             for token in command:
                 if token.startswith("status="):
-                    return stopped[token.split("=", 1)[1]] + "\n"
+                    return stopped.get(token.split("=", 1)[1], "")
             return ""
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1351,6 +1378,27 @@ class ValidationCleanupTest(unittest.TestCase):
             ],
             commands,
         )
+
+
+    def test_cleanup_defers_all_deletion_while_validation_is_running(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            stale = home / ".cache/sub2api-validation/bbbbbbbbbbbbbbbb"
+            stale.mkdir(parents=True)
+            (stale / "dependency").write_text("in use")
+
+            def capture(command):
+                self.assertIn("status=running", command)
+                self.assertIn("label=sub2api-validation", command)
+                return "active123\n"
+
+            with mock.patch.object(push_cli.validation_runtime, "home_directory", return_value=home):
+                push_cli.validation_runtime.cleanup_validation_runtime(
+                    push_cli.Runtime("docker"), image="sub2api-validation:aaaaaaaaaaaaaaaa",
+                    cache_generation="aaaaaaaaaaaaaaaa", capture=capture,
+                    run_step=lambda *args: self.fail("active validation resources must survive"),
+                )
+            self.assertEqual("in use", (stale / "dependency").read_text())
 
 
 class MainFlowTest(unittest.TestCase):
@@ -1389,6 +1437,7 @@ class MainFlowTest(unittest.TestCase):
             tag=tag,
             serial=serial,
             yes=want_yes,
+            wsl_workspace="linux",
         )
 
     def test_check_rejects_dirty_worktree_before_runtime_start(self) -> None:
@@ -1440,8 +1489,8 @@ class MainFlowTest(unittest.TestCase):
         self.assertEqual(
             [
                 "github_gate",
-                "current_branch",
                 "repository_default_branch",
+                "current_branch",
                 "require_clean_worktree",
             ],
             order,
@@ -1454,6 +1503,7 @@ class MainFlowTest(unittest.TestCase):
         with (
             mock.patch.object(push_cli, "parse_args", return_value=args),
             mock.patch.object(push_cli, "github_gate", return_value="LuckyKuang/sub2api-plus"),
+            mock.patch.object(push_cli, "repository_default_branch", return_value="main"),
             mock.patch.object(push_cli, "current_branch", return_value="feature"),
             mock.patch.object(
                 push_cli,
@@ -1495,6 +1545,7 @@ class MainFlowTest(unittest.TestCase):
         with (
             mock.patch.object(push_cli, "parse_args", return_value=args),
             mock.patch.object(push_cli, "github_gate") as gate,
+            mock.patch.object(push_cli, "repository_default_branch", return_value="main"),
             mock.patch.object(
                 push_cli, "probe_runtime", return_value=push_cli.Runtime("docker")
             ),
@@ -1504,8 +1555,19 @@ class MainFlowTest(unittest.TestCase):
         ):
             self.assertEqual(0, push_cli.main())
 
-        gate.assert_not_called()
+        gate.assert_called_once_with("origin")
         purge.assert_called_once()
+
+    def test_clean_auth_failure_must_precede_any_deletion(self) -> None:
+        # SKILL.md: every action requires the authenticated repository gate.
+        with (
+            mock.patch.object(push_cli, "parse_args", return_value=self.args("clean", want_yes=True)),
+            mock.patch.object(push_cli, "github_gate", side_effect=push_cli.PushCliError("not authenticated")),
+            mock.patch.object(push_cli, "probe_runtime", return_value=push_cli.Runtime("docker")),
+            mock.patch.object(push_cli.validation_runtime, "purge_validation_resources") as purge,
+        ):
+            self.assertEqual(1, push_cli.main())
+        purge.assert_not_called()
 
     def test_host_check_launches_container_instead_of_host_matrix(self) -> None:
         runtime = push_cli.Runtime("docker")
@@ -1524,14 +1586,18 @@ class MainFlowTest(unittest.TestCase):
             mock.patch.object(push_cli, "ensure_clean_after_checks"),
             mock.patch.object(push_cli, "run_local_checks") as local_checks,
             mock.patch.object(push_cli, "check_toolchains") as check,
+            mock.patch.object(push_cli, "capture", return_value="a" * 40),
         ):
             self.assertEqual(0, push_cli.main())
 
         launch.assert_called_once_with(
             runtime,
             "origin",
-            base_ref=None,
+            base_ref="a" * 40,
             serial=False,
+            exact_head="a" * 40,
+            exact_base="a" * 40,
+            source_mode="linux",
         )
         final_gate.assert_called_once_with(runtime)
         local_checks.assert_not_called()
@@ -1619,7 +1685,39 @@ class MainFlowTest(unittest.TestCase):
         ):
             self.assertEqual(0, push_cli.main())
 
-        self.assertEqual(["validate", "recheck", "push", "status", "pr"], order)
+        # A required success status can immediately trigger GitHub auto-merge.
+        # The exact PR marker must already exist when that boundary opens.
+        self.assertEqual(["validate", "recheck", "push", "pr", "status"], order)
+
+    def test_pr_write_or_readback_failure_cannot_publish_success(self) -> None:
+        # Full main-flow boundary: even after a valid exact push, an unverified
+        # marker must leave the required success status unavailable.
+        for failure in ("marker write failed", "proof changed on readback"):
+            proof = push_cli.ValidationProof("a" * 40, "b" * 40)
+            with (
+                self.subTest(failure=failure),
+                mock.patch.object(push_cli, "parse_args", return_value=self.args("submit-pr")),
+                mock.patch.object(push_cli, "github_gate", return_value="LuckyKuang/sub2api-plus"),
+                mock.patch.object(push_cli, "current_branch", return_value="fix/test"),
+                mock.patch.object(push_cli, "repository_default_branch", return_value="main"),
+                mock.patch.object(push_cli, "require_working_branch"),
+                mock.patch.object(push_cli, "require_no_git_operation"),
+                mock.patch.object(push_cli, "require_clean_worktree"),
+                mock.patch.object(push_cli, "probe_runtime", return_value=push_cli.Runtime("docker")),
+                mock.patch.object(push_cli, "ensure_validation_image"),
+                mock.patch.object(push_cli, "require_latest_base", return_value=proof),
+                mock.patch.object(push_cli, "launch_in_validation"),
+                mock.patch.object(push_cli, "run_runtime_final_gate"),
+                mock.patch.object(push_cli, "ensure_clean_after_checks"),
+                mock.patch.object(push_cli, "require_unchanged_proof"),
+                mock.patch.object(push_cli, "push_branch") as pushed,
+                mock.patch.object(push_cli, "publish_validation_status") as success,
+                mock.patch.object(push_cli, "create_or_update_pull_request", side_effect=push_cli.PushCliError(failure)),
+                mock.patch.object(push_cli.validation_runtime, "cleanup_validation_runtime"),
+            ):
+                self.assertEqual(1, push_cli.main())
+            pushed.assert_called_once_with("origin", "fix/test")
+            success.assert_not_called()
 
     def test_finalization_submit_pr_runs_focused_checks_without_runtime(self) -> None:
         tag = "v1.2.3+custom.009"
@@ -1667,7 +1765,7 @@ class MainFlowTest(unittest.TestCase):
         ):
             self.assertEqual(0, push_cli.main())
 
-        self.assertEqual(["validate", "recheck", "push", "status", "pr"], order)
+        self.assertEqual(["validate", "recheck", "push", "pr", "status"], order)
         probe.assert_not_called()
         image.assert_not_called()
         launch.assert_not_called()
