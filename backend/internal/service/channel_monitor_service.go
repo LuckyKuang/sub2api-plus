@@ -629,16 +629,22 @@ func (s *ChannelMonitorService) RunCheck(ctx context.Context, id int64) ([]*Chec
 	if checkMode != MonitorCheckModeQuota && m.APIKeyDecryptFailed {
 		return nil, ErrChannelMonitorAPIKeyDecryptFailed
 	}
+	probeTimeouts := rt.probeTimeouts
+	if probeTimeouts == (channelMonitorProbeTimeouts{}) {
+		probeTimeouts = readChannelMonitorProbeTimeouts(nil)
+	}
+	ctx, cancel := context.WithTimeout(ctx, probeTimeouts.checkTimeout(checkMode))
+	defer cancel()
 
 	var results []*CheckResult
 	switch checkMode {
 	case MonitorCheckModeQuota:
 		results = s.runQuotaOnlyCheck(ctx, m)
 	case MonitorCheckModeQuotaProbe:
-		results = s.runChecksConcurrent(ctx, m)
+		results = s.runChecksConcurrent(ctx, m, probeTimeouts)
 		attachQuotaSnapshot(results, s.fetchQuotaSnapshot(ctx, m))
 	default:
-		results = s.runChecksConcurrent(ctx, m)
+		results = s.runChecksConcurrent(ctx, m, probeTimeouts)
 	}
 	s.persistCheckResults(ctx, m, results)
 	return results, nil
@@ -709,7 +715,7 @@ func (s *ChannelMonitorService) persistCheckResults(ctx context.Context, m *Chan
 
 // runChecksConcurrent 对 primary + extra 模型并发执行检测。
 // errgroup 仅用于等待，不传播错误（每个 model 失败都已打包进 CheckResult）。
-func (s *ChannelMonitorService) runChecksConcurrent(ctx context.Context, m *ChannelMonitor) []*CheckResult {
+func (s *ChannelMonitorService) runChecksConcurrent(ctx context.Context, m *ChannelMonitor, timeouts channelMonitorProbeTimeouts) []*CheckResult {
 	ctx = WithStandaloneOutboundIdentity(ctx, m.Provider)
 	models := append([]string{m.PrimaryModel}, m.ExtraModels...)
 	results := make([]*CheckResult, len(models))
@@ -724,6 +730,7 @@ func (s *ChannelMonitorService) runChecksConcurrent(ctx context.Context, m *Chan
 		BodyOverrideMode: m.BodyOverrideMode,
 		StreamProbe:      m.StreamProbe,
 		BodyOverride:     m.BodyOverride,
+		httpClient:       monitorHTTPClientForTimeouts(timeouts),
 	}
 
 	var eg errgroup.Group

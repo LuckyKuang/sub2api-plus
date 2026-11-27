@@ -912,6 +912,52 @@ describe("admin SettingsView payment visible method controls", () => {
     } finally { wrapper.unmount(); }
   });
 
+  it('defaults V1 probe timeouts and saves a valid pair', async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, channel_monitor_enabled: true, channel_monitor_mode: 'v1' });
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      const header = wrapper.get<HTMLInputElement>('#channel-monitor-probe-header-timeout');
+      const total = wrapper.get<HTMLInputElement>('#channel-monitor-probe-total-timeout');
+      expect(header.element.value).toBe('30');
+      expect(total.element.value).toBe('45');
+      await header.setValue(60);
+      await wrapper.get('form').trigger('submit.prevent');
+      await flushPromises();
+      expect(updateSettings).not.toHaveBeenCalled();
+
+      await total.setValue(90);
+      await wrapper.get('form').trigger('submit.prevent');
+      await flushPromises();
+      expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+        channel_monitor_probe_response_header_timeout_seconds: 60,
+        channel_monitor_probe_total_timeout_seconds: 90,
+      }));
+    } finally { wrapper.unmount(); }
+  });
+
+  it('uses stored V1 probe timeouts for V3 with active probes enabled', async () => {
+    getSettings.mockResolvedValue({
+      ...baseSettingsResponse,
+      channel_monitor_enabled: true,
+      channel_monitor_mode: 'v3',
+      channel_monitor_v1_enabled: true,
+      channel_monitor_probe_response_header_timeout_seconds: 75,
+      channel_monitor_probe_total_timeout_seconds: 100,
+    });
+    const wrapper = mountView();
+    try {
+      await flushPromises();
+      expect(wrapper.get<HTMLInputElement>('#channel-monitor-probe-header-timeout').element.value).toBe('75');
+      expect(wrapper.get<HTMLInputElement>('#channel-monitor-probe-total-timeout').element.value).toBe('100');
+      await wrapper.get('[data-mode="v2"]').trigger('click');
+      expect(wrapper.find('#channel-monitor-probe-total-timeout').exists()).toBe(false);
+      await wrapper.get('form').trigger('submit.prevent');
+      await flushPromises();
+      expect(updateSettings.mock.calls[0][0].channel_monitor_probe_total_timeout_seconds).toBeUndefined();
+    } finally { wrapper.unmount(); }
+  });
+
   it("keeps manual Codex version controls without automatic synchronization or retired submitted fields", async () => {
     getSettings.mockResolvedValue({ ...baseSettingsResponse,
       openai_codex_client_version: "", openai_codex_client_version_effective: "0.165.0", openai_codex_client_version_source: "compiled",

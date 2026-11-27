@@ -346,13 +346,15 @@ type UpdateSettingsRequest struct {
 	PaymentAlipayMobilePrecreateDeepLink *bool `json:"payment_alipay_mobile_precreate_deep_link"`
 
 	// Channel Monitor feature switch
-	ChannelMonitorEnabled                *bool   `json:"channel_monitor_enabled"`
-	ChannelMonitorMode                   *string `json:"channel_monitor_mode"`
-	ChannelMonitorDefaultIntervalSeconds *int    `json:"channel_monitor_default_interval_seconds"`
-	ChannelMonitorHideThroughput         *bool   `json:"channel_monitor_hide_throughput"`
-	ChannelMonitorV1Enabled              *bool   `json:"channel_monitor_v1_enabled"`
-	ChannelMonitorShowQuota              *bool   `json:"channel_monitor_show_quota"`
-	ChannelMonitorHideUserRanking        *bool   `json:"channel_monitor_hide_user_ranking"`
+	ChannelMonitorEnabled                           *bool   `json:"channel_monitor_enabled"`
+	ChannelMonitorMode                              *string `json:"channel_monitor_mode"`
+	ChannelMonitorDefaultIntervalSeconds            *int    `json:"channel_monitor_default_interval_seconds"`
+	ChannelMonitorProbeResponseHeaderTimeoutSeconds *int    `json:"channel_monitor_probe_response_header_timeout_seconds"`
+	ChannelMonitorProbeTotalTimeoutSeconds          *int    `json:"channel_monitor_probe_total_timeout_seconds"`
+	ChannelMonitorHideThroughput                    *bool   `json:"channel_monitor_hide_throughput"`
+	ChannelMonitorV1Enabled                         *bool   `json:"channel_monitor_v1_enabled"`
+	ChannelMonitorShowQuota                         *bool   `json:"channel_monitor_show_quota"`
+	ChannelMonitorHideUserRanking                   *bool   `json:"channel_monitor_hide_user_ranking"`
 
 	// Grok model mapping policy
 	GrokDefaultTextModel           *string `json:"grok_default_text_model"`
@@ -559,6 +561,26 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
+	}
+	probeHeaderTimeout := previousSettings.ChannelMonitorProbeResponseHeaderTimeoutSeconds
+	probeTotalTimeout := previousSettings.ChannelMonitorProbeTotalTimeoutSeconds
+	if req.ChannelMonitorProbeResponseHeaderTimeoutSeconds != nil {
+		probeHeaderTimeout = *req.ChannelMonitorProbeResponseHeaderTimeoutSeconds
+	}
+	if req.ChannelMonitorProbeTotalTimeoutSeconds != nil {
+		probeTotalTimeout = *req.ChannelMonitorProbeTotalTimeoutSeconds
+	}
+	if req.ChannelMonitorProbeResponseHeaderTimeoutSeconds == nil && req.ChannelMonitorProbeTotalTimeoutSeconds == nil {
+		omitted[service.SettingKeyChannelMonitorProbeResponseHeaderTimeoutSeconds] = struct{}{}
+		omitted[service.SettingKeyChannelMonitorProbeTotalTimeoutSeconds] = struct{}{}
+	} else {
+		if err := service.ValidateChannelMonitorProbeTimeouts(probeHeaderTimeout, probeTotalTimeout); err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		// Persist the validated pair together, including on a single-field update.
+		delete(omitted, service.SettingKeyChannelMonitorProbeResponseHeaderTimeoutSeconds)
+		delete(omitted, service.SettingKeyChannelMonitorProbeTotalTimeoutSeconds)
 	}
 	previousAuthSourceDefaults, err := h.settingService.GetAuthSourceDefaultSettings(c.Request.Context())
 	if err != nil {
@@ -2087,6 +2109,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.ChannelMonitorDefaultIntervalSeconds
 		}(),
+		ChannelMonitorProbeResponseHeaderTimeoutSeconds: probeHeaderTimeout,
+		ChannelMonitorProbeTotalTimeoutSeconds:          probeTotalTimeout,
 		ChannelMonitorHideThroughput: func() bool {
 			if req.ChannelMonitorHideThroughput != nil {
 				return *req.ChannelMonitorHideThroughput
@@ -2629,13 +2653,15 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PaymentAlipayForceQRCode:                               updatedPaymentCfg.AlipayForceQRCode,
 		PaymentAlipayMobilePrecreateDeepLink:                   updatedPaymentCfg.AlipayMobilePrecreateDeepLink,
 
-		ChannelMonitorEnabled:                updatedSettings.ChannelMonitorEnabled,
-		ChannelMonitorMode:                   updatedSettings.ChannelMonitorMode,
-		ChannelMonitorDefaultIntervalSeconds: updatedSettings.ChannelMonitorDefaultIntervalSeconds,
-		ChannelMonitorHideThroughput:         updatedSettings.ChannelMonitorHideThroughput,
-		ChannelMonitorV1Enabled:              updatedSettings.ChannelMonitorV1Enabled,
-		ChannelMonitorShowQuota:              updatedSettings.ChannelMonitorShowQuota,
-		ChannelMonitorHideUserRanking:        updatedSettings.ChannelMonitorHideUserRanking,
+		ChannelMonitorEnabled:                           updatedSettings.ChannelMonitorEnabled,
+		ChannelMonitorMode:                              updatedSettings.ChannelMonitorMode,
+		ChannelMonitorDefaultIntervalSeconds:            updatedSettings.ChannelMonitorDefaultIntervalSeconds,
+		ChannelMonitorProbeResponseHeaderTimeoutSeconds: updatedSettings.ChannelMonitorProbeResponseHeaderTimeoutSeconds,
+		ChannelMonitorProbeTotalTimeoutSeconds:          updatedSettings.ChannelMonitorProbeTotalTimeoutSeconds,
+		ChannelMonitorHideThroughput:                    updatedSettings.ChannelMonitorHideThroughput,
+		ChannelMonitorV1Enabled:                         updatedSettings.ChannelMonitorV1Enabled,
+		ChannelMonitorShowQuota:                         updatedSettings.ChannelMonitorShowQuota,
+		ChannelMonitorHideUserRanking:                   updatedSettings.ChannelMonitorHideUserRanking,
 
 		GrokDefaultTextModel:           updatedSettings.GrokDefaultTextModel,
 		GrokCrossClientModelMapEnabled: updatedSettings.GrokCrossClientModelMapEnabled,

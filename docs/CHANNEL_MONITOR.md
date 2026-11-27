@@ -162,8 +162,8 @@ V2 的模型展示模式、完整排除策略、历史窗口语义及管理员�
 
 使用记录的 `first_byte_ms` 是首次实际读到上游响应体数据的时间，独立于严格
 `first_token_ms`。V1 使用每个模型现有调用起点采样，独立于 HEAD Ping 和配额查询。
-默认仍为非流式请求；可通过下面的流式探测开关启用 SSE。SSRF 校验、供应商身份、challenge 与超时/响应上限保持原行为。
-首字节快而完整响应超过 6 秒仍判为 degraded；HTTP 错误、challenge 失败和截断不因
+默认仍为非流式请求，可通过下面的流式探测开关启用 SSE。两种探测共用 SSRF 校验、供应商身份、challenge、超时设置和响应上限。
+首字节快而完整响应耗时达到 6 秒仍判为 degraded；HTTP 错误、challenge 失败和截断不因
 首字节快而成功。失败后的实际观察可保留，空体/未观察/历史记录为 NULL，0ms 有效。
 
 `channel_monitor_histories.first_byte_ms` 贯通手动/定时结果、最新状态、附加模型、
@@ -183,7 +183,9 @@ V3 的 TTFT 始终只来自真实请求的严格首 token；不混入 V1 首字�
 
 `first_text_ms` 从探测调用开始，到首个非空白 assistant 文本 delta，忽略心跳、角色、元数据、推理和工具事件；`first_byte_ms` 保留首次响应体数据口径。Chat 使用 choice 0 文本，并要求正常 `finish_reason=stop` 和 `[DONE]`；Responses 按 output/content 索引拼接 `response.output_text.delta`，要求 `response.completed` 且状态为 completed。正常终态立即结束，不等 TCP 断开；正确文本后断流、failed/incomplete/error、无效事件、超限仍失败，已测时间保留。只有最终聚合文本而无 delta 时可以校验答案，但首字保持 NULL。
 
-默认/合并模式完成后校验算术答案；覆盖模式保留非空文本校验。总耗时 `latency_ms`、6 秒 degraded 阈值、45 秒超时、64 KiB 响应上限及独立 HEAD Ping/配额查询不变。失败后时间可见，但只有 operational/degraded 的非 NULL 首字参与均值。历史 `stream_probe` 是当次模式快照，旧历史为 NULL；0ms 是有效样本，不等于缺失。
+默认/合并模式完成后校验算术答案；覆盖模式保留非空文本校验。总耗时 `latency_ms` 用于 6 秒 degraded 阈值，响应上限为 64 KiB。失败后时间可见，但只有 operational/degraded 的非 NULL 首字参与均值。历史 `stream_probe` 是当次模式快照，旧历史为 NULL；0ms 是有效样本，不等于缺失。
+
+在「系统设置 → 功能开关 → 渠道监控」中可配置 V1 等待响应头的超时（默认 30 秒）和单次模型探测总超时（默认 45 秒）。总时限包括等待响应头和读取响应体，适用于非流式和流式探测。两项接受 1–120 的整数秒，响应头超时不得大于总超时。设置保存在数据库中，缺失时使用默认值。改动在下一轮生效，手动检测、定时探测及 V3 开启的额外 V1 探测都使用同一套设置。前置 HEAD Ping 和配额查询有各自的超时，手动检测页面等待整轮结果。部署使用反向代理时，代理的请求等待时间也需要覆盖整轮手动检测。
 
 结果、历史、附加模型、时间线暴露 `first_text_ms`；列表为 `primary_first_text_ms`，详情为 `latest_first_text_ms`、`avg_first_text_7d_ms` 和 `first_text_samples_7d`。日聚合为独立 `sum_first_text_ms/count_first_text`。前端并列展示首字、首字节和总耗时；旧数据不从总耗时推算首字。V3 真实请求 TTFT 不混入此指标。
 

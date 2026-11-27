@@ -754,6 +754,8 @@ export interface SystemSettings {
   channel_monitor_enabled: boolean;
   channel_monitor_mode?: 'v1' | 'v2' | 'v3';
   channel_monitor_default_interval_seconds: number;
+  channel_monitor_probe_response_header_timeout_seconds: number;
+  channel_monitor_probe_total_timeout_seconds: number;
   channel_monitor_hide_throughput?: boolean;
   channel_monitor_v1_enabled?: boolean;
   channel_monitor_show_quota?: boolean;
@@ -1080,6 +1082,8 @@ export interface UpdateSettingsRequest {
   channel_monitor_enabled?: boolean;
   channel_monitor_mode?: 'v1' | 'v2' | 'v3';
   channel_monitor_default_interval_seconds?: number;
+  channel_monitor_probe_response_header_timeout_seconds?: number;
+  channel_monitor_probe_total_timeout_seconds?: number;
   channel_monitor_hide_throughput?: boolean;
   channel_monitor_v1_enabled?: boolean;
   channel_monitor_show_quota?: boolean;

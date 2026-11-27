@@ -443,6 +443,7 @@ type ChannelMonitorRuntime struct {
 	Enabled                bool
 	Mode                   string // ChannelMonitorModeV1, ChannelMonitorModeV2 or ChannelMonitorModeV3
 	DefaultIntervalSeconds int
+	probeTimeouts          channelMonitorProbeTimeouts
 	// HideThroughput: when true, user-facing V2 APIs omit RPM/TPM scale signals.
 	HideThroughput bool
 	// ShowQuota: when true, user-facing monitor views keep the quota/balance
@@ -480,6 +481,8 @@ func (s *SettingService) GetChannelMonitorRuntime(ctx context.Context) ChannelMo
 		SettingKeyChannelMonitorEnabled,
 		SettingKeyChannelMonitorMode,
 		SettingKeyChannelMonitorDefaultIntervalSeconds,
+		SettingKeyChannelMonitorProbeResponseHeaderTimeoutSeconds,
+		SettingKeyChannelMonitorProbeTotalTimeoutSeconds,
 		SettingKeyChannelMonitorHideThroughput,
 		SettingKeyChannelMonitorV1Enabled,
 		SettingKeyChannelMonitorShowQuota,
@@ -497,6 +500,7 @@ func (s *SettingService) GetChannelMonitorRuntime(ctx context.Context) ChannelMo
 		Enabled:                !isFalseSettingValue(vals[SettingKeyChannelMonitorEnabled]),
 		Mode:                   normalizeChannelMonitorMode(vals[SettingKeyChannelMonitorMode]),
 		DefaultIntervalSeconds: parseChannelMonitorInterval(vals[SettingKeyChannelMonitorDefaultIntervalSeconds]),
+		probeTimeouts:          readChannelMonitorProbeTimeouts(vals),
 		HideThroughput:         !isFalseSettingValue(vals[SettingKeyChannelMonitorHideThroughput]),
 		ShowQuota:              vals[SettingKeyChannelMonitorShowQuota] == "true",
 		V1Enabled:              vals[SettingKeyChannelMonitorV1Enabled] == "true",
