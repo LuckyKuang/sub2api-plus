@@ -165,10 +165,10 @@
         </div>
       </transition>
 
-      <section class="card workspace-fixed redeem-guidance p-5" :aria-label="t('redeem.aboutCodes')">
+      <section class="workspace-fixed redeem-guidance" :aria-label="t('redeem.aboutCodes')">
         <h3 class="mb-3 text-sm font-semibold">{{ t('redeem.aboutCodes') }}</h3>
         <ul class="redeem-guide-grid">
-          <li v-for="(rule, index) in redeemRules" :key="rule.body" class="surface-subcard redeem-guide-card">
+          <li v-for="(rule, index) in redeemRules" :key="rule.body" class="card redeem-guide-card">
             <div class="redeem-guide-top">
               <span class="redeem-guide-icon"><Icon :name="rule.icon" size="md" /></span>
               <span class="redeem-guide-step">{{ String(index + 1).padStart(2, '0') }}</span>
@@ -537,7 +537,7 @@ useLocaleRefresh(() => fetchHistory(historyPage.value))
 .redeem-form-card { display: flex; align-items: center; }
 .redeem-form-card > div { width: 100%; padding: 24px 28px; }
 .redeem-guide-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.redeem-guide-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px 18px; border-radius: var(--surface-radius-item); }
+.redeem-guide-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px 18px; }
 .redeem-guide-top { display: flex; align-items: center; justify-content: space-between; }
 .redeem-guide-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: var(--surface-radius-control); background: var(--surface-soft); color: var(--console-accent-readable); }
 .redeem-guide-step { color: var(--surface-muted); opacity: .65; font: 500 12px/1.5 ui-monospace, monospace; }

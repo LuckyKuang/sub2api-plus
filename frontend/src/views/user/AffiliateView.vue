@@ -80,10 +80,10 @@
           </section>
         </div>
 
-        <section class="card workspace-fixed affiliate-guide p-5" :aria-label="t('affiliate.tips.title')">
+        <section class="workspace-fixed affiliate-guide" :aria-label="t('affiliate.tips.title')">
           <h3 class="mb-3 text-sm font-semibold">{{ t('affiliate.tips.title') }}</h3>
           <ul class="affiliate-guide-grid">
-            <li v-for="(tip, index) in affiliateTips" :key="tip.body" class="surface-subcard affiliate-guide-card">
+            <li v-for="(tip, index) in affiliateTips" :key="tip.body" class="card affiliate-guide-card">
               <div class="affiliate-guide-top">
                 <span class="affiliate-guide-icon"><Icon :name="tip.icon" size="md" /></span>
                 <span class="affiliate-guide-step">{{ String(index + 1).padStart(2, '0') }}</span>
@@ -253,7 +253,7 @@ onMounted(() => {
 .affiliate-transfer-value strong { font-size: 30px; line-height: 1.3; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
 .affiliate-transfer-value span { color: var(--surface-muted); font-size: 12px; }
 .affiliate-guide-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.affiliate-guide-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 14px 16px; border-radius: var(--surface-radius-item); }
+.affiliate-guide-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 14px 16px; }
 .affiliate-guide-top { display: flex; align-items: center; justify-content: space-between; }
 .affiliate-guide-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: var(--surface-radius-control); background: var(--surface-soft); color: var(--console-accent-readable); }
 .affiliate-guide-step { color: var(--surface-muted); opacity: .65; font: 500 12px/1.5 ui-monospace, monospace; }

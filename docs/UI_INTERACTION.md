@@ -93,6 +93,9 @@ component lifecycle so inactive modes do not acquire background polling.
 Fixed filter areas use the available width before wrapping. In shorter usage
 workspaces, the filter fields share a horizontal row with actions below it;
 search results stay portalled outside that row so scrolling cannot clip them.
+Below 1024px, TablePageLayout initially folds query rows with at least three
+filter fields. The toggle hides only those fields; refresh, creation, column
+settings and other page actions remain reachable in the same query row.
 
 Plugin management and channel monitoring keep their heading/control cards fixed.
 Prompt Audit keeps its title, events/configuration navigation, event filters and
@@ -136,6 +139,8 @@ locally. Both pages allocate the remaining desktop height to records alone;
 aligned bottom pagination stays fixed. Changing page resets the record viewport,
 and reduced results clamp the page. Redemption, copying and balance-transfer
 business rules stay unchanged. Mobile layouts keep natural page scrolling.
+The four guide cards have their own card surfaces and share the top row's outer
+edges; an additional inset card must not indent the guide grid.
 
 Scroll clipping belongs to the actual viewport: large content viewports use the
 outer card radius, and inset table viewports use the panel radius. Their corners

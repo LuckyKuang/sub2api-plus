@@ -6,7 +6,7 @@
     </div>
 
     <!-- 固定区域：搜索和过滤器 -->
-    <div v-if="$slots.filters" ref="filtersSectionRef" class="layout-section-fixed workspace-fixed">
+    <div v-if="$slots.filters" class="layout-section-fixed workspace-fixed">
       <button
         v-if="shouldCollapseMobileFilters"
         type="button"
@@ -31,8 +31,10 @@
       </button>
       <div
         ref="filtersBodyRef"
-        :class="{ 'mt-3': shouldCollapseMobileFilters && mobileFiltersExpanded }"
-        v-show="!shouldCollapseMobileFilters || mobileFiltersExpanded"
+        :class="{
+          'mt-3': shouldCollapseMobileFilters,
+          'mobile-filters-collapsed': shouldCollapseMobileFilters && !mobileFiltersExpanded
+        }"
       >
         <slot name="filters" />
       </div>
@@ -71,7 +73,6 @@ const hideFiltersLabel = computed(() => translate ? translate('common.hideFilter
 
 const isMobile = ref(false)
 const layoutRef = ref<HTMLElement | null>(null)
-const filtersSectionRef = ref<HTMLElement | null>(null)
 const filtersBodyRef = ref<HTMLElement | null>(null)
 const availableHeight = ref('auto')
 const filterFieldCount = ref(0)
@@ -170,6 +171,11 @@ onUnmounted(() => {
 .mobile-filters-toggle:hover {
   background-color: var(--surface-hover);
   border-color: var(--console-control-hover-edge);
+}
+
+/* Page actions share the query row and must remain available when it folds. */
+.mobile-filters-collapsed :deep(.filter-field) {
+  display: none;
 }
 
 .table-page-pagination { container-name: table-page-pagination; container-type: inline-size; }

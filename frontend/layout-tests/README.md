@@ -31,7 +31,9 @@ that order and restore focus to the corresponding trigger.
 Checkbox menus also open from the keyboard, accept multiple choices without
 closing, and return Tab/Shift+Tab to the surrounding form's normal order.
 The real API Key page checks equal prominence of both creation actions and
-complete selected group names at phone, tablet and desktop widths. Long names
+complete selected group names at phone, tablet and desktop widths.
+Both creation actions stay visible when the query fields are folded, including
+after expanding and folding them again. Long names
 wrap inside the selection field, and an open checkbox menu follows its growing
 height without covering the selected text.
 Aggregate creation and editing also preserve the ordinary Key's platform badge

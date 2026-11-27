@@ -163,11 +163,16 @@ test('available-channel list fits both themes and supports quote details, filter
 
   // Toolbar view switcher toggles card <-> list without extra catalog reads.
   const readsBeforeToggle = listReads
-  const viewSwitch = page.getByTestId('catalog-filters').locator('[role="radiogroup"] [role="radio"]')
+  // docs/AVAILABLE_CHANNELS.md specifies the shared pressed-button switch.
+  const viewSwitch = page.getByTestId('catalog-filters').locator('.segmented-control button[aria-pressed]')
+  await expect(viewSwitch.nth(0)).toHaveAttribute('aria-pressed', 'true')
   await viewSwitch.nth(1).click()
+  await expect(viewSwitch.nth(1)).toHaveAttribute('aria-pressed', 'true')
+  await expect(viewSwitch.nth(0)).toHaveAttribute('aria-pressed', 'false')
   await expect(page.locator('.catalog-model-card')).toHaveCount(9)
   expect(listReads).toBe(readsBeforeToggle)
   await viewSwitch.nth(0).click()
+  await expect(viewSwitch.nth(0)).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTestId('catalog-model-list')).toBeVisible()
   expect(listReads).toBe(readsBeforeToggle)
 
@@ -696,15 +701,31 @@ async function interceptAggregateKeyAPI(page: Page, saved = false) {
 
 test('aggregate key creation is as prominent as ordinary key creation', async ({ page }, info) => {
   await interceptAggregateKeyAPI(page)
-  await openAuditPage(page, 'keys', info, 1440)
-  const aggregate = page.getByTestId('create-aggregate-key')
-  const ordinary = page.locator('[data-tour="keys-create-btn"]')
-  await expect(aggregate).toBeVisible()
   const appearance = (element: Element) => {
     const style = getComputedStyle(element)
     return { fill: style.backgroundColor, gradient: style.backgroundImage, border: style.borderColor, foreground: style.color }
   }
-  expect(await aggregate.evaluate(appearance)).toEqual(await ordinary.evaluate(appearance))
+  // Primary actions must stay reachable when only query fields are collapsed.
+  for (const width of [375, 768, 1440]) {
+    await openAuditPage(page, 'keys', info, width)
+    const aggregate = page.getByTestId('create-aggregate-key')
+    const ordinary = page.locator('[data-tour="keys-create-btn"]')
+    await expect(aggregate).toBeVisible()
+    await expect(ordinary).toBeVisible()
+    expect(await aggregate.evaluate(appearance)).toEqual(await ordinary.evaluate(appearance))
+    if (width < 1024) {
+      const toggle = page.locator('.mobile-filters-toggle')
+      const search = page.locator('.filter-field input').first()
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      await expect(search).toBeHidden()
+      await toggle.click()
+      await expect(search).toBeVisible()
+      await toggle.click()
+      await expect(search).toBeHidden()
+      await expect(aggregate).toBeVisible()
+      await expect(ordinary).toBeVisible()
+    }
+  }
 })
 
 test('aggregate group selections show every full name and keep the open menu clear of the growing field', async ({ page }, info) => {
@@ -784,7 +805,9 @@ test('aggregate editing retains the ordinary key platform colors for saved group
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Close modal', exact: true }).click()
 
-  await page.getByRole('button', { name: locale === 'zh' ? '编辑' : 'Edit', exact: true }).click()
+  // Row actions use the shared ActionMenu (AGENTS.md Console Shapes).
+  await page.getByRole('button', { name: locale === 'zh' ? '更多' : 'More', exact: true }).click()
+  await page.getByRole('menuitem', { name: locale === 'zh' ? '编辑' : 'Edit', exact: true }).click()
   const field = page.getByTestId('aggregate-key-fields')
   const trigger = field.getByRole('button', { name: locale === 'zh' ? '选择按量分组' : 'Select pay-as-you-go groups', exact: true })
   await expect(trigger.getByTestId('aggregate-selected-group')).toHaveCount(3)
