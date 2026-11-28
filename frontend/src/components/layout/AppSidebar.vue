@@ -24,7 +24,7 @@
       <div class="sidebar-brand" :class="{ 'sidebar-brand-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'" :inert="sidebarCollapsed || undefined">
         <router-link
           :to="homePath"
-          class="sidebar-brand-title text-lg font-bold text-gray-900 transition-colors hover:text-primary-600 dark:text-white dark:hover:text-primary-400"
+          class="sidebar-brand-title text-base font-bold leading-tight text-gray-900 transition-colors hover:text-primary-600 dark:text-white dark:hover:text-primary-400"
           @click="handleMenuItemClick(homePath)"
         >
           {{ siteName }}
@@ -40,10 +40,9 @@
       <!-- Admin console: management menu only -->
       <template v-if="isAdmin">
         <div
-          v-for="(section, sectionIdx) in adminNavSections"
+          v-for="section in adminNavSections"
           :key="section.key"
           class="sidebar-section"
-          :class="{ 'mt-2': sectionIdx > 0 }"
         >
           <div
             v-if="adminNavSections.length > 1"
@@ -63,7 +62,7 @@
             <template v-if="item.children?.length">
               <button
                 type="button"
-                class="sidebar-link mb-1 w-full surface-control"
+                class="sidebar-link mb-0.5 w-full surface-control"
                 :class="{
                   'sidebar-link-active': isGroupActive(item) && !isGroupExpanded(item),
                   'sidebar-link-collapsed': sidebarCollapsed
@@ -85,12 +84,12 @@
                 </span>
               </button>
               <!-- Children -->
-              <div v-if="!sidebarCollapsed && isGroupExpanded(item)" class="mb-1 ml-4 border-l border-[var(--surface-edge)] pl-2">
+              <div v-if="!sidebarCollapsed && isGroupExpanded(item)" class="sidebar-subnav mb-1 mt-0.5 ml-3.5 border-l border-[var(--surface-edge)] pl-1.5">
                 <router-link
                   v-for="child in item.children"
                   :key="child.path"
                   :to="child.path"
-                  class="sidebar-link mb-0.5 py-1.5 text-sm"
+                  class="sidebar-link mb-0.5 last:mb-0"
                   :class="{ 'sidebar-link-active': route.path === child.path }"
                   @click="handleMenuItemClick(child.path)"
                 >
@@ -103,7 +102,7 @@
             <router-link
               v-else
               :to="item.path"
-              class="sidebar-link mb-1"
+              class="sidebar-link mb-0.5 last:mb-0"
               :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
               :title="sidebarCollapsed ? item.label : undefined"
               :id="
@@ -128,14 +127,13 @@
 
       <!-- Personal / assistance view (also used by administrators in the user portal) -->
       <template v-else>
-        <div v-if="isAdminUserPortal" class="mb-2" :class="sidebarCollapsed ? 'px-1' : 'px-2'">
+        <div v-if="isAdminUserPortal" class="mb-2.5 px-0.5">
           <AdminSupportUserSelector :collapsed="sidebarCollapsed" />
         </div>
         <div
-          v-for="(section, sectionIdx) in userNavSections"
+          v-for="section in userNavSections"
           :key="section.key"
           class="sidebar-section"
-          :class="{ 'mt-2': sectionIdx > 0 }"
         >
           <div
             v-if="userNavSections.length > 1"
@@ -154,7 +152,7 @@
             v-for="item in section.items"
             :key="item.path"
             :to="item.path"
-            class="sidebar-link mb-1"
+            class="sidebar-link mb-0.5 last:mb-0"
             :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
             :title="sidebarCollapsed ? item.label : undefined"
             :data-tour="item.path === '/keys' ? 'sidebar-my-keys' : undefined"
@@ -169,14 +167,14 @@
     </nav>
 
     <!-- Bottom Section -->
-    <div class="sidebar-footer mt-auto border-t border-[var(--surface-edge)] p-3">
+    <div class="sidebar-footer mt-auto border-t border-[var(--surface-edge)] p-2">
       <!-- The portal switch sits directly above the theme toggle. -->
       <button
         v-if="isAdmin"
         id="sidebar-user-portal"
         type="button"
         @click="enterUserPortal"
-        class="sidebar-link mb-2 w-full surface-control"
+        class="sidebar-link mb-0.5 w-full surface-control"
         :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
         :title="sidebarCollapsed ? t('nav.userPortal') : undefined"
         :aria-label="t('nav.userPortal')"
@@ -189,7 +187,7 @@
         id="sidebar-back-to-admin"
         type="button"
         @click="exitToAdmin"
-        class="sidebar-link mb-2 w-full surface-control"
+        class="sidebar-link mb-0.5 w-full surface-control"
         :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
         :title="sidebarCollapsed ? t('nav.backToAdmin') : undefined"
         :aria-label="t('nav.backToAdmin')"
@@ -201,7 +199,7 @@
       <!-- Theme Toggle -->
       <button
         @click="toggleTheme"
-        class="sidebar-link theme-toggle mb-2 w-full surface-control"
+        class="sidebar-link theme-toggle mb-0.5 w-full surface-control"
         :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
         :title="sidebarCollapsed ? (isDark ? t('nav.lightMode') : t('nav.darkMode')) : undefined"
       >
@@ -1133,8 +1131,8 @@ onBeforeUnmount(() => {
 
 .sidebar-header-collapsed {
   gap: 0;
-  padding-left: 1.125rem;
-  padding-right: 1.125rem;
+  padding-left: 0.9375rem;
+  padding-right: 0.9375rem;
 }
 
 .sidebar-brand {
@@ -1165,15 +1163,15 @@ onBeforeUnmount(() => {
 
 .sidebar-link-collapsed {
   gap: 0;
-  padding-left: 0.875rem;
-  padding-right: 0.875rem;
+  padding-left: 0.9375rem;
+  padding-right: 0.9375rem;
 }
 
 .sidebar-section-title {
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 1.25rem;
+  min-height: 1.125rem;
   overflow: hidden;
   white-space: nowrap;
 }

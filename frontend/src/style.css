@@ -566,27 +566,29 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   .sidebar-header {
     height: var(--shell-header-height);
     flex: none;
-    @apply px-[18px];
-    @apply flex items-center gap-3;
+    @apply px-3;
+    @apply flex items-center gap-2.5;
     transition:
       padding 0.2s ease,
       gap 0.2s ease;
   }
 
   .sidebar-nav {
-    @apply flex-1 overflow-y-auto px-3 py-4;
+    @apply flex-1 overflow-y-auto px-2 py-2.5;
   }
 
   .sidebar-link {
-    @apply flex items-center gap-3 rounded-xl py-2.5;
+    @apply flex items-center gap-2.5 rounded-xl py-1.5;
     @apply overflow-hidden;
-    @apply text-sm font-medium;
+    @apply font-medium;
     @apply text-gray-600 dark:text-dark-300;
     @apply transition-all duration-200;
 
     @apply hover:text-gray-900 dark:hover:text-white;
-    padding-left: 1.0625rem;
-    padding-right: 0.875rem;
+    font-size: 13.5px;
+    line-height: 1.25;
+    padding-left: 0.625rem;
+    padding-right: 0.625rem;
   }
 
   /* .sidebar-link-active is painted only by styles/console.css (hover card,
@@ -598,12 +600,12 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   }
 
   .sidebar-section {
-    @apply mb-6;
+    @apply mb-3 last:mb-0;
   }
 
   .sidebar-section-title {
-    @apply mb-2 px-3;
-    @apply text-xs font-semibold uppercase tracking-wider;
+    @apply mb-1 px-2.5;
+    @apply text-[11px] font-semibold uppercase tracking-[0.04em];
     @apply text-gray-400 dark:text-dark-500;
   }
 

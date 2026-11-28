@@ -167,8 +167,8 @@ onMounted(() => {
 }
 
 .admin-support-selector :deep(.select-trigger) {
-  min-height: 42px;
-  padding: 0.45rem 0.55rem;
+  min-height: 38px;
+  padding: 0.3125rem 0.5rem;
 }
 
 .admin-support-selector-collapsed :deep(.select-trigger) {

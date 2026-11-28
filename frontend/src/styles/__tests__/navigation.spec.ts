@@ -126,7 +126,9 @@ describe('lightweight shared navigation', () => {
     expect(value(selector, 'background-image')).toBe('none')
     expect(value(selector, 'box-shadow')).toBe('none')
     expect(value(selector, 'color')).toBe('var(--surface-muted)')
-    expect(value('.sidebar-link', 'min-height')).toBe('44px')
+    expect(value('.sidebar-link', 'min-height')).toBe('34px')
+    expect(value('.sidebar-nav .sidebar-subnav .sidebar-link', 'min-height')).toBe('30px')
+    expect(value('.sidebar-nav .sidebar-subnav .sidebar-link', 'font-size')).toBe('13px')
     // The current page reads as the hover card, without an edge bar.
     expect(value('.sidebar-nav .sidebar-link-active', 'background-color')).toBe('var(--surface-hover)')
     expect(value('.sidebar-nav .sidebar-link-active', 'box-shadow')).toBe('none')
@@ -138,5 +140,26 @@ describe('lightweight shared navigation', () => {
     expect(container.querySelectorAll(selector)).toHaveLength(2)
     expect(container.querySelector('.sidebar-brand-title')!.matches(selector)).toBe(false)
     rule(selector).walkDecls(declaration => { expect(declaration.important).toBeFalsy() })
+  })
+
+  it('narrows the desktop expanded and collapsed sidebar widths', () => {
+    let expandedWidth: string | undefined
+    let collapsedWidth: string | undefined
+    styles.walkRules('.app-layout', candidate => {
+      let parent = candidate.parent
+      while (parent) {
+        if (parent.type === 'atrule' && parent.name === 'media') return
+        parent = parent.parent
+      }
+      candidate.walkDecls('--sidebar-width', declaration => { expandedWidth = declaration.value })
+    })
+    styles.walkAtRules('media', atRule => {
+      if (!atRule.params.includes('min-width: 1024px')) return
+      atRule.walkRules('.app-layout.sidebar-is-collapsed', candidate => {
+        candidate.walkDecls('--sidebar-width', declaration => { collapsedWidth = declaration.value })
+      })
+    })
+    expect(expandedWidth).toBe('212px')
+    expect(collapsedWidth).toBe('68px')
   })
 })
