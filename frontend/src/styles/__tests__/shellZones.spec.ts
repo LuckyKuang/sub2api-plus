@@ -103,7 +103,7 @@ describe('console shell zones', () => {
     }
     // One container radius at every viewport: no breakpoint enlarges it.
     stylesheet.walkDecls('--surface-radius', declaration => {
-      expect(declaration.value).toBe('16px')
+      expect(declaration.value).toBe('12px')
     })
   })
 

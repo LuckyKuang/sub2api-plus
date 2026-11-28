@@ -7,13 +7,13 @@
       borderClass,
     ]"
   >
-    <div class="plan-content flex min-w-0 flex-1 flex-col p-4">
+    <div class="plan-content flex min-w-0 flex-1 flex-col p-3.5">
       <!-- Header: name + badge + price -->
-      <div class="plan-header mb-3 flex items-start justify-between gap-2">
+      <div class="plan-header mb-2.5 flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1">
           <h3
             :title="plan.name"
-            class="h-12 min-w-0 break-words [overflow-wrap:anywhere] text-base font-bold leading-6 text-gray-900 dark:text-white line-clamp-2"
+            class="h-10 min-w-0 break-words [overflow-wrap:anywhere] text-[15px] font-bold leading-5 text-gray-900 dark:text-white line-clamp-2"
           >
             {{ plan.name }}
           </h3>
@@ -24,11 +24,11 @@
         <div class="plan-price shrink-0 text-right">
           <div class="flex items-baseline gap-1">
             <span class="text-xs surface-muted">{{ planCurrencySymbol }}</span>
-            <span :class="['text-2xl font-extrabold tracking-tight tabular-nums', textClass]">{{ plan.price }}</span>
+            <span :class="['text-xl font-extrabold tracking-tight tabular-nums', textClass]">{{ plan.price }}</span>
             <span v-if="plan.currency" class="text-xs font-medium surface-muted">{{ plan.currency }}</span>
           </div>
           <div class="flex items-center justify-end gap-1">
-            <span :class="['inline-flex shrink-0 rounded-md px-2 py-0.5 text-[11px] font-medium', badgeLightClass]">
+            <span :class="['inline-flex shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium', badgeLightClass]">
               {{ pLabel }}
             </span>
             <span class="text-[11px] surface-muted">/ {{ validitySuffix }}</span>
@@ -41,7 +41,7 @@
       </div>
 
       <!-- Group quota info: rate tag top-left, then one labelled bar per limit -->
-      <div class="plan-quota surface-subcard mb-3 space-y-2 px-3 py-2.5 text-xs">
+      <div class="plan-quota surface-subcard mb-2.5 space-y-1.5 px-2.5 py-2 text-xs">
         <div class="flex items-center gap-2">
           <span class="surface-muted">{{ t('payment.planCard.rate') }}</span>
           <span
@@ -59,7 +59,7 @@
             <span class="font-medium surface-muted">{{ bar.label }}</span>
             <span class="tabular-nums surface-muted">{{ bar.amount }}</span>
           </div>
-          <div class="relative h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
+          <div class="relative h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
             <div
               class="console-data-mark absolute inset-y-0 left-0 rounded-full transition-all duration-300"
               :class="bar.barClass"
@@ -67,7 +67,7 @@
             ></div>
           </div>
         </div>
-        <div v-if="limitBars.length === 0" class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-50 to-teal-50 px-2.5 py-1.5 dark:from-emerald-900/20 dark:to-teal-900/20">
+        <div v-if="limitBars.length === 0" class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-50 to-teal-50 px-2 py-1 dark:from-emerald-900/20 dark:to-teal-900/20">
           <span class="text-base text-emerald-600 dark:text-emerald-400">∞</span>
           <span class="font-medium text-emerald-700 dark:text-emerald-300">{{ t('payment.planCard.unlimited') }}</span>
         </div>
@@ -82,10 +82,10 @@
         </div>
       </div>
 
-      <PlanModelCatalog class="mb-3" dialog :catalog="plan.model_catalog" />
+      <PlanModelCatalog class="mb-2.5" dialog :catalog="plan.model_catalog" />
 
       <!-- Features list (compact) -->
-      <div v-if="plan.features.length > 0" class="mb-3 space-y-1">
+      <div v-if="plan.features.length > 0" class="mb-2.5 space-y-1">
         <div v-for="feature in plan.features" :key="feature" class="flex items-start gap-1.5">
           <svg :class="['mt-0.5 h-3.5 w-3.5 flex-shrink-0', iconClass]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -235,7 +235,7 @@ const validitySuffix = computed(() => planValiditySuffix(props.plan, t))
   .subscription-plan-catalog .plan-header {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
+    gap: 8px;
   }
 
   .subscription-plan-catalog .plan-price {
@@ -248,11 +248,11 @@ const validitySuffix = computed(() => planValiditySuffix(props.plan, t))
   }
 
   .subscription-plan-catalog .plan-content {
-    padding: 14px;
+    padding: 12px;
   }
 
   .subscription-plan-catalog .plan-quota {
-    padding-inline: 10px;
+    padding-inline: 8px;
   }
 }
 </style>

@@ -2,23 +2,23 @@
   <AppLayout workspace>
     <div class="workspace-page">
       <section
-        class="card workspace-fixed flex flex-col gap-4 px-6 py-4"
+        class="card workspace-fixed flex flex-col gap-3 px-4 py-3"
       >
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div class="min-w-0">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-white">
               {{ t("admin.plugins.title") }}
             </h2>
-            <p class="mt-1 max-w-3xl text-sm surface-muted">
+            <p class="mt-0.5 max-w-3xl text-[13px] surface-muted">
               {{ t("admin.plugins.description") }}
             </p>
             <div
-              class="mt-3 flex flex-wrap items-center gap-2 text-xs surface-muted"
+              class="mt-2 flex flex-wrap items-center gap-1.5 text-xs surface-muted"
             >
-              <span class="rounded-md surface-inset px-2 py-1">{{
+              <span class="rounded-md surface-inset px-2 py-0.5">{{
                 t("admin.plugins.onlyOpenAI")
               }}</span>
-              <span class="rounded-md surface-inset px-2 py-1">{{
+              <span class="rounded-md surface-inset px-2 py-0.5">{{
                 t("admin.plugins.noAccountCoupling")
               }}</span>
               <span class="text-xs surface-muted">{{
@@ -58,47 +58,47 @@
         </div>
 
         <div
-          class="rounded-lg border border-blue-200/80 bg-blue-50/[0.15] px-4 py-3 text-xs leading-relaxed text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
+          class="rounded-lg border border-blue-200/80 bg-blue-50/[0.15] px-3 py-2 text-xs leading-relaxed text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
         >
           <p>{{ t("admin.plugins.runtimeNotice") }}</p>
-          <p class="mt-1">{{ t("admin.plugins.menuNotice") }}</p>
+          <p class="mt-0.5">{{ t("admin.plugins.menuNotice") }}</p>
         </div>
       </section>
 
       <div class="workspace-shell workspace-scroll" data-test="plugin-list-scroll">
       <div
         v-if="loading"
-        class="flex min-h-48 items-center justify-center text-sm surface-muted"
+        class="flex min-h-40 items-center justify-center text-[13px] surface-muted"
       >
         {{ t("common.loading") }}
       </div>
 
       <div
         v-else-if="plugins.length === 0"
-        class="flex min-h-56 flex-col items-center justify-center rounded-lg border border-dashed border-[var(--surface-edge)] surface-inset px-6 text-center"
+        class="flex min-h-48 flex-col items-center justify-center rounded-lg border border-dashed border-[var(--surface-edge)] surface-inset px-4 text-center"
       >
-        <Icon name="cube" size="xl" class="text-gray-400" />
-        <p class="mt-3 font-medium text-gray-800 dark:text-gray-200">
+        <Icon name="cube" size="lg" class="text-gray-400" />
+        <p class="mt-2.5 font-medium text-gray-800 dark:text-gray-200">
           {{ t("admin.plugins.empty") }}
         </p>
-        <p class="mt-1 max-w-lg text-sm surface-muted">
+        <p class="mt-1 max-w-lg text-[13px] surface-muted">
           {{ t("admin.plugins.emptyHint") }}
         </p>
       </div>
 
-      <div v-else class="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+      <div v-else class="grid grid-cols-1 items-start gap-3 md:grid-cols-2 2xl:grid-cols-3">
         <article
           v-for="plugin in plugins"
           :key="plugin.id"
           class="surface-subcard overflow-hidden"
         >
           <div
-            class="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--surface-edge)] p-5"
+            class="flex flex-wrap items-start justify-between gap-2.5 border-b border-[var(--surface-edge)] p-3.5"
           >
             <div class="min-w-0">
-              <div class="flex flex-wrap items-center gap-2">
+              <div class="flex flex-wrap items-center gap-1.5">
                 <h3
-                  class="truncate text-base font-semibold text-gray-900 dark:text-white"
+                  class="truncate text-[15px] font-semibold text-gray-900 dark:text-white"
                 >
                   {{ plugin.name }}
                 </h3>
@@ -106,19 +106,19 @@
                   >v{{ plugin.version }}</span
                 >
                 <span
-                  class="whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium"
+                  class="whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium"
                   :class="stateClass(plugin.state)"
                 >
                   {{ t(`admin.plugins.${plugin.state}`) }}
                 </span>
               </div>
-              <p class="mt-1 text-xs surface-muted">
+              <p class="mt-0.5 text-xs surface-muted">
                 {{ plugin.plugin_key
                 }}<span v-if="plugin.author"> · {{ plugin.author }}</span>
               </p>
               <p
                 v-if="plugin.description"
-                class="mt-2 text-sm surface-muted"
+                class="mt-1.5 text-[13px] surface-muted"
               >
                 {{ plugin.description }}
               </p>
@@ -133,14 +133,14 @@
             </button>
           </div>
 
-          <div class="grid grid-cols-1 gap-x-6 gap-y-4 p-5 md:grid-cols-2">
+          <div class="grid grid-cols-1 gap-x-4 gap-y-3 p-3.5 md:grid-cols-2">
             <div>
-              <p class="text-xs font-medium uppercase surface-muted">
+              <p class="text-[11px] font-medium uppercase surface-muted">
                 {{ t("admin.plugins.compatibility") }}
               </p>
-              <div class="mt-2 flex items-center gap-2">
+              <div class="mt-1.5 flex items-center gap-1.5">
                 <span
-                  class="whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium"
+                  class="whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium"
                   :class="compatibilityClass(plugin.compatibility.status)"
                 >
                   {{ t(`admin.plugins.${plugin.compatibility.status}`) }}
@@ -150,7 +150,7 @@
                 }}</span>
               </div>
               <dl
-                class="mt-3 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-xs"
+                class="mt-2 grid grid-cols-[auto,1fr] gap-x-2.5 gap-y-0.5 text-xs"
               >
                 <dt class="text-gray-500">
                   {{ t("admin.plugins.currentVersion") }}
@@ -174,12 +174,12 @@
             </div>
 
             <div>
-              <p class="text-xs font-medium uppercase surface-muted">
+              <p class="text-[11px] font-medium uppercase surface-muted">
                 {{ t("admin.plugins.runtime") }}
               </p>
-              <div class="mt-2 flex flex-wrap gap-2 text-xs">
+              <div class="mt-1.5 flex flex-wrap gap-1.5 text-xs">
                 <span
-                  class="whitespace-nowrap rounded-md px-2 py-0.5"
+                  class="whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px]"
                   :class="
                     plugin.runtime_healthy
                       ? 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
@@ -193,7 +193,7 @@
                   }}
                 </span>
                 <span
-                  class="rounded surface-inset px-2 py-0.5 surface-muted"
+                  class="rounded surface-inset px-1.5 py-0.5 text-[11px] surface-muted"
                 >
                   {{ t("admin.plugins.signature") }}:
                   {{ t(`admin.plugins.${plugin.signature_status}`) }}
@@ -201,13 +201,13 @@
               </div>
               <p
                 v-if="plugin.last_error"
-                class="mt-3 break-words text-xs text-red-600 dark:text-red-400"
+                class="mt-2 break-words text-xs text-red-600 dark:text-red-400"
               >
                 {{ plugin.last_error }}
               </p>
               <p
                 v-else-if="plugin.runtime_message"
-                class="mt-3 break-words text-xs surface-muted"
+                class="mt-2 break-words text-xs surface-muted"
               >
                 {{ plugin.runtime_message }}
               </p>
@@ -215,7 +215,7 @@
 
             <div class="md:col-span-2">
               <label
-                class="flex items-center justify-between gap-4 text-xs font-medium surface-muted"
+                class="flex items-center justify-between gap-3 text-xs font-medium surface-muted"
               >
                 <span>{{ t("admin.plugins.rollout") }}</span>
                 <span class="w-11 text-right font-mono"
@@ -230,7 +230,7 @@
                 min="1"
                 max="100"
                 step="1"
-                class="mt-2 w-full accent-primary-600"
+                class="mt-1.5 w-full accent-primary-600"
                 :disabled="hasEnabledBinding(plugin)"
                 @input="setRollout(plugin.id, $event)"
               />
@@ -238,7 +238,7 @@
           </div>
 
           <div
-            class="flex flex-wrap justify-end gap-2 border-t border-[var(--surface-edge)] px-5 py-4"
+            class="flex flex-wrap justify-end gap-1.5 border-t border-[var(--surface-edge)] px-3.5 py-2.5"
           >
             <button
               type="button"

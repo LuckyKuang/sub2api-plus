@@ -2,7 +2,7 @@
   <div
     :class="[
       'pagination-container min-w-0',
-      embedded ? 'pagination-embedded' : 'pagination-card card px-4 py-3 sm:px-6'
+      embedded ? 'pagination-embedded' : 'pagination-card card px-3 py-2 sm:px-4'
     ]"
   >
     <!-- Narrow containers keep numbered pages, with a tighter window -->
@@ -44,8 +44,8 @@
 
     <div class="pagination-desktop">
       <!-- Desktop pagination info -->
-      <div class="pagination-info flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-        <p class="whitespace-nowrap text-sm surface-muted">
+      <div class="pagination-info flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+        <p class="whitespace-nowrap text-xs surface-muted">
           <slot name="info">
             <template v-if="totalKnown">
               {{ t('pagination.showing') }}
@@ -61,11 +61,11 @@
         </p>
 
         <!-- Page size selector -->
-        <div v-if="showPageSizeSelector" class="flex shrink-0 items-center space-x-2 whitespace-nowrap">
-          <span class="text-sm surface-muted"
+        <div v-if="showPageSizeSelector" class="flex shrink-0 items-center space-x-1.5 whitespace-nowrap">
+          <span class="text-xs surface-muted"
             >{{ t('pagination.perPage') }}:</span
           >
-          <div class="page-size-select w-24">
+          <div class="page-size-select w-20">
             <Select
               :model-value="pageSize"
               :options="pageSizeSelectOptions"
@@ -75,14 +75,14 @@
           </div>
         </div>
 
-        <div v-if="showJump" class="flex shrink-0 items-center space-x-2 whitespace-nowrap">
-          <span class="text-sm surface-muted">{{ t('pagination.jumpTo') }}</span>
+        <div v-if="showJump" class="flex shrink-0 items-center space-x-1.5 whitespace-nowrap">
+          <span class="text-xs surface-muted">{{ t('pagination.jumpTo') }}</span>
           <input
             v-model="jumpPage"
             type="number"
             min="1"
             :max="totalPages"
-            class="input w-20 text-sm"
+            class="input w-16 text-xs"
             :placeholder="t('pagination.jumpPlaceholder')"
             @keyup.enter="submitJump"
           />
@@ -266,7 +266,7 @@ const submitJump = () => {
   container-type: inline-size;
 }
 .pagination-mobile { display: none; }
-.pagination-desktop { display: flex; min-width: 0; flex-direction: column; gap: 12px; }
+.pagination-desktop { display: flex; min-width: 0; flex-direction: column; gap: 8px; }
 @container pagination (min-width: 760px) {
   .pagination-desktop { flex-direction: row; align-items: center; justify-content: space-between; }
 }
@@ -277,6 +277,6 @@ const submitJump = () => {
 
 .page-size-select :deep(.select-trigger) {
   min-height: var(--control-height-sm);
-  padding-block: 5px;
+  padding-block: 3px;
 }
 </style>

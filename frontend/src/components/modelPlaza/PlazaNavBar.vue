@@ -2,37 +2,37 @@
   <header
     class="shell-surface sticky top-[var(--shell-inset-top)] z-30"
   >
-    <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:px-4">
       <!-- 左:站点 logo + 名称 -->
-      <RouterLink to="/home" class="flex min-w-0 items-center gap-3">
+      <RouterLink to="/home" class="flex min-w-0 items-center gap-2">
         <template v-if="settings">
           <span
-            class="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset p-1"
+            class="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset p-1"
           >
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </span>
-          <span class="truncate text-base font-semibold text-gray-950 dark:text-white">
+          <span class="truncate text-[15px] font-semibold text-gray-950 dark:text-white">
             {{ siteName }}
           </span>
         </template>
         <template v-else>
-          <span class="h-9 w-9 flex-shrink-0 animate-pulse rounded-lg surface-inset" aria-hidden="true"></span>
-          <span class="h-5 w-28 animate-pulse rounded surface-inset" aria-hidden="true"></span>
+          <span class="h-8 w-8 flex-shrink-0 animate-pulse rounded-lg surface-inset" aria-hidden="true"></span>
+          <span class="h-4 w-24 animate-pulse rounded surface-inset" aria-hidden="true"></span>
         </template>
       </RouterLink>
 
       <!-- 右:工具栏 + 登录 / 回到后台 -->
-      <div class="flex shrink-0 items-center gap-2">
+      <div class="flex shrink-0 items-center gap-1.5">
         <LocaleSwitcher />
         <button
           type="button"
-          class="theme-toggle flex h-9 w-9 items-center justify-center rounded-lg surface-control transition-colors"
+          class="theme-toggle flex h-8 w-8 items-center justify-center rounded-lg surface-control transition-colors"
           :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
           :aria-label="isDark ? t('home.switchToLight') : t('home.switchToDark')"
           @click="toggleTheme"
         >
-          <Icon v-if="isDark" name="sun" size="md" />
-          <Icon v-else name="moon" size="md" />
+          <Icon v-if="isDark" name="sun" size="sm" />
+          <Icon v-else name="moon" size="sm" />
         </button>
         <RouterLink
           v-if="isAuthenticated"

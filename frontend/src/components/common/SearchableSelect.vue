@@ -206,7 +206,7 @@ const dropdownViewportPadding = 8
 // At least --filter-control-width: an expanded menu never renders narrower than
 // the unified filter control it belongs to, and keeps a little extra room for
 // option labels. styles/__tests__/filterWidths keeps the two in step.
-const dropdownMinimumWidth = 200
+const dropdownMinimumWidth = 176
 // Content-sized menus stay readable; longer labels ellipsize instead of
 // stretching the panel across the viewport.
 const dropdownMaximumWidth = 480
@@ -609,7 +609,7 @@ onUnmounted(() => {
 <style>
 .select-dropdown-portal {
   /* Floor mirrors dropdownMinimumWidth; the inline minWidth wins at send time. */
-  @apply flex w-max min-w-[200px] flex-col;
+  @apply flex w-max min-w-[176px] flex-col;
   background-color: var(--surface-panel);
   border-radius: var(--surface-radius-panel);
   @apply border border-[var(--surface-edge)];
@@ -619,24 +619,24 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-search {
-  @apply flex shrink-0 items-center gap-2 px-3 py-2;
+  @apply flex shrink-0 items-center gap-1.5 px-2.5 py-1.5;
   @apply border-b border-[var(--surface-edge)];
 }
 
 .select-dropdown-portal .select-search-input {
-  @apply min-w-0 flex-1 bg-transparent text-sm;
+  @apply min-w-0 flex-1 bg-transparent text-[13px];
   @apply text-gray-900 dark:text-gray-100;
   @apply placeholder:text-gray-400 dark:placeholder:text-dark-400;
   @apply focus:outline-none;
 }
 
 .select-dropdown-portal .select-options {
-  @apply min-h-0 shrink max-h-80 space-y-0.5 overflow-y-auto p-1.5 outline-none;
+  @apply min-h-0 shrink max-h-80 space-y-0.5 overflow-y-auto p-1 outline-none;
 }
 
 .select-dropdown-portal .select-option {
-  @apply flex items-center justify-between gap-2;
-  @apply px-3 py-2.5 text-sm;
+  @apply flex items-center justify-between gap-1.5;
+  @apply px-2.5 py-1.5 text-[13px];
   border-radius: var(--surface-radius-item);
   color: var(--surface-muted);
   @apply cursor-pointer transition-colors duration-150;
@@ -673,7 +673,7 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-empty {
-  @apply px-4 py-8 text-center text-sm;
+  @apply px-3 py-6 text-center text-xs;
   color: var(--surface-muted);
 }
 

@@ -1,12 +1,12 @@
 <template>
   <!-- Custom Home Content: Full Page Mode -->
-  <div v-if="hasHomeContent" class="home-page min-h-screen p-4 md:p-6 lg:p-8">
+  <div v-if="hasHomeContent" class="home-page min-h-screen p-[var(--shell-gutter)]">
     <div class="card overflow-hidden">
       <!-- iframe mode -->
       <iframe
         v-if="isHomeContentUrl"
         :src="homeContent.trim()"
-        class="h-[calc(100dvh-2rem)] w-full border-0 md:h-[calc(100dvh-3rem)] lg:h-[calc(100dvh-4rem)]"
+        class="h-[calc(100dvh-var(--shell-gutter)*2)] w-full border-0"
         allowfullscreen
       ></iframe>
       <!-- HTML mode - SECURITY: homeContent is admin-only setting, XSS risk is acceptable -->
@@ -20,48 +20,48 @@
     data-testid="compact-home"
     class="home-page home-compact flex min-h-screen flex-col gap-[var(--shell-gap)] p-[var(--shell-gutter)] text-gray-900 dark:text-white"
   >
-    <header class="shell-surface sticky top-[var(--shell-inset-top)] z-20 px-4 py-3.5 sm:px-6">
-      <nav class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 sm:gap-4">
-        <div class="flex min-w-0 flex-1 items-center gap-3">
-          <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset p-1">
+    <header class="shell-surface sticky top-[var(--shell-inset-top)] z-20 px-3 py-2 sm:px-4">
+      <nav class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 sm:gap-3">
+        <div class="flex min-w-0 flex-1 items-center gap-2">
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset p-1">
             <img
               :src="siteLogo || '/logo.svg'"
               alt="Logo"
               class="h-full w-full object-contain"
             />
           </span>
-          <span class="min-w-0 truncate text-base font-semibold text-gray-950 dark:text-white">{{ siteName }}</span>
+          <span class="min-w-0 truncate text-[15px] font-semibold text-gray-950 dark:text-white">{{ siteName }}</span>
         </div>
-        <div class="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+        <div class="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1.5">
           <LocaleSwitcher />
           <a
             v-if="docUrl"
             :href="docUrl"
             target="_blank"
             rel="noopener noreferrer"
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg surface-muted transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white"
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg surface-muted transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white"
             :title="t('home.viewDocs')"
           >
-            <Icon name="book" size="md" />
+            <Icon name="book" size="sm" />
           </a>
           <router-link
             v-if="showModelPlazaEntry"
             to="/model-plaza"
-            class="flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium surface-muted transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white"
+            class="flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium surface-muted transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white"
             :title="t('nav.modelPlaza')"
           >
-            <Icon name="grid" size="md" />
+            <Icon name="grid" size="sm" />
             <span class="hidden sm:inline">{{ t('nav.modelPlaza') }}</span>
           </router-link>
           <button
             type="button"
-            class="theme-toggle flex h-9 w-9 shrink-0 items-center justify-center rounded-lg surface-control transition-colors"
+            class="theme-toggle flex h-8 w-8 shrink-0 items-center justify-center rounded-lg surface-control transition-colors"
             :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
             :aria-label="isDark ? t('home.switchToLight') : t('home.switchToDark')"
             @click="toggleTheme"
           >
-            <Icon v-if="isDark" name="sun" size="md" />
-            <Icon v-else name="moon" size="md" />
+            <Icon v-if="isDark" name="sun" size="sm" />
+            <Icon v-else name="moon" size="sm" />
           </button>
           <router-link
             :to="isAuthenticated ? dashboardPath : '/login'"
@@ -74,19 +74,19 @@
     </header>
 
     <main class="flex min-w-0 flex-1 items-center justify-center">
-      <div class="card w-full min-w-0 max-w-2xl px-6 py-12 text-center sm:px-10 sm:py-16">
-        <div class="mx-auto mb-6 flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-[var(--surface-edge)] surface-inset p-2.5 shadow-sm">
+      <div class="card w-full min-w-0 max-w-2xl px-5 py-8 text-center sm:px-8 sm:py-10">
+        <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-[var(--surface-edge)] surface-inset p-2 shadow-sm">
           <img
             :src="siteLogo || '/logo.svg'"
             alt="Logo"
             class="h-full w-full object-contain"
           />
         </div>
-        <h1 class="[overflow-wrap:anywhere] text-3xl font-bold tracking-tight text-gray-950 dark:text-white md:text-4xl">{{ siteName }}</h1>
-        <p class="mt-4 whitespace-pre-wrap [overflow-wrap:anywhere] text-base leading-relaxed surface-muted">{{ siteSubtitle }}</p>
+        <h1 class="[overflow-wrap:anywhere] text-2xl font-bold tracking-tight text-gray-950 dark:text-white md:text-3xl">{{ siteName }}</h1>
+        <p class="mt-3 whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-relaxed surface-muted">{{ siteSubtitle }}</p>
         <router-link
           :to="isAuthenticated ? dashboardPath : '/login'"
-          class="btn btn-primary mt-8 px-6"
+          class="btn btn-primary mt-5 px-5"
         >
           {{ isAuthenticated ? t('home.goToDashboard') : t('home.login') }}
           <Icon name="arrowRight" size="sm" class="ml-1.5" :stroke-width="2" />
@@ -94,7 +94,7 @@
       </div>
     </main>
 
-    <footer class="shell-surface min-w-0 px-4 py-4 text-center text-sm [overflow-wrap:anywhere] sm:px-6 surface-muted">
+    <footer class="shell-surface min-w-0 px-3 py-3 text-center text-xs [overflow-wrap:anywhere] sm:px-4 surface-muted">
       &copy; {{ currentYear }} {{ siteName }}
     </footer>
   </div>
@@ -105,18 +105,18 @@
     class="home-page home-default relative flex min-h-screen flex-col gap-[var(--shell-gap)] p-[var(--shell-gutter)]"
   >
     <!-- Header -->
-    <header class="shell-surface sticky top-[var(--shell-inset-top)] z-20 px-4 py-3.5 sm:px-6">
-      <nav class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
+    <header class="shell-surface sticky top-[var(--shell-inset-top)] z-20 px-3 py-2 sm:px-4">
+      <nav class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
         <!-- Logo -->
-        <div class="flex min-w-0 items-center gap-3">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset p-1">
+        <div class="flex min-w-0 items-center gap-2">
+          <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--surface-edge)] surface-inset p-1">
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </div>
-          <span class="max-w-[14rem] truncate text-base font-semibold tracking-tight text-gray-950 dark:text-white">{{ siteName }}</span>
+          <span class="max-w-[14rem] truncate text-[15px] font-semibold tracking-tight text-gray-950 dark:text-white">{{ siteName }}</span>
         </div>
 
         <!-- Nav Actions -->
-        <div class="flex max-w-full flex-wrap items-center gap-2">
+        <div class="flex max-w-full flex-wrap items-center gap-1.5">
           <!-- Language Switcher -->
           <LocaleSwitcher />
 
@@ -126,20 +126,20 @@
             :href="docUrl"
             target="_blank"
             rel="noopener noreferrer"
-            class="flex h-9 w-9 items-center justify-center rounded-lg surface-muted transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white"
+            class="flex h-8 w-8 items-center justify-center rounded-lg surface-muted transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white"
             :title="t('home.viewDocs')"
           >
-            <Icon name="book" size="md" />
+            <Icon name="book" size="sm" />
           </a>
 
           <!-- Model Plaza Link -->
           <router-link
             v-if="showModelPlazaEntry"
             to="/model-plaza"
-            class="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium surface-muted transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white"
+            class="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium surface-muted transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white"
             :title="t('nav.modelPlaza')"
           >
-            <Icon name="grid" size="md" />
+            <Icon name="grid" size="sm" />
             <span class="hidden sm:inline">{{ t('nav.modelPlaza') }}</span>
           </router-link>
 
@@ -147,19 +147,19 @@
           <button
             type="button"
             @click="toggleTheme"
-            class="theme-toggle flex h-9 w-9 items-center justify-center rounded-lg transition-colors surface-control"
+            class="theme-toggle flex h-8 w-8 items-center justify-center rounded-lg transition-colors surface-control"
             :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
             :aria-label="isDark ? t('home.switchToLight') : t('home.switchToDark')"
           >
-            <Icon v-if="isDark" name="sun" size="md" />
-            <Icon v-else name="moon" size="md" />
+            <Icon v-if="isDark" name="sun" size="sm" />
+            <Icon v-else name="moon" size="sm" />
           </button>
 
           <!-- Login / Dashboard Button -->
           <router-link
             v-if="isAuthenticated"
             :to="dashboardPath"
-            class="btn btn-primary gap-1.5 pl-2 pr-3"
+            class="btn btn-primary gap-1.5 pl-2 pr-2.5"
           >
             <span
               class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[10px] font-semibold text-white"
@@ -184,27 +184,27 @@
     <main class="relative z-10 min-w-0 flex-1">
       <div class="mx-auto flex max-w-6xl flex-col gap-[var(--shell-gap)]">
         <!-- Hero Section - Framed Showcase Card -->
-        <section class="card home-hero flex min-w-0 flex-col items-center justify-between gap-10 p-6 sm:p-10 lg:flex-row lg:gap-12 lg:p-12">
+        <section class="card home-hero flex min-w-0 flex-col items-center justify-between gap-6 p-4 sm:p-6 lg:flex-row lg:gap-8 lg:p-8">
           <!-- Left: Text Content -->
           <div class="min-w-0 flex-1 text-center lg:text-left">
-            <div class="mb-4 inline-flex items-center gap-2 rounded-md border border-[var(--surface-edge)] surface-inset px-3 py-1 text-xs font-medium text-primary-700 dark:text-primary-300">
+            <div class="mb-3 inline-flex items-center gap-1.5 rounded-md border border-[var(--surface-edge)] surface-inset px-2.5 py-0.5 text-xs font-medium text-primary-700 dark:text-primary-300">
               <span class="h-1.5 w-1.5 rounded-full bg-primary-500"></span>
               <span>{{ t('home.heroSubtitle') }}</span>
             </div>
             <h1
-              class="mb-4 break-words text-3xl font-bold tracking-tight text-gray-950 dark:text-white sm:text-4xl lg:text-5xl"
+              class="mb-3 break-words text-2xl font-bold tracking-tight text-gray-950 dark:text-white sm:text-3xl lg:text-4xl"
             >
               {{ siteName }}
             </h1>
-            <p class="mb-7 whitespace-pre-wrap text-base leading-relaxed md:text-lg surface-muted">
+            <p class="mb-5 whitespace-pre-wrap text-sm leading-relaxed md:text-base surface-muted">
               {{ siteSubtitle }}
             </p>
 
             <!-- CTA Actions -->
-            <div class="flex flex-wrap items-center justify-center gap-3 lg:justify-start">
+            <div class="flex flex-wrap items-center justify-center gap-2.5 lg:justify-start">
               <router-link
                 :to="isAuthenticated ? dashboardPath : '/login'"
-                class="btn btn-primary px-6"
+                class="btn btn-primary px-5"
               >
                 {{ isAuthenticated ? t('home.goToDashboard') : t('home.getStarted') }}
                 <Icon name="arrowRight" size="sm" class="ml-1.5" :stroke-width="2" />
@@ -212,7 +212,7 @@
               <router-link
                 v-if="showModelPlazaEntry"
                 to="/model-plaza"
-                class="btn btn-secondary px-5"
+                class="btn btn-secondary px-4"
               >
                 <Icon name="grid" size="sm" class="mr-1.5" />
                 {{ t('nav.modelPlaza') }}
@@ -222,7 +222,7 @@
                 :href="docUrl"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="btn btn-secondary px-5"
+                class="btn btn-secondary px-4"
               >
                 <Icon name="book" size="sm" class="mr-1.5" />
                 {{ t('home.docs') }}
@@ -269,28 +269,28 @@
         </section>
 
         <!-- Feature Tags - Centered -->
-        <div class="flex flex-wrap items-center justify-center gap-3">
+        <div class="flex flex-wrap items-center justify-center gap-2">
           <div
-            class="surface-subcard inline-flex items-center gap-2.5 px-4 py-2.5"
+            class="surface-subcard inline-flex items-center gap-2 px-3 py-1.5"
           >
             <Icon name="swap" size="sm" class="text-primary-500" />
-            <span class="text-sm font-medium text-gray-800 dark:text-gray-200">{{
+            <span class="text-[13px] font-medium text-gray-800 dark:text-gray-200">{{
               t('home.tags.subscriptionToApi')
             }}</span>
           </div>
           <div
-            class="surface-subcard inline-flex items-center gap-2.5 px-4 py-2.5"
+            class="surface-subcard inline-flex items-center gap-2 px-3 py-1.5"
           >
             <Icon name="shield" size="sm" class="text-primary-500" />
-            <span class="text-sm font-medium text-gray-800 dark:text-gray-200">{{
+            <span class="text-[13px] font-medium text-gray-800 dark:text-gray-200">{{
               t('home.tags.stickySession')
             }}</span>
           </div>
           <div
-            class="surface-subcard inline-flex items-center gap-2.5 px-4 py-2.5"
+            class="surface-subcard inline-flex items-center gap-2 px-3 py-1.5"
           >
             <Icon name="chart" size="sm" class="text-primary-500" />
-            <span class="text-sm font-medium text-gray-800 dark:text-gray-200">{{
+            <span class="text-[13px] font-medium text-gray-800 dark:text-gray-200">{{
               t('home.tags.realtimeBilling')
             }}</span>
           </div>
@@ -300,30 +300,30 @@
         <div class="grid gap-[var(--shell-gap)] md:grid-cols-3">
           <!-- Feature 1: Unified Gateway -->
           <div
-            class="card home-feature p-6"
+            class="card home-feature p-4"
           >
             <div
-              class="home-feature-icon mb-5 flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--surface-edge)]"
+              class="home-feature-icon mb-3 flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--surface-edge)]"
             >
-              <Icon name="server" size="md" />
+              <Icon name="server" size="sm" />
             </div>
-            <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+            <h3 class="mb-1.5 text-base font-semibold text-gray-900 dark:text-white">
               {{ t('home.features.unifiedGateway') }}
             </h3>
-            <p class="text-sm leading-relaxed surface-muted">
+            <p class="text-[13px] leading-relaxed surface-muted">
               {{ t('home.features.unifiedGatewayDesc') }}
             </p>
           </div>
 
           <!-- Feature 2: Account Pool -->
           <div
-            class="card home-feature p-6"
+            class="card home-feature p-4"
           >
             <div
-              class="home-feature-icon mb-5 flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--surface-edge)]"
+              class="home-feature-icon mb-3 flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--surface-edge)]"
             >
               <svg
-                class="h-5 w-5"
+                class="h-4 w-4"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -336,23 +336,23 @@
                 />
               </svg>
             </div>
-            <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+            <h3 class="mb-1.5 text-base font-semibold text-gray-900 dark:text-white">
               {{ t('home.features.multiAccount') }}
             </h3>
-            <p class="text-sm leading-relaxed surface-muted">
+            <p class="text-[13px] leading-relaxed surface-muted">
               {{ t('home.features.multiAccountDesc') }}
             </p>
           </div>
 
           <!-- Feature 3: Billing & Quota -->
           <div
-            class="card home-feature p-6"
+            class="card home-feature p-4"
           >
             <div
-              class="home-feature-icon mb-5 flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--surface-edge)]"
+              class="home-feature-icon mb-3 flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--surface-edge)]"
             >
               <svg
-                class="h-5 w-5"
+                class="h-4 w-4"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -365,37 +365,37 @@
                 />
               </svg>
             </div>
-            <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+            <h3 class="mb-1.5 text-base font-semibold text-gray-900 dark:text-white">
               {{ t('home.features.balanceQuota') }}
             </h3>
-            <p class="text-sm leading-relaxed surface-muted">
+            <p class="text-[13px] leading-relaxed surface-muted">
               {{ t('home.features.balanceQuotaDesc') }}
             </p>
           </div>
         </div>
 
         <!-- Supported Providers -->
-        <section class="card p-5 sm:p-8">
-          <div class="mb-6 text-center">
-            <h2 class="mb-2 text-2xl font-bold tracking-tight text-gray-950 dark:text-white">
+        <section class="card p-4 sm:p-5">
+          <div class="mb-4 text-center">
+            <h2 class="mb-1 text-xl font-bold tracking-tight text-gray-950 dark:text-white">
               {{ t('home.providers.title') }}
             </h2>
-            <p class="text-sm surface-muted">
+            <p class="text-[13px] surface-muted">
               {{ t('home.providers.description') }}
             </p>
           </div>
 
-          <div class="flex flex-wrap items-center justify-center gap-3.5">
+          <div class="flex flex-wrap items-center justify-center gap-2.5">
             <!-- Claude - Supported -->
             <div
-              class="surface-subcard flex items-center gap-2.5 px-4 py-3"
+              class="surface-subcard flex items-center gap-2 px-3 py-2"
             >
               <div
-                class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-500"
+                class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-500"
               >
                 <span class="text-xs font-bold text-white">C</span>
               </div>
-              <span class="text-sm font-medium text-gray-900 dark:text-white">{{ t('home.providers.claude') }}</span>
+              <span class="text-[13px] font-medium text-gray-900 dark:text-white">{{ t('home.providers.claude') }}</span>
               <span
                 class="rounded-md bg-primary-500/10 px-1.5 py-0.5 text-[10px] font-medium text-primary-700 dark:text-primary-300"
                 >{{ t('home.providers.supported') }}</span
@@ -403,14 +403,14 @@
             </div>
             <!-- GPT - Supported -->
             <div
-              class="surface-subcard flex items-center gap-2.5 px-4 py-3"
+              class="surface-subcard flex items-center gap-2 px-3 py-2"
             >
               <div
-                class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-green-600"
+                class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-green-600"
               >
                 <span class="text-xs font-bold text-white">G</span>
               </div>
-              <span class="text-sm font-medium text-gray-900 dark:text-white">GPT</span>
+              <span class="text-[13px] font-medium text-gray-900 dark:text-white">GPT</span>
               <span
                 class="rounded-md bg-primary-500/10 px-1.5 py-0.5 text-[10px] font-medium text-primary-700 dark:text-primary-300"
                 >{{ t('home.providers.supported') }}</span
@@ -418,14 +418,14 @@
             </div>
             <!-- Gemini - Supported -->
             <div
-              class="surface-subcard flex items-center gap-2.5 px-4 py-3"
+              class="surface-subcard flex items-center gap-2 px-3 py-2"
             >
               <div
-                class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600"
+                class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600"
               >
                 <span class="text-xs font-bold text-white">G</span>
               </div>
-              <span class="text-sm font-medium text-gray-900 dark:text-white">{{ t('home.providers.gemini') }}</span>
+              <span class="text-[13px] font-medium text-gray-900 dark:text-white">{{ t('home.providers.gemini') }}</span>
               <span
                 class="rounded-md bg-primary-500/10 px-1.5 py-0.5 text-[10px] font-medium text-primary-700 dark:text-primary-300"
                 >{{ t('home.providers.supported') }}</span
@@ -433,14 +433,14 @@
             </div>
             <!-- Antigravity - Supported -->
             <div
-              class="surface-subcard flex items-center gap-2.5 px-4 py-3"
+              class="surface-subcard flex items-center gap-2 px-3 py-2"
             >
               <div
-                class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-pink-600"
+                class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-pink-600"
               >
                 <span class="text-xs font-bold text-white">A</span>
               </div>
-              <span class="text-sm font-medium text-gray-900 dark:text-white">{{ t('home.providers.antigravity') }}</span>
+              <span class="text-[13px] font-medium text-gray-900 dark:text-white">{{ t('home.providers.antigravity') }}</span>
               <span
                 class="rounded-md bg-primary-500/10 px-1.5 py-0.5 text-[10px] font-medium text-primary-700 dark:text-primary-300"
                 >{{ t('home.providers.supported') }}</span
@@ -448,14 +448,14 @@
             </div>
             <!-- More - Coming Soon -->
             <div
-              class="surface-subcard flex items-center gap-2.5 px-4 py-3 opacity-70"
+              class="surface-subcard flex items-center gap-2 px-3 py-2 opacity-70"
             >
               <div
-                class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-gray-500 to-gray-600"
+                class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-gray-500 to-gray-600"
               >
                 <span class="text-xs font-bold text-white">+</span>
               </div>
-              <span class="text-sm font-medium surface-muted">{{ t('home.providers.more') }}</span>
+              <span class="text-[13px] font-medium surface-muted">{{ t('home.providers.more') }}</span>
               <span
                 class="rounded-md surface-inset px-1.5 py-0.5 text-[10px] font-medium surface-muted"
                 >{{ t('home.providers.soon') }}</span
@@ -467,19 +467,19 @@
         <!-- Guest Conversion CTA -->
         <section
           v-if="!isAuthenticated"
-          class="card flex flex-col items-center justify-between gap-5 p-6 text-center sm:flex-row sm:p-8 sm:text-left"
+          class="card flex flex-col items-center justify-between gap-4 p-4 text-center sm:flex-row sm:p-5 sm:text-left"
         >
           <div class="min-w-0">
-            <h2 class="text-xl font-bold tracking-tight text-gray-950 dark:text-white sm:text-2xl">
+            <h2 class="text-lg font-bold tracking-tight text-gray-950 dark:text-white sm:text-xl">
               {{ t('home.cta.title') }}
             </h2>
-            <p class="mt-1.5 text-sm leading-relaxed surface-muted">
+            <p class="mt-1 text-[13px] leading-relaxed surface-muted">
               {{ t('home.cta.description') }}
             </p>
           </div>
           <router-link
             :to="registrationEnabled ? '/register' : '/login'"
-            class="btn btn-primary shrink-0 px-6"
+            class="btn btn-primary shrink-0 px-5"
           >
             {{ registrationEnabled ? t('home.cta.button') : t('home.login') }}
             <Icon name="arrowRight" size="sm" class="ml-1.5" :stroke-width="2" />
@@ -489,20 +489,20 @@
     </main>
 
     <!-- Footer -->
-    <footer class="shell-surface relative z-10 px-4 py-5 sm:px-6">
+    <footer class="shell-surface relative z-10 px-3 py-3 sm:px-4">
       <div
-        class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left"
+        class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 text-center sm:flex-row sm:text-left"
       >
-        <p class="text-sm surface-muted">
+        <p class="text-xs surface-muted">
           &copy; {{ currentYear }} {{ siteName }}. {{ t('home.footer.allRightsReserved') }}
         </p>
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3">
           <a
             v-if="docUrl"
             :href="docUrl"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-sm transition-colors hover:text-gray-900 dark:hover:text-white surface-muted"
+            class="text-xs transition-colors hover:text-gray-900 dark:hover:text-white surface-muted"
           >
             {{ t('home.docs') }}
           </a>
@@ -510,7 +510,7 @@
             :href="githubUrl"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-sm transition-colors hover:text-gray-900 dark:hover:text-white surface-muted"
+            class="text-xs transition-colors hover:text-gray-900 dark:hover:text-white surface-muted"
           >
             GitHub
           </a>
@@ -634,19 +634,19 @@ onMounted(() => {
 .terminal-header {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  padding: 9px 12px;
   background: rgba(42, 42, 42, 0.8);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .terminal-buttons {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .terminal-buttons span {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
 }
 
@@ -663,18 +663,18 @@ onMounted(() => {
 .terminal-title {
   flex: 1;
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
   font-family: ui-monospace, monospace;
   color: #a1a1aa;
-  margin-right: 52px;
+  margin-right: 42px;
 }
 
 /* Terminal Body */
 .terminal-body {
-  padding: 20px 24px;
+  padding: 14px 18px;
   font-family: ui-monospace, 'Fira Code', monospace;
-  font-size: 14px;
-  line-height: 2;
+  font-size: 13px;
+  line-height: 1.75;
 }
 
 .code-line {

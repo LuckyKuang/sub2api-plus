@@ -64,10 +64,10 @@ describe('data-table filter widths', () => {
   // User audit: search boxes and selects share one compact width (the old
   // 200/240px pair left large blanks after short labels such as 全部平台).
   it('declares one compact width shared by search and select controls', () => {
-    expect(rootToken('--filter-control-width')).toBe('160px')
+    expect(rootToken('--filter-control-width')).toBe('144px')
     expect(rootToken('--filter-search-width')).toBe('var(--filter-control-width)')
-    expect(rootToken('--filter-date-width')).toBe('200px')
-    expect(rootToken('--filter-gap')).toBe('12px')
+    expect(rootToken('--filter-date-width')).toBe('184px')
+    expect(rootToken('--filter-gap')).toBe('8px')
   })
 
   it('gives every filter control the same fixed width on desktop', () => {

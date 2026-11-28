@@ -117,13 +117,13 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
 @layer components {
   /* ============ 按钮样式 ============ */
   .btn {
-    @apply inline-flex items-center justify-center gap-2;
+    @apply inline-flex items-center justify-center gap-1.5;
     @apply min-w-0 font-medium;
     border-radius: var(--surface-radius-control);
     min-height: var(--control-height);
-    padding: 6px 14px;
+    padding: 4px 12px;
     font-size: 13px;
-    line-height: 20px;
+    line-height: 18px;
     letter-spacing: .01em;
     max-width: 100%;
     /* Labels break only between words, never inside one (CJK words included),
@@ -169,10 +169,10 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   .btn-sm {
     border-radius: var(--surface-radius-control);
     min-height: var(--control-height-sm);
-    padding: 5px 12px;
+    padding: 3px 10px;
     font-size: 12px;
-    line-height: 18px;
-    gap: 6px;
+    line-height: 16px;
+    gap: 5px;
   }
 
   /* Extra-small inline actions (dense toolbars). Previously referenced but
@@ -180,27 +180,27 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   .btn-xs {
     border-radius: var(--surface-radius-tag);
     min-height: var(--control-height-xs);
-    padding: 3px 8px;
+    padding: 2px 7px;
     font-size: 11px;
-    line-height: 16px;
-    gap: 4px;
+    line-height: 14px;
+    gap: 3px;
   }
 
   .btn-md {
-    padding-inline: 16px;
-    font-size: 14px;
+    padding-inline: 14px;
+    font-size: 13.5px;
   }
 
   .btn-lg {
     min-height: var(--control-height-lg);
-    padding: 10px 24px;
-    font-size: 15px;
-    line-height: 22px;
+    padding: 7px 18px;
+    font-size: 14px;
+    line-height: 20px;
   }
 
   .btn-icon {
     min-width: var(--control-height);
-    padding: 6px;
+    padding: 4px;
   }
 
   .btn-danger, .btn-success, .btn-warning, .btn-stripe, .btn-airwallex, .btn-alipay, .btn-wxpay {
@@ -234,11 +234,12 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
 
   /* ============ 输入框样式 ============ */
   .input {
-    @apply w-full min-w-0 text-sm;
+    @apply w-full min-w-0;
     border-radius: var(--surface-radius-control);
     min-height: var(--control-height);
-    padding: 7px 12px;
-    line-height: 20px;
+    padding: 5px 10px;
+    font-size: 13px;
+    line-height: 18px;
     background-color: var(--surface-field);
     @apply border border-gray-200 dark:border-dark-600;
     @apply text-gray-900 dark:text-gray-100;
@@ -250,11 +251,12 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
 
   /* Shared appearance for all selection triggers; menus use SearchableSelect. */
   .select-trigger {
-    @apply w-full min-w-0 text-sm;
+    @apply w-full min-w-0;
     border-radius: var(--surface-radius-control);
     min-height: var(--control-height);
-    padding: 7px 12px;
-    line-height: 20px;
+    padding: 5px 10px;
+    font-size: 13px;
+    line-height: 18px;
     background-color: var(--surface-field);
     @apply border border-gray-200 dark:border-dark-600;
     @apply text-gray-900 dark:text-gray-100;
@@ -289,7 +291,7 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   }
 
   .input-label {
-    @apply mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300;
+    @apply mb-1 block text-[13px] font-medium text-gray-700 dark:text-gray-300;
   }
 
   .input-hint {
@@ -324,29 +326,29 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
 
   .card-header {
     @apply border-b border-gray-100 dark:border-dark-700;
-    @apply px-6 py-4;
+    @apply px-4 py-2.5;
   }
 
   .card-body {
-    @apply p-6;
+    @apply p-3.5;
   }
 
   .card-footer {
     @apply border-t border-gray-100 dark:border-dark-700;
-    @apply px-6 py-4;
+    @apply px-4 py-2.5;
   }
 
   /* ============ 统计卡片 ============ */
   .stat-card {
-    @apply card p-5;
-    @apply flex min-w-0 items-start gap-3.5;
+    @apply card p-3.5;
+    @apply flex min-w-0 items-start gap-2.5;
   }
 
   .stat-icon {
-    @apply h-11 w-11 shrink-0;
+    @apply h-9 w-9 shrink-0;
     border-radius: var(--surface-radius-control);
     @apply flex items-center justify-center;
-    @apply text-xl;
+    @apply text-lg;
   }
 
   .stat-icon-primary {
@@ -366,16 +368,16 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   }
 
   .stat-value {
-    @apply text-2xl font-bold text-gray-900 dark:text-white truncate;
+    @apply text-xl font-bold text-gray-900 dark:text-white truncate;
   }
 
   .stat-label {
-    @apply text-sm;
+    @apply text-xs;
     color: var(--surface-muted);
   }
 
   .stat-trend {
-    @apply mt-1 flex items-center gap-1 text-xs font-medium;
+    @apply mt-0.5 flex items-center gap-1 text-xs font-medium;
   }
 
   .stat-trend-up {
@@ -392,17 +394,17 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   }
 
   .table {
-    @apply w-full text-sm;
+    @apply w-full text-[13px];
   }
 
   .table th {
-    @apply px-4 py-3 text-left font-medium;
+    @apply px-3 py-2 text-left font-medium;
     @apply text-gray-600 dark:text-dark-300;
     background-color: transparent;
   }
 
   .table td {
-    @apply px-4 py-3;
+    @apply px-3 py-2;
     @apply text-gray-700 dark:text-gray-300;
   }
 
@@ -411,12 +413,12 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   }
 
   /* ============ 徽章样式 ============ */
-  /* Status and category labels: one tag shape and one 20px height. */
+  /* Status and category labels: one tag shape and one 18px height. */
   .badge {
     @apply inline-flex items-center gap-1 font-medium;
     border-radius: var(--surface-radius-tag);
-    padding: 2px 8px;
-    font-size: 12px;
+    padding: 1px 6px;
+    font-size: 11.5px;
     line-height: 16px;
     white-space: nowrap;
   }
@@ -456,19 +458,19 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   }
 
   .dropdown-item {
-    @apply px-3 py-2 text-sm;
+    @apply px-2.5 py-1.5 text-[13px];
     border-radius: var(--surface-radius-item);
     @apply text-gray-700 dark:text-gray-300;
 
     @apply cursor-pointer transition-colors;
-    @apply flex items-center gap-2;
+    @apply flex items-center gap-1.5;
   }
 
   /* ============ 模态框 ============ */
   .modal-overlay {
     @apply fixed inset-0 z-50;
     background: var(--surface-overlay);
-    @apply flex items-center justify-center p-2 sm:p-4;
+    @apply flex items-center justify-center p-2 sm:p-3;
   }
 
   .modal-content {
@@ -480,34 +482,34 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   }
 
   .modal-header {
-    @apply border-b border-gray-200 px-4 py-3 dark:border-dark-700;
-    @apply sm:px-6 sm:py-4;
-    @apply flex min-w-0 items-center justify-between gap-3;
+    @apply border-b border-gray-200 px-3.5 py-2.5 dark:border-dark-700;
+    @apply sm:px-4 sm:py-3;
+    @apply flex min-w-0 items-center justify-between gap-2.5;
     @apply flex-shrink-0;
   }
 
   .modal-title {
-    @apply min-w-0 text-lg font-semibold text-gray-900 dark:text-white;
+    @apply min-w-0 text-base font-semibold text-gray-900 dark:text-white;
     overflow-wrap: anywhere;
   }
 
   .modal-body {
-    @apply px-4 py-3;
-    @apply sm:px-6 sm:py-4;
+    @apply px-3.5 py-2.5;
+    @apply sm:px-4 sm:py-3;
     @apply min-h-0 min-w-0 flex-1 overflow-y-auto;
     overflow-wrap: anywhere;
   }
 
   .modal-footer {
-    @apply border-t border-gray-200 px-4 py-3 dark:border-dark-700;
-    @apply sm:px-6 sm:py-4;
-    @apply flex min-w-0 flex-wrap items-center justify-end gap-3;
+    @apply border-t border-gray-200 px-3.5 py-2.5 dark:border-dark-700;
+    @apply sm:px-4 sm:py-3;
+    @apply flex min-w-0 flex-wrap items-center justify-end gap-2;
     @apply flex-shrink-0;
     overflow-wrap: anywhere;
   }
 
   @screen sm {
-    .modal-content { max-height: min(90dvh, calc(100dvh - 2rem)); }
+    .modal-content { max-height: min(90dvh, calc(100dvh - 1.5rem)); }
   }
 
   /* 防止body滚动的工具类 */
@@ -519,31 +521,31 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   .dialog-overlay {
     @apply fixed inset-0 z-50;
     background: var(--surface-overlay);
-    @apply flex items-center justify-center p-4;
+    @apply flex items-center justify-center p-2 sm:p-3;
   }
 
   .dialog-container {
     @apply flex min-w-0 w-full flex-col;
-    max-height: min(90dvh, calc(100dvh - 2rem));
+    max-height: min(90dvh, calc(100dvh - 1.5rem));
     border: 1px solid var(--surface-edge);
     border-radius: var(--surface-radius);
   }
 
   .dialog-header {
-    @apply border-b border-gray-100 px-6 py-4 dark:border-dark-700;
-    @apply flex min-w-0 shrink-0 items-center justify-between gap-3;
+    @apply border-b border-gray-100 px-4 py-3 dark:border-dark-700;
+    @apply flex min-w-0 shrink-0 items-center justify-between gap-2.5;
     overflow-wrap: anywhere;
   }
 
   .dialog-body {
-    @apply min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-4;
+    @apply min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-3;
     overflow-wrap: anywhere;
   }
 
   .dialog-footer {
-    @apply border-t border-gray-100 px-6 py-4 dark:border-dark-700;
+    @apply border-t border-gray-100 px-4 py-3 dark:border-dark-700;
     background-color: var(--surface-soft);
-    @apply flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-3;
+    @apply flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2;
     overflow-wrap: anywhere;
   }
 
@@ -553,7 +555,7 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
     min-width: 0;
     max-width: 100%;
     flex-wrap: wrap;
-    row-gap: 0.75rem;
+    row-gap: 0.5rem;
   }
 
   :is(.modal-footer, .dialog-footer) button { max-width: 100%; }
@@ -585,7 +587,7 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
     @apply transition-all duration-200;
 
     @apply hover:text-gray-900 dark:hover:text-white;
-    font-size: 13.5px;
+    font-size: 13px;
     line-height: 1.25;
     padding-left: 0.625rem;
     padding-right: 0.625rem;
@@ -611,29 +613,29 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
 
   /* ============ 页面头部 ============ */
   .page-header {
-    @apply mb-6;
+    @apply mb-3.5;
   }
 
   .page-title {
-    @apply text-2xl font-bold text-gray-900 dark:text-white;
+    @apply text-xl font-bold text-gray-900 dark:text-white;
   }
 
   .page-description {
-    @apply mt-1 text-sm text-gray-500 dark:text-dark-400;
+    @apply mt-0.5 text-xs text-gray-500 dark:text-dark-400;
   }
 
   /* ============ 空状态 ============ */
   .empty-state {
-    @apply flex flex-col items-center justify-center px-4 py-10;
+    @apply flex flex-col items-center justify-center px-3 py-6;
     @apply text-center;
   }
 
   .empty-state--sm {
-    @apply px-4 py-6;
+    @apply px-3 py-4;
   }
 
   .empty-state--lg {
-    @apply px-4 py-12;
+    @apply px-3 py-8;
   }
 
   .empty-state-icon {
@@ -641,19 +643,19 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   }
 
   .empty-state-title {
-    @apply mb-1 text-base font-semibold text-gray-900 dark:text-white;
+    @apply mb-1 text-sm font-semibold text-gray-900 dark:text-white;
   }
 
   .empty-state--sm .empty-state-title {
-    @apply text-sm font-medium;
+    @apply text-xs font-medium;
   }
 
   .empty-state--lg .empty-state-title {
-    @apply text-lg font-semibold;
+    @apply text-base font-semibold;
   }
 
   .empty-state-description {
-    @apply max-w-sm text-sm;
+    @apply max-w-sm text-xs;
     color: var(--surface-muted);
   }
 
@@ -673,7 +675,7 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
 
   /* ============ 分隔线 ============ */
   .divider {
-    @apply my-4 h-px bg-gray-200 dark:bg-dark-700;
+    @apply my-3 h-px bg-gray-200 dark:bg-dark-700;
   }
 
   /* ============ 标签页 ============ */
@@ -684,7 +686,7 @@ input:is([type=range], [type=checkbox], [type=radio]) { accent-color: rgb(var(--
   }
 
   .tab {
-    @apply px-4 py-2 text-sm font-medium;
+    @apply px-3 py-1.5 text-[13px] font-medium;
     border-radius: var(--surface-radius-control);
     @apply text-gray-600 dark:text-dark-400;
     @apply transition-all duration-200;

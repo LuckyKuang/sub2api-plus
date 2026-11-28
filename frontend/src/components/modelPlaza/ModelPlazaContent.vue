@@ -1,15 +1,15 @@
 <template>
   <div class="flex min-w-0 flex-col gap-[var(--shell-gap)]">
     <!-- 页头(独立形态下展示标题;后台形态 AppHeader 已有页面标题) -->
-    <div v-if="!embedded" class="card px-5 py-5 sm:px-6">
-      <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-3xl">{{ t('modelPlaza.title') }}</h1>
-      <p class="mt-1.5 text-sm surface-muted">{{ t('modelPlaza.description') }}</p>
+    <div v-if="!embedded" class="card px-4 py-3.5 sm:px-5">
+      <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-2xl">{{ t('modelPlaza.title') }}</h1>
+      <p class="mt-1 text-[13px] surface-muted">{{ t('modelPlaza.description') }}</p>
     </div>
 
     <!-- 未登录提示 -->
     <p
       v-if="!isAuthenticated"
-      class="card flex items-center gap-1.5 px-5 py-3 text-xs surface-muted"
+      class="card flex items-center gap-1.5 px-4 py-2 text-xs surface-muted"
       :class="{ 'workspace-shell': embedded }"
     >
       <Icon name="infoCircle" size="xs" class="h-3.5 w-3.5" />
@@ -17,12 +17,12 @@
     </p>
 
     <!-- 加载/错误/空 -->
-    <div v-if="loading" class="card flex min-h-[240px] items-center justify-center" :class="{ 'workspace-shell': embedded }">
+    <div v-if="loading" class="card flex min-h-[200px] items-center justify-center" :class="{ 'workspace-shell': embedded }">
       <div class="h-8 w-8 animate-spin rounded-full border-2 border-primary-600/25 border-t-primary-600 dark:border-primary-400/25 dark:border-t-primary-400"></div>
     </div>
     <div
       v-else-if="error"
-      class="card border-red-200 px-5 py-8 text-center text-sm text-red-600 dark:border-red-500/30 dark:text-red-300"
+      class="card border-red-200 px-4 py-6 text-center text-sm text-red-600 dark:border-red-500/30 dark:text-red-300"
       :class="{ 'workspace-shell': embedded }"
     >
       {{ t('modelPlaza.loadFailed') }}
@@ -237,8 +237,8 @@ watch(groups, (list) => {
 <style scoped>
 .plaza-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(19rem, calc((100% - 24px) / 3))), 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(15.5rem, calc((100% - 30px) / 4))), 1fr));
+  gap: 10px;
 }
 
 .plaza-notes {

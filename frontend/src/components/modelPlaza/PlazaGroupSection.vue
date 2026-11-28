@@ -4,8 +4,8 @@
     :class="[platformBorderStrongClass(group.platform)]"
   >
     <!-- 分组头部:名称/平台/倍率徽章/专属/订阅徽章 + 描述 -->
-    <header class="border-b border-[var(--surface-edge)] px-5 py-4">
-      <div class="flex flex-wrap items-center gap-2">
+    <header class="border-b border-[var(--surface-edge)] px-4 py-3">
+      <div class="flex flex-wrap items-center gap-1.5">
         <GroupBadge
           :name="group.name"
           :platform="group.platform as GroupPlatform"
@@ -20,31 +20,31 @@
         />
         <span
           v-if="group.is_exclusive"
-          class="inline-flex items-center gap-1 rounded-md bg-purple-50/[0.15] px-2 py-0.5 text-xs font-medium text-purple-600 dark:bg-purple-900/20 dark:text-purple-400"
+          class="inline-flex items-center gap-1 rounded-md bg-purple-50/[0.15] px-1.5 py-0.5 text-[11px] font-medium text-purple-600 dark:bg-purple-900/20 dark:text-purple-400"
         >
           <Icon name="shield" size="xs" class="h-3 w-3" />
           {{ t('modelPlaza.badges.exclusive') }}
         </span>
         <span
           v-if="group.subscription_type === 'subscription'"
-          class="inline-flex items-center rounded-md bg-violet-50/[0.15] px-2 py-0.5 text-xs font-medium text-violet-600 dark:bg-violet-900/20 dark:text-violet-400"
+          class="inline-flex items-center rounded-md bg-violet-50/[0.15] px-1.5 py-0.5 text-[11px] font-medium text-violet-600 dark:bg-violet-900/20 dark:text-violet-400"
         >
           {{ t('modelPlaza.badges.subscription') }}
         </span>
       </div>
-      <p v-if="group.description" class="mt-2 text-sm surface-muted">
+      <p v-if="group.description" class="mt-1.5 text-[13px] surface-muted">
         {{ group.description }}
       </p>
       <p
         v-if="peakNote"
-        class="mt-1.5 inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400"
+        class="mt-1 inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400"
       >
         <Icon name="clock" size="xs" class="h-3 w-3" />
         {{ peakNote }}
       </p>
       <p
         v-if="longContextNote"
-        class="mt-1.5 flex items-center gap-1 text-xs surface-muted"
+        class="mt-1 flex items-center gap-1 text-xs surface-muted"
       >
         <Icon name="infoCircle" size="xs" class="h-3 w-3" />
         {{ longContextNote }}
@@ -67,7 +67,7 @@
         :peak-rate-multiplier="group.peak_rate_multiplier"
         @open="$emit('open', $event)"
       />
-      <p v-else class="px-5 py-4 text-center text-sm surface-muted">
+      <p v-else class="px-4 py-3 text-center text-[13px] surface-muted">
         {{ t('modelPlaza.detail.noModels') }}
       </p>
     </div>

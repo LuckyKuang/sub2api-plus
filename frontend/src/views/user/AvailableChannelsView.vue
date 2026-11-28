@@ -448,14 +448,14 @@ onUnmounted(() => {
   container-type: inline-size;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .catalog-toolbar-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 10px;
+  padding: 10px 12px;
   border-radius: var(--surface-radius);
   background-color: var(--surface-fill);
   background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
@@ -467,20 +467,20 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .catalog-search-field {
   position: relative;
-  width: min(320px, 100%);
-  flex: 1 1 220px;
-  max-width: 340px;
+  width: min(300px, 100%);
+  flex: 1 1 200px;
+  max-width: 320px;
   min-width: 0;
 }
 
 .catalog-search-icon {
   position: absolute;
-  left: 11px;
+  left: 10px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--surface-muted);
@@ -489,8 +489,8 @@ onUnmounted(() => {
 
 .catalog-search-input {
   height: var(--control-height);
-  padding-left: 36px;
-  padding-right: 12px;
+  padding-left: 32px;
+  padding-right: 10px;
   font-size: 13px;
   border-radius: var(--surface-radius-control);
 }
@@ -626,14 +626,14 @@ onUnmounted(() => {
 .catalog-platforms {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding-top: 11px;
+  gap: 8px;
+  padding-top: 8px;
   border-top: 1px solid color-mix(in srgb, var(--surface-edge) 55%, transparent);
 }
 
 .catalog-platforms-label {
   flex: none;
-  padding-top: 6px;
+  padding-top: 4px;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--surface-muted);
@@ -645,16 +645,16 @@ onUnmounted(() => {
   display: flex;
   flex: 1 1 0%;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
 }
 
 .catalog-platform-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 29px;
-  padding: 4px 10px;
+  gap: 4px;
+  min-height: 26px;
+  padding: 3px 8px;
   border-radius: var(--surface-radius-control);
   background: var(--record-card-fill);
   border: 1px solid color-mix(in srgb, var(--surface-edge) 75%, transparent);
@@ -691,47 +691,53 @@ onUnmounted(() => {
 .catalog-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
+  gap: 10px;
 }
 
 .catalog-skeleton-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px 14px;
+  gap: 5px;
+  padding: 10px 12px 12px;
   border-radius: var(--surface-radius);
   background-color: var(--surface-fill);
   border: 1px solid var(--surface-edge);
 }
 
 .catalog-skeleton-row {
-  height: 56px;
+  height: 48px;
   border-radius: var(--surface-radius-item);
   background: var(--record-card-fill);
 }
 
 .catalog-skeleton-card {
-  height: 196px;
+  height: 168px;
   border-radius: var(--surface-radius-card);
   background: var(--surface-fill);
   border: 1px solid var(--surface-edge);
 }
 
-@container (min-width: 640px) {
+@container (min-width: 560px) {
   .catalog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@container (min-width: 1020px) {
+@container (min-width: 860px) {
   .catalog-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
+@container (min-width: 1160px) {
+  .catalog-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @container (max-width: 640px) {
   .catalog-toolbar-card {
-    padding: 12px;
+    padding: 10px;
   }
 
   .catalog-search-field {

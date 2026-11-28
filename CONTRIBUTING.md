@@ -147,14 +147,14 @@ menus inside dialogs and scrollable cards; checking only the closed trigger is i
 Data-table query rows read one control width everywhere. `.filter-bar` is the row
 and `.filter-field` wraps exactly one control; both live in
 `frontend/src/styles/workspace.css` and take their sizes from
-`--filter-control-width` (160px, shared by search boxes and selects; the
-search token is an alias, not a wider size), `--filter-date-width` (200px,
+`--filter-control-width` (144px, shared by search boxes and selects; the
+search token is an alias, not a wider size), `--filter-date-width` (184px,
 `.filter-field--date`, for date and date-range pickers only) and
 `--filter-gap`. Action buttons stay outside `.filter-field` so they keep their
 natural width, and labels belong inside the field they name. Controls fill their
 field (`width: 100%`), so a select wrapper can never size itself to its longest
 option label. Below 1024px fields stack at full width instead of squeezing.
-Expanded select menus stay content-sized (`w-max`), floored at 200px (never
+Expanded select menus stay content-sized (`w-max`), floored at 176px (never
 narrower than `--filter-control-width`) and capped at 480px so one long label cannot stretch the
 panel across the viewport. `src/styles/__tests__/filterWidths.spec.ts` owns the
 stylesheet contract and the `SearchableSelect` floor; the component layout suite
@@ -175,11 +175,11 @@ padding.
 
 Console shapes and control sizes come from one set of tokens in
 `frontend/src/styles/console.css`. Every rounded element takes exactly one step
-of the radius ladder by role: container `--surface-radius` (16px: shell chrome,
-page zones, dialogs, toasts) > card/panel (12px: business cards, floating menus,
-popovers) > control/item (8px: buttons, fields, select and date triggers, tabs,
-menu items, table rows) > tag (6px: badges, chips, segmented options, compact
-buttons) > xs (4px: checkboxes, inline code). No breakpoint enlarges a step.
+of the radius ladder by role: container `--surface-radius` (12px: shell chrome,
+page zones, dialogs, toasts) > card/panel (10px: business cards, floating menus,
+popovers) > control/item (6px: buttons, fields, select and date triggers, tabs,
+menu items, table rows) > tag (4px: badges, chips, segmented options, compact
+buttons) > xs (3px: checkboxes, inline code). No breakpoint enlarges a step.
 Tailwind `rounded-*` utilities resolve to these tokens (`sm`/default xs, `md`
 tag, `lg` control, `xl` card, `2xl` container) and pages use `rounded-md`,
 `rounded-lg` or `rounded-xl`; the container radius belongs to the shared
@@ -187,9 +187,9 @@ container classes. Square icon tiles up to 40px take the control radius.
 `rounded-full` is reserved for avatars, status dots, switches, progress tracks
 and spinners and never wraps text. Stylesheets declare radii only through the
 ladder tokens. Buttons, fields, select and date triggers and tabs share
-`--control-height` (36px), with `-sm` 32px, `-xs` 26px and `-lg` 44px variants;
+`--control-height` (32px), with `-sm` 28px, `-xs` 24px and `-lg` 38px variants;
 button labels break only between words, never inside one. Status labels
-use `.badge` (20px tag). Dialogs, menus and popovers use `--surface-panel`,
+use `.badge` (18px tag). Dialogs, menus and popovers use `--surface-panel`,
 which stays near-opaque, and the dialog scrim dims by a fixed amount; only
 in-page surfaces follow the card transparency setting.
 `src/styles/__tests__/radiusLadder.spec.ts` and `controls.spec.ts` own this

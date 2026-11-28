@@ -5,15 +5,15 @@
       <section
         class="channel-monitor-toolbar card workspace-shell workspace-fixed p-0"
       >
-        <header class="page-header mb-0 flex flex-wrap items-start justify-between gap-4 border-b border-[var(--surface-edge)] px-5 py-4 sm:px-6">
+        <header class="page-header mb-0 flex flex-wrap items-start justify-between gap-3 border-b border-[var(--surface-edge)] px-4 py-3 sm:px-5">
           <div class="min-w-0">
-            <h1 class="page-title flex items-center gap-2 text-xl font-black text-gray-900 dark:text-white">
-              <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50/[0.15] text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
+            <h1 class="page-title flex items-center gap-2 text-lg font-black text-gray-900 dark:text-white">
+              <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50/[0.15] text-blue-500 dark:bg-blue-900/30 dark:text-blue-400">
                 <Icon name="chart" size="sm" />
               </span>
               {{ t('channelMonitorV2.title') }}
             </h1>
-            <div class="page-description mt-1.5 flex flex-wrap items-center gap-2 text-xs surface-muted">
+            <div class="page-description mt-1 flex flex-wrap items-center gap-2 text-xs surface-muted">
               <span class="relative flex h-2 w-2 shrink-0">
                 <span
                   class="console-data-mark relative inline-flex h-2 w-2 rounded-full"
@@ -57,7 +57,7 @@
         <!-- First-upgrade silent backfill: show until 30d product window is covered -->
         <div
           v-if="bootstrapActive"
-          class="bg-blue-50/90 px-5 py-3 dark:bg-blue-950/40 sm:px-6"
+          class="bg-blue-50/90 px-4 py-2.5 dark:bg-blue-950/40 sm:px-5"
           role="status"
           aria-live="polite"
         >
@@ -90,7 +90,7 @@
         </div>
 
         <!-- Single compact toolbar row: range · filters · view controls -->
-        <div class="monitor-toolbar flex flex-nowrap items-center gap-1.5 overflow-x-auto px-4 py-3 sm:gap-2 sm:px-5">
+        <div class="monitor-toolbar flex flex-nowrap items-center gap-1.5 overflow-x-auto px-3 py-2 sm:gap-2 sm:px-4">
           <div
             class="tabs inline-flex shrink-0"
             role="group"
@@ -197,7 +197,7 @@
       <!-- Overview KPI: success · TTFT · tokens/s(optional) · cache · (+ RPM when throughput visible) -->
       <section
         v-if="snapshot"
-        class="grid grid-cols-2 gap-3 sm:grid-cols-3"
+        class="grid grid-cols-2 gap-2.5 sm:grid-cols-3"
         :class="showThroughput ? 'xl:grid-cols-5' : 'xl:grid-cols-4'"
         :aria-label="t('channelMonitorV2.summaryAria')"
       >
@@ -274,7 +274,7 @@
       </div>
 
       <section class="card workspace-shell flex min-h-0 flex-col overflow-hidden">
-        <div class="px-5 pt-4 sm:px-6">
+        <div class="px-4 pt-3 sm:px-5">
           <nav class="card-tabs w-full max-w-md sm:w-auto" role="tablist" :aria-label="t('channelMonitorV2.tabs.aria')">
             <button
               v-for="item in tabs"
@@ -289,7 +289,7 @@
             </button>
           </nav>
         </div>
-        <div class="min-h-0 p-4 sm:p-5">
+        <div class="min-h-0 p-3 sm:p-4">
           <div v-if="activeTab === 'models'" class="monitor-tab-viewport record-table-scroll table-container min-h-0 overflow-auto border-0">
             <table class="record-table table monitor-table min-w-[720px]">
               <thead>
@@ -336,11 +336,11 @@
             </table>
           </div>
 
-          <div v-else-if="activeTab === 'errors'" class="monitor-tab-viewport min-h-0 space-y-3 overflow-auto">
+          <div v-else-if="activeTab === 'errors'" class="monitor-tab-viewport min-h-0 space-y-2 overflow-auto">
             <div
               v-for="row in errorRows"
               :key="row.category"
-              class="surface-subcard p-4 text-sm"
+              class="surface-subcard p-3 text-sm"
               :class="row.ignored ? 'opacity-60' : ''"
             >
               <button

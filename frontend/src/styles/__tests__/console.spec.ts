@@ -248,15 +248,15 @@ describe('rounded card surfaces', () => {
     expect(lastValue(declarationsFor(panel), 'border-radius')).toBe('var(--surface-radius-panel)')
     card.remove()
     panel.remove()
-    // The approved ladder: container 16 > card/panel 12 > control/item 8 > tag 6 > xs 4.
+    // The approved ladder: container 12 > card/panel 10 > control/item 6 > tag 4 > xs 3.
     const root = declarationsFor(document.documentElement)
-    expect(lastValue(root, '--surface-radius')).toBe('16px')
-    expect(lastValue(root, '--surface-radius-card')).toBe('12px')
-    expect(lastValue(root, '--surface-radius-panel')).toBe('12px')
-    expect(lastValue(root, '--surface-radius-control')).toBe('8px')
-    expect(lastValue(root, '--surface-radius-item')).toBe('8px')
-    expect(lastValue(root, '--surface-radius-tag')).toBe('6px')
-    expect(lastValue(root, '--surface-radius-xs')).toBe('4px')
+    expect(lastValue(root, '--surface-radius')).toBe('12px')
+    expect(lastValue(root, '--surface-radius-card')).toBe('10px')
+    expect(lastValue(root, '--surface-radius-panel')).toBe('10px')
+    expect(lastValue(root, '--surface-radius-control')).toBe('6px')
+    expect(lastValue(root, '--surface-radius-item')).toBe('6px')
+    expect(lastValue(root, '--surface-radius-tag')).toBe('4px')
+    expect(lastValue(root, '--surface-radius-xs')).toBe('3px')
     expect(lastValue(declarationsFor(fixture('<header class="shell-surface"></header>')), 'border-radius')).toBe('var(--surface-radius)')
   })
 

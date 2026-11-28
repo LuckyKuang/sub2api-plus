@@ -151,10 +151,10 @@ onUnmounted(() => {
 .catalog-model-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   height: 100%;
   min-width: 0;
-  padding: 16px;
+  padding: 12px;
   border-radius: var(--surface-radius-card);
   background-color: var(--surface-fill);
   background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
@@ -171,7 +171,7 @@ onUnmounted(() => {
 .catalog-card-head {
   display: flex;
   align-items: flex-start;
-  gap: 11px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -179,8 +179,8 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   flex: none;
   border-radius: var(--surface-radius-control);
   background: color-mix(in srgb, currentColor 12%, transparent);
@@ -190,7 +190,7 @@ onUnmounted(() => {
 .catalog-card-head-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
   flex: 1;
 }
@@ -208,9 +208,9 @@ onUnmounted(() => {
   min-width: 0;
   flex: 1;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  font-size: 14.5px;
+  font-size: 13.5px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.3;
   color: var(--surface-text);
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -276,8 +276,8 @@ onUnmounted(() => {
 .catalog-card-ledger {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 6px;
+  padding: 8px 10px;
   border-radius: var(--surface-radius-item);
   background: var(--record-card-fill);
   border: 1px solid color-mix(in srgb, var(--surface-edge) 70%, transparent);
@@ -286,11 +286,11 @@ onUnmounted(() => {
 .catalog-ledger-unit {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .catalog-ledger-unit.has-divider {
-  padding-top: 8px;
+  padding-top: 6px;
   border-top: 1px dashed color-mix(in srgb, var(--surface-edge) 60%, transparent);
 }
 
@@ -309,7 +309,7 @@ onUnmounted(() => {
 }
 
 .catalog-ledger-row--divided {
-  padding-top: 6px;
+  padding-top: 4px;
   border-top: 1px solid color-mix(in srgb, var(--surface-edge) 45%, transparent);
 }
 
@@ -320,7 +320,7 @@ onUnmounted(() => {
 }
 
 .catalog-ledger-val {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--surface-text);
   white-space: nowrap;
@@ -346,7 +346,7 @@ onUnmounted(() => {
 
 .catalog-card-footer {
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: 8px;
   border-top: 1px solid color-mix(in srgb, var(--surface-edge) 50%, transparent);
   display: flex;
   align-items: center;
@@ -359,7 +359,7 @@ onUnmounted(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 4px;
-  padding: 3px 8px;
+  padding: 2px 6px;
   border-radius: var(--surface-radius-tag);
   background: var(--record-card-fill-strong);
   border: 1px solid color-mix(in srgb, var(--surface-edge) 70%, transparent);
@@ -373,7 +373,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 3px;
   flex: none;
-  padding: 4px 8px;
+  padding: 3px 7px;
   border-radius: var(--surface-radius-tag);
   border: 1px solid transparent;
   background: transparent;

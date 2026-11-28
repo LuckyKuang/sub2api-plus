@@ -9,9 +9,9 @@
 .workspace-tabs {
   display: flex;
   flex: none;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
-  padding: 4px;
+  padding: 3px;
   overflow-x: auto;
   scrollbar-width: thin;
 }
@@ -21,15 +21,15 @@
   flex: 0 0 auto;
   min-width: max-content;
   min-height: var(--control-height);
-  padding: 7px 20px;
+  padding: 4px 14px;
   border: 1px solid transparent;
   border-radius: var(--surface-radius-control);
   background-color: transparent;
   box-shadow: none;
   color: var(--surface-muted);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 22px;
+  line-height: 20px;
   white-space: nowrap;
   transition: background-color 150ms, border-color 150ms, color 150ms, box-shadow 150ms;
 }
@@ -98,7 +98,7 @@
 
 /* Filter bars own their fill and corners, without an extra page-level frame. */
 .table-page-layout > .layout-section-fixed:not(.table-page-pagination):has(input.input, .select-trigger):not(:has(> .card, > .surface-card)) {
-  padding: 12px;
+  padding: 8px 12px;
   border-radius: var(--surface-radius);
   background-color: var(--surface-fill);
   background-image: linear-gradient(135deg, var(--surface-glint), transparent 65%);
@@ -126,7 +126,7 @@
   max-width: 100%;
   margin-inline-start: auto;
 }
-.filter-pair { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.filter-pair { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .filter-pair > span { white-space: nowrap; }
 .filter-field > div { width: 100%; }
 .filter-field :where(.input, .select-trigger, .date-picker-trigger),
@@ -169,5 +169,5 @@
     margin-top: 0;
     margin-bottom: 0;
   }
-  .workspace-tab { padding-inline: 16px; }
+  .workspace-tab { padding-inline: 12px; }
 }

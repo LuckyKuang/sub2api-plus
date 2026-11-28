@@ -390,11 +390,11 @@ onUnmounted(() => {
 
 <style scoped>
 .date-picker-trigger {
-  @apply flex items-center gap-2;
-  @apply min-w-0 text-sm;
+  @apply flex items-center gap-1.5;
+  @apply min-w-0 text-[13px];
   min-height: var(--control-height);
-  padding: 7px 12px;
-  line-height: 20px;
+  padding: 5px 10px;
+  line-height: 18px;
   border-radius: var(--surface-radius-control);
   background-color: var(--surface-field);
   @apply border border-[var(--surface-edge)];
@@ -432,16 +432,16 @@ onUnmounted(() => {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  width: 320px;
-  max-width: calc(100vw - 24px);
+  width: 296px;
+  max-width: calc(100vw - 20px);
 }
 
 .date-picker-presets {
-  @apply grid grid-cols-2 gap-1 p-2;
+  @apply grid grid-cols-2 gap-1 p-1.5;
 }
 
 .date-picker-preset {
-  @apply px-3 py-1.5 text-xs font-medium;
+  @apply px-2.5 py-1 text-xs font-medium;
   border-radius: var(--surface-radius-item);
   color: var(--surface-muted);
 
@@ -458,7 +458,7 @@ onUnmounted(() => {
 }
 
 .date-picker-custom {
-  @apply flex items-end gap-2 p-3;
+  @apply flex items-end gap-1.5 p-2.5;
 }
 
 .date-picker-field {
@@ -471,7 +471,7 @@ onUnmounted(() => {
 }
 
 .date-picker-input {
-  @apply w-full px-2 py-1.5 text-sm;
+  @apply w-full px-2 py-1 text-[13px];
   border-radius: var(--surface-radius-item);
   background-color: var(--surface-field);
   @apply border border-[var(--surface-edge)];
@@ -488,7 +488,7 @@ onUnmounted(() => {
 }
 
 .date-picker-apply {
-  @apply px-4 py-1.5 text-sm font-medium;
+  @apply px-3 py-1 text-[13px] font-medium;
   border-radius: var(--surface-radius-item);
   @apply bg-primary-600 text-white;
   @apply hover:bg-primary-700;

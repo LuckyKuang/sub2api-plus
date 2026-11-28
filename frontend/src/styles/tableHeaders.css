@@ -84,5 +84,5 @@
 :root table.static-table-header-table > thead::before { content: none !important; }
 :root table.static-table-header-table > thead > tr:last-child > :is(th, td),
 :root table.static-table-header-table > thead > tr > [data-header-edge-bottom] {
-  border-bottom-width: 8px !important;
+  border-bottom-width: 6px !important;
 }

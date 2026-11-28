@@ -1,40 +1,40 @@
 <template>
   <AppLayout appearance="user" workspace>
     <div class="workspace-page subscriptions-page">
-      <header class="card workspace-fixed subscriptions-heading flex flex-wrap items-center justify-between gap-4 p-5" data-testid="subscriptions-heading">
+      <header class="card workspace-fixed subscriptions-heading flex flex-wrap items-center justify-between gap-3 p-4" data-testid="subscriptions-heading">
         <div>
-          <h2 class="text-base font-semibold">{{ t('userSubscriptions.title') }}</h2>
-          <p class="mt-1 text-xs surface-muted">{{ t('userSubscriptions.description') }}</p>
+          <h2 class="text-[15px] font-semibold">{{ t('userSubscriptions.title') }}</h2>
+          <p class="mt-0.5 text-xs surface-muted">{{ t('userSubscriptions.description') }}</p>
         </div>
-        <span class="rounded-lg border border-[var(--surface-edge)] surface-inset px-3 py-1.5 text-xs tabular-nums surface-muted">
+        <span class="rounded-lg border border-[var(--surface-edge)] surface-inset px-2.5 py-1 text-xs tabular-nums surface-muted">
           {{ t('userSubscriptions.count', { count: subscriptions.length }) }} · {{ t('userSubscriptions.pageSize', { count: PAGE_SIZE }) }}
         </span>
       </header>
       <UserCardScroll :label="t('userSubscriptions.title')" :reset-key="page" data-testid="subscriptions-activity">
       <!-- Loading State -->
-      <div v-if="loading" class="flex justify-center py-12">
+      <div v-if="loading" class="flex justify-center py-10">
         <div
-          class="h-8 w-8 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"
+          class="h-7 w-7 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"
         ></div>
       </div>
 
       <!-- Empty State -->
-      <div v-else-if="subscriptions.length === 0" class="card workspace-shell p-12 text-center">
+      <div v-else-if="subscriptions.length === 0" class="card workspace-shell p-8 text-center">
         <div
-          class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full surface-inset"
+          class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full surface-inset"
         >
-          <Icon name="creditCard" size="xl" class="text-gray-400" />
+          <Icon name="creditCard" size="lg" class="text-gray-400" />
         </div>
-        <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+        <h3 class="mb-1.5 text-base font-semibold text-gray-900 dark:text-white">
           {{ t('userSubscriptions.noActiveSubscriptions') }}
         </h3>
-        <p class="surface-muted">
+        <p class="text-[13px] surface-muted">
           {{ t('userSubscriptions.noActiveSubscriptionsDesc') }}
         </p>
       </div>
 
       <!-- Subscriptions Grid -->
-      <div v-else class="subscriptions-grid grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div v-else class="subscriptions-grid grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <div
           v-for="subscription in pagedSubscriptions"
           :key="subscription.id"
@@ -44,23 +44,23 @@
         >
           <!-- Header -->
           <div
-            class="flex flex-col items-stretch gap-3 border-b border-[var(--surface-edge)] p-4"
+            class="flex flex-col items-stretch gap-2.5 border-b border-[var(--surface-edge)] p-3.5"
           >
-            <div class="flex min-w-0 flex-1 items-start gap-3">
+            <div class="flex min-w-0 flex-1 items-start gap-2.5">
               <div :class="['console-data-mark h-1.5 w-1.5 shrink-0 rounded-full', platformAccentDotClass(subscription.group?.platform || '')]" />
               <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <h3 class="break-words font-semibold text-gray-900 dark:text-white [overflow-wrap:anywhere]">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <h3 class="break-words text-[13px] font-semibold text-gray-900 dark:text-white [overflow-wrap:anywhere]">
                     {{ subscription.group?.name || `Group #${subscription.group_id}` }}
                   </h3>
-                  <span :class="['rounded-md border px-2 py-0.5 text-[11px] font-medium', platformBadgeClass(subscription.group?.platform || '')]">
+                  <span :class="['rounded-md border px-1.5 py-0.5 text-[11px] font-medium', platformBadgeClass(subscription.group?.platform || '')]">
                     {{ platformLabel(subscription.group?.platform || '') }}
                   </span>
                 </div>
                 <p v-if="subscription.group?.description" class="mt-0.5 break-words text-xs surface-muted [overflow-wrap:anywhere]">
                   {{ subscription.group.description }}
                 </p>
-                <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] tabular-nums surface-muted">
+                <div class="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[11px] tabular-nums surface-muted">
                   <span>{{ t('payment.planCard.rate') }}: ×{{ subscription.group?.rate_multiplier ?? 1 }}</span>
                   <span v-if="subscriptionHasPeakRate(subscription)" class="text-amber-700 dark:text-amber-300">
                     {{ t('payment.planCard.peakRate') }}: {{ subscriptionPeakRateLabel(subscription) }}
@@ -71,7 +71,7 @@
             <div class="flex shrink-0 flex-wrap items-center justify-between gap-2">
               <span
                 :class="[
-                  'rounded-md px-2 py-0.5 text-xs font-medium',
+                  'rounded-md px-1.5 py-0.5 text-[11px] font-medium',
                   subscription.status === 'active'
                     ? 'bg-emerald-100/[0.15] text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                     : subscription.status === 'expired'
@@ -83,7 +83,7 @@
               </span>
               <button
                 v-if="subscription.status === 'active'"
-                :class="['rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors', platformButtonClass(subscription.group?.platform || '')]"
+                :class="['rounded-lg px-2.5 py-1 text-xs font-semibold text-white transition-colors', platformButtonClass(subscription.group?.platform || '')]"
                 @click="router.push({ path: '/purchase', query: { tab: 'subscription', group: String(subscription.group_id) } })"
               >
                 {{ t('payment.renewNow') }}
@@ -92,9 +92,9 @@
           </div>
 
           <!-- Usage Progress -->
-          <div class="space-y-4 p-4">
+          <div class="space-y-3 p-3.5">
             <!-- Expiration Info -->
-            <div v-if="subscription.expires_at" class="flex items-start justify-between gap-3 text-sm">
+            <div v-if="subscription.expires_at" class="flex items-start justify-between gap-2.5 text-xs">
               <span class="shrink-0 whitespace-nowrap surface-muted">{{
                 t('userSubscriptions.expires')
               }}</span>
@@ -102,7 +102,7 @@
                 {{ formatExpirationDate(subscription.expires_at) }}
               </span>
             </div>
-            <div v-else class="flex items-start justify-between gap-3 text-sm">
+            <div v-else class="flex items-start justify-between gap-2.5 text-xs">
               <span class="shrink-0 whitespace-nowrap surface-muted">{{
                 t('userSubscriptions.expires')
               }}</span>
@@ -112,45 +112,45 @@
             </div>
 
             <!-- 5-hour rolling usage -->
-            <div v-if="subscription.group?.five_hour_limit_usd" class="space-y-2">
+            <div v-if="subscription.group?.five_hour_limit_usd" class="space-y-1.5">
               <div class="flex items-center justify-between">
-                <span class="text-sm font-medium surface-muted">
+                <span class="text-xs font-medium surface-muted">
                   {{ t('userSubscriptions.fiveHour') }}
                 </span>
-                <span class="text-sm tabular-nums surface-muted">
+                <span class="text-xs tabular-nums surface-muted">
                   &#36;{{ (subscription.five_hour_usage_usd || 0).toFixed(2) }} / &#36;{{
                     subscription.group.five_hour_limit_usd.toFixed(2)
                   }}
                 </span>
               </div>
-              <div class="relative h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
+              <div class="relative h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                 <div
                   class="console-data-mark absolute inset-y-0 left-0 rounded-full transition-all duration-300"
                   :class="getProgressBarClass(subscription.five_hour_usage_usd, subscription.group.five_hour_limit_usd)"
                   :style="{ width: getProgressWidth(subscription.five_hour_usage_usd, subscription.group.five_hour_limit_usd) }"
                 ></div>
               </div>
-              <p v-if="subscription.five_hour_window_start" class="text-xs surface-muted">
+              <p v-if="subscription.five_hour_window_start" class="text-[11px] surface-muted">
                 {{ t('userSubscriptions.resetIn', { time: formatResetTime(subscription.five_hour_window_start, 5) }) }}
               </p>
-              <p v-else class="text-xs surface-muted">
+              <p v-else class="text-[11px] surface-muted">
                 {{ t('userSubscriptions.windowNotActive') }}
               </p>
             </div>
 
             <!-- Daily Usage -->
-            <div v-if="subscription.group?.daily_limit_usd" class="space-y-2">
+            <div v-if="subscription.group?.daily_limit_usd" class="space-y-1.5">
               <div class="flex items-center justify-between">
-                <span class="text-sm font-medium surface-muted">
+                <span class="text-xs font-medium surface-muted">
                   {{ t('userSubscriptions.daily') }}
                 </span>
-                <span class="text-sm tabular-nums surface-muted">
+                <span class="text-xs tabular-nums surface-muted">
                   ${{ (subscription.daily_usage_usd || 0).toFixed(2) }} / ${{
                     subscription.group.daily_limit_usd.toFixed(2)
                   }}
                 </span>
               </div>
-              <div class="relative h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
+              <div class="relative h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                 <div
                   class="console-data-mark absolute inset-y-0 left-0 rounded-full transition-all duration-300"
                   :class="
@@ -169,25 +169,25 @@
               </div>
               <p
                 v-if="subscription.daily_window_start"
-                class="text-xs surface-muted"
+                class="text-[11px] surface-muted"
               >
                 {{ formatDailyUsageWindow(subscription) }}
               </p>
             </div>
 
             <!-- Weekly Usage -->
-            <div v-if="subscription.group?.weekly_limit_usd" class="space-y-2">
+            <div v-if="subscription.group?.weekly_limit_usd" class="space-y-1.5">
               <div class="flex items-center justify-between">
-                <span class="text-sm font-medium surface-muted">
+                <span class="text-xs font-medium surface-muted">
                   {{ t('userSubscriptions.weekly') }}
                 </span>
-                <span class="text-sm tabular-nums surface-muted">
+                <span class="text-xs tabular-nums surface-muted">
                   ${{ (subscription.weekly_usage_usd || 0).toFixed(2) }} / ${{
                     subscription.group.weekly_limit_usd.toFixed(2)
                   }}
                 </span>
               </div>
-              <div class="relative h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
+              <div class="relative h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                 <div
                   class="console-data-mark absolute inset-y-0 left-0 rounded-full transition-all duration-300"
                   :class="
@@ -206,7 +206,7 @@
               </div>
               <p
                 v-if="subscription.weekly_window_start"
-                class="text-xs surface-muted"
+                class="text-[11px] surface-muted"
               >
                 {{
                   t('userSubscriptions.resetIn', {
@@ -217,18 +217,18 @@
             </div>
 
             <!-- Monthly Usage -->
-            <div v-if="subscription.group?.monthly_limit_usd" class="space-y-2">
+            <div v-if="subscription.group?.monthly_limit_usd" class="space-y-1.5">
               <div class="flex items-center justify-between">
-                <span class="text-sm font-medium surface-muted">
+                <span class="text-xs font-medium surface-muted">
                   {{ t('userSubscriptions.monthly') }}
                 </span>
-                <span class="text-sm tabular-nums surface-muted">
+                <span class="text-xs tabular-nums surface-muted">
                   ${{ (subscription.monthly_usage_usd || 0).toFixed(2) }} / ${{
                     subscription.group.monthly_limit_usd.toFixed(2)
                   }}
                 </span>
               </div>
-              <div class="relative h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
+              <div class="relative h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                 <div
                   class="console-data-mark absolute inset-y-0 left-0 rounded-full transition-all duration-300"
                   :class="
@@ -247,7 +247,7 @@
               </div>
               <p
                 v-if="subscription.monthly_window_start"
-                class="text-xs surface-muted"
+                class="text-[11px] surface-muted"
               >
                 {{
                   t('userSubscriptions.resetIn', {
@@ -265,15 +265,15 @@
                 !subscription.group?.monthly_limit_usd &&
                 !subscription.group?.five_hour_limit_usd
               "
-              class="surface-subcard flex items-center justify-center bg-gradient-to-r from-emerald-50/70 to-teal-50/70 py-6 dark:from-emerald-900/20 dark:to-teal-900/20"
+              class="surface-subcard flex items-center justify-center bg-gradient-to-r from-emerald-50/70 to-teal-50/70 py-4 dark:from-emerald-900/20 dark:to-teal-900/20"
             >
-              <div class="flex items-center gap-3">
-                <span class="text-4xl text-emerald-600 dark:text-emerald-400">∞</span>
+              <div class="flex items-center gap-2.5">
+                <span class="text-3xl text-emerald-600 dark:text-emerald-400">∞</span>
                 <div>
-                  <p class="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                  <p class="text-[13px] font-medium text-emerald-700 dark:text-emerald-300">
                     {{ t('userSubscriptions.unlimited') }}
                   </p>
-                  <p class="text-xs text-emerald-600/70 dark:text-emerald-400/70">
+                  <p class="text-[11px] text-emerald-600/70 dark:text-emerald-400/70">
                     {{ t('userSubscriptions.unlimitedDesc') }}
                   </p>
                 </div>
@@ -292,7 +292,7 @@
         :show-page-size-selector="false"
         @update:page="page = $event"
       />
-      <footer v-else class="card workspace-fixed subscriptions-pagination p-5 text-sm surface-muted">
+      <footer v-else class="card workspace-fixed subscriptions-pagination p-3.5 text-xs surface-muted">
         {{ loading ? t('common.loading') : t('userSubscriptions.count', { count: 0 }) }}
       </footer>
     </div>

@@ -6,7 +6,7 @@ import postcss, { type Root } from 'postcss'
 
 // Requirement: controls that share a row line up. Buttons, fields, select and
 // date triggers, tabs and pagers read one height per size and the control
-// radius; status labels are 20px tags, never capsules.
+// radius; status labels are 18px tags, never capsules.
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const parse = (path: string) => postcss.parse(readFileSync(resolve(sourceRoot, path), 'utf8'))
 const sheets: Record<string, Root> = {
@@ -28,10 +28,10 @@ function declarations(sheet: Root, selector: string): Map<string, string> {
 describe('shared control sizes', () => {
   it('declares one height per control size', () => {
     const root = declarations(sheets.console, ':root')
-    expect(root.get('--control-height')).toBe('36px')
-    expect(root.get('--control-height-sm')).toBe('32px')
-    expect(root.get('--control-height-xs')).toBe('26px')
-    expect(root.get('--control-height-lg')).toBe('44px')
+    expect(root.get('--control-height')).toBe('32px')
+    expect(root.get('--control-height-sm')).toBe('28px')
+    expect(root.get('--control-height-xs')).toBe('24px')
+    expect(root.get('--control-height-lg')).toBe('38px')
   })
 
   it.each([
@@ -64,12 +64,12 @@ describe('shared control sizes', () => {
     expect(button.get('max-width')).toBe('100%')
   })
 
-  it('renders status labels as 20px tags', () => {
+  it('renders status labels as 18px tags', () => {
     const badge = declarations(sheets.style, '.badge')
     expect(badge.get('border-radius')).toBe('var(--surface-radius-tag)')
-    expect(badge.get('padding')).toBe('2px 8px')
+    expect(badge.get('padding')).toBe('1px 6px')
     expect(badge.get('line-height')).toBe('16px')
-    expect(badge.get('font-size')).toBe('12px')
+    expect(badge.get('font-size')).toBe('11.5px')
   })
 
   it('gives every pager control the small control height with only the current page tinted', () => {

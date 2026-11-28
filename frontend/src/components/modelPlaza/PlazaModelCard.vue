@@ -1,8 +1,8 @@
 <template>
   <article class="plaza-model-card">
-    <header class="flex min-w-0 items-start gap-3">
+    <header class="flex min-w-0 items-start gap-2.5">
       <span class="model-mark" :class="platformBadgeLightClass(model.platform)" :title="platformLabel(model.platform)">
-        <PlatformIcon :platform="model.platform as GroupPlatform" size="lg" />
+        <PlatformIcon :platform="model.platform as GroupPlatform" size="md" />
         <span class="sr-only">{{ platformLabel(model.platform) }}</span>
       </span>
       <div class="min-w-0 flex-1">
@@ -11,7 +11,7 @@
             {{ model.name }}
           </button>
         </h3>
-        <p class="mt-1 break-words text-xs surface-muted">
+        <p class="mt-0.5 break-words text-xs surface-muted">
           {{ group.name }} <span class="ml-1 whitespace-nowrap font-mono">{{ quote.rate }}×</span>
         </p>
       </div>
@@ -27,15 +27,15 @@
     </header>
 
     <div class="model-prices">
-      <p v-if="!model.pricing" class="text-sm surface-muted">{{ t('modelPlaza.detail.noPricing') }}</p>
+      <p v-if="!model.pricing" class="text-[13px] surface-muted">{{ t('modelPlaza.detail.noPricing') }}</p>
       <template v-else>
-        <dl class="flex flex-wrap items-baseline gap-x-5 gap-y-1">
+        <dl class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <div v-for="price in quote.prices" :key="price.label" class="flex items-baseline gap-1.5">
             <dt class="text-xs surface-muted">{{ t(price.label) }}</dt>
             <dd class="price-number">{{ price.value }}</dd>
           </div>
         </dl>
-        <p class="mt-1 flex flex-wrap gap-x-2 text-xs surface-muted">
+        <p class="mt-1 flex flex-wrap gap-x-2 text-[11px] surface-muted">
           <span><template v-if="billingMode(model) === BILLING_MODE_TOKEN">{{ t('modelPlaza.catalog.paid') }} · </template>{{ t(quote.unit) }}</span>
           <span v-if="quote.tier">{{ quote.tier }}</span>
           <span v-if="group.peak_rate_enabled || timePricing(model)?.periods.length">{{ t('modelPlaza.catalog.standardPrice') }}</span>
@@ -78,8 +78,8 @@ const quote = computed(() => summarizeOffer(props))
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 16px;
-  padding: 18px;
+  gap: 10px;
+  padding: 12px 14px;
   border: 1px solid var(--surface-edge);
   border-radius: var(--surface-radius-card);
   background: var(--surface-fill);
@@ -87,7 +87,7 @@ const quote = computed(() => summarizeOffer(props))
 }
 
 .plaza-model-card:hover, .plaza-model-card:focus-within { border-color: var(--console-control-hover-edge); }
-.model-name { font-size: 1rem; line-height: 1.35; font-weight: 650; }
+.model-name { font-size: 0.9375rem; line-height: 1.35; font-weight: 650; }
 .open-model { overflow-wrap: anywhere; text-align: left; }
 .open-model::after { position: absolute; inset: 0; content: ''; border-radius: var(--surface-radius-card); }
 .open-model:focus-visible { outline: none; }
@@ -106,10 +106,10 @@ const quote = computed(() => summarizeOffer(props))
 .model-copy { position: relative; color: var(--surface-muted); }
 .model-copy:hover, .model-copy:focus-visible { background: var(--surface-hover); color: var(--console-accent-readable); }
 .model-prices { margin-top: auto; }
-.price-number { font-size: 1.05rem; line-height: 1.4; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.price-number { font-size: 0.95rem; line-height: 1.35; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 
-.plaza-model-card footer { padding-top: 10px; border-top: 1px solid var(--surface-edge); color: var(--console-accent-readable); }
+.plaza-model-card footer { padding-top: 8px; border-top: 1px solid var(--surface-edge); color: var(--console-accent-readable); }
 @media (max-width: 639px) {
-  .plaza-model-card { gap: 12px; padding: 14px 16px; }
+  .plaza-model-card { gap: 8px; padding: 10px 12px; }
 }
 </style>

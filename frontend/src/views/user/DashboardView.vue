@@ -1,27 +1,27 @@
 <template>
   <AppLayout appearance="user" workspace>
     <div class="workspace-page user-dashboard">
-      <div class="card workspace-fixed dashboard-toolbar flex flex-wrap items-center gap-3 p-4">
+      <div class="card workspace-fixed dashboard-toolbar flex flex-wrap items-center gap-2.5 p-3">
         <DateRangePicker v-model:start-date="startDate" v-model:end-date="endDate" @change="changeCharts" />
         <div class="flex items-center gap-2">
-          <span class="text-sm surface-muted">{{ t('dashboard.granularity') }}</span>
-          <Select v-model="granularity" class="w-28" :options="granularityOptions" @change="changeCharts" />
+          <span class="text-xs sm:text-[13px] surface-muted">{{ t('dashboard.granularity') }}</span>
+          <Select v-model="granularity" class="w-24" :options="granularityOptions" @change="changeCharts" />
         </div>
-        <div class="dashboard-refresh flex flex-wrap items-center gap-3 text-xs surface-muted">
+        <div class="dashboard-refresh flex flex-wrap items-center gap-2.5 text-xs surface-muted">
           <span v-if="stats">{{ t('inspection.timezone', { zone: stats.timezone || 'UTC' }) }}</span>
           <RefreshControl :state="overviewRefresh" />
           <button v-if="!stats && overviewRefresh.error.value" class="btn btn-secondary" @click="refreshAll">{{ t('inspection.retry') }}</button>
         </div>
       </div>
       <UserCardScroll class="dashboard-activity" data-testid="dashboard-activity">
-      <div v-if="loading && !stats" class="flex items-center justify-center py-12"><LoadingSpinner /></div>
+      <div v-if="loading && !stats" class="flex items-center justify-center py-10"><LoadingSpinner /></div>
       <template v-else-if="stats">
         <UserDashboardStats workspace section="summary" :stats="stats" :balance="user?.balance || 0" :frozen-balance="user?.frozen_balance" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
         <section class="dashboard-section" data-testid="dashboard-charts-panel">
           <UserDashboardCharts workspace :show-toolbar="false" v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="changeCharts" @granularityChange="changeCharts" @refresh="refreshAll" />
         </section>
         <section class="dashboard-section user-dashboard-details" data-testid="dashboard-quotas-panel">
-          <div class="card flex items-center justify-between px-4 py-2.5">
+          <div class="card flex items-center justify-between px-3.5 py-2">
             <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('workspace.platformsQuotas') }}</h2>
           </div>
           <UserDashboardStats section="details" :stats="stats" :balance="user?.balance || 0" :frozen-balance="user?.frozen_balance" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
@@ -132,13 +132,13 @@ onBeforeUnmount(() => { disposed = true; chartSeq++; recentSeq++ })
 /* Chart.js resizes on its next animation frame. Constrain the previous
    canvas width immediately when the dashboard's viewport becomes narrower. */
 .dashboard-section :deep(canvas) { max-width: 100%; }
-.user-dashboard-details { display: flex; flex-direction: column; gap: 16px; }
+.user-dashboard-details { display: flex; flex-direction: column; gap: 10px; }
 .user-dashboard-details > * { margin-block: 0; }
 .dashboard-refresh { margin-left: auto; }
 @media (min-width: 1024px) {
-  .dashboard-toolbar { padding: 14px 20px; }
+  .dashboard-toolbar { padding: 10px 14px; }
 }
 @media (min-width: 1024px) and (max-height: 799px) {
-  .dashboard-toolbar { padding-top: 8px; padding-bottom: 8px; }
+  .dashboard-toolbar { padding-top: 6px; padding-bottom: 6px; }
 }
 </style>

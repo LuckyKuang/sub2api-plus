@@ -73,7 +73,7 @@ describe('record table appearance requirements', () => {
     expect(recordTable.get('border-spacing')).toBe('0')
     expect(recordTable.get('border-collapse')).toBe('separate')
     expect(recordTable.get('--record-row-radius')).toBe('var(--surface-radius-item)')
-    expect(recordTable.get('--record-row-gap')).toBe('3px')
+    expect(recordTable.get('--record-row-gap')).toBe('2px')
     expect(recordTable.get('--record-row-fill')).toBe('var(--record-card-fill)')
     // Hover and selection tints keep their strength at any card transparency.
     expect(recordTable.get('--record-row-hover')).toBe('rgb(var(--console-accent-500, 20 184 166) / 10%)')
@@ -124,13 +124,13 @@ describe('record table appearance requirements', () => {
     }
   })
 
-  it.each(['', 'dark'])('uses flat headers, transparent 12px gutters and a 6px gap before the cards in %s mode', theme => {
+  it.each(['', 'dark'])('uses flat headers, transparent 8px gutters and a 4px gap before the cards in %s mode', theme => {
     const container = table()
     container.classList.add(...theme.split(' ').filter(Boolean))
     const scroll = paint(container)
-    expect(scroll.get('border-inline')).toBe('12px solid transparent')
+    expect(scroll.get('border-inline')).toBe('8px solid transparent')
     expect(scroll.get('background-color')).toBe('transparent')
-    expect(scroll.get('padding')).toBe('4px 0 8px')
+    expect(scroll.get('padding')).toBe('3px 0 6px')
     for (const layer of container.querySelectorAll('thead, thead > tr')) {
       expect(paint(layer).get('background-color')).toBe('transparent')
       expect(paint(layer).get('background-image')).toBe('none')
@@ -140,7 +140,7 @@ describe('record table appearance requirements', () => {
       expect(headerPaint.get('background-color')).toBe('transparent')
       expect(headerPaint.get('background-image')).toBe('none')
       expect(headerPaint.get('border-radius')).toBe('0')
-      expect(headerPaint.get('border-bottom-width')).toBe('6px')
+      expect(headerPaint.get('border-bottom-width')).toBe('4px')
       // Cards delimit themselves; the header carries no rule line.
       expect(headerPaint.get('box-shadow')).toBe('none')
     }
@@ -163,7 +163,7 @@ describe('record table appearance requirements', () => {
       expect(paint(layer).get('background-color')).toBe('transparent')
       expect(paint(layer).get('background-image')).toBe('none')
     }
-    expect(paint(container.querySelector('thead [rowspan]')!).get('border-bottom-width')).toBe('6px')
+    expect(paint(container.querySelector('thead [rowspan]')!).get('border-bottom-width')).toBe('4px')
     for (const cell of container.querySelectorAll(':is(tbody, tfoot) > tr:not([aria-hidden="true"]) > :is(td, th)')) {
       const cellPaint = paint(cell)
       expect(cellPaint.get('background-color')).toBe('transparent')

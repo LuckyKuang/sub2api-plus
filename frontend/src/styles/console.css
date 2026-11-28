@@ -2,10 +2,10 @@
   --console-accent-readable: rgb(var(--console-accent-700, 15 118 110));
   --console-control-edge: rgb(var(--console-accent-500, 20 184 166) / 36%);
   --console-control-hover-edge: rgb(var(--console-accent-500, 20 184 166) / 65%);
-  --shell-gap: 12px;
-  --shell-gutter: 12px;
+  --shell-gap: 8px;
+  --shell-gutter: 8px;
   /* One gap separates the three console zones (top / middle / bottom). */
-  --shell-zone-gap: 16px;
+  --shell-zone-gap: 10px;
   /* One page width token; the admin console takes it at full width, the user
      console narrows it and opts into its own cap. */
   --shell-page-width: 100%;
@@ -14,11 +14,11 @@
      SearchableSelect's dropdownMinimumWidth and .select-dropdown-portal. */
   /* One width for every query control (search included), sized to the longest
      default label ("全部Privacy状态"); date ranges need two dates. */
-  --filter-control-width: 160px;
+  --filter-control-width: 144px;
   --filter-search-width: var(--filter-control-width);
-  --filter-date-width: 200px;
-  --filter-gap: 12px;
-  --shell-header-height: 64px;
+  --filter-date-width: 184px;
+  --filter-gap: 8px;
+  --shell-header-height: 52px;
   --shell-inset-top: max(var(--shell-gutter), env(safe-area-inset-top));
   --shell-inset-bottom: max(var(--shell-gutter), env(safe-area-inset-bottom));
   --shell-sticky-offset: calc(var(--shell-inset-top) + var(--shell-header-height) + var(--shell-gap));
@@ -32,19 +32,19 @@
      L2 control/item: buttons, fields, select triggers, menu items, table rows.
      L3 tag: badges, chips, segmented options, compact buttons.
      L4 xs: checkboxes, inline code, micro marks. */
-  --surface-radius: 16px;
-  --surface-radius-panel: 12px;
-  --surface-radius-card: 12px;
-  --surface-radius-item: 8px;
-  --surface-radius-control: 8px;
-  --surface-radius-tag: 6px;
-  --surface-radius-xs: 4px;
+  --surface-radius: 12px;
+  --surface-radius-panel: 10px;
+  --surface-radius-card: 10px;
+  --surface-radius-item: 6px;
+  --surface-radius-control: 6px;
+  --surface-radius-tag: 4px;
+  --surface-radius-xs: 3px;
   /* One control height per size, shared by buttons, fields, select and date
      triggers and pagination, so controls in one row always line up. */
-  --control-height: 36px;
-  --control-height-sm: 32px;
-  --control-height-xs: 26px;
-  --control-height-lg: 44px;
+  --control-height: 32px;
+  --control-height-sm: 28px;
+  --control-height-xs: 24px;
+  --control-height-lg: 38px;
   --surface-fill: var(--surface-solid);
   --surface-shell: var(--surface-solid);
   --surface-soft: rgb(240 237 232 / var(--console-card-alpha, 1));
@@ -165,11 +165,11 @@
   height: var(--shell-header-height);
   min-width: 0;
 }
-.app-header-inner { flex: 1; height: var(--shell-header-height); min-width: 0; padding-inline: 10px; }
-.app-header :where(button, select) { min-height: 44px; }
-.app-header .btn-icon, .app-header :where(button[aria-label]) { min-width: 44px; }
+.app-header-inner { flex: 1; height: var(--shell-header-height); min-width: 0; padding-inline: 8px; }
+.app-header :where(button, select) { min-height: var(--control-height); }
+.app-header .btn-icon, .app-header :where(button[aria-label]) { min-width: var(--control-height); }
 .header-user-dropdown {
-  width: min(320px, calc(100vw - var(--shell-gutter) * 2));
+  width: min(296px, calc(100vw - var(--shell-gutter) * 2));
   max-height: calc(100dvh - var(--shell-sticky-offset) - var(--shell-inset-bottom));
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -188,8 +188,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 12px 10px 16px;
+  gap: 8px;
+  padding: 8px 10px 8px 12px;
   border-bottom: 1px solid var(--surface-edge);
 }
 .announcement-dropdown-list {
@@ -197,10 +197,10 @@
   min-height: 0;
   /* Keep the panel to roughly a third of its former height: a few rows stay
      visible and the rest scrolls inside the list. */
-  max-height: min(32dvh, 260px);
+  max-height: min(32dvh, 240px);
   flex-direction: column;
   gap: 2px;
-  padding: 6px;
+  padding: 4px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -208,8 +208,8 @@
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 12px;
-  padding: 10px;
+  gap: 8px;
+  padding: 7px 8px;
   border-radius: var(--surface-radius-item);
   text-align: left;
   transition: background-color 150ms;
@@ -219,8 +219,8 @@
 .announcement-dropdown-item:focus-visible { box-shadow: inset 0 0 0 2px rgb(var(--console-accent-500, 20 184 166) / 70%); }
 .announcement-dropdown-icon {
   display: flex;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   flex: none;
   align-items: center;
   justify-content: center;
@@ -235,7 +235,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--shell-gap);
-  width: min(320px, calc(100vw - var(--shell-gutter) * 2));
+  width: min(248px, calc(100vw - var(--shell-gutter) * 2));
   height: calc(100dvh - var(--shell-inset-top) - var(--shell-inset-bottom));
   min-height: 0;
   transform: translateX(calc(-100% - var(--shell-gutter) - 32px));
@@ -246,7 +246,7 @@
 .sidebar-header { position: relative; z-index: 2; }
 .sidebar-panel { display: flex; min-height: 0; flex: 1; flex-direction: column; }
 .sidebar-footer { flex-shrink: 0; }
-.sidebar-mobile-close { flex: none; width: 44px; height: 44px; }
+.sidebar-mobile-close { flex: none; width: var(--control-height); height: var(--control-height); }
 .sidebar-nav { min-height: 0; overscroll-behavior: contain; scrollbar-width: thin; }
 .sidebar-link { min-height: 34px; }
 .sidebar-nav .sidebar-subnav .sidebar-link { min-height: 30px; padding: 4px 8px; font-size: 13px; }
@@ -303,15 +303,15 @@
 }
 
 @media (min-width: 768px) {
-  :root { --shell-gap: 16px; --shell-gutter: 16px; }
+  :root { --shell-gap: 10px; --shell-gutter: 10px; }
 }
 @media (min-width: 1024px) {
-  :root { --shell-gap: 24px; --shell-gutter: 24px; }
+  :root { --shell-gap: 14px; --shell-gutter: 14px; }
   .app-layout { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); transition: grid-template-columns 200ms ease-out; }
   .app-layout { --console-content-left: calc(max(var(--shell-gutter), env(safe-area-inset-left)) + var(--sidebar-width) + var(--shell-gap)); }
   .app-layout.sidebar-is-collapsed { --sidebar-width: 68px; }
   .sidebar { position: sticky; left: auto; align-self: start; width: 100%; transform: none; }
-  .app-header-inner { padding-inline: 18px; }
+  .app-header-inner { padding-inline: 12px; }
 }
 
 /* Keep this fallback outside Tailwind's component variants, including !card/!dropdown. */

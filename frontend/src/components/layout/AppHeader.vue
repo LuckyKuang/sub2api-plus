@@ -2,7 +2,7 @@
   <header ref="headerRef" class="app-header shell-surface">
     <div class="app-header-inner flex items-center justify-between gap-2">
       <!-- Left: Mobile Menu Toggle + Page Title -->
-      <div class="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
+      <div class="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-3">
         <button
           @click="toggleMobileSidebar"
           class="btn-ghost btn-icon lg:hidden surface-control"
@@ -15,7 +15,7 @@
 
         <img v-if="appStore.publicSettingsLoaded" :src="siteLogo || '/logo.svg'" alt="" class="header-mobile-logo h-7 w-7 shrink-0 rounded-lg object-contain lg:hidden" />
         <div class="min-w-0">
-          <h1 class="truncate text-sm font-semibold text-gray-900 dark:text-white sm:text-lg" :title="pageTitle">
+          <h1 class="truncate text-sm font-semibold text-gray-900 dark:text-white sm:text-base" :title="pageTitle">
             {{ pageTitle }}
           </h1>
           <p v-if="pageDescription && !compactHeader" class="truncate text-xs surface-muted" :title="pageDescription">
@@ -25,7 +25,7 @@
       </div>
 
       <!-- Right: shared tools everywhere; personal widgets only in the user portal. -->
-      <div class="flex shrink-0 items-center gap-1 sm:gap-3">
+      <div class="flex shrink-0 items-center gap-1 sm:gap-2">
         <!-- Personal announcements only belong to the user portal. -->
         <AnnouncementBell v-if="user && isUserPortal" />
 
@@ -35,7 +35,7 @@
           :href="docUrl"
           target="_blank"
           rel="noopener noreferrer"
-          class="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white sm:flex surface-muted"
+          class="hidden items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] font-medium transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white sm:flex surface-muted"
         >
           <Icon name="book" size="sm" />
           <span class="hidden sm:inline">{{ t('nav.docs') }}</span>
@@ -47,7 +47,7 @@
           :to="{ path: '/model-plaza', query: { embedded: '1' } }"
           :title="t('nav.modelPlaza')"
           :aria-label="t('nav.modelPlaza')"
-          class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white surface-muted"
+          class="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] font-medium transition-colors hover:surface-hover hover:text-gray-900 dark:hover:text-white surface-muted"
         >
           <Icon name="grid" size="sm" />
           <span class="hidden sm:inline">{{ t('nav.modelPlaza') }}</span>
@@ -62,7 +62,7 @@
         <!-- Balance Display -->
         <div
           v-if="user && isUserPortal && !compactHeader"
-          class="group relative hidden items-center gap-2 rounded-lg border border-[var(--surface-edge)] bg-primary-50/[0.15] px-3 py-1.5 dark:bg-primary-900/20 sm:flex"
+          class="group relative hidden items-center gap-1.5 rounded-lg border border-[var(--surface-edge)] bg-primary-50/[0.15] px-2.5 py-1 dark:bg-primary-900/20 sm:flex"
         >
           <svg
             class="h-4 w-4 text-primary-600 dark:text-primary-400"
@@ -77,7 +77,7 @@
               d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"
             />
           </svg>
-          <span class="tabular-nums text-sm font-semibold text-primary-700 dark:text-primary-300">
+          <span class="tabular-nums text-[13px] font-semibold text-primary-700 dark:text-primary-300">
             {{ formatHeaderMoney(availableBalance) }}
           </span>
           <span
@@ -87,7 +87,7 @@
             {{ balanceFrozenLabel }}
           </span>
           <div
-            class="pointer-events-none absolute right-0 top-full mt-2 hidden w-56 rounded-xl border border-[var(--surface-edge)] p-3 text-xs shadow-lg group-hover:block surface-panel"
+            class="pointer-events-none absolute right-0 top-full mt-2 hidden w-56 rounded-xl border border-[var(--surface-edge)] p-2.5 text-xs shadow-lg group-hover:block surface-panel"
           >
             <div class="flex items-center justify-between">
               <span class="surface-muted">{{ balanceAvailableText }}</span>
@@ -112,12 +112,12 @@
             ref="userMenuButton"
             @click="toggleDropdown"
             @keydown.esc.stop="closeDropdownAndFocus"
-            class="flex items-center gap-2 rounded-lg p-1.5 transition-colors hover:surface-hover surface-control"
+            class="flex items-center gap-1.5 rounded-lg p-1 transition-colors hover:surface-hover surface-control"
             :aria-label="t('common.userMenu')"
             :aria-expanded="dropdownOpen"
             aria-haspopup="true"
           >
-            <div class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-primary-500 to-primary-600 text-sm font-medium text-white shadow-sm">
+            <div class="flex h-7 w-7 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-primary-500 to-primary-600 text-xs font-medium text-white shadow-sm">
               <img
                 v-if="avatarUrl"
                 :src="avatarUrl"
@@ -127,10 +127,10 @@
               <span v-else>{{ userInitials }}</span>
             </div>
             <div v-if="!compactHeader" class="max-w-32 text-left">
-              <div class="truncate text-sm font-medium text-gray-900 dark:text-white">
+              <div class="truncate text-[13px] font-medium leading-tight text-gray-900 dark:text-white">
                 {{ displayName }}
               </div>
-              <div class="text-xs surface-muted">
+              <div class="text-[11px] leading-tight surface-muted">
                 {{ t('admin.users.roles.' + user.role) }}
               </div>
             </div>
@@ -139,24 +139,24 @@
 
           <!-- Dropdown Menu -->
           <transition name="dropdown">
-            <div v-if="dropdownOpen" class="dropdown header-user-dropdown right-0 mt-2" @keydown.esc.stop="closeDropdownAndFocus">
+            <div v-if="dropdownOpen" class="dropdown header-user-dropdown right-0 mt-1.5" @keydown.esc.stop="closeDropdownAndFocus">
               <!-- User Info -->
-              <div class="border-b border-[var(--surface-edge)] px-4 py-3">
-                <div class="text-sm font-medium text-gray-900 dark:text-white">
+              <div class="border-b border-[var(--surface-edge)] px-3 py-2">
+                <div class="text-[13px] font-medium text-gray-900 dark:text-white">
                   {{ displayName }}
                 </div>
                 <div class="text-xs surface-muted">{{ user.email }}</div>
               </div>
 
               <!-- Balance (mobile only) -->
-              <div v-if="compactHeader && isUserPortal" class="border-b border-[var(--surface-edge)] px-4 py-2.5">
+              <div v-if="compactHeader && isUserPortal" class="border-b border-[var(--surface-edge)] px-3 py-2">
                 <div class="text-xs surface-muted">
                   {{ t('common.balance') }}
                 </div>
-                <div class="tabular-nums text-sm font-semibold text-primary-600 dark:text-primary-400">
+                <div class="tabular-nums text-[13px] font-semibold text-primary-600 dark:text-primary-400">
                   {{ formatHeaderMoney(availableBalance) }}
                 </div>
-                <div v-if="frozenBalance > 0" class="mt-1 tabular-nums text-xs text-amber-600 dark:text-amber-300">
+                <div v-if="frozenBalance > 0" class="mt-0.5 tabular-nums text-xs text-amber-600 dark:text-amber-300">
                   {{ balanceFrozenText }} {{ formatHeaderMoney(frozenBalance) }}
                 </div>
               </div>
@@ -165,7 +165,7 @@
                 <template v-if="compactHeader">
                   <a v-if="docUrl" :href="docUrl" target="_blank" rel="noopener noreferrer" class="dropdown-item" @click="closeDropdown"><Icon name="book" size="sm" />{{ t('nav.docs') }}</a>
                   <router-link v-if="modelPlazaEnabled" :to="{ path: '/model-plaza', query: { embedded: '1' } }" class="dropdown-item" @click="closeDropdown"><Icon name="grid" size="sm" />{{ t('nav.modelPlaza') }}</router-link>
-                  <div class="flex flex-col items-start gap-3 px-4 py-2">
+                  <div class="flex flex-col items-start gap-2 px-3 py-1.5">
                     <LocaleSwitcher />
                     <SubscriptionProgressMini v-if="isUserPortal && subscriptionFeatureEnabled" inline class="w-full" />
                   </div>

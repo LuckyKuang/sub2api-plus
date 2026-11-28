@@ -9,8 +9,8 @@
    transparent block border is the gap between cards. */
 .record-table-scroll {
   border: 0 !important;
-  border-inline: 12px solid transparent !important;
-  padding: 4px 0 8px !important;
+  border-inline: 8px solid transparent !important;
+  padding: 3px 0 6px !important;
   overflow-x: auto;
   background-color: transparent !important;
   background-image: none !important;
@@ -32,8 +32,8 @@ table.record-table {
   --record-row-edge-rest: var(--surface-edge);
   --record-row-edge-active: rgb(var(--console-accent-500, 20 184 166) / 55%);
   --record-row-radius: var(--surface-radius-item);
-  --record-row-gap: 3px;
-  --record-row-indent: 20px;
+  --record-row-gap: 2px;
+  --record-row-indent: 16px;
   border-collapse: separate !important;
   border-spacing: 0 !important;
   border: 0 !important;
@@ -65,7 +65,7 @@ table.record-table {
 /* Cards delimit themselves, so the header needs only a gap before them. */
 :root table.record-table > thead > tr:last-child > :is(th, td),
 :root table.record-table > thead > tr > [data-header-edge-bottom] {
-  border-bottom-width: 6px !important;
+  border-bottom-width: 4px !important;
 }
 
 :root table.record-table > :is(tbody, tfoot) > tr:not([aria-hidden="true"]) > :is(td, th) {
@@ -200,7 +200,7 @@ table.record-table .sticky-col::after {
   max-width: 240px;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   white-space: normal;
 }
 .table-actions > :is(span, div) { min-width: 0; max-width: 100%; }
@@ -211,13 +211,13 @@ table.record-table .sticky-col::after {
   display: inline-flex;
   min-width: 0;
   max-width: 100%;
-  min-height: 28px;
+  min-height: 24px;
   height: auto;
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 4px 8px;
+  gap: 3px;
+  padding: 2px 7px;
   border: 1px solid var(--surface-edge);
   border-radius: var(--surface-radius-tag);
   background: var(--surface-soft);
@@ -251,7 +251,7 @@ table.record-table .sticky-col::after {
 }
 .table-action:is(:disabled, [aria-disabled="true"]) { cursor: not-allowed; opacity: .5; }
 @media (pointer: coarse) {
-  .table-action { min-height: 44px; }
+  .table-action { min-height: var(--control-height-sm); }
 }
 
 /* Row action menus open from a table's “more” action and share the dropdown
@@ -259,7 +259,7 @@ table.record-table .sticky-col::after {
 .action-menu-content {
   position: fixed;
   z-index: 9999;
-  min-width: 176px;
+  min-width: 160px;
   max-width: min(280px, calc(100vw - 16px));
   max-height: calc(100dvh - 16px);
   overflow-y: auto;
@@ -272,12 +272,12 @@ table.record-table .sticky-col::after {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-height: var(--control-height-sm);
-  padding: 6px 10px;
+  padding: 4px 8px;
   background: transparent;
   color: var(--surface-text);
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 18px;
   text-align: left;
   white-space: nowrap;
@@ -295,13 +295,13 @@ table.record-table .sticky-col::after {
    bare previous/next pagers). Each page control is one ghost button with the
    small control height and control radius; only the current page is tinted.
    `embedded` drops the card shell for pagers inside a card or dialog. */
-.pagination-embedded { padding-top: 12px; }
+.pagination-embedded { padding-top: 8px; }
 .pagination-pages {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 3px;
   align-self: flex-end;
 }
 .pagination-button {
@@ -311,12 +311,12 @@ table.record-table .sticky-col::after {
   justify-content: center;
   min-width: var(--control-height-sm);
   height: var(--control-height-sm);
-  padding: 0 8px;
+  padding: 0 6px;
   border: 1px solid transparent;
   border-radius: var(--surface-radius-control);
   background: transparent;
   color: var(--surface-muted);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1;

@@ -1,56 +1,56 @@
 <template>
-  <div v-if="section !== 'details'" class="grid grid-cols-1 gap-4 sm:grid-cols-2" :class="[workspace ? 'dashboard-kpis workspace-fixed' : '', isSimple ? 'xl:grid-cols-3' : 'xl:grid-cols-4']">
-    <div v-if="!isSimple" class="card p-5">
-      <p class="text-sm surface-muted">{{ t('dashboard.balance') }} · {{ t('common.available') }}</p>
-      <p class="stat-value mt-3 text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">${{ formatBalance(balance) }}</p>
-      <p v-if="frozenBalance" class="mt-2 text-xs text-amber-600">{{ t('inspection.frozen') }} ${{ formatBalance(frozenBalance) }}</p>
+  <div v-if="section !== 'details'" class="grid grid-cols-1 gap-3 sm:grid-cols-2" :class="[workspace ? 'dashboard-kpis workspace-fixed' : '', isSimple ? 'xl:grid-cols-3' : 'xl:grid-cols-4']">
+    <div v-if="!isSimple" class="card p-3.5 sm:p-4">
+      <p class="text-xs sm:text-[13px] surface-muted">{{ t('dashboard.balance') }} · {{ t('common.available') }}</p>
+      <p class="stat-value mt-2 text-xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">${{ formatBalance(balance) }}</p>
+      <p v-if="frozenBalance" class="mt-1.5 text-xs text-amber-600">{{ t('inspection.frozen') }} ${{ formatBalance(frozenBalance) }}</p>
     </div>
-    <div class="card p-5">
-      <p class="text-sm surface-muted">{{ t('inspection.todayRecords') }}</p>
-      <p class="stat-value mt-3 text-2xl font-semibold tabular-nums">{{ formatNumber(stats.today_requests) }}</p>
-      <p class="mt-2 text-xs surface-muted">{{ t('inspection.recordsHint') }}</p>
+    <div class="card p-3.5 sm:p-4">
+      <p class="text-xs sm:text-[13px] surface-muted">{{ t('inspection.todayRecords') }}</p>
+      <p class="stat-value mt-2 text-xl font-semibold tabular-nums">{{ formatNumber(stats.today_requests) }}</p>
+      <p class="mt-1.5 text-xs surface-muted">{{ t('inspection.recordsHint') }}</p>
     </div>
-    <div class="card p-5">
-      <p class="text-sm surface-muted">{{ t('dashboard.todayCost') }} · {{ t('dashboard.actual') }}</p>
-      <p class="stat-value mt-3 text-2xl font-semibold tabular-nums">{{ usageMoney(stats.today_actual_cost) }}</p>
-      <p class="mt-2 text-xs surface-muted">{{ t('dashboard.standard') }} ${{ formatCost(stats.today_cost) }}</p>
+    <div class="card p-3.5 sm:p-4">
+      <p class="text-xs sm:text-[13px] surface-muted">{{ t('dashboard.todayCost') }} · {{ t('dashboard.actual') }}</p>
+      <p class="stat-value mt-2 text-xl font-semibold tabular-nums">{{ usageMoney(stats.today_actual_cost) }}</p>
+      <p class="mt-1.5 text-xs surface-muted">{{ t('dashboard.standard') }} ${{ formatCost(stats.today_cost) }}</p>
     </div>
-    <div class="card p-5">
-      <p class="text-sm surface-muted">{{ t('dashboard.todayTokens') }}</p>
-      <p class="stat-value mt-3 text-2xl font-semibold tabular-nums">{{ formatTokens(stats.today_tokens) }}</p>
-      <div class="mt-2 flex flex-wrap gap-x-2.5 gap-y-0.5 text-xs tabular-nums surface-muted">
+    <div class="card p-3.5 sm:p-4">
+      <p class="text-xs sm:text-[13px] surface-muted">{{ t('dashboard.todayTokens') }}</p>
+      <p class="stat-value mt-2 text-xl font-semibold tabular-nums">{{ formatTokens(stats.today_tokens) }}</p>
+      <div class="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs tabular-nums surface-muted">
         <span>{{ t('dashboard.input') }}: {{ formatTokens(stats.today_input_tokens) }}<template v-if="todayTokenShare(stats.today_input_tokens)"> ({{ todayTokenShare(stats.today_input_tokens) }})</template></span>
         <span>{{ t('dashboard.output') }}: {{ formatTokens(stats.today_output_tokens) }}<template v-if="todayTokenShare(stats.today_output_tokens)"> ({{ todayTokenShare(stats.today_output_tokens) }})</template></span>
         <span>{{ t('dashboard.cache') }}: {{ formatTokens(todayCacheTokens) }}<template v-if="todayTokenShare(todayCacheTokens)"> ({{ todayTokenShare(todayCacheTokens) }})</template></span>
       </div>
     </div>
   </div>
-  <section v-if="section !== 'summary'" class="card p-4 sm:p-5" data-testid="dashboard-performance" :aria-label="t('dashboard.performance')">
-    <h3 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.performance') }}</h3>
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <div data-testid="performance-card" class="surface-subcard min-w-0 p-3.5"><p class="text-xs surface-muted">{{ t('dashboard.apiKeys') }}</p><p class="mt-1.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">{{ stats.active_api_keys }} / {{ stats.total_api_keys }}</p></div>
-      <div data-testid="performance-card" class="surface-subcard min-w-0 p-3.5"><p class="text-xs surface-muted">RPM / TPM</p><p class="mt-1.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">{{ formatNumber(stats.rpm) }} / {{ formatTokens(stats.tpm) }}</p><p class="mt-1.5 text-xs surface-muted">{{ t('inspection.performanceHint') }}</p></div>
-      <div data-testid="performance-card" class="surface-subcard min-w-0 p-3.5"><p class="text-xs surface-muted">{{ t('dashboard.avgResponse') }}</p><p class="mt-1.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">{{ stats.total_requests ? formatDuration(stats.average_duration_ms) : '—' }}</p><p class="mt-1.5 text-xs surface-muted">{{ t('inspection.durationHint') }}</p></div>
-      <div data-testid="performance-card" class="surface-subcard min-w-0 p-3.5"><p class="text-xs surface-muted">{{ t('dashboard.totalTokens') }}</p><p class="mt-1.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">{{ formatTokens(stats.total_tokens) }}</p><p class="mt-1.5 text-xs tabular-nums surface-muted">{{ t('dashboard.cache') }} {{ formatTokens(totalCacheTokens) }}<template v-if="totalTokenShare(totalCacheTokens)"> ({{ totalTokenShare(totalCacheTokens) }})</template></p></div>
+  <section v-if="section !== 'summary'" class="card p-3.5 sm:p-4" data-testid="dashboard-performance" :aria-label="t('dashboard.performance')">
+    <h3 class="mb-2.5 text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.performance') }}</h3>
+    <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div data-testid="performance-card" class="surface-subcard min-w-0 p-3"><p class="text-xs surface-muted">{{ t('dashboard.apiKeys') }}</p><p class="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-white">{{ stats.active_api_keys }} / {{ stats.total_api_keys }}</p></div>
+      <div data-testid="performance-card" class="surface-subcard min-w-0 p-3"><p class="text-xs surface-muted">RPM / TPM</p><p class="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-white">{{ formatNumber(stats.rpm) }} / {{ formatTokens(stats.tpm) }}</p><p class="mt-1 text-xs surface-muted">{{ t('inspection.performanceHint') }}</p></div>
+      <div data-testid="performance-card" class="surface-subcard min-w-0 p-3"><p class="text-xs surface-muted">{{ t('dashboard.avgResponse') }}</p><p class="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-white">{{ stats.total_requests ? formatDuration(stats.average_duration_ms) : '—' }}</p><p class="mt-1 text-xs surface-muted">{{ t('inspection.durationHint') }}</p></div>
+      <div data-testid="performance-card" class="surface-subcard min-w-0 p-3"><p class="text-xs surface-muted">{{ t('dashboard.totalTokens') }}</p><p class="mt-1 text-base font-semibold tabular-nums text-gray-900 dark:text-white">{{ formatTokens(stats.total_tokens) }}</p><p class="mt-1 text-xs tabular-nums surface-muted">{{ t('dashboard.cache') }} {{ formatTokens(totalCacheTokens) }}<template v-if="totalTokenShare(totalCacheTokens)"> ({{ totalTokenShare(totalCacheTokens) }})</template></p></div>
     </div>
   </section>
 
   <!-- Row 3: Per-platform breakdown -->
-  <div v-if="section !== 'summary' && !isSimple && platformCards.length > 0" class="card p-4 sm:p-5">
-    <div class="mb-3 flex items-center justify-between gap-2">
+  <div v-if="section !== 'summary' && !isSimple && platformCards.length > 0" class="card p-3.5 sm:p-4">
+    <div class="mb-2.5 flex items-center justify-between gap-2">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.platformBreakdown') }}</h3>
       <span class="badge badge-gray">
         {{ t('dashboard.platformCount', { count: platformCount }) }}
       </span>
     </div>
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-5">
       <div
         v-for="item in platformCards"
         :key="item.platform"
         data-testid="platform-card"
         :data-platform="item.platform"
         :class="[
-          'surface-subcard min-w-0 p-3.5',
+          'surface-subcard min-w-0 p-3',
           item.isOther ? 'border-dashed' : ''
         ]"
       >
@@ -333,13 +333,13 @@ const formatDuration = (ms: number) => ms >= 1000 ? `${(ms / 1000).toFixed(2)}s`
 
 <style scoped>
 @media (min-width: 1024px) {
-  .dashboard-kpis { gap: 10px; }
-  .dashboard-kpis > .card { min-width: 0; padding: 12px; }
-  .dashboard-kpis > .card > .mt-3 { margin-top: 8px; }
+  .dashboard-kpis { gap: 8px; }
+  .dashboard-kpis > .card { min-width: 0; padding: 10px 12px; }
+  .dashboard-kpis > .card > .mt-2 { margin-top: 6px; }
 }
 @media (min-width: 1024px) and (max-height: 799px) {
   .dashboard-kpis { display: flex; overflow-x: auto; scrollbar-width: thin; padding-bottom: 4px; }
-  .dashboard-kpis > .card { flex: 0 0 340px; padding: 10px; }
-  .dashboard-kpis > .card > .mt-3, .dashboard-kpis > .card > .mt-2 { margin-top: 4px; }
+  .dashboard-kpis > .card { flex: 0 0 280px; padding: 8px 10px; }
+  .dashboard-kpis > .card > .mt-2, .dashboard-kpis > .card > .mt-1\.5 { margin-top: 4px; }
 }
 </style>

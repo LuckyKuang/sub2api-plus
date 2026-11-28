@@ -11,9 +11,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
-  padding: 4px;
+  padding: 3px;
 }
 
 .card-tab {
@@ -21,19 +21,19 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
   max-width: 100%;
   min-height: var(--control-height);
-  padding: 7px 14px;
+  padding: 4px 10px;
   border: 1px solid transparent;
   border-radius: var(--surface-radius-control);
   background-color: transparent;
   box-shadow: none;
   color: var(--surface-muted);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 22px;
+  line-height: 20px;
   white-space: normal;
   overflow-wrap: anywhere;
   transition: background-color 150ms, border-color 150ms, color 150ms, box-shadow 150ms;
@@ -67,6 +67,6 @@
 .card-tab:disabled { opacity: .5; cursor: not-allowed; }
 
 .usage-detail-tabs.card-tabs {
-  min-height: 46px;
-  padding: 4px;
+  min-height: 38px;
+  padding: 3px;
 }

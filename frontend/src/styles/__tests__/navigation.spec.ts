@@ -69,7 +69,7 @@ describe('lightweight shared navigation', () => {
     // Tabs are controls: control radius and the shared control height.
     expect(value(selector, 'border-radius')).toBe('var(--surface-radius-control)')
     expect(value(selector, 'min-height')).toBe('var(--control-height)')
-    expect(value(selector, 'font-size')).toBe('13.5px')
+    expect(value(selector, 'font-size')).toBe('13px')
     expect(value(selector, 'font-weight')).toBe('600')
     expect(value(selector, 'border')).toBe('1px solid transparent')
     expect(value(selector, 'background-color')).toBe('transparent')
@@ -93,11 +93,11 @@ describe('lightweight shared navigation', () => {
 
   it('keeps long workspace tabs scrollable and long card-tab labels able to wrap', () => {
     expect(value('.workspace-tabs', 'overflow-x')).toBe('auto')
-    expect(value('.workspace-tabs', 'padding')).toBe('4px')
+    expect(value('.workspace-tabs', 'padding')).toBe('3px')
     expect(value('.workspace-tab', 'white-space')).toBe('nowrap')
     expect(value('.workspace-tab', 'min-width')).toBe('max-content')
     expect(value(':where(.card-tabs)', 'flex-wrap')).toBe('wrap')
-    expect(value(':where(.card-tabs)', 'padding')).toBe('4px')
+    expect(value(':where(.card-tabs)', 'padding')).toBe('3px')
     expect(value('.card-tab', 'max-width')).toBe('100%')
     expect(value('.card-tab', 'white-space')).toBe('normal')
     expect(value('.card-tab', 'overflow-wrap')).toBe('anywhere')

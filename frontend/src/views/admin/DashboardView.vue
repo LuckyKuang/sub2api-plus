@@ -1,10 +1,10 @@
 <template>
   <AppLayout workspace>
     <div class="workspace-page admin-dashboard">
-      <div class="card workspace-fixed dashboard-toolbar p-4">
-            <div class="flex flex-wrap items-center gap-3">
+      <div class="card workspace-fixed dashboard-toolbar p-3">
+            <div class="flex flex-wrap items-center gap-2.5">
               <div class="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-                <span class="text-sm font-medium surface-muted"
+                <span class="text-xs font-medium sm:text-[13px] surface-muted"
                   >{{ t('admin.dashboard.timeRange') }}:</span
                 >
                 <DateRangePicker
@@ -18,10 +18,10 @@
                 {{ t('common.refresh') }}
               </button>
               <div class="flex w-full min-w-0 flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
-                <span class="text-sm font-medium surface-muted"
+                <span class="text-xs font-medium sm:text-[13px] surface-muted"
                   >{{ t('admin.dashboard.granularity') }}:</span
                 >
-                <div class="w-28 min-w-0 max-w-full">
+                <div class="w-24 min-w-0 max-w-full">
                   <Select
                     v-model="granularity"
                     :options="granularityOptions"
@@ -29,7 +29,7 @@
                   />
                 </div>
               </div>
-              <div class="dashboard-refresh flex flex-wrap items-center gap-3">
+              <div class="dashboard-refresh flex flex-wrap items-center gap-2.5">
                 <RefreshControl :state="overviewRefresh" />
                 <button v-if="!stats && overviewRefresh.error.value" class="btn btn-secondary" @click="refreshAll">{{ t('inspection.retry') }}</button>
               </div>
@@ -37,16 +37,16 @@
           </div>
 
       <!-- Loading State: KPI skeletons (match the loaded layout to avoid a jump) -->
-      <div v-if="loading && !stats" class="dashboard-kpis workspace-fixed flex flex-col gap-4">
-        <div class="card p-5">
+      <div v-if="loading && !stats" class="dashboard-kpis workspace-fixed flex flex-col gap-3">
+        <div class="card p-4">
           <div class="skeleton h-3 w-24"></div>
-          <div class="skeleton mt-3 h-9 w-44"></div>
-          <div class="skeleton mt-3 h-3 w-64"></div>
+          <div class="skeleton mt-2.5 h-8 w-40"></div>
+          <div class="skeleton mt-2.5 h-3 w-56"></div>
         </div>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
-          <div v-for="n in 6" :key="n" class="card p-4">
+        <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+          <div v-for="n in 6" :key="n" class="card p-3">
             <div class="skeleton h-3 w-16"></div>
-            <div class="skeleton mt-3 h-6 w-20"></div>
+            <div class="skeleton mt-2.5 h-5 w-20"></div>
             <div class="skeleton mt-2 h-3 w-24"></div>
           </div>
         </div>
@@ -54,15 +54,15 @@
 
       <template v-else-if="stats">
         <!-- Hero: today's operational + financial pulse (the one primary focus) -->
-        <div class="dashboard-kpis workspace-fixed flex flex-col gap-4">
-          <div class="dashboard-hero card p-5">
-            <div class="flex flex-wrap items-start justify-between gap-4 sm:gap-6">
+        <div class="dashboard-kpis workspace-fixed flex flex-col gap-3">
+          <div class="dashboard-hero card p-4">
+            <div class="flex flex-wrap items-start justify-between gap-3 sm:gap-5">
               <div class="min-w-0">
                 <p class="text-xs font-medium surface-muted">{{ t('admin.dashboard.todayTokens') }}</p>
-                <p class="mt-1 text-3xl font-bold tracking-tight tabular-nums text-gray-900 dark:text-white">
+                <p class="mt-0.5 text-2xl font-bold tracking-tight tabular-nums text-gray-900 dark:text-white">
                   {{ formatTokens(stats.today_tokens) }}
                 </p>
-                <p class="mt-1 flex flex-wrap gap-x-1.5 text-xs tabular-nums surface-muted">
+                <p class="mt-0.5 flex flex-wrap gap-x-1.5 text-xs tabular-nums surface-muted">
                   <span>{{ t('dashboard.input') }} {{ todayTokenShare(stats.today_input_tokens) }}</span>
                   <span aria-hidden="true">·</span>
                   <span>{{ t('dashboard.output') }} {{ todayTokenShare(stats.today_output_tokens) }}</span>
@@ -74,11 +74,11 @@
               </div>
               <div class="shrink-0 text-left sm:text-right">
                 <p class="text-xs font-medium surface-muted">{{ t('admin.dashboard.todayRequests') }}</p>
-                <p class="mt-1 text-2xl font-bold tabular-nums text-gray-900 dark:text-white">{{ formatNumber(stats.today_requests) }}</p>
-                <p class="mt-1 text-xs tabular-nums surface-muted">{{ t('common.total') }}: {{ formatNumber(stats.total_requests) }}</p>
+                <p class="mt-0.5 text-xl font-bold tabular-nums text-gray-900 dark:text-white">{{ formatNumber(stats.today_requests) }}</p>
+                <p class="mt-0.5 text-xs tabular-nums surface-muted">{{ t('common.total') }}: {{ formatNumber(stats.total_requests) }}</p>
               </div>
             </div>
-            <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--surface-edge)] pt-3 text-xs tabular-nums">
+            <div class="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-[var(--surface-edge)] pt-2.5 text-xs tabular-nums">
               <span class="surface-muted">{{ t('admin.dashboard.actual') }}</span>
               <span class="font-semibold text-green-600 dark:text-green-400">${{ formatCost(stats.today_actual_cost) }}</span>
               <span class="surface-muted" aria-hidden="true">/</span>
@@ -91,18 +91,18 @@
           </div>
 
           <!-- Supporting KPIs: uniform and neutral; color carries no meaning here -->
-          <div class="dashboard-kpi-grid grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
+          <div class="dashboard-kpi-grid grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
           <!-- Total API Keys -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="surface-subcard shrink-0 p-2">
-                <Icon name="key" size="md" class="surface-muted" :stroke-width="2" />
+          <div class="card p-3">
+            <div class="flex items-center gap-2.5">
+              <div class="surface-subcard shrink-0 p-1.5">
+                <Icon name="key" size="sm" class="surface-muted" :stroke-width="2" />
               </div>
               <div class="min-w-0 tabular-nums">
                 <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.apiKeys') }}
                 </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
+                <p class="text-lg font-bold text-gray-900 dark:text-white">
                   {{ stats.total_api_keys }}
                 </p>
                 <p class="text-xs text-green-600 dark:text-green-400">
@@ -113,16 +113,16 @@
           </div>
 
           <!-- Service Accounts -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="surface-subcard shrink-0 p-2">
-                <Icon name="server" size="md" class="surface-muted" :stroke-width="2" />
+          <div class="card p-3">
+            <div class="flex items-center gap-2.5">
+              <div class="surface-subcard shrink-0 p-1.5">
+                <Icon name="server" size="sm" class="surface-muted" :stroke-width="2" />
               </div>
               <div class="min-w-0 tabular-nums">
                 <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.accounts') }}
                 </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
+                <p class="text-lg font-bold text-gray-900 dark:text-white">
                   {{ stats.total_accounts }}
                 </p>
                 <p class="text-xs">
@@ -138,16 +138,16 @@
           </div>
 
           <!-- New Users Today -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="surface-subcard shrink-0 p-2">
-                <Icon name="userPlus" size="md" class="surface-muted" :stroke-width="2" />
+          <div class="card p-3">
+            <div class="flex items-center gap-2.5">
+              <div class="surface-subcard shrink-0 p-1.5">
+                <Icon name="userPlus" size="sm" class="surface-muted" :stroke-width="2" />
               </div>
               <div class="min-w-0 tabular-nums">
                 <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.users') }}
                 </p>
-                <p class="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                <p class="text-lg font-bold text-emerald-600 dark:text-emerald-400">
                   +{{ stats.today_new_users }}
                 </p>
                 <p class="text-xs surface-muted">
@@ -158,16 +158,16 @@
           </div>
 
           <!-- Total Tokens -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="surface-subcard shrink-0 p-2">
-                <Icon name="database" size="md" class="surface-muted" :stroke-width="2" />
+          <div class="card p-3">
+            <div class="flex items-center gap-2.5">
+              <div class="surface-subcard shrink-0 p-1.5">
+                <Icon name="database" size="sm" class="surface-muted" :stroke-width="2" />
               </div>
               <div class="min-w-0 tabular-nums">
                 <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.totalTokens') }}
                 </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
+                <p class="text-lg font-bold text-gray-900 dark:text-white">
                   {{ formatTokens(stats.total_tokens) }}
                 </p>
                 <p class="flex flex-wrap gap-x-1 text-xs surface-muted">
@@ -200,23 +200,23 @@
           </div>
 
           <!-- Performance (RPM/TPM) -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="surface-subcard shrink-0 p-2">
-                <Icon name="bolt" size="md" class="surface-muted" :stroke-width="2" />
+          <div class="card p-3">
+            <div class="flex items-center gap-2.5">
+              <div class="surface-subcard shrink-0 p-1.5">
+                <Icon name="bolt" size="sm" class="surface-muted" :stroke-width="2" />
               </div>
               <div class="min-w-0 flex-1 tabular-nums">
                 <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.performance') }}
                 </p>
-                <div class="flex items-baseline gap-2">
-                  <p class="text-xl font-bold text-gray-900 dark:text-white">
+                <div class="flex items-baseline gap-1.5">
+                  <p class="text-lg font-bold text-gray-900 dark:text-white">
                     {{ formatTokens(stats.rpm) }}
                   </p>
                   <span class="text-xs surface-muted">RPM</span>
                 </div>
-                <div class="flex items-baseline gap-2">
-                  <p class="text-sm font-semibold text-violet-600 dark:text-violet-400">
+                <div class="flex items-baseline gap-1.5">
+                  <p class="text-xs font-semibold text-violet-600 dark:text-violet-400">
                     {{ formatTokens(stats.tpm) }}
                   </p>
                   <span class="text-xs surface-muted">TPM</span>
@@ -226,16 +226,16 @@
           </div>
 
           <!-- Avg Response Time -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="surface-subcard shrink-0 p-2">
-                <Icon name="clock" size="md" class="surface-muted" :stroke-width="2" />
+          <div class="card p-3">
+            <div class="flex items-center gap-2.5">
+              <div class="surface-subcard shrink-0 p-1.5">
+                <Icon name="clock" size="sm" class="surface-muted" :stroke-width="2" />
               </div>
               <div class="min-w-0 tabular-nums">
                 <p class="text-xs font-medium surface-muted">
                   {{ t('admin.dashboard.avgResponse') }}
                 </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
+                <p class="text-lg font-bold text-gray-900 dark:text-white">
                   {{ formatDuration(stats.average_duration_ms) }}
                 </p>
                 <p class="text-xs surface-muted">
@@ -251,7 +251,7 @@
         <WorkspaceTabs v-if="compactCharts" v-model="chartTab" class="workspace-fixed" :tabs="dashboardTabs" :label="t('workspace.charts')" />
         <div class="workspace-body dashboard-charts">
           <!-- Charts Grid -->
-          <div v-show="!compactCharts || chartTab === 'models'" class="dashboard-chart-grid grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div v-show="!compactCharts || chartTab === 'models'" class="dashboard-chart-grid grid grid-cols-1 gap-3 lg:grid-cols-2">
             <ModelDistributionChart
               workspace
               :model-stats="modelStats"
@@ -271,8 +271,8 @@
           </div>
 
           <!-- User Usage Trend (Full Width) -->
-          <div v-show="!compactCharts || chartTab === 'users'" class="card dashboard-user-trend p-4">
-            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div v-show="!compactCharts || chartTab === 'users'" class="card dashboard-user-trend p-3.5">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2.5">
               <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.dashboard.recentUsage') }} (Top 12)</h3>
               <div class="segmented-control" role="group" :aria-label="t('admin.dashboard.recentUsage')">
                 <button v-for="metric in (['tokens', 'actual_cost'] as const)" :key="metric" type="button"
@@ -782,31 +782,28 @@ onMounted(() => {
 <style scoped>
 .dashboard-refresh { margin-left: auto; }
 @media (min-width: 1024px) {
-  .dashboard-toolbar { padding: 12px 16px; }
-  .dashboard-toolbar > div { gap: 12px; }
-  .dashboard-kpis { gap: 10px; }
+  .dashboard-toolbar { padding: 10px 12px; }
+  .dashboard-toolbar > div { gap: 10px; }
+  .dashboard-kpis { gap: 8px; }
   .dashboard-hero { min-width: 0; }
-  .dashboard-kpi-grid { gap: 10px; }
-  .dashboard-kpi-grid > .card { min-width: 0; padding: 12px; }
-  .dashboard-kpi-grid > .card > div { gap: 10px; }
+  .dashboard-kpi-grid { gap: 8px; }
+  .dashboard-kpi-grid > .card { min-width: 0; padding: 10px; }
+  .dashboard-kpi-grid > .card > div { gap: 8px; }
   /* The dashboard now carries the usage overview too, so the charts zone
      scrolls vertically instead of dividing one viewport between fixed rows. */
-  .dashboard-charts { display: flex; min-height: 0; flex-direction: column; gap: 12px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; }
+  .dashboard-charts { display: flex; min-height: 0; flex-direction: column; gap: 10px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; }
   .dashboard-charts > * { flex: none; }
-  .dashboard-chart-grid { min-height: 340px; gap: 12px; }
-  .dashboard-user-trend { display: flex; flex-direction: column; overflow: hidden; min-height: 320px; padding: 14px; }
-  .dashboard-user-trend > div:first-child { flex: none; margin-bottom: 10px; }
-  .dashboard-line-canvas { position: relative; height: 280px; min-height: 0; flex: none; }
-}
-@media (min-width: 1800px) and (min-height: 960px) {
-  .dashboard-kpi-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .dashboard-chart-grid { min-height: 300px; gap: 10px; }
+  .dashboard-user-trend { display: flex; flex-direction: column; overflow: hidden; min-height: 280px; padding: 12px; }
+  .dashboard-user-trend > div:first-child { flex: none; margin-bottom: 8px; }
+  .dashboard-line-canvas { position: relative; height: 248px; min-height: 0; flex: none; }
 }
 @media (min-width: 1024px) and (max-height: 959px) {
-  .dashboard-kpi-grid > .card { padding: 10px; }
+  .dashboard-kpi-grid > .card { padding: 8px 10px; }
 }
 @media (min-width: 1024px) and (max-height: 799px) {
-  .dashboard-toolbar { padding-top: 8px; padding-bottom: 8px; }
-  .dashboard-kpis { gap: 8px; }
-  .dashboard-kpi-grid { gap: 8px; }
+  .dashboard-toolbar { padding-top: 6px; padding-bottom: 6px; }
+  .dashboard-kpis { gap: 6px; }
+  .dashboard-kpi-grid { gap: 6px; }
 }
 </style>

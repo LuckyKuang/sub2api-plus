@@ -201,10 +201,12 @@ reduced transparency is requested. Reduced-motion preferences disable transition
 ## Rounded surfaces and hover cards
 
 Shape belongs to the shared surface system, including transient UI. Shared radius
-defaults are `--surface-radius` (24px desktop, 20px below 1024px) for the shell and
-dialogs, `--surface-radius-card` (14px) for business cards, 16px for inset sections
-and popup panels, 9px for controls and 10px for menu items.
-Different control sizes and existing local styles may retain other rounded radii.
+defaults follow the five-step ladder: `--surface-radius` (12px) for shell chrome,
+page zones and dialogs, `--surface-radius-card` / `--surface-radius-panel` (10px)
+for business cards and floating panels, `--surface-radius-control` /
+`--surface-radius-item` (6px) for controls, menu items and table rows,
+`--surface-radius-tag` (4px) for badges and tags, and `--surface-radius-xs` (3px)
+for checkboxes and micro marks.
 Menus have inner padding so hover, focus and selection backgrounds remain
 independent rounded regions.
 Searchable select menus fit the available viewport height, keeping their search

@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 // Requirement: every rounded element in the console takes one step of the
-// radius ladder (container 16 > card 12 > control 8 > tag 6 > xs 4); fully
+// radius ladder (container 12 > card 10 > control 6 > tag 4 > xs 3); fully
 // round shapes are reserved for avatars, dots, switches, tracks and spinners,
 // never for a box of text.
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')

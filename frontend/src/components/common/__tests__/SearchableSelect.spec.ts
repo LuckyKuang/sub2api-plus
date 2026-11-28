@@ -85,7 +85,7 @@ describe('Select dropdown viewport constraints', () => {
     expect(dropdown?.style.left).toBe('20px')
   })
 
-  it('preserves the existing 200px minimum width when space is available', async () => {
+  it('preserves the existing 176px minimum width when space is available', async () => {
     setViewportWidth(1024)
     mockTriggerRect(20, 80)
 
@@ -93,7 +93,7 @@ describe('Select dropdown viewport constraints', () => {
 
     expect(dropdown).not.toBeNull()
     expect(dropdown?.style.left).toBe('20px')
-    expect(dropdown?.style.minWidth).toBe('200px')
+    expect(dropdown?.style.minWidth).toBe('176px')
     // Content-sized menus stop at 480px so one long label cannot stretch the
     // panel across the viewport; the label ellipsizes inside the panel.
     expect(dropdown?.style.maxWidth).toBe('480px')
@@ -106,9 +106,9 @@ describe('Select dropdown viewport constraints', () => {
     const dropdown = await openSelect()
 
     expect(dropdown).not.toBeNull()
-    expect(dropdown?.style.left).toBe('112px')
-    expect(dropdown?.style.minWidth).toBe('200px')
-    expect(dropdown?.style.maxWidth).toBe('200px')
+    expect(dropdown?.style.left).toBe('136px')
+    expect(dropdown?.style.minWidth).toBe('176px')
+    expect(dropdown?.style.maxWidth).toBe('176px')
   })
 
   it('clamps a trigger left of the viewport to the safe padding', async () => {
@@ -119,7 +119,7 @@ describe('Select dropdown viewport constraints', () => {
 
     expect(dropdown).not.toBeNull()
     expect(dropdown?.style.left).toBe('8px')
-    expect(dropdown?.style.minWidth).toBe('200px')
+    expect(dropdown?.style.minWidth).toBe('176px')
     expect(dropdown?.style.maxWidth).toBe('304px')
   })
 
@@ -130,9 +130,9 @@ describe('Select dropdown viewport constraints', () => {
     const dropdown = await openSelect()
 
     expect(dropdown).not.toBeNull()
-    expect(dropdown?.style.left).toBe('112px')
-    expect(dropdown?.style.minWidth).toBe('200px')
-    expect(dropdown?.style.maxWidth).toBe('200px')
+    expect(dropdown?.style.left).toBe('136px')
+    expect(dropdown?.style.minWidth).toBe('176px')
+    expect(dropdown?.style.maxWidth).toBe('176px')
   })
 
   const mockVerticalLayout = () => {
@@ -259,9 +259,9 @@ describe('Select dropdown viewport constraints', () => {
     Object.assign(visibleViewport, { width: 390, height: 300 })
     visibleViewport.dispatchEvent(new Event('resize'))
     await nextTick(); await nextTick()
-    expect(panel.style.left).toBe('182px')
-    expect(panel.style.minWidth).toBe('200px')
-    expect(panel.style.maxWidth).toBe('200px')
+    expect(panel.style.left).toBe('200px')
+    expect(panel.style.minWidth).toBe('176px')
+    expect(panel.style.maxWidth).toBe('182px')
     expect(panel.style.top).toBe('')
     expect(panel.style.bottom).toBe('673px')
     expect(panel.style.maxHeight).toBe('119px')
@@ -273,13 +273,13 @@ describe('Select dropdown viewport constraints', () => {
     Object.assign(visibleViewport, { offsetLeft: 140, offsetTop: 100, width: 250 })
     visibleViewport.dispatchEvent(new Event('scroll'))
     await nextTick(); await nextTick()
-    expect(panel.style.left).toBe('182px')
+    expect(panel.style.left).toBe('200px')
     expect(panel.style.bottom).toBe('')
     expect(panel.style.top).toBe('175px')
     expect(panel.style.maxHeight).toBe('217px')
     expect(Number.parseFloat(panel.style.top) + panel.offsetHeight).toBe(392)
 
-    // A narrower visible area must also relax the normal 200px minimum,
+    // A narrower visible area must also relax the normal 176px minimum,
     // retaining 8px gutters even when the trigger is partly out of view.
     Object.assign(visibleViewport, { offsetLeft: 230, offsetTop: 160, width: 160, height: 260 })
     visibleViewport.dispatchEvent(new Event('scroll'))
